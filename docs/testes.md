@@ -157,3 +157,7 @@ selecionável, link, caixa de seleção). Rótulos repetidos na tela: o último 
 Os roteiros de exemplo estão em `crates/utsim-viewer/roteiros/`: `editor_basico.ron` (`--novo`),
 `propriedades.ron` (com `examples/mm1.ron`) e `simular_paletes.ron` (com `examples/montagem_paletes.ron`).
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
+
+Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a
+cena: a câmera enquadra o modelo na área livre ao abrir, ao entrar em Simular, após novo modelo e
+com a tecla `F` ou o botão "Enquadrar". `Objeto`/`Mundo` continuam projetados com a câmera ativa.

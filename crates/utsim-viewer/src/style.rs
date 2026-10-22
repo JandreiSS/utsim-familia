@@ -130,6 +130,44 @@ pub fn slot_offset(shape: Shape, i: usize) -> [f32; 3] {
     }
 }
 
+/// Layers of items drawn on a block; items beyond that are not drawn (the label shows "+N").
+pub const MAX_LAYERS: usize = 2;
+
+/// How many resting items a block of this shape draws at most.
+pub fn visible_slots(shape: Shape) -> usize {
+    let per_layer = if shape == Shape::LongBox { 30 } else { 9 };
+    per_layer * MAX_LAYERS
+}
+
+/// Items of a block that are not drawn because the stack is capped.
+pub fn hidden_items(shape: Shape, resting: usize) -> usize {
+    resting.saturating_sub(visible_slots(shape))
+}
+
+/// Height above the block base of the top of what is drawn on it (`drawn` items).
+pub fn top_of_stack(shape: Shape, drawn: usize) -> f32 {
+    let (half, _) = extents(shape);
+    if drawn == 0 {
+        half[1] * 2.0
+    } else {
+        slot_offset(shape, drawn.min(visible_slots(shape)) - 1)[1] + 0.2
+    }
+}
+
+/// Text of the in-scene label of a block. `received` is `Some` for sinks (items that
+/// arrived so far, which a sink never holds); `hidden` counts items not drawn.
+pub fn label_text(name: &str, content: usize, hidden: usize, received: Option<usize>) -> String {
+    let mut text = match received {
+        Some(n) => format!("{name} (recebidos: {n})"),
+        None if content > 0 => format!("{name} ({content})"),
+        None => name.to_string(),
+    };
+    if hidden > 0 {
+        text.push_str(&format!(" +{hidden}"));
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,5 +233,23 @@ mod tests {
             state_color(Some(State::TravelEmpty)),
             state_color(Some(State::Loading))
         );
+    }
+
+    #[test]
+    fn stack_is_capped_and_label_counts_the_rest() {
+        assert_eq!(visible_slots(Shape::LongBox), 60);
+        assert_eq!(visible_slots(Shape::Box), 18);
+        assert_eq!(hidden_items(Shape::LongBox, 23), 0);
+        assert_eq!(hidden_items(Shape::LongBox, 80), 20);
+        // The top of the stack never grows past the cap, however many items rest there.
+        assert_eq!(
+            top_of_stack(Shape::LongBox, 500),
+            top_of_stack(Shape::LongBox, 60)
+        );
+        assert!(top_of_stack(Shape::LongBox, 60) > top_of_stack(Shape::LongBox, 1));
+        assert!(top_of_stack(Shape::LongBox, 0) < top_of_stack(Shape::LongBox, 1));
+        assert_eq!(label_text("fila", 80, 20, None), "fila (80) +20");
+        assert_eq!(label_text("fila", 0, 0, None), "fila");
+        assert_eq!(label_text("saida", 0, 0, Some(12)), "saida (recebidos: 12)");
     }
 }
