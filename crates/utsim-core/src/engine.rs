@@ -1,13 +1,13 @@
 //! The simulation kernel: clock, future event list, item arena and flow resolution.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, VecDeque};
+use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
 
 use rand::Rng;
 use slotmap::SlotMap;
 
 use crate::Time;
-use crate::block::{Behavior, BlockId, OutputRule, State};
+use crate::block::{Behavior, BlockId, Downtime, OutputRule, State};
 use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, TallySummary};
@@ -29,9 +29,15 @@ pub enum SimError {
     Model { time: Time, messages: Vec<String> },
 }
 
+/// Handle to a scheduled event, used to cancel it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EventId(u64);
+
 #[derive(Clone, Copy, Debug)]
 enum EventKind {
     Block { block: BlockId, tag: u32, item: Option<ItemId> },
+    Fail(BlockId),
+    Repair(BlockId),
     EndWarmup,
 }
 
@@ -94,8 +100,15 @@ struct BlockRuntime {
     name: String,
     kind: &'static str,
     inputs: Vec<BlockId>,
-    outputs: Vec<BlockId>,
+    /// Downstream block and the input port number on that block.
+    outputs: Vec<(BlockId, usize)>,
     rule: OutputRule,
+    downtime: Option<Downtime>,
+    /// Separate stream so enabling breakdowns does not shift the block's own draws.
+    downtime_rng: SimRng,
+    down: bool,
+    /// State the block asked for while down; restored on repair.
+    state_when_up: Option<State>,
     contents: Vec<ItemId>,
     outbox: VecDeque<Pending>,
     stats: BlockStats,
@@ -117,12 +130,34 @@ pub struct Core {
     doomed: Vec<ItemId>,
     errors: Vec<String>,
     events_processed: u64,
+    /// Sequence numbers of cancelled events still sitting in the heap.
+    cancelled: HashSet<u64>,
 }
 
 impl Core {
-    fn schedule_at(&mut self, time: Time, kind: EventKind) {
+    fn schedule_at(&mut self, time: Time, kind: EventKind) -> EventId {
         self.seq += 1;
         self.events.push(Scheduled { time, seq: self.seq, kind });
+        EventId(self.seq)
+    }
+
+    fn take_item_from(&mut self, b: BlockId, item: ItemId) {
+        let rt = &mut self.blocks[b.0];
+        if let Some(pos) = rt.contents.iter().position(|&x| x == item) {
+            rt.contents.remove(pos);
+        }
+        rt.outbox.retain(|p| p.item != item);
+        self.update_content(b);
+    }
+
+    fn put_item_into(&mut self, b: BlockId, item: ItemId) {
+        let now = self.now;
+        let it = &mut self.items[item];
+        it.location = Some(b);
+        it.container = None;
+        it.entered_at = now;
+        self.blocks[b.0].contents.push(item);
+        self.update_content(b);
     }
 
     fn mark_dirty(&mut self, b: BlockId) {
@@ -159,9 +194,29 @@ impl Ctx<'_> {
     }
 
     /// Schedules [`Behavior::on_event`] on this block after `delay`.
-    pub fn schedule(&mut self, delay: Time, tag: u32, item: Option<ItemId>) {
+    pub fn schedule(&mut self, delay: Time, tag: u32, item: Option<ItemId>) -> EventId {
         let time = self.core.now + delay.max(0.0);
-        self.core.schedule_at(time, EventKind::Block { block: self.me, tag, item });
+        self.core.schedule_at(time, EventKind::Block { block: self.me, tag, item })
+    }
+
+    /// Cancels an event scheduled earlier. Cancelling a fired event is a no-op.
+    pub fn cancel(&mut self, id: EventId) {
+        if id.0 <= self.core.seq {
+            self.core.cancelled.insert(id.0);
+        }
+    }
+
+    /// Whether this block is currently broken down.
+    pub fn is_down(&self) -> bool {
+        self.core.blocks[self.me.0].down
+    }
+
+    pub fn input_count(&self) -> usize {
+        self.core.blocks[self.me.0].inputs.len()
+    }
+
+    pub fn output_count(&self) -> usize {
+        self.core.blocks[self.me.0].outputs.len()
     }
 
     pub fn rng(&mut self) -> &mut SimRng {
@@ -177,9 +232,16 @@ impl Ctx<'_> {
         self.sample(dist).max(0.0)
     }
 
+    /// Sets the block state. While the block is down the kernel keeps showing
+    /// `down` and applies this state when the repair finishes.
     pub fn set_state(&mut self, state: State) {
         let now = self.core.now;
-        self.core.blocks[self.me.0].stats.states.set(now, state);
+        let rt = &mut self.core.blocks[self.me.0];
+        if rt.down {
+            rt.state_when_up = Some(state);
+        } else {
+            rt.stats.states.set(now, state);
+        }
     }
 
     pub fn content_len(&self) -> usize {
@@ -206,15 +268,53 @@ impl Ctx<'_> {
             created_at: now,
             entered_at: now,
             location: Some(self.me),
+            container: None,
+            contents: Vec::new(),
         });
         self.core.blocks[self.me.0].contents.push(id);
         self.core.update_content(self.me);
         id
     }
 
-    /// Removes the item from the model once the current hook returns.
+    /// Creates a copy of `id` (labels and creation time, not contents) inside this block.
+    pub fn clone_item(&mut self, id: ItemId) -> ItemId {
+        let (labels, created_at) = {
+            let src = &self.core.items[id];
+            (src.labels.clone(), src.created_at)
+        };
+        let copy = self.spawn_item();
+        let it = &mut self.core.items[copy];
+        it.labels = labels;
+        it.created_at = created_at;
+        copy
+    }
+
+    /// Removes the item (and anything packed in it) once the current hook returns.
     pub fn destroy(&mut self, id: ItemId) {
         self.core.doomed.push(id);
+    }
+
+    /// Moves `item`, which must be in this block, into `container`.
+    /// The packed item no longer counts as block content.
+    pub fn pack(&mut self, container: ItemId, item: ItemId) {
+        if self.core.items[item].location != Some(self.me) || container == item {
+            self.error("pack: o item não está neste objeto");
+            return;
+        }
+        self.core.take_item_from(self.me, item);
+        let it = &mut self.core.items[item];
+        it.location = None;
+        it.container = Some(container);
+        self.core.items[container].contents.push(item);
+    }
+
+    /// Takes everything out of `container` and places it in this block.
+    pub fn unpack(&mut self, container: ItemId) -> Vec<ItemId> {
+        let items = std::mem::take(&mut self.core.items[container].contents);
+        for &item in &items {
+            self.core.put_item_into(self.me, item);
+        }
+        items
     }
 
     /// Marks the item as ready to leave, behind items released earlier.
@@ -256,6 +356,19 @@ impl Ctx<'_> {
                 Some(port)
             }
             OutputRule::Random => Some(rt.rng.random_range(0..n)),
+            OutputRule::Weighted(weights) => {
+                let total: f64 = weights.iter().take(n).sum();
+                let mut x = rt.rng.random::<f64>() * total;
+                let mut port = n - 1;
+                for (k, w) in weights.iter().take(n).enumerate() {
+                    if x < *w {
+                        port = k;
+                        break;
+                    }
+                    x -= w;
+                }
+                Some(port)
+            }
             OutputRule::ByLabel(label) => {
                 match core.items[id].label(label).and_then(Value::as_num) {
                     Some(v) if v.fract() == 0.0 && v >= 1.0 && v as usize <= n => {
@@ -275,6 +388,9 @@ impl Ctx<'_> {
         Pending { item: id, port }
     }
 }
+
+/// Offset of the breakdown random streams, far above any block index.
+const DOWNTIME_STREAMS: u64 = 1 << 40;
 
 /// A runnable model instance: one replication.
 pub struct Simulation {
@@ -296,6 +412,7 @@ impl Simulation {
                 doomed: Vec::new(),
                 errors: Vec::new(),
                 events_processed: 0,
+                cancelled: HashSet::new(),
             },
             behaviors: Vec::new(),
             config,
@@ -315,6 +432,10 @@ impl Simulation {
             inputs: Vec::new(),
             outputs: Vec::new(),
             rule,
+            downtime: None,
+            downtime_rng: rng::stream(self.config.seed, self.config.replication, DOWNTIME_STREAMS + id.0 as u64),
+            down: false,
+            state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
             stats: BlockStats::default(),
@@ -329,8 +450,14 @@ impl Simulation {
     /// Connects an output port of `from` to an input port of `to`.
     /// Port numbers follow connection order, which is also the pull priority.
     pub fn connect(&mut self, from: BlockId, to: BlockId) {
-        self.core.blocks[from.0].outputs.push(to);
+        let in_port = self.core.blocks[to.0].inputs.len();
+        self.core.blocks[from.0].outputs.push((to, in_port));
         self.core.blocks[to.0].inputs.push(from);
+    }
+
+    /// Enables random breakdowns on a block.
+    pub fn set_downtime(&mut self, block: BlockId, downtime: Downtime) {
+        self.core.blocks[block.0].downtime = Some(downtime);
     }
 
     pub fn block_id(&self, name: &str) -> Option<BlockId> {
@@ -346,6 +473,9 @@ impl Simulation {
         let stop = self.config.stop_time;
         while self.core.events.peek().is_some_and(|ev| ev.time <= stop) {
             let ev = self.core.events.pop().expect("peeked");
+            if self.core.cancelled.remove(&ev.seq) {
+                continue;
+            }
             self.core.now = ev.time;
             self.core.events_processed += 1;
             self.dispatch(ev.kind);
@@ -368,8 +498,54 @@ impl Simulation {
         if self.config.warmup > 0.0 {
             self.core.schedule_at(self.config.warmup, EventKind::EndWarmup);
         }
+        for b in 0..self.core.blocks.len() {
+            self.schedule_failure(BlockId(b));
+        }
         self.resolve();
         self.check()
+    }
+
+    fn schedule_failure(&mut self, b: BlockId) {
+        let rt = &mut self.core.blocks[b.0];
+        if let Some(dt) = &rt.downtime {
+            let delay = dt.mtbf.sample(&mut rt.downtime_rng).max(0.0);
+            let time = self.core.now + delay;
+            self.core.schedule_at(time, EventKind::Fail(b));
+        }
+    }
+
+    fn fail(&mut self, b: BlockId) {
+        let now = self.core.now;
+        let rt = &mut self.core.blocks[b.0];
+        rt.state_when_up = rt.stats.states.current();
+        rt.down = true;
+        rt.stats.states.set(now, State::Down);
+        let repair = rt.downtime.as_ref().map_or(0.0, |dt| dt.mttr.sample(&mut rt.downtime_rng).max(0.0));
+        self.core.schedule_at(now + repair, EventKind::Repair(b));
+        let Simulation { core, behaviors, .. } = self;
+        behaviors[b.0].on_stop(&mut Ctx { core, me: b });
+        self.flush_doomed();
+    }
+
+    fn repair(&mut self, b: BlockId) {
+        let now = self.core.now;
+        let rt = &mut self.core.blocks[b.0];
+        rt.down = false;
+        if let Some(state) = rt.state_when_up.take() {
+            rt.stats.states.set(now, state);
+        }
+        {
+            let Simulation { core, behaviors, .. } = self;
+            behaviors[b.0].on_resume(&mut Ctx { core, me: b });
+        }
+        self.flush_doomed();
+        // Both sides may move again.
+        self.core.mark_dirty(b);
+        for k in 0..self.core.blocks[b.0].inputs.len() {
+            let up = self.core.blocks[b.0].inputs[k];
+            self.core.mark_dirty(up);
+        }
+        self.schedule_failure(b);
     }
 
     fn check(&mut self) -> Result<(), SimError> {
@@ -390,6 +566,8 @@ impl Simulation {
                 behaviors[block.0].on_event(&mut Ctx { core, me: block }, tag, item);
                 self.flush_doomed();
             }
+            EventKind::Fail(b) => self.fail(b),
+            EventKind::Repair(b) => self.repair(b),
             EventKind::EndWarmup => {
                 let now = self.core.now;
                 self.core.blocks.iter_mut().for_each(|rt| rt.stats.reset(now));
@@ -406,6 +584,9 @@ impl Simulation {
     }
 
     fn try_send(&mut self, from: BlockId) {
+        if self.core.blocks[from.0].down {
+            return;
+        }
         let mut i = 0;
         while i < self.core.blocks[from.0].outbox.len() {
             let pending = self.core.blocks[from.0].outbox[i];
@@ -419,42 +600,37 @@ impl Simulation {
         }
     }
 
-    fn find_destination(&self, from: BlockId, pending: Pending) -> Option<BlockId> {
+    fn find_destination(&self, from: BlockId, pending: Pending) -> Option<(BlockId, usize)> {
         let outputs = &self.core.blocks[from.0].outputs;
         let item = &self.core.items[pending.item];
-        let open = |to: &BlockId| self.behaviors[to.0].accepts(item, self.core.blocks[to.0].contents.len());
+        let open = |&(to, in_port): &(BlockId, usize)| {
+            let rt = &self.core.blocks[to.0];
+            !rt.down && self.behaviors[to.0].accepts(item, rt.contents.len(), in_port)
+        };
         match pending.port {
             Some(port) => outputs.get(port).copied().filter(open),
             None => outputs.iter().copied().find(open),
         }
     }
 
-    fn transfer(&mut self, item: ItemId, from: BlockId, to: BlockId) {
+    fn transfer(&mut self, item: ItemId, from: BlockId, (to, in_port): (BlockId, usize)) {
         let now = self.core.now;
 
         let entered = self.core.items[item].entered_at;
-        let rt = &mut self.core.blocks[from.0];
-        if let Some(pos) = rt.contents.iter().position(|&x| x == item) {
-            rt.contents.remove(pos);
-        }
-        rt.stats.output += 1;
-        rt.stats.staytime.record(now - entered);
-        self.core.update_content(from);
+        self.core.take_item_from(from, item);
+        let stats = &mut self.core.blocks[from.0].stats;
+        stats.output += 1;
+        stats.staytime.record(now - entered);
         {
             let Simulation { core, behaviors, .. } = self;
             behaviors[from.0].on_exit(&mut Ctx { core, me: from }, item);
         }
 
-        let it = &mut self.core.items[item];
-        it.location = Some(to);
-        it.entered_at = now;
-        let rt = &mut self.core.blocks[to.0];
-        rt.contents.push(item);
-        rt.stats.input += 1;
-        self.core.update_content(to);
+        self.core.put_item_into(to, item);
+        self.core.blocks[to.0].stats.input += 1;
         {
             let Simulation { core, behaviors, .. } = self;
-            behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item);
+            behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item, in_port);
         }
         self.flush_doomed();
 
@@ -469,11 +645,12 @@ impl Simulation {
         while let Some(id) = self.core.doomed.pop() {
             let Some(item) = self.core.items.remove(id) else { continue };
             if let Some(b) = item.location {
-                let rt = &mut self.core.blocks[b.0];
-                rt.contents.retain(|&x| x != id);
-                rt.outbox.retain(|p| p.item != id);
-                self.core.update_content(b);
+                self.core.take_item_from(b, id);
             }
+            if let Some(c) = item.container.and_then(|c| self.core.items.get_mut(c)) {
+                c.contents.retain(|&x| x != id);
+            }
+            self.core.doomed.extend(item.contents);
         }
     }
 

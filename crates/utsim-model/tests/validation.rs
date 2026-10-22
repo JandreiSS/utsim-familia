@@ -154,3 +154,50 @@ fn bundled_examples_are_valid() {
         }
     }
 }
+
+#[test]
+fn breakdowns_follow_availability() {
+    // Always-busy machine with MTBF 90 / MTTR 10: availability 0.9. Timers pause
+    // during repairs, so throughput is exactly the available time / process time.
+    let m = model(
+        r#"Model(
+            name: "quebras",
+            run: (stop_time: 200000.0, warmup: 1000.0, seed: 5, replications: 4),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(0.5))),
+                (name: "q", kind: Queue(capacity: 10)),
+                (name: "p", kind: Processor(process: Const(1.0)),
+                 downtime: (mtbf: Exp(mean: 90.0), mttr: Exp(mean: 10.0))),
+                (name: "out", kind: Sink),
+            ],
+            connections: [("src", "q"), ("q", "p"), ("p", "out")],
+        )"#,
+    );
+    let reports = m.run_replications().unwrap();
+    let s = summarize(&reports);
+    assert_close("down", s["p.state.down"].mean, 0.1, 0.05);
+    assert_close("processing", s["p.state.processing"].mean, 0.9, 0.01);
+    for r in &reports {
+        let p = r.block("p").unwrap();
+        let busy = p.states["processing"] * (r.end_time - r.stats_from);
+        assert!((p.output as f64 - busy).abs() <= 2.0, "saídas {} vs tempo produtivo {busy}", p.output);
+    }
+}
+
+#[test]
+fn weighted_routing_splits_flow() {
+    let m = model(
+        r#"Model(
+            name: "pesos",
+            run: (stop_time: 100000.0, seed: 3),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1.0)), output: Weighted([1.0, 3.0])),
+                (name: "a", kind: Sink),
+                (name: "b", kind: Sink),
+            ],
+            connections: [("src", "a"), ("src", "b")],
+        )"#,
+    );
+    let r = &m.run_replications().unwrap()[0];
+    assert_close("fração para b", r.block("b").unwrap().input as f64 / 100000.0, 0.75, 0.01);
+}

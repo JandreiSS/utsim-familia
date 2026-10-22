@@ -47,7 +47,12 @@ pub struct Item {
     pub created_at: Time,
     /// Time the item entered its current block.
     pub entered_at: Time,
+    /// Block holding the item; `None` while it is packed inside a container.
     pub location: Option<BlockId>,
+    /// Container this item is packed in, if any.
+    pub container: Option<ItemId>,
+    /// Items packed inside this one (pallets, totes...).
+    pub contents: Vec<ItemId>,
 }
 
 impl Item {

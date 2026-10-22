@@ -5,7 +5,7 @@ use std::path::Path;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, Dist, OutputRule, RunConfig, RunReport, SimError, Simulation};
+use utsim_core::{Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, SimError, Simulation};
 use utsim_objects::{Discipline, Processor, Queue, Sink, Source};
 
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +52,9 @@ pub struct ObjectDef {
     /// Layout position (x, y, z), used by the 3D view from phase 2 on.
     #[serde(default)]
     pub position: [f64; 3],
+    /// Random breakdowns (MTBF/MTTR on the clock).
+    #[serde(default)]
+    pub downtime: Option<Downtime>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -146,6 +149,10 @@ impl Model {
                 }
                 ObjectKind::Sink => {}
             }
+            if let Some(dt) = &obj.downtime {
+                dists.push(("downtime.mtbf".into(), &dt.mtbf));
+                dists.push(("downtime.mttr".into(), &dt.mttr));
+            }
             for (what, d) in dists {
                 if let Err(e) = d.validate() {
                     errors.push(format!("{}.{what}: {e}", obj.name));
@@ -160,8 +167,12 @@ impl Model {
 
         let kind_of: HashMap<&str, &ObjectKind> =
             self.objects.iter().map(|o| (o.name.as_str(), &o.kind)).collect();
-        let mut has_output = HashSet::new();
+        let mut outputs: HashMap<&str, usize> = HashMap::new();
+        let mut seen = HashSet::new();
         for (from, to) in &self.connections {
+            if !seen.insert((from, to)) {
+                errors.push(format!("conexão ({from} -> {to}) repetida"));
+            }
             for end in [from, to] {
                 if !kind_of.contains_key(end.as_str()) {
                     errors.push(format!("conexão ({from} -> {to}): objeto '{end}' não existe"));
@@ -176,11 +187,22 @@ impl Model {
             if matches!(kind_of.get(to.as_str()), Some(ObjectKind::Source { .. })) {
                 errors.push(format!("conexão ({from} -> {to}): Source não tem entrada"));
             }
-            has_output.insert(from.as_str());
+            *outputs.entry(from.as_str()).or_default() += 1;
         }
         for obj in &self.objects {
-            if !matches!(obj.kind, ObjectKind::Sink) && !has_output.contains(obj.name.as_str()) {
+            let n_out = outputs.get(obj.name.as_str()).copied().unwrap_or(0);
+            if !matches!(obj.kind, ObjectKind::Sink) && n_out == 0 {
                 errors.push(format!("{}: não tem saída conectada (os itens ficariam presos)", obj.name));
+            }
+            if let OutputRule::Weighted(weights) = &obj.output {
+                let valid = weights.iter().all(|w| w.is_finite() && *w >= 0.0)
+                    && weights.iter().any(|w| *w > 0.0);
+                if weights.len() != n_out || !valid {
+                    errors.push(format!(
+                        "{}: Weighted precisa de um peso >= 0 por porta de saída ({n_out}), com soma > 0",
+                        obj.name
+                    ));
+                }
             }
         }
 
@@ -212,7 +234,11 @@ impl Model {
                 }
                 ObjectKind::Sink => Box::new(Sink),
             };
-            ids.insert(obj.name.as_str(), sim.add_block(obj.name.clone(), obj.output.clone(), behavior));
+            let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
+            if let Some(dt) = &obj.downtime {
+                sim.set_downtime(id, dt.clone());
+            }
+            ids.insert(obj.name.as_str(), id);
         }
         for (from, to) in &self.connections {
             sim.connect(ids[from.as_str()], ids[to.as_str()]);

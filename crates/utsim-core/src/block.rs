@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::dist::Dist;
 use crate::engine::Ctx;
 use crate::item::{Item, ItemId};
 
@@ -57,6 +58,15 @@ pub enum OutputRule {
     Random,
     /// The port number (1-based) stored in the given numeric label.
     ByLabel(String),
+    /// A random port with the given relative weights, one per output port.
+    Weighted(Vec<f64>),
+}
+
+/// Random breakdowns: time between failures counted on the clock (not on use).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Downtime {
+    pub mtbf: Dist,
+    pub mttr: Dist,
 }
 
 /// Logic of a block. The kernel calls these hooks; a block reacts by
@@ -70,12 +80,13 @@ pub trait Behavior: Send {
         let _ = cx;
     }
 
-    /// Whether the input side is open for `item`, given the current content.
-    fn accepts(&self, item: &Item, content: usize) -> bool;
+    /// Whether input `port` (0-based, in connection order) is open for `item`,
+    /// given the current content.
+    fn accepts(&self, item: &Item, content: usize, port: usize) -> bool;
 
-    /// The item has just been placed in this block.
-    fn on_entry(&mut self, cx: &mut Ctx, item: ItemId) {
-        let _ = (cx, item);
+    /// The item has just been placed in this block through input `port`.
+    fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, port: usize) {
+        let _ = (cx, item, port);
     }
 
     /// The item has just left this block (content already excludes it).
@@ -86,5 +97,16 @@ pub trait Behavior: Send {
     /// An event this block scheduled with [`Ctx::schedule`] has fired.
     fn on_event(&mut self, cx: &mut Ctx, tag: u32, item: Option<ItemId>) {
         let _ = (cx, tag, item);
+    }
+
+    /// The block went down. The kernel already closed its ports and shows
+    /// `down`; blocks with running timers should pause them (see [`Ctx::cancel`]).
+    fn on_stop(&mut self, cx: &mut Ctx) {
+        let _ = cx;
+    }
+
+    /// The block is back up. The kernel restores the last state set by the block.
+    fn on_resume(&mut self, cx: &mut Ctx) {
+        let _ = cx;
     }
 }

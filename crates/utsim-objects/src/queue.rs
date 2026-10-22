@@ -35,11 +35,11 @@ impl Behavior for Queue {
         cx.set_state(State::Empty);
     }
 
-    fn accepts(&self, _item: &Item, content: usize) -> bool {
+    fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
         self.capacity.is_none_or(|cap| content < cap)
     }
 
-    fn on_entry(&mut self, cx: &mut Ctx, item: ItemId) {
+    fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
         match self.discipline {
             Discipline::Fifo => cx.release(item),
             Discipline::Lifo => cx.release_front(item),
