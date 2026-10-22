@@ -88,7 +88,18 @@ Fase 2  ── Observer ──────┬─ Sonnet: visualizador Bevy (repl
 Fase 3  ── utsim-edit ────┬─ Sonnet: modo de edição no utsim-view ─────┐
            (Opus)         ├─ Sonnet: painel de propriedades ───────────┤
                           └─ Haiku: sequências aleatórias de comandos ─┴─ merge + verificar
+Fase 4  ── transporte ────┬─ Sonnet A: transportadores e regras ───────┐
+           (Opus)         ├─ Sonnet B: rede de caminhos ───────────────┤
+                          ├─ Sonnet C: operadores nos processadores ───┤
+                          └─ Sonnet D: veículos no 3D e propriedades ──┴─ merge + verificar
+QA da UI  ── Sonnet: modo roteirizado (entrada sintética + capturas) ───── o coordenador roda
+             os roteiros, olha as capturas e delega as correções
 ```
+
+**Teste da interface sem acesso à tela.** O coordenador não clica na janela: ele
+escreve roteiros (`crates/utsim-viewer/roteiros/*.ron`) que o próprio `utsim-view`
+executa com entrada sintética e capturas em PNG, e lê as imagens. Defeitos de interface
+achados assim viram tarefas para uma frente de correção.
 
 Regras para rodar em paralelo sem conflito:
 - Cada frente tem **arquivos próprios**. Quando duas precisam do mesmo arquivo, uma delas
