@@ -196,6 +196,52 @@ impl NetworkRouter {
     }
 }
 
+/// Route over the network as a node sequence (AGV traffic control).
+#[derive(Clone, Debug, PartialEq)]
+pub struct NodeRoute {
+    /// Node indices (into `NetworkDef::nodes`), at least one.
+    pub nodes: Vec<usize>,
+    /// Length of the edge between `nodes[i]` and `nodes[i + 1]`.
+    pub edge_lengths: Vec<f64>,
+}
+
+impl NetworkRouter {
+    /// Number of nodes.
+    pub fn node_count(&self) -> usize {
+        self.positions.len()
+    }
+
+    /// Position of node `i`.
+    pub fn node_position(&self, i: usize) -> [f64; 3] {
+        self.positions[i]
+    }
+
+    /// Nodes (and edge lengths) of the shortest route between the nodes nearest to
+    /// `from` and `to`; same snapping and tie-breaking as [`Router::route`]. `None`
+    /// when the network is empty or the two nodes are not connected.
+    pub fn node_route(&self, from: [f64; 3], to: [f64; 3]) -> Option<NodeRoute> {
+        let (a, b) = (self.nearest(from)?, self.nearest(to)?);
+        if !self.reachable[a][b] {
+            return None;
+        }
+        let mut nodes = vec![b];
+        let mut cur = b;
+        while cur != a {
+            cur = self.prev[a][cur];
+            nodes.push(cur);
+        }
+        nodes.reverse();
+        let edge_lengths = nodes
+            .windows(2)
+            .map(|w| distance(self.positions[w[0]], self.positions[w[1]]))
+            .collect();
+        Some(NodeRoute {
+            nodes,
+            edge_lengths,
+        })
+    }
+}
+
 impl Router for NetworkRouter {
     fn route(&self, from: [f64; 3], to: [f64; 3]) -> Vec<[f64; 3]> {
         if from == to {
@@ -233,4 +279,9 @@ pub fn router(network: Option<&NetworkDef>) -> Arc<dyn Router> {
         Some(def) => Arc::new(NetworkRouter::new(def)),
         None => Arc::new(StraightLine),
     }
+}
+
+/// The network router itself (not type-erased), for AGV traffic control.
+pub fn network_router(network: Option<&NetworkDef>) -> Option<Arc<NetworkRouter>> {
+    network.map(|def| Arc::new(NetworkRouter::new(def)))
 }

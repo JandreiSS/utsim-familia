@@ -11,6 +11,7 @@ mod separator;
 mod sink;
 mod source;
 mod timer;
+pub mod traffic;
 mod transporter;
 
 pub use combiner::{CombineMode, Combiner};
