@@ -115,6 +115,6 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [x] **Validação:** M/M/1, M/M/3 e Jackson só com fluxos; lei de Little; roteamento por script reprodutível; docas de recebimento (`examples/fluxo_docas.ron`)
 
 ## Fase 7+: avançado
-- [ ] Otimização de parâmetros (metaheurísticas)
+- [x] Otimização de parâmetros: grade, recozimento simulado, genético, refinamento, comparação pareada (`utsim otimizar`)
 - [ ] Fluidos, AGVs, emulação via OPC UA, interface para aprendizado por reforço
 - [x] Build WASM: rodar modelos no navegador (`utsim-web`, página `web/`, `scripts/web.sh`)
