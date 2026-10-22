@@ -226,10 +226,10 @@ impl FitReport {
 
         out.push_str("DADOS\n");
         let desc = self.descriptive_lines();
-        for chunk in desc.chunks(4) {
+        for chunk in desc.chunks(3) {
             let cells: Vec<String> = chunk
                 .iter()
-                .map(|(k, v)| pad(&format!("{k}: {v}"), 24))
+                .map(|(k, v)| pad(&format!("{k}: {v}"), 28))
                 .collect();
             out.push_str(&format!("  {}\n", cells.join("").trim_end()));
         }
