@@ -162,3 +162,38 @@ Você pode usar, estudar, modificar e redistribuir o UTSim, inclusive comercialm
 Quem distribuir uma versão modificada precisa mantê-la sob a mesma licença e entregar
 o código-fonte. Modelos `.ron` e resultados de simulação feitos com o UTSim pertencem
 a quem os criou e não são afetados pela licença.
+
+## Otimização
+
+`utsim otimizar` procura os valores de parâmetros do modelo (número de servidores,
+capacidade de fila, tempos de serviço) que minimizam ou maximizam um objetivo, respeitando
+restrições. O problema é um arquivo RON (veja `examples/otimizacao_servidores.ron`):
+
+```bash
+utsim otimizar examples/otimizacao_servidores.ron --html relatorio.html
+# opções: --json saida.json  --reps N  --orcamento N
+```
+
+Todos os pontos usam as mesmas sementes, então a comparação é pareada: o relatório mostra
+a diferença de cada ponto para o melhor (Δ ± intervalo de 95
+## Otimização
+
+`utsim otimizar` procura os valores de parâmetros do modelo (número de servidores,
+capacidade de fila, tempos de serviço) que minimizam ou maximizam um objetivo, respeitando
+restrições. O problema é um arquivo RON (veja `examples/otimizacao_servidores.ron`):
+
+```bash
+utsim otimizar examples/otimizacao_servidores.ron --html relatorio.html
+# opções: --json saida.json  --reps N  --orcamento N
+```
+
+Todos os pontos usam as mesmas sementes, então a comparação é pareada: o relatório mostra
+a diferença de cada ponto para o melhor (Δ ± intervalo de 95%), marca com `≈` os que não
+se distinguem estatisticamente e imprime o cenário (`set: { ... }`) pronto para colar em
+um arquivo de experimento. O `--html` inclui gráficos do objetivo por ordem de avaliação
+e dos 10 melhores pontos.
+
+Observações: com `refine`, os melhores pontos são re-simulados com mais replicações e a
+comparação final (melhor e equivalentes) usa essa lista; o relatório mostra as duas
+tabelas. As métricas `<bloco>.lost.*` ainda não servem de objetivo (só `.mean` é exposto e
+vale sempre 1); use, por exemplo, as entradas da Sink com peso negativo.

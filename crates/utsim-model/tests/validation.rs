@@ -184,6 +184,9 @@ fn bundled_examples_are_valid() {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if name.starts_with("otimizacao") {
+            continue; // optimization problems are checked by utsim-opt and the CLI tests
+        }
         if name.starts_with("experimento") {
             // Experiment files are checked by running them.
             utsim_model::experiment::Experiment::load(&path)
