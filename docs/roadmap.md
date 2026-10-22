@@ -14,12 +14,16 @@ validação da anterior passa.
 - [x] **Validação:** M/M/1 contra a teoria, linha determinística exata, bloqueio, determinismo
 
 ## Fase 1: análise estatística mais rica
-- [ ] Séries temporais (conteúdo × tempo) e histogramas de permanência
-- [ ] Cenários (variação de parâmetros) e tabela comparativa
-- [ ] Exportação CSV
-- [ ] Combiner, Separator e Queue com lote
-- [ ] Quebras (MTBF/MTTR) e tabelas de turnos (estado `down`)
-- [ ] **Validação:** M/M/c, M/M/1/K e redes de Jackson contra a teoria
+- [x] Séries temporais (conteúdo × tempo) e histogramas de permanência
+- [x] Cenários (variação de parâmetros) e tabela comparativa (`utsim experiment`)
+- [x] Exportação CSV
+- [x] Combiner, Separator e Queue com lote
+- [x] Quebras (MTBF/MTTR) com pausa dos tempos em andamento
+- [ ] Tabelas de turnos (parada programada)
+- [x] Roteamento ponderado (`Weighted`) e eventos canceláveis
+- [x] **Validação:** M/M/c (Erlang C), redes de Jackson, LIFO, disponibilidade com quebras
+- [ ] **Validação:** M/M/1/K (precisa de perda de chegadas na Source)
+- [ ] Rede de segurança: snapshots golden, `scripts/verificar`, CI
 
 ## Fase 1b: modelagem de dados de entrada (ajuste de distribuições)
 A partir de dados reais (intervalos entre chegadas, tempos de processo, tempos de reparo...),
