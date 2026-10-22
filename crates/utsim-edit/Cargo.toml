@@ -12,3 +12,6 @@ utsim-model.workspace = true
 utsim-objects.workspace = true
 ron.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
