@@ -13,6 +13,7 @@ use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
 use crate::stats::{StateTracker, Tally, TimeWeighted};
+use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
 #[derive(Clone, Debug)]
 pub struct RunConfig {
@@ -125,6 +126,9 @@ struct BlockRuntime {
     /// Separate stream so enabling breakdowns does not shift the block's own draws.
     downtime_rng: SimRng,
     shifts: Option<ShiftTable>,
+    /// Off-shift windows currently open. A counter, not a flag: when one window ends
+    /// at the instant the next begins, both events share the same time.
+    open_windows: u32,
     /// Active stop reasons (bit set of `BREAKDOWN`, `OFF_SHIFT`); 0 = running.
     stops: u8,
     /// State the block asked for while stopped; restored when it runs again.
@@ -157,6 +161,9 @@ pub struct Core {
     keep_raw: bool,
     /// Number of samples taken so far; sample `k` happens at `warmup + k * interval`.
     samples_taken: u64,
+    /// Recorded trace, when enabled with [`Simulation::enable_trace`].
+    trace: Option<Vec<TraceRecord>>,
+    observer: Option<Box<dyn Observer>>,
 }
 
 impl Core {
@@ -187,6 +194,20 @@ impl Core {
         it.entered_at = now;
         self.blocks[b.0].contents.push(item);
         self.update_content(b);
+    }
+
+    fn emit(&mut self, event: TraceEvent) {
+        if let Some(observer) = &mut self.observer {
+            observer.on_event(self.now, &event);
+        }
+        if let Some(trace) = &mut self.trace {
+            trace.push(TraceRecord { t: self.now, event });
+        }
+    }
+
+    fn set_block_state(&mut self, b: BlockId, state: State) {
+        self.blocks[b.0].stats.states.set(self.now, state);
+        self.emit(TraceEvent::State { block: b.0, state });
     }
 
     fn mark_dirty(&mut self, b: BlockId) {
@@ -271,12 +292,11 @@ impl Ctx<'_> {
     /// Sets the block state. While the block is down the kernel keeps showing
     /// `down` and applies this state when the repair finishes.
     pub fn set_state(&mut self, state: State) {
-        let now = self.core.now;
         let rt = &mut self.core.blocks[self.me.0];
         if rt.stops != 0 {
             rt.state_when_up = Some(state);
         } else {
-            rt.stats.states.set(now, state);
+            self.core.set_block_state(self.me, state);
         }
     }
 
@@ -309,6 +329,11 @@ impl Ctx<'_> {
         });
         self.core.blocks[self.me.0].contents.push(id);
         self.core.update_content(self.me);
+        let block = self.me.0;
+        self.core.emit(TraceEvent::Created {
+            item: item_key(id),
+            block,
+        });
         id
     }
 
@@ -342,6 +367,10 @@ impl Ctx<'_> {
         it.location = None;
         it.container = Some(container);
         self.core.items[container].contents.push(item);
+        self.core.emit(TraceEvent::Packed {
+            item: item_key(item),
+            container: item_key(container),
+        });
     }
 
     /// Takes everything out of `container` and places it in this block.
@@ -349,6 +378,11 @@ impl Ctx<'_> {
         let items = std::mem::take(&mut self.core.items[container].contents);
         for &item in &items {
             self.core.put_item_into(self.me, item);
+            let block = self.me.0;
+            self.core.emit(TraceEvent::Unpacked {
+                item: item_key(item),
+                block,
+            });
         }
         items
     }
@@ -465,6 +499,8 @@ impl Simulation {
                 cancelled: HashSet::new(),
                 keep_raw: config.histogram_bins.is_some_and(|b| b > 0),
                 samples_taken: 0,
+                trace: None,
+                observer: None,
             },
             behaviors: Vec::new(),
             config,
@@ -491,6 +527,7 @@ impl Simulation {
                 DOWNTIME_STREAMS + id.0 as u64,
             ),
             shifts: None,
+            open_windows: 0,
             stops: 0,
             state_when_up: None,
             contents: Vec::new(),
@@ -536,6 +573,20 @@ impl Simulation {
             .iter()
             .position(|b| b.name == name)
             .map(BlockId)
+    }
+
+    /// Records every [`TraceEvent`] of the run; read it with [`Simulation::take_trace`].
+    pub fn enable_trace(&mut self) {
+        self.core.trace.get_or_insert_with(Vec::new);
+    }
+
+    pub fn take_trace(&mut self) -> Vec<TraceRecord> {
+        self.core.trace.take().unwrap_or_default()
+    }
+
+    /// Streams every [`TraceEvent`] to `observer` while the run progresses.
+    pub fn set_observer(&mut self, observer: Box<dyn Observer>) {
+        self.core.observer = Some(observer);
     }
 
     pub fn now(&self) -> Time {
@@ -656,7 +707,16 @@ impl Simulation {
         self.core.schedule_at(now + duration, EventKind::ShiftOn(b));
         self.core
             .schedule_at(now + period, EventKind::ShiftOff(b, k));
+        self.core.blocks[b.0].open_windows += 1;
         self.stop(b, OFF_SHIFT);
+    }
+
+    fn shift_on(&mut self, b: BlockId) {
+        let rt = &mut self.core.blocks[b.0];
+        rt.open_windows = rt.open_windows.saturating_sub(1);
+        if rt.open_windows == 0 {
+            self.resume(b, OFF_SHIFT);
+        }
     }
 
     /// State shown while stopped: a breakdown wins over being off shift.
@@ -670,14 +730,14 @@ impl Simulation {
 
     /// Adds a stop reason. Ports close and `on_stop` runs only on the first one.
     fn stop(&mut self, b: BlockId, reason: u8) {
-        let now = self.core.now;
         let rt = &mut self.core.blocks[b.0];
         let was_running = rt.stops == 0;
         if was_running {
             rt.state_when_up = rt.stats.states.current();
         }
         rt.stops |= reason;
-        rt.stats.states.set(now, Self::stopped_state(rt.stops));
+        let shown = Self::stopped_state(rt.stops);
+        self.core.set_block_state(b, shown);
         if was_running {
             let Simulation {
                 core, behaviors, ..
@@ -689,15 +749,15 @@ impl Simulation {
 
     /// Clears a stop reason; the block runs again once no reason is left.
     fn resume(&mut self, b: BlockId, reason: u8) {
-        let now = self.core.now;
         let rt = &mut self.core.blocks[b.0];
         rt.stops &= !reason;
         if rt.stops != 0 {
-            rt.stats.states.set(now, Self::stopped_state(rt.stops));
+            let shown = Self::stopped_state(rt.stops);
+            self.core.set_block_state(b, shown);
             return;
         }
         if let Some(state) = rt.state_when_up.take() {
-            rt.stats.states.set(now, state);
+            self.core.set_block_state(b, state);
         }
         {
             let Simulation {
@@ -740,7 +800,7 @@ impl Simulation {
             EventKind::Fail(b) => self.fail(b),
             EventKind::Repair(b) => self.repair(b),
             EventKind::ShiftOff(b, k) => self.shift_off(b, k),
-            EventKind::ShiftOn(b) => self.resume(b, OFF_SHIFT),
+            EventKind::ShiftOn(b) => self.shift_on(b),
             EventKind::Sample => self.sample(),
             EventKind::EndWarmup => {
                 let now = self.core.now;
@@ -807,6 +867,11 @@ impl Simulation {
 
         self.core.put_item_into(to, item);
         self.core.blocks[to.0].stats.input += 1;
+        self.core.emit(TraceEvent::Moved {
+            item: item_key(item),
+            from: from.0,
+            to: to.0,
+        });
         {
             let Simulation {
                 core, behaviors, ..
@@ -833,6 +898,7 @@ impl Simulation {
             if let Some(c) = item.container.and_then(|c| self.core.items.get_mut(c)) {
                 c.contents.retain(|&x| x != id);
             }
+            self.core.emit(TraceEvent::Destroyed { item: item_key(id) });
             self.core.doomed.extend(item.contents);
         }
     }

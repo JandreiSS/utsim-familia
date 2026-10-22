@@ -275,3 +275,58 @@ fn shifts_close_the_block_on_schedule() {
     assert_close("processing", p.states["processing"], 0.8, 1e-9);
     assert_eq!(p.output, 800);
 }
+
+#[test]
+fn touching_shift_windows_stay_closed() {
+    // Regression: [0,3) and [3,5) touch, and the last window ends at the period end
+    // while the next cycle starts at 0. The block must stay off for 5 of every 10.
+    let m = model(
+        r#"Model(
+            name: "janelas encostadas",
+            run: (stop_time: 100.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(0.25), first_at_zero: true)),
+                (name: "q", kind: Queue(capacity: 10)),
+                (name: "p", kind: Processor(process: Const(1.0)),
+                 shifts: (period: 10.0, off: [(start: 0.0, duration: 3.0), (start: 3.0, duration: 2.0), (start: 8.0, duration: 2.0)])),
+                (name: "out", kind: Sink),
+            ],
+            connections: [("src", "q"), ("q", "p"), ("p", "out")],
+        )"#,
+    );
+    let r = &m.run_replications().unwrap()[0];
+    assert_close(
+        "off_shift",
+        r.block("p").unwrap().states["off_shift"],
+        0.7,
+        1e-9,
+    );
+}
+
+#[test]
+fn replay_trace_is_consistent_with_the_report() {
+    let m = Model::load(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/montagem_paletes.ron"),
+    )
+    .unwrap();
+    let mut short = m.clone();
+    short.run.stop_time = 500.0;
+    short.run.warmup = 0.0;
+    let replay = short.replay(0).unwrap();
+    let direct = short.build(0).run().unwrap();
+    assert_eq!(
+        replay.report.metrics(),
+        direct.metrics(),
+        "rastrear não pode mudar o resultado"
+    );
+    let moved_into = |b: usize| {
+        replay
+            .records
+            .iter()
+            .filter(|r| matches!(r.event, utsim_core::TraceEvent::Moved { to, .. } if to == b))
+            .count() as u64
+    };
+    for (i, b) in replay.report.blocks.iter().enumerate() {
+        assert_eq!(moved_into(i), b.input, "entradas de {}", b.name);
+    }
+}

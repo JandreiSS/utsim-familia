@@ -13,6 +13,7 @@ pub mod item;
 pub mod report;
 pub mod rng;
 pub mod stats;
+pub mod trace;
 
 /// Simulation time. Units are whatever the model author chooses (usually seconds).
 pub type Time = f64;
@@ -23,3 +24,4 @@ pub use engine::{Ctx, EventId, RunConfig, SimError, Simulation};
 pub use item::{Item, ItemId, Value};
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, summarize};
 pub use stats::Histogram;
+pub use trace::{Observer, TraceEvent, TraceRecord};
