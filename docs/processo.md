@@ -95,6 +95,10 @@ Fase 4  ── transporte ────┬─ Sonnet A: transportadores e regras 
 Fase 5  ── esteira/rack ──┬─ Sonnet A: esteira cinemática ─────────────┐
            (Opus)         ├─ Haiku B: porta-paletes ────────────────────┤
                           └─ (depois) Sonnet: esteira/rack no 3D ───────┴─ merge + verificar
+Fase 6  ── tokens/scripts ┬─ Sonnet A: motor do fluxo de tokens ───────┐
+           (Opus)         ├─ Sonnet B: scripts em Rhai ────────────────┤
+                          ├─ Sonnet C: fluxos e scripts no editor ─────┤
+                          └─ (depois) Haiku: teoria com fluxos ────────┴─ merge + verificar
 QA da UI  ── Sonnet: modo roteirizado (entrada sintética + capturas) ───── o coordenador roda
              os roteiros, olha as capturas e delega as correções
 ```

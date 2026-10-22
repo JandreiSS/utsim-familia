@@ -256,8 +256,8 @@ impl Model {
             errors.push("run.histogram_bins deve ser >= 1".to_string());
         }
 
-        if self.objects.is_empty() {
-            errors.push("o modelo está vazio: adicione objetos".to_string());
+        if self.objects.is_empty() && self.flows.is_empty() {
+            errors.push("o modelo está vazio: adicione objetos ou fluxos".to_string());
         }
         let mut names = HashSet::new();
         for obj in &self.objects {
