@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
-use utsim_core::task::MSG_TRANSPORT_RESERVED;
-use utsim_core::{Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, State, Time};
+use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED};
+use utsim_core::{
+    Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind, Time,
+};
 
 /// Operators a processor needs (phase 4, contract): `count` members of `team`
 /// (a transporter or a dispatcher), during setup and/or processing.
@@ -28,6 +30,8 @@ const PROCESS_DONE: u32 = 1;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
+    /// Waiting for operators before a phase can start (see `Pending`).
+    WaitingOperator,
     Setup,
     Processing,
     Done,
@@ -43,17 +47,37 @@ struct Timer {
     remaining: Time,
 }
 
+/// An item waiting for all its operators to arrive before `stage` starts.
+struct Pending {
+    item: ItemId,
+    stage: Phase,
+    requests: Vec<RequestId>,
+    arrived: Vec<(RequestId, BlockId)>,
+}
+
+/// Operators currently assigned to an item: (request id, operator block).
+type Crew = Vec<(RequestId, BlockId)>;
+
 /// Holds each item for an optional setup time followed by a process time,
 /// then releases it. With capacity > 1 items are worked on in parallel.
 /// A breakdown pauses every running timer; the remaining time resumes on repair.
+///
+/// With `operators`, each item asks the team for `count` operators (one request per
+/// operator) before a phase that needs them; the timer starts when all have arrived.
+/// The operators stay with the item from setup to process when both need them, and
+/// are released when the last phase that needs them ends. Every item has its own
+/// requests, so capacity > 1 works. A breakdown does not release operators: a broken
+/// processor keeps its crew and the paused timers resume on repair.
 pub struct Processor {
     capacity: usize,
     setup: Option<Dist>,
     process: Dist,
     phases: Vec<(ItemId, Phase)>,
     timers: Vec<Timer>,
-    /// Operator team and usage (the operator front implements the protocol).
+    /// Operator team and usage.
     operators: Option<(BlockId, OperatorUse)>,
+    pending: Vec<Pending>,
+    held: Vec<(ItemId, Crew)>,
 }
 
 impl Processor {
@@ -65,6 +89,8 @@ impl Processor {
             phases: Vec::new(),
             timers: Vec::new(),
             operators: None,
+            pending: Vec::new(),
+            held: Vec::new(),
         }
     }
 
@@ -91,6 +117,17 @@ impl Processor {
     }
 
     fn start_timer(&mut self, cx: &mut Ctx, item: ItemId, tag: u32, duration: Time) {
+        if cx.is_down() {
+            // Operators arrived while stopped: start paused, resume on repair.
+            self.timers.push(Timer {
+                item,
+                tag,
+                event: None,
+                due: cx.now() + duration,
+                remaining: duration,
+            });
+            return;
+        }
         let event = Some(cx.schedule(duration, tag, Some(item)));
         self.timers.push(Timer {
             item,
@@ -101,19 +138,72 @@ impl Processor {
         });
     }
 
-    fn start_process(&mut self, cx: &mut Ctx, item: ItemId) {
-        self.set_phase(item, Phase::Processing);
-        let t = cx.sample_duration(&self.process);
-        self.start_timer(cx, item, PROCESS_DONE, t);
+    fn needs_operators(&self, stage: Phase) -> bool {
+        match (&self.operators, stage) {
+            (Some((_, op)), Phase::Setup) => op.setup,
+            (Some((_, op)), Phase::Processing) => op.process,
+            _ => false,
+        }
     }
 
-    /// With several items inside, the most "productive" phase wins.
+    /// Starts `stage` for `item`, first getting operators if the stage needs them
+    /// and the item does not already hold them.
+    fn begin(&mut self, cx: &mut Ctx, item: ItemId, stage: Phase) {
+        if self.needs_operators(stage) && !self.held.iter().any(|(i, _)| *i == item) {
+            let (team, op) = self.operators.clone().expect("checked by needs_operators");
+            let tag = if stage == Phase::Setup {
+                SETUP_DONE
+            } else {
+                PROCESS_DONE
+            };
+            let me = cx.me();
+            let requests = (0..op.count)
+                .map(|_| cx.request_task(team, TaskKind::Operate { station: me, tag }, 0))
+                .collect();
+            self.pending.push(Pending {
+                item,
+                stage,
+                requests,
+                arrived: Vec::new(),
+            });
+            self.set_phase(item, Phase::WaitingOperator);
+            return;
+        }
+        self.run_stage(cx, item, stage);
+    }
+
+    fn run_stage(&mut self, cx: &mut Ctx, item: ItemId, stage: Phase) {
+        self.set_phase(item, stage);
+        if stage == Phase::Setup {
+            let setup = self.setup.clone().expect("setup stage needs a setup time");
+            let t = cx.sample_duration(&setup);
+            self.start_timer(cx, item, SETUP_DONE, t);
+        } else {
+            let t = cx.sample_duration(&self.process);
+            self.start_timer(cx, item, PROCESS_DONE, t);
+        }
+    }
+
+    /// Sends MSG_RELEASE to the operators the item holds, if any.
+    fn release_operators(&mut self, cx: &mut Ctx, item: ItemId) {
+        if let Some(at) = self.held.iter().position(|(i, _)| *i == item) {
+            for (request, operator) in self.held.remove(at).1 {
+                cx.send(operator, MSG_RELEASE, request.0);
+            }
+        }
+    }
+
+    /// With several items inside, the most "productive" phase wins:
+    /// processing > setup > waiting for operators > blocked/waiting transport > idle.
+    /// So `WaitingOperator` shows only while nothing is being worked on.
     fn update_state(&self, cx: &mut Ctx) {
         let has = |p: Phase| self.phases.iter().any(|(_, q)| *q == p);
         let state = if has(Phase::Processing) {
             State::Processing
         } else if has(Phase::Setup) {
             State::Setup
+        } else if has(Phase::WaitingOperator) {
+            State::WaitingOperator
         } else if has(Phase::Done) {
             let waiting = self
                 .phases
@@ -139,6 +229,8 @@ impl Behavior for Processor {
     fn reset(&mut self, cx: &mut Ctx) {
         self.phases.clear();
         self.timers.clear();
+        self.pending.clear();
+        self.held.clear();
         cx.set_state(State::Idle);
     }
 
@@ -147,14 +239,12 @@ impl Behavior for Processor {
     }
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
-        match &self.setup {
-            Some(setup) => {
-                let t = cx.sample_duration(setup);
-                self.set_phase(item, Phase::Setup);
-                self.start_timer(cx, item, SETUP_DONE, t);
-            }
-            None => self.start_process(cx, item),
-        }
+        let first = if self.setup.is_some() {
+            Phase::Setup
+        } else {
+            Phase::Processing
+        };
+        self.begin(cx, item, first);
         self.update_state(cx);
     }
 
@@ -162,8 +252,15 @@ impl Behavior for Processor {
         let Some(item) = item else { return };
         self.timers.retain(|t| !(t.item == item && t.tag == tag));
         match tag {
-            SETUP_DONE => self.start_process(cx, item),
+            SETUP_DONE => {
+                // Keep the operators only if the process phase needs them too.
+                if !self.needs_operators(Phase::Processing) {
+                    self.release_operators(cx, item);
+                }
+                self.begin(cx, item, Phase::Processing);
+            }
             PROCESS_DONE => {
+                self.release_operators(cx, item);
                 self.set_phase(item, Phase::Done);
                 cx.release(item);
             }
@@ -187,9 +284,25 @@ impl Behavior for Processor {
         }
     }
 
-    fn on_message(&mut self, cx: &mut Ctx, _from: BlockId, tag: u32, _payload: u64) {
-        if tag == MSG_TRANSPORT_RESERVED {
-            self.update_state(cx);
+    fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
+        match tag {
+            MSG_TRANSPORT_RESERVED => self.update_state(cx),
+            MSG_ARRIVED => {
+                let id = RequestId(payload);
+                let Some(at) = self.pending.iter().position(|p| p.requests.contains(&id)) else {
+                    // Nobody waits for this operator any more: give it back.
+                    cx.send(from, MSG_RELEASE, payload);
+                    return;
+                };
+                self.pending[at].arrived.push((id, from));
+                if self.pending[at].arrived.len() == self.pending[at].requests.len() {
+                    let p = self.pending.remove(at);
+                    self.held.push((p.item, p.arrived));
+                    self.run_stage(cx, p.item, p.stage);
+                }
+                self.update_state(cx);
+            }
+            _ => {}
         }
     }
 
