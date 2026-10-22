@@ -469,6 +469,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-fit"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "rand_distr",
+ "serde",
+ "utsim-core",
+]
+
+[[package]]
 name = "utsim-model"
 version = "0.1.0"
 dependencies = [

@@ -13,6 +13,7 @@ repository = "https://github.com/jandreiss/utsim"
 utsim-core = { path = "crates/utsim-core" }
 utsim-objects = { path = "crates/utsim-objects" }
 utsim-model = { path = "crates/utsim-model" }
+utsim-fit = { path = "crates/utsim-fit" }
 
 rand = "0.9"
 rand_distr = "0.5"

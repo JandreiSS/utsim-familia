@@ -28,7 +28,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-10 | montar itens: empacotar em contêiner, juntar ou formar lote (Combiner) | 1 | ✅ | `objects.rs` |
 | RF-11 | desmontar itens: desempacotar ou dividir em cópias (Separator) | 1 | ✅ | `objects.rs` |
 | RF-12 | acumular itens na fila e liberar em lotes, com tempo máximo de espera | 1 | ✅ | `objects.rs` |
-| RF-13 | descartar chegadas quando não há lugar, contando as perdas | 1 | 🔄 | M/M/1/K |
+| RF-13 | descartar chegadas quando não há lugar, contando as perdas | 1 | ✅ | `finite_capacity.rs` (M/M/1/K, M/M/1/1) |
 
 ### Disponibilidade dos recursos
 
@@ -85,7 +85,7 @@ a situação atual e onde está a prova de que funciona.
 | RNF-02 | ser feito do zero (clean room), sem copiar código ou analisar binários proprietários | ✅ | comportamento especificado em `arquitetura.md` a partir de documentação pública |
 | RNF-03 | ser **reprodutível**: mesma semente → mesmo resultado, sempre | ✅ | `same_seed_same_result_and_replications_differ`, snapshots golden |
 | RNF-04 | ter números aleatórios independentes por objeto, para comparar cenários com justiça | ✅ | `rng.rs`; cenário base = rodada direta (`tests/experiment.rs`) |
-| RNF-05 | dar resultados **estatisticamente corretos** | ✅ | testes contra a teoria das filas (M/M/1, M/M/c, Jackson, M/M/1/K 🔄) |
+| RNF-05 | dar resultados **estatisticamente corretos** | ✅ | testes contra a teoria das filas (M/M/1, M/M/c, Jackson, M/M/1/K) |
 | RNF-06 | ser rápido: 10 replicações de 100 mil chegadas M/M/1 em menos de 1 s (release) | ✅ | hoje cerca de 45 ms; medido pela CLI |
 | RNF-07 | rodar sem tela (headless) e usar todos os núcleos nas replicações | ✅ | `utsim-cli`, rayon |
 | RNF-08 | guardar modelos em texto legível e versionável (RON) | ✅ | `examples/*.ron` |
