@@ -5894,6 +5894,7 @@ dependencies = [
  "utsim-core",
  "utsim-fit",
  "utsim-model",
+ "utsim-opt",
 ]
 
 [[package]]

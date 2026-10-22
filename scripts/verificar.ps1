@@ -33,7 +33,7 @@ Passo '5/6 Validação dos modelos (utsim check)'
 $bin = Join-Path (Get-Location) 'target\release\utsim.exe'
 if (-not (Test-Path $bin)) { Falha "binário não encontrado: $bin" }
 foreach ($modelo in Get-ChildItem -Path 'examples' -Filter '*.ron') {
-    if ($modelo.Name -like 'experimento*') { continue }
+    if ($modelo.Name -like 'experimento*' -or $modelo.Name -like 'otimizacao*') { continue }
     & $bin check $modelo.FullName
     if ($LASTEXITCODE -ne 0) { Falha "modelo inválido: $($modelo.Name)" }
 }

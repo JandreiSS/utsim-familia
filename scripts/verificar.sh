@@ -36,7 +36,7 @@ fi
 [ -x "$BIN" ] || falha "binário utsim não encontrado em target/release"
 for modelo in examples/*.ron; do
     case "$(basename "$modelo")" in
-        experimento*) continue ;;
+        experimento*|otimizacao*) continue ;;
     esac
     "$BIN" check "$modelo" || falha "modelo inválido: $modelo"
 done
