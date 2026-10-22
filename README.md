@@ -49,6 +49,22 @@ cargo run --release -p utsim-cli -- run examples/mm1.ron --sample 100 --bins 20 
 cargo test --workspace
 ```
 
+## Ajuste de distribuições
+
+A partir de dados reais (tempos de atendimento, intervalos entre chegadas...), o UTSim
+testa várias distribuições, mostra todas numa tabela (testes KS, Anderson-Darling e
+qui-quadrado, AIC e peso de Akaike), explica a escolha e entrega a linha `Dist` pronta
+para o `.ron`:
+
+```bash
+cargo run --release -p utsim-cli -- fit examples/dados/tempos_atendimento.csv --html relatorio.html
+```
+
+Aceita CSV/TXT com separador `,`, `;` ou tab, cabeçalho e vírgula decimal detectados
+automaticamente. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz instantes e o
+ajuste é feito sobre os intervalos), `--alpha 0.05`, `--bootstrap 300`, `--seed 1`,
+`--html relatorio.html` (histograma, Q-Q, P-P e ECDF) e `--json saida.json`.
+
 ## Formato do modelo
 
 Os modelos são arquivos de texto [RON](https://github.com/ron-rs/ron): legíveis,
