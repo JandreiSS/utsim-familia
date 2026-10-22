@@ -85,6 +85,9 @@ Fase 1b ── utsim-fit ─────┬─ Sonnet A: famílias + MLE (+ Dist
                           └─ Sonnet D: relatório + `utsim fit` ────────┴─ merge ─ Haiku: testes de recuperação
 Fase 2  ── Observer ──────┬─ Sonnet: visualizador Bevy (replay) ───────┐
            (Opus)         └─ Haiku: consistência replay × eventos ─────┴─ merge + verificar
+Fase 3  ── utsim-edit ────┬─ Sonnet: modo de edição no utsim-view ─────┐
+           (Opus)         ├─ Sonnet: painel de propriedades ───────────┤
+                          └─ Haiku: sequências aleatórias de comandos ─┴─ merge + verificar
 ```
 
 Regras para rodar em paralelo sem conflito:

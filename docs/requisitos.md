@@ -69,8 +69,11 @@ a situação atual e onde está a prova de que funciona.
 | RF-46 | gravar o rastro completo de uma replicação (replay) para análise ou animação | 2 | ✅ |
 | RF-50 | mostrar o modelo em 3D e animar os itens a partir da simulação | 2 | 🔄 |
 | RF-51 | controlar a animação: velocidade, pausa, passo a passo | 2 | 🔄 |
-| RF-60 | montar o modelo arrastando objetos e ligando portas com o mouse | 3 | ⏳ |
-| RF-61 | editar as propriedades dos objetos num painel e salvar o `.ron` | 3 | ⏳ |
+| RF-60 | montar o modelo arrastando objetos e ligando portas com o mouse | 3 | 🔄 |
+| RF-61 | editar as propriedades dos objetos num painel e salvar o `.ron` | 3 | 🔄 |
+| RF-62 | desfazer e refazer qualquer alteração (arrastar conta como um passo só) | 3 | ✅ (núcleo) |
+| RF-63 | mostrar os problemas do modelo enquanto ele é montado, apontando o objeto | 3 | ✅ (núcleo) |
+| RF-64 | simular direto do editor e voltar a editar | 3 | 🔄 |
 | RF-70 | ter operadores e veículos que se deslocam e executam tarefas | 4 | ⏳ |
 | RF-71 | distribuir tarefas entre recursos (dispatcher) e calcular rotas | 4 | ⏳ |
 | RF-80 | ter esteiras com acúmulo e armazéns endereçáveis (racks) | 5 | ⏳ |
@@ -99,3 +102,5 @@ a situação atual e onde está a prova de que funciona.
 | RNF-15 | ter documentação sempre atualizada: requisitos, arquitetura, roteiro e processo | ✅ | regra do `processo.md` |
 | RNF-16 | ser transparente nas escolhas estatísticas: regra de decisão publicada, todos os candidatos e métricas visíveis | ✅ | `RULE` em `rank.rs`, impressa em todo relatório |
 | RNF-17 | analisar um conjunto de dados (300 valores, 20 famílias, bootstrap 300) em poucos segundos | ✅ | ≈ 2 s em release |
+| RNF-18 | salvar de forma estável: o mesmo modelo gera sempre o mesmo texto, sem bagunçar o diff no Git; comentários de cabeçalho preservados | ✅ | `utsim-edit`: teste de ida e volta em todos os exemplos |
+| RNF-19 | separar a lógica do editor da interface gráfica, para testá-la sem tela | ✅ | `utsim-edit` não depende do Bevy |

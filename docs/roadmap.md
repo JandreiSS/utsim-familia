@@ -77,6 +77,7 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [x] **Validação:** o índice da linha do tempo reproduz as séries amostradas (`timeline.rs`); a conferência visual em janela ainda é manual
 
 ## Fase 3: editor
+- [x] Documento editável sem interface (`utsim-edit`): comandos, desfazer/refazer, validação ao vivo, salvamento estável
 - [ ] Arrastar objetos da biblioteca, mover/rotacionar (gizmos), grade
 - [ ] Conectar portas com o mouse; painel de propriedades (egui)
 - [ ] Salvar e abrir `.ron`
