@@ -7,7 +7,7 @@ use rand::Rng;
 use slotmap::SlotMap;
 
 use crate::Time;
-use crate::block::{Behavior, BlockId, Downtime, OutputRule, State};
+use crate::block::{Behavior, BlockId, Downtime, OutputRule, ShiftTable, State};
 use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
@@ -46,6 +46,9 @@ enum EventKind {
     },
     Fail(BlockId),
     Repair(BlockId),
+    /// Start of off-shift window `k` of the block's shift table.
+    ShiftOff(BlockId, usize),
+    ShiftOn(BlockId),
     EndWarmup,
     /// Records the time series; internal, not counted in `events_processed`.
     Sample,
@@ -121,8 +124,10 @@ struct BlockRuntime {
     downtime: Option<Downtime>,
     /// Separate stream so enabling breakdowns does not shift the block's own draws.
     downtime_rng: SimRng,
-    down: bool,
-    /// State the block asked for while down; restored on repair.
+    shifts: Option<ShiftTable>,
+    /// Active stop reasons (bit set of `BREAKDOWN`, `OFF_SHIFT`); 0 = running.
+    stops: u8,
+    /// State the block asked for while stopped; restored when it runs again.
     state_when_up: Option<State>,
     contents: Vec<ItemId>,
     outbox: VecDeque<Pending>,
@@ -237,9 +242,9 @@ impl Ctx<'_> {
         }
     }
 
-    /// Whether this block is currently broken down.
+    /// Whether this block is currently stopped (breakdown or off shift).
     pub fn is_down(&self) -> bool {
-        self.core.blocks[self.me.0].down
+        self.core.blocks[self.me.0].stops != 0
     }
 
     pub fn input_count(&self) -> usize {
@@ -268,7 +273,7 @@ impl Ctx<'_> {
     pub fn set_state(&mut self, state: State) {
         let now = self.core.now;
         let rt = &mut self.core.blocks[self.me.0];
-        if rt.down {
+        if rt.stops != 0 {
             rt.state_when_up = Some(state);
         } else {
             rt.stats.states.set(now, state);
@@ -433,6 +438,10 @@ impl Ctx<'_> {
 /// Offset of the breakdown random streams, far above any block index.
 const DOWNTIME_STREAMS: u64 = 1 << 40;
 
+/// Stop reasons. A block runs only when no reason is active.
+const BREAKDOWN: u8 = 1;
+const OFF_SHIFT: u8 = 2;
+
 /// A runnable model instance: one replication.
 pub struct Simulation {
     core: Core,
@@ -481,7 +490,8 @@ impl Simulation {
                 self.config.replication,
                 DOWNTIME_STREAMS + id.0 as u64,
             ),
-            down: false,
+            shifts: None,
+            stops: 0,
             state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
@@ -513,6 +523,11 @@ impl Simulation {
     /// Enables random breakdowns on a block.
     pub fn set_downtime(&mut self, block: BlockId, downtime: Downtime) {
         self.core.blocks[block.0].downtime = Some(downtime);
+    }
+
+    /// Enables a repeating shift table (scheduled off-shift windows) on a block.
+    pub fn set_shifts(&mut self, block: BlockId, shifts: ShiftTable) {
+        self.core.blocks[block.0].shifts = Some(shifts);
     }
 
     pub fn block_id(&self, name: &str) -> Option<BlockId> {
@@ -564,6 +579,7 @@ impl Simulation {
         }
         for b in 0..self.core.blocks.len() {
             self.schedule_failure(BlockId(b));
+            self.schedule_shifts(BlockId(b));
         }
         if self.sample_interval().is_some() {
             self.core.schedule_at(self.config.warmup, EventKind::Sample);
@@ -608,25 +624,78 @@ impl Simulation {
     fn fail(&mut self, b: BlockId) {
         let now = self.core.now;
         let rt = &mut self.core.blocks[b.0];
-        rt.state_when_up = rt.stats.states.current();
-        rt.down = true;
-        rt.stats.states.set(now, State::Down);
         let repair = rt
             .downtime
             .as_ref()
             .map_or(0.0, |dt| dt.mttr.sample(&mut rt.downtime_rng).max(0.0));
         self.core.schedule_at(now + repair, EventKind::Repair(b));
-        let Simulation {
-            core, behaviors, ..
-        } = self;
-        behaviors[b.0].on_stop(&mut Ctx { core, me: b });
-        self.flush_doomed();
+        self.stop(b, BREAKDOWN);
     }
 
     fn repair(&mut self, b: BlockId) {
+        self.resume(b, BREAKDOWN);
+        self.schedule_failure(b);
+    }
+
+    fn schedule_shifts(&mut self, b: BlockId) {
+        let Some(table) = &self.core.blocks[b.0].shifts else {
+            return;
+        };
+        let starts: Vec<Time> = table.off.iter().map(|w| w.start).collect();
+        for (k, start) in starts.into_iter().enumerate() {
+            self.core.schedule_at(start, EventKind::ShiftOff(b, k));
+        }
+    }
+
+    fn shift_off(&mut self, b: BlockId, k: usize) {
+        let now = self.core.now;
+        let Some(table) = &self.core.blocks[b.0].shifts else {
+            return;
+        };
+        let (period, duration) = (table.period, table.off[k].duration);
+        self.core.schedule_at(now + duration, EventKind::ShiftOn(b));
+        self.core
+            .schedule_at(now + period, EventKind::ShiftOff(b, k));
+        self.stop(b, OFF_SHIFT);
+    }
+
+    /// State shown while stopped: a breakdown wins over being off shift.
+    fn stopped_state(stops: u8) -> State {
+        if stops & BREAKDOWN != 0 {
+            State::Down
+        } else {
+            State::OffShift
+        }
+    }
+
+    /// Adds a stop reason. Ports close and `on_stop` runs only on the first one.
+    fn stop(&mut self, b: BlockId, reason: u8) {
         let now = self.core.now;
         let rt = &mut self.core.blocks[b.0];
-        rt.down = false;
+        let was_running = rt.stops == 0;
+        if was_running {
+            rt.state_when_up = rt.stats.states.current();
+        }
+        rt.stops |= reason;
+        rt.stats.states.set(now, Self::stopped_state(rt.stops));
+        if was_running {
+            let Simulation {
+                core, behaviors, ..
+            } = self;
+            behaviors[b.0].on_stop(&mut Ctx { core, me: b });
+            self.flush_doomed();
+        }
+    }
+
+    /// Clears a stop reason; the block runs again once no reason is left.
+    fn resume(&mut self, b: BlockId, reason: u8) {
+        let now = self.core.now;
+        let rt = &mut self.core.blocks[b.0];
+        rt.stops &= !reason;
+        if rt.stops != 0 {
+            rt.stats.states.set(now, Self::stopped_state(rt.stops));
+            return;
+        }
         if let Some(state) = rt.state_when_up.take() {
             rt.stats.states.set(now, state);
         }
@@ -643,7 +712,6 @@ impl Simulation {
             let up = self.core.blocks[b.0].inputs[k];
             self.core.mark_dirty(up);
         }
-        self.schedule_failure(b);
     }
 
     fn check(&mut self) -> Result<(), SimError> {
@@ -671,6 +739,8 @@ impl Simulation {
             }
             EventKind::Fail(b) => self.fail(b),
             EventKind::Repair(b) => self.repair(b),
+            EventKind::ShiftOff(b, k) => self.shift_off(b, k),
+            EventKind::ShiftOn(b) => self.resume(b, OFF_SHIFT),
             EventKind::Sample => self.sample(),
             EventKind::EndWarmup => {
                 let now = self.core.now;
@@ -691,7 +761,7 @@ impl Simulation {
     }
 
     fn try_send(&mut self, from: BlockId) {
-        if self.core.blocks[from.0].down {
+        if self.core.blocks[from.0].stops != 0 {
             return;
         }
         let mut i = 0;
@@ -712,7 +782,7 @@ impl Simulation {
         let item = &self.core.items[pending.item];
         let open = |&(to, in_port): &(BlockId, usize)| {
             let rt = &self.core.blocks[to.0];
-            !rt.down && self.behaviors[to.0].accepts(item, rt.contents.len(), in_port)
+            rt.stops == 0 && self.behaviors[to.0].accepts(item, rt.contents.len(), in_port)
         };
         match pending.port {
             Some(port) => outputs.get(port).copied().filter(open),

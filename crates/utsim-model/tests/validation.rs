@@ -251,3 +251,27 @@ fn weighted_routing_splits_flow() {
         0.01,
     );
 }
+
+#[test]
+fn shifts_close_the_block_on_schedule() {
+    // Always-busy machine, off 2 of every 10 time units: exactly 80% processing.
+    let m = model(
+        r#"Model(
+            name: "turnos",
+            run: (stop_time: 1000.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(0.25), first_at_zero: true)),
+                (name: "q", kind: Queue(capacity: 10)),
+                (name: "p", kind: Processor(process: Const(1.0)),
+                 shifts: (period: 10.0, off: [(start: 8.0, duration: 2.0)])),
+                (name: "out", kind: Sink),
+            ],
+            connections: [("src", "q"), ("q", "p"), ("p", "out")],
+        )"#,
+    );
+    let r = &m.run_replications().unwrap()[0];
+    let p = r.block("p").unwrap();
+    assert_close("off_shift", p.states["off_shift"], 0.2, 1e-9);
+    assert_close("processing", p.states["processing"], 0.8, 1e-9);
+    assert_eq!(p.output, 800);
+}

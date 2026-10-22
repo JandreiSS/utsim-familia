@@ -17,7 +17,7 @@ pub mod stats;
 /// Simulation time. Units are whatever the model author chooses (usually seconds).
 pub type Time = f64;
 
-pub use block::{Behavior, BlockId, Downtime, OutputRule, State};
+pub use block::{Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftTable, State};
 pub use dist::Dist;
 pub use engine::{Ctx, EventId, RunConfig, SimError, Simulation};
 pub use item::{Item, ItemId, Value};

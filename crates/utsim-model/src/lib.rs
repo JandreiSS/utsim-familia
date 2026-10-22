@@ -8,7 +8,7 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{
-    Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, SimError, Simulation,
+    Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError, Simulation,
 };
 use utsim_objects::{
     Batch, CombineMode, Combiner, Discipline, Processor, Queue, SeparateMode, Separator, Sink,
@@ -68,6 +68,9 @@ pub struct ObjectDef {
     /// Random breakdowns (MTBF/MTTR on the clock).
     #[serde(default)]
     pub downtime: Option<Downtime>,
+    /// Scheduled off-shift windows, repeating every `period`.
+    #[serde(default)]
+    pub shifts: Option<ShiftTable>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -264,6 +267,9 @@ impl Model {
                 dists.push(("downtime.mtbf".into(), &dt.mtbf));
                 dists.push(("downtime.mttr".into(), &dt.mttr));
             }
+            if let Some(Err(e)) = obj.shifts.as_ref().map(ShiftTable::validate) {
+                errors.push(format!("{}: {e}", obj.name));
+            }
             for (what, d) in dists {
                 if let Err(e) = d.validate() {
                     errors.push(format!("{}.{what}: {e}", obj.name));
@@ -395,6 +401,9 @@ impl Model {
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
             if let Some(dt) = &obj.downtime {
                 sim.set_downtime(id, dt.clone());
+            }
+            if let Some(table) = &obj.shifts {
+                sim.set_shifts(id, table.clone());
             }
             ids.insert(obj.name.as_str(), id);
         }

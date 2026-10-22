@@ -25,6 +25,7 @@ pub enum State {
     WaitingOperator,
     WaitingTransport,
     Down,
+    OffShift,
 }
 
 impl State {
@@ -41,6 +42,7 @@ impl State {
             State::WaitingOperator => "waiting_operator",
             State::WaitingTransport => "waiting_transport",
             State::Down => "down",
+            State::OffShift => "off_shift",
         }
     }
 }
@@ -60,6 +62,45 @@ pub enum OutputRule {
     ByLabel(String),
     /// A random port with the given relative weights, one per output port.
     Weighted(Vec<f64>),
+}
+
+/// Repeating schedule of off-shift windows (breaks, nights, weekends).
+/// Window times are offsets inside a cycle of length `period`, starting at t=0.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ShiftTable {
+    pub period: f64,
+    pub off: Vec<OffWindow>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OffWindow {
+    pub start: f64,
+    pub duration: f64,
+}
+
+impl ShiftTable {
+    /// Windows must be positive, inside the period, sorted and non-overlapping.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(self.period.is_finite() && self.period > 0.0) {
+            return Err("shifts.period deve ser finito e > 0".into());
+        }
+        let mut end_prev = 0.0;
+        for (k, w) in self.off.iter().enumerate() {
+            let ok = w.start.is_finite() && w.duration.is_finite() && w.duration > 0.0;
+            if !ok || w.start < end_prev || w.start + w.duration > self.period {
+                return Err(format!(
+                    "shifts.off[{k}]: janelas precisam ter duração > 0, estar dentro do período, em ordem e sem sobreposição"
+                ));
+            }
+            end_prev = w.start + w.duration;
+        }
+        Ok(())
+    }
+
+    /// Fraction of each cycle spent off shift.
+    pub fn off_fraction(&self) -> f64 {
+        self.off.iter().map(|w| w.duration).sum::<f64>() / self.period
+    }
 }
 
 /// Random breakdowns: time between failures counted on the clock (not on use).

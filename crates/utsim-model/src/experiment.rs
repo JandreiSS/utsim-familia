@@ -171,6 +171,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             set!(obj.downtime);
             return Ok(());
         }
+        "shifts" => {
+            set!(obj.shifts);
+            return Ok(());
+        }
         _ => {}
     }
     let (kind_name, kind_fields): (&str, &[&str]) = match &obj.kind {
@@ -205,7 +209,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             let valid: Vec<&str> = kind_fields
                 .iter()
                 .copied()
-                .chain(["output", "position", "downtime"])
+                .chain(["output", "position", "downtime", "shifts"])
                 .collect();
             return Err(invalid(format!(
                 "'{key}': '{target}' ({kind_name}) não tem o campo '{field}'; campos válidos: {}",
