@@ -106,6 +106,7 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Diagrama de fluxo: arrastar caixas, zoom; arestas longas desviando das caixas
 - [ ] Linha de status do Simular não deve contar os blocos de fluxo
 - [ ] Scripts: evitar a conversão de rótulos quando o script não usa `item` (custo por chamada)
+- [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
 
 ## Fase 6: lógica do usuário
 - [x] Fluxo de tokens (gerar, agenda, ao evento, esperar, decidir, atribuir, adquirir/liberar recurso, aguardar evento, criar item, lote, fim)
