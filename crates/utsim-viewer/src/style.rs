@@ -12,6 +12,8 @@ pub fn state_color(state: Option<State>) -> [f32; 3] {
         Some(State::OffShift) => [0.25, 0.45, 0.90],
         Some(State::WaitingOperator | State::WaitingTransport) => [0.70, 0.45, 0.80],
         Some(State::Idle) => [0.55, 0.55, 0.58],
+        Some(State::TravelEmpty | State::TravelLoaded) => [0.20, 0.60, 0.85],
+        Some(State::Loading | State::Unloading | State::Utilize) => [0.20, 0.72, 0.30],
         // Empty, generating, releasing, collecting and "no state yet": neutral.
         Some(_) | None => [0.62, 0.66, 0.72],
     }
@@ -33,6 +35,11 @@ pub fn state_label(state: Option<State>) -> &'static str {
         Some(State::WaitingTransport) => "aguardando transporte",
         Some(State::Down) => "em falha",
         Some(State::OffShift) => "fora do turno",
+        Some(State::TravelEmpty) => "viajando vazio",
+        Some(State::TravelLoaded) => "viajando carregado",
+        Some(State::Loading) => "carregando",
+        Some(State::Unloading) => "descarregando",
+        Some(State::Utilize) => "trabalhando no posto",
     }
 }
 

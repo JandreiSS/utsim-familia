@@ -1,4 +1,27 @@
-use utsim_core::{Behavior, Ctx, Dist, EventId, Item, ItemId, State, Time};
+use serde::{Deserialize, Serialize};
+use utsim_core::task::MSG_TRANSPORT_RESERVED;
+use utsim_core::{Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, State, Time};
+
+/// Operators a processor needs (phase 4, contract): `count` members of `team`
+/// (a transporter or a dispatcher), during setup and/or processing.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OperatorUse {
+    pub team: String,
+    #[serde(default = "one")]
+    pub count: usize,
+    #[serde(default = "yes")]
+    pub setup: bool,
+    #[serde(default = "yes")]
+    pub process: bool,
+}
+
+fn one() -> usize {
+    1
+}
+
+fn yes() -> bool {
+    true
+}
 
 const SETUP_DONE: u32 = 0;
 const PROCESS_DONE: u32 = 1;
@@ -29,6 +52,8 @@ pub struct Processor {
     process: Dist,
     phases: Vec<(ItemId, Phase)>,
     timers: Vec<Timer>,
+    /// Operator team and usage (the operator front implements the protocol).
+    operators: Option<(BlockId, OperatorUse)>,
 }
 
 impl Processor {
@@ -39,6 +64,7 @@ impl Processor {
             process,
             phases: Vec::new(),
             timers: Vec::new(),
+            operators: None,
         }
     }
 
@@ -49,6 +75,11 @@ impl Processor {
 
     pub fn setup(mut self, setup: Option<Dist>) -> Self {
         self.setup = setup;
+        self
+    }
+
+    pub fn operators(mut self, operators: Option<(BlockId, OperatorUse)>) -> Self {
+        self.operators = operators;
         self
     }
 
@@ -84,7 +115,15 @@ impl Processor {
         } else if has(Phase::Setup) {
             State::Setup
         } else if has(Phase::Done) {
-            State::Blocked
+            let waiting = self
+                .phases
+                .iter()
+                .any(|(id, p)| *p == Phase::Done && cx.item(*id).awaiting_transport);
+            if waiting {
+                State::WaitingTransport
+            } else {
+                State::Blocked
+            }
         } else {
             State::Idle
         };
@@ -145,6 +184,12 @@ impl Behavior for Processor {
                 cx.cancel(event);
                 timer.remaining = (timer.due - now).max(0.0);
             }
+        }
+    }
+
+    fn on_message(&mut self, cx: &mut Ctx, _from: BlockId, tag: u32, _payload: u64) {
+        if tag == MSG_TRANSPORT_RESERVED {
+            self.update_state(cx);
         }
     }
 

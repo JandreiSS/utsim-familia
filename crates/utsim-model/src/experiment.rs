@@ -175,6 +175,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             set!(obj.shifts);
             return Ok(());
         }
+        "transport" => {
+            set!(obj.transport);
+            return Ok(());
+        }
         _ => {}
     }
     let (kind_name, kind_fields): (&str, &[&str]) = match &obj.kind {
@@ -189,7 +193,21 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             ],
         ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
-        ObjectKind::Processor { .. } => ("Processor", &["capacity", "setup", "process"]),
+        ObjectKind::Processor { .. } => {
+            ("Processor", &["capacity", "setup", "process", "operators"])
+        }
+        ObjectKind::Transporter { .. } => (
+            "Transporter",
+            &[
+                "speed",
+                "acceleration",
+                "deceleration",
+                "capacity",
+                "load_time",
+                "unload_time",
+            ],
+        ),
+        ObjectKind::Dispatcher { .. } => ("Dispatcher", &["team", "rule"]),
         ObjectKind::Combiner { .. } => ("Combiner", &["components", "mode", "setup", "process"]),
         ObjectKind::Separator { .. } => ("Separator", &["mode", "process"]),
         ObjectKind::Sink => ("Sink", &[]),
@@ -206,6 +224,15 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Processor { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Processor { setup, .. }, "setup") => set!(*setup),
         (ObjectKind::Processor { process, .. }, "process") => set!(*process),
+        (ObjectKind::Processor { operators, .. }, "operators") => set!(*operators),
+        (ObjectKind::Transporter { speed, .. }, "speed") => set!(*speed),
+        (ObjectKind::Transporter { acceleration, .. }, "acceleration") => set!(*acceleration),
+        (ObjectKind::Transporter { deceleration, .. }, "deceleration") => set!(*deceleration),
+        (ObjectKind::Transporter { capacity, .. }, "capacity") => set!(*capacity),
+        (ObjectKind::Transporter { load_time, .. }, "load_time") => set!(*load_time),
+        (ObjectKind::Transporter { unload_time, .. }, "unload_time") => set!(*unload_time),
+        (ObjectKind::Dispatcher { team, .. }, "team") => set!(*team),
+        (ObjectKind::Dispatcher { rule, .. }, "rule") => set!(*rule),
         (ObjectKind::Combiner { components, .. }, "components") => set!(*components),
         (ObjectKind::Combiner { mode, .. }, "mode") => set!(*mode),
         (ObjectKind::Combiner { setup, .. }, "setup") => set!(*setup),
@@ -216,7 +243,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             let valid: Vec<&str> = kind_fields
                 .iter()
                 .copied()
-                .chain(["output", "position", "downtime", "shifts"])
+                .chain(["output", "position", "downtime", "shifts", "transport"])
                 .collect();
             return Err(invalid(format!(
                 "'{key}': '{target}' ({kind_name}) não tem o campo '{field}'; campos válidos: {}",
@@ -374,7 +401,7 @@ mod tests {
     fn unknown_field_lists_valid_ones() {
         let e = set(&[("m.velocidade", "1")]).unwrap_err().to_string();
         assert!(
-            e.contains("Processor") && e.contains("capacity, setup, process, output"),
+            e.contains("Processor") && e.contains("capacity, setup, process, operators, output"),
             "{e}"
         );
         let e = set(&[("out.process", "Const(1.0)")])

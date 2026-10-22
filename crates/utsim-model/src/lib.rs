@@ -9,11 +9,13 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{
-    Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError, Simulation,
+    Behavior, BlockId, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError,
+    Simulation,
 };
+use utsim_objects::network::NetworkDef;
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Discipline, OnBlocked, Processor, Queue, SeparateMode, Separator,
-    Sink, Source,
+    Batch, CombineMode, Combiner, Discipline, DispatchRule, Dispatcher, OnBlocked, OperatorUse,
+    Processor, Queue, SeparateMode, Separator, Sink, Source, Transporter,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -38,6 +40,9 @@ pub struct Model {
     /// `(from, to)` pairs. Order defines port numbers and pull priority.
     #[serde(default)]
     pub connections: Vec<(String, String)>,
+    /// Paths for mobile resources (straight lines when absent).
+    #[serde(default)]
+    pub network: Option<NetworkDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -72,6 +77,10 @@ pub struct ObjectDef {
     /// Scheduled off-shift windows, repeating every `period`.
     #[serde(default)]
     pub shifts: Option<ShiftTable>,
+    /// Transporter or dispatcher that carries items out of this object
+    /// (instead of handing them over instantly).
+    #[serde(default)]
+    pub transport: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -103,6 +112,9 @@ pub enum ObjectKind {
         #[serde(default)]
         setup: Option<Dist>,
         process: Dist,
+        /// Operators needed during setup and/or processing.
+        #[serde(default)]
+        operators: Option<OperatorUse>,
     },
     /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
     Combiner {
@@ -119,6 +131,40 @@ pub enum ObjectKind {
         process: Dist,
     },
     Sink,
+    /// Mobile resource: forklift, AGV, person. Not connected by ports; objects
+    /// point to it with `transport`, or processors with `operators`.
+    Transporter {
+        /// Maximum speed (length units per time unit).
+        speed: f64,
+        #[serde(default)]
+        acceleration: Option<f64>,
+        #[serde(default)]
+        deceleration: Option<f64>,
+        #[serde(default = "one_usize")]
+        capacity: usize,
+        #[serde(default = "zero")]
+        load_time: Dist,
+        #[serde(default = "zero")]
+        unload_time: Dist,
+    },
+    /// Hands work to a team of transporters.
+    Dispatcher {
+        team: Vec<String>,
+        #[serde(default)]
+        rule: DispatchRule,
+    },
+}
+
+fn zero() -> Dist {
+    Dist::Const(0.0)
+}
+
+/// Mobile resources and dispatchers live outside the port graph.
+pub fn is_mobile(kind: &ObjectKind) -> bool {
+    matches!(
+        kind,
+        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. }
+    )
 }
 
 fn default_seed() -> u64 {
@@ -256,6 +302,7 @@ impl Model {
                     capacity,
                     setup,
                     process,
+                    operators,
                 } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
@@ -264,8 +311,43 @@ impl Model {
                         dists.push(("setup".into(), s));
                     }
                     dists.push(("process".into(), process));
+                    if let Some(op) = operators {
+                        if op.count == 0 {
+                            errors.push(format!("{}: operators.count deve ser >= 1", obj.name));
+                        }
+                    }
                 }
                 ObjectKind::Sink => {}
+                ObjectKind::Transporter {
+                    speed,
+                    acceleration,
+                    deceleration,
+                    capacity,
+                    load_time,
+                    unload_time,
+                } => {
+                    if !(speed.is_finite() && *speed > 0.0) {
+                        errors.push(format!("{}: speed deve ser finita e > 0", obj.name));
+                    }
+                    for (what, v) in [
+                        ("acceleration", acceleration),
+                        ("deceleration", deceleration),
+                    ] {
+                        if v.is_some_and(|a| !(a.is_finite() && a > 0.0)) {
+                            errors.push(format!("{}: {what} deve ser finita e > 0", obj.name));
+                        }
+                    }
+                    if *capacity == 0 {
+                        errors.push(format!("{}: capacity deve ser >= 1", obj.name));
+                    }
+                    dists.push(("load_time".into(), load_time));
+                    dists.push(("unload_time".into(), unload_time));
+                }
+                ObjectKind::Dispatcher { team, .. } => {
+                    if team.is_empty() {
+                        errors.push(format!("{}: team não pode ser vazio", obj.name));
+                    }
+                }
             }
             if let Some(dt) = &obj.downtime {
                 dists.push(("downtime.mtbf".into(), &dt.mtbf));
@@ -294,6 +376,7 @@ impl Model {
             .iter()
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
+        self.validate_mobile(&kind_of, &mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -318,11 +401,19 @@ impl Model {
             if matches!(kind_of.get(to.as_str()), Some(ObjectKind::Source { .. })) {
                 errors.push(format!("conexão ({from} -> {to}): Source não tem entrada"));
             }
+            for end in [from, to] {
+                if kind_of.get(end.as_str()).is_some_and(|k| is_mobile(k)) {
+                    errors.push(format!(
+                        "conexão ({from} -> {to}): '{end}' é um recurso móvel e não se liga por portas; \
+                         use `transport` ou `operators`"
+                    ));
+                }
+            }
             *outputs.entry(from.as_str()).or_default() += 1;
         }
         for obj in &self.objects {
             let n_out = outputs.get(obj.name.as_str()).copied().unwrap_or(0);
-            if !matches!(obj.kind, ObjectKind::Sink) && n_out == 0 {
+            if !matches!(obj.kind, ObjectKind::Sink) && !is_mobile(&obj.kind) && n_out == 0 {
                 errors.push(format!(
                     "{}: não tem saída conectada (os itens ficariam presos)",
                     obj.name
@@ -347,6 +438,58 @@ impl Model {
         }
     }
 
+    /// References between objects that do not go through ports.
+    fn validate_mobile(&self, kind_of: &HashMap<&str, &ObjectKind>, errors: &mut Vec<String>) {
+        let mobile = |name: &str| kind_of.get(name).is_some_and(|k| is_mobile(k));
+        let mut in_team: HashMap<&str, &str> = HashMap::new();
+        for obj in &self.objects {
+            if let Some(t) = &obj.transport {
+                if !mobile(t) {
+                    errors.push(format!(
+                        "{}: transport '{t}' precisa ser um Transporter ou Dispatcher",
+                        obj.name
+                    ));
+                }
+                if is_mobile(&obj.kind) {
+                    errors.push(format!("{}: recursos móveis não usam transport", obj.name));
+                }
+            }
+            if let ObjectKind::Processor {
+                operators: Some(op),
+                ..
+            } = &obj.kind
+            {
+                if !mobile(&op.team) {
+                    errors.push(format!(
+                        "{}: operators.team '{}' precisa ser um Transporter ou Dispatcher",
+                        obj.name, op.team
+                    ));
+                }
+            }
+            if let ObjectKind::Dispatcher { team, .. } = &obj.kind {
+                for member in team {
+                    if !matches!(
+                        kind_of.get(member.as_str()),
+                        Some(ObjectKind::Transporter { .. })
+                    ) {
+                        errors.push(format!(
+                            "{}: membro '{member}' da equipe precisa ser um Transporter",
+                            obj.name
+                        ));
+                    } else if let Some(other) = in_team.insert(member.as_str(), obj.name.as_str()) {
+                        errors.push(format!(
+                            "{member}: está nas equipes de '{other}' e de '{}'; use um só despachante",
+                            obj.name
+                        ));
+                    }
+                }
+            }
+        }
+        if let Some(net) = &self.network {
+            errors.extend(net.validate());
+        }
+    }
+
     /// Builds one replication. Call [`Model::validate`] first.
     pub fn build(&self, replication: u32) -> Simulation {
         let mut sim = Simulation::new(RunConfig {
@@ -357,7 +500,22 @@ impl Model {
             sample_interval: self.run.sample_interval,
             histogram_bins: self.run.histogram_bins,
         });
-        let mut ids = HashMap::new();
+        // Block ids follow object order, so references can be resolved up front.
+        let ids: HashMap<&str, BlockId> = self
+            .objects
+            .iter()
+            .enumerate()
+            .map(|(i, o)| (o.name.as_str(), BlockId(i)))
+            .collect();
+        let dispatcher_of: HashMap<&str, BlockId> = self
+            .objects
+            .iter()
+            .filter_map(|o| match &o.kind {
+                ObjectKind::Dispatcher { team, .. } => Some((team, ids[o.name.as_str()])),
+                _ => None,
+            })
+            .flat_map(|(team, d)| team.iter().map(move |m| (m.as_str(), d)))
+            .collect();
         for obj in &self.objects {
             let behavior: Box<dyn Behavior> = match &obj.kind {
                 ObjectKind::Source {
@@ -397,25 +555,52 @@ impl Model {
                     capacity,
                     setup,
                     process,
+                    operators,
                 } => Box::new(
                     Processor::new(process.clone())
                         .capacity(*capacity)
-                        .setup(setup.clone()),
+                        .setup(setup.clone())
+                        .operators(
+                            operators
+                                .as_ref()
+                                .map(|op| (ids[op.team.as_str()], op.clone())),
+                        ),
                 ),
                 ObjectKind::Sink => Box::new(Sink),
+                ObjectKind::Transporter {
+                    speed,
+                    acceleration,
+                    deceleration,
+                    load_time,
+                    unload_time,
+                    ..
+                } => Box::new(
+                    Transporter::new(*speed)
+                        .acceleration(*acceleration, *deceleration)
+                        .handling(load_time.clone(), unload_time.clone())
+                        .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
+                ),
+                ObjectKind::Dispatcher { team, rule } => Box::new(Dispatcher::new(
+                    team.iter().map(|m| ids[m.as_str()]).collect(),
+                    *rule,
+                )),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
+            sim.set_position(id, obj.position);
+            if let Some(t) = &obj.transport {
+                sim.set_transport(id, ids[t.as_str()]);
+            }
             if let Some(dt) = &obj.downtime {
                 sim.set_downtime(id, dt.clone());
             }
             if let Some(table) = &obj.shifts {
                 sim.set_shifts(id, table.clone());
             }
-            ids.insert(obj.name.as_str(), id);
         }
         for (from, to) in &self.connections {
             sim.connect(ids[from.as_str()], ids[to.as_str()]);
         }
+        sim.set_router(utsim_objects::network::router(self.network.as_ref()));
         sim
     }
 

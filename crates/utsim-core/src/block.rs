@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::dist::Dist;
 use crate::engine::Ctx;
 use crate::item::{Item, ItemId};
+use crate::task::TaskRequest;
 
 /// Index of a block inside a [`Simulation`](crate::Simulation).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -26,6 +27,12 @@ pub enum State {
     WaitingTransport,
     Down,
     OffShift,
+    TravelEmpty,
+    TravelLoaded,
+    Loading,
+    Unloading,
+    /// A mobile resource working at a station (operator).
+    Utilize,
 }
 
 impl State {
@@ -43,6 +50,11 @@ impl State {
             State::WaitingTransport => "waiting_transport",
             State::Down => "down",
             State::OffShift => "off_shift",
+            State::TravelEmpty => "travel_empty",
+            State::TravelLoaded => "travel_loaded",
+            State::Loading => "loading",
+            State::Unloading => "unloading",
+            State::Utilize => "utilize",
         }
     }
 }
@@ -149,5 +161,17 @@ pub trait Behavior: Send {
     /// The block is back up. The kernel restores the last state set by the block.
     fn on_resume(&mut self, cx: &mut Ctx) {
         let _ = cx;
+    }
+
+    /// A task for a mobile resource or dispatcher (see [`crate::task`]). Blocks that
+    /// cannot do work report a modelling error.
+    fn on_task(&mut self, cx: &mut Ctx, request: TaskRequest) {
+        let _ = request;
+        cx.error("este objeto não executa tarefas de transporte ou operação");
+    }
+
+    /// A message from another block (`MSG_*` tags in [`crate::task`]).
+    fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
+        let _ = (cx, from, tag, payload);
     }
 }

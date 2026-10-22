@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
+use std::sync::Arc;
 
 use rand::Rng;
 use slotmap::SlotMap;
@@ -13,6 +14,7 @@ use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
 use crate::stats::{StateTracker, Tally, TimeWeighted};
+use crate::task::{MSG_TRANSPORT_RESERVED, RequestId, Router, StraightLine, TaskKind, TaskRequest};
 use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
 #[derive(Clone, Debug)]
@@ -140,6 +142,37 @@ struct BlockRuntime {
     rng: SimRng,
     rr_next: usize,
     dirty: bool,
+    /// Layout position, used for travel distances.
+    position: [f64; 3],
+    /// Mobile resource (or dispatcher) that carries this block's items out.
+    transport: Option<BlockId>,
+    /// Items on their way here (room reserved by a transport request).
+    incoming: usize,
+}
+
+/// Work that involves another block's hooks, run by the kernel after the current
+/// hook returns (a hook can only reach its own block).
+enum KernelOp {
+    Task {
+        to: BlockId,
+        request: TaskRequest,
+    },
+    Message {
+        to: BlockId,
+        from: BlockId,
+        tag: u32,
+        payload: u64,
+    },
+    PickUp {
+        carrier: BlockId,
+        item: ItemId,
+    },
+    DropOff {
+        carrier: BlockId,
+        item: ItemId,
+        to: BlockId,
+        port: usize,
+    },
 }
 
 /// Kernel state that blocks can reach through [`Ctx`].
@@ -164,6 +197,11 @@ pub struct Core {
     /// Recorded trace, when enabled with [`Simulation::enable_trace`].
     trace: Option<Vec<TraceRecord>>,
     observer: Option<Box<dyn Observer>>,
+    ops: VecDeque<KernelOp>,
+    next_request: u64,
+    router: Arc<dyn Router>,
+    /// Origin of the move in progress, between `leave` and `arrive` (for the trace).
+    pending_move_from: Option<BlockId>,
 }
 
 impl Core {
@@ -326,6 +364,7 @@ impl Ctx<'_> {
             location: Some(self.me),
             container: None,
             contents: Vec::new(),
+            awaiting_transport: false,
         });
         self.core.blocks[self.me.0].contents.push(id);
         self.core.update_content(self.me);
@@ -389,14 +428,14 @@ impl Ctx<'_> {
 
     /// Marks the item as ready to leave, behind items released earlier.
     pub fn release(&mut self, id: ItemId) {
-        let pending = self.route(id);
+        let pending = self.route_output(id);
         self.core.blocks[self.me.0].outbox.push_back(pending);
         self.core.mark_dirty(self.me);
     }
 
     /// Marks the item as ready to leave, ahead of items released earlier.
     pub fn release_front(&mut self, id: ItemId) {
-        let pending = self.route(id);
+        let pending = self.route_output(id);
         self.core.blocks[self.me.0].outbox.push_front(pending);
         self.core.mark_dirty(self.me);
     }
@@ -423,7 +462,78 @@ impl Ctx<'_> {
         self.core.errors.push(message);
     }
 
-    fn route(&mut self, id: ItemId) -> Pending {
+    /// Layout position of any block.
+    pub fn position(&self, block: BlockId) -> [f64; 3] {
+        self.core.blocks[block.0].position
+    }
+
+    pub fn block_name(&self, block: BlockId) -> &str {
+        &self.core.blocks[block.0].name
+    }
+
+    /// Path between two points (straight line unless a path network is set).
+    pub fn route(&self, from: [f64; 3], to: [f64; 3]) -> Vec<[f64; 3]> {
+        self.core.router.route(from, to)
+    }
+
+    /// Records that this block starts moving along `path` for `duration` (for the 3D view).
+    pub fn trace_travel(&mut self, path: Vec<[f64; 3]>, duration: Time) {
+        let carrier = self.me.0;
+        self.core.emit(TraceEvent::Travel {
+            carrier,
+            path,
+            duration,
+        });
+    }
+
+    /// Asks block `to` (a mobile resource or dispatcher) to do some work for this block.
+    pub fn request_task(&mut self, to: BlockId, kind: TaskKind, priority: i32) -> RequestId {
+        self.core.next_request += 1;
+        let id = RequestId(self.core.next_request);
+        let request = TaskRequest {
+            id,
+            kind,
+            requester: self.me,
+            priority,
+        };
+        self.core.ops.push_back(KernelOp::Task { to, request });
+        id
+    }
+
+    /// Passes a task on unchanged (dispatchers).
+    pub fn forward_task(&mut self, to: BlockId, request: TaskRequest) {
+        self.core.ops.push_back(KernelOp::Task { to, request });
+    }
+
+    /// Sends a message to another block, delivered right after the current hook.
+    pub fn send(&mut self, to: BlockId, tag: u32, payload: u64) {
+        let from = self.me;
+        self.core.ops.push_back(KernelOp::Message {
+            to,
+            from,
+            tag,
+            payload,
+        });
+    }
+
+    /// Takes `item` (awaiting transport, anywhere) into this block, as a carrier.
+    pub fn pick_up(&mut self, item: ItemId) {
+        let carrier = self.me;
+        self.core.ops.push_back(KernelOp::PickUp { carrier, item });
+    }
+
+    /// Delivers a carried `item` into input `port` of `to`, using the room reserved for it.
+    pub fn drop_off(&mut self, item: ItemId, to: BlockId, port: usize) {
+        let carrier = self.me;
+        self.core.ops.push_back(KernelOp::DropOff {
+            carrier,
+            item,
+            to,
+            port,
+        });
+    }
+
+    fn route_output(&mut self, id: ItemId) -> Pending {
         let core = &mut *self.core;
         let rt = &mut core.blocks[self.me.0];
         let n = rt.outputs.len();
@@ -501,6 +611,10 @@ impl Simulation {
                 samples_taken: 0,
                 trace: None,
                 observer: None,
+                ops: VecDeque::new(),
+                next_request: 0,
+                router: Arc::new(StraightLine),
+                pending_move_from: None,
             },
             behaviors: Vec::new(),
             config,
@@ -544,6 +658,9 @@ impl Simulation {
             rng: rng::stream(self.config.seed, self.config.replication, id.0 as u64),
             rr_next: 0,
             dirty: false,
+            position: [0.0; 3],
+            transport: None,
+            incoming: 0,
         });
         self.behaviors.push(behavior);
         id
@@ -560,6 +677,20 @@ impl Simulation {
     /// Enables random breakdowns on a block.
     pub fn set_downtime(&mut self, block: BlockId, downtime: Downtime) {
         self.core.blocks[block.0].downtime = Some(downtime);
+    }
+
+    pub fn set_position(&mut self, block: BlockId, position: [f64; 3]) {
+        self.core.blocks[block.0].position = position;
+    }
+
+    /// Items leaving `block` are carried by `carrier` (a mobile resource or dispatcher).
+    pub fn set_transport(&mut self, block: BlockId, carrier: BlockId) {
+        self.core.blocks[block.0].transport = Some(carrier);
+    }
+
+    /// Replaces the straight-line router (e.g. by a path network).
+    pub fn set_router(&mut self, router: Arc<dyn Router>) {
+        self.core.router = router;
     }
 
     /// Enables a repeating shift table (scheduled off-shift windows) on a block.
@@ -814,10 +945,73 @@ impl Simulation {
 
     /// Moves released items until nothing else can move at the current instant.
     fn resolve(&mut self) {
-        while let Some(b) = self.core.dirty.pop_front() {
-            self.core.blocks[b.0].dirty = false;
-            self.try_send(b);
+        loop {
+            if let Some(op) = self.core.ops.pop_front() {
+                self.run_op(op);
+            } else if let Some(b) = self.core.dirty.pop_front() {
+                self.core.blocks[b.0].dirty = false;
+                self.try_send(b);
+            } else {
+                break;
+            }
         }
+    }
+
+    fn run_op(&mut self, op: KernelOp) {
+        match op {
+            KernelOp::Task { to, request } => {
+                let Simulation {
+                    core, behaviors, ..
+                } = self;
+                behaviors[to.0].on_task(&mut Ctx { core, me: to }, request);
+            }
+            KernelOp::Message {
+                to,
+                from,
+                tag,
+                payload,
+            } => {
+                let Simulation {
+                    core, behaviors, ..
+                } = self;
+                behaviors[to.0].on_message(&mut Ctx { core, me: to }, from, tag, payload);
+            }
+            KernelOp::PickUp { carrier, item } => {
+                let from = self.core.items.get(item).and_then(|it| it.location);
+                match from {
+                    Some(from) if self.core.items[item].awaiting_transport => {
+                        self.core.items[item].awaiting_transport = false;
+                        self.leave(item, from);
+                        self.arrive(item, carrier, 0);
+                    }
+                    _ => {
+                        let name = self.core.blocks[carrier.0].name.clone();
+                        self.core.errors.push(format!(
+                            "{name}: pick_up de um item que não aguarda transporte"
+                        ));
+                    }
+                }
+            }
+            KernelOp::DropOff {
+                carrier,
+                item,
+                to,
+                port,
+            } => {
+                if self.core.items.get(item).and_then(|it| it.location) != Some(carrier) {
+                    let name = self.core.blocks[carrier.0].name.clone();
+                    self.core
+                        .errors
+                        .push(format!("{name}: drop_off de um item que não está com ele"));
+                    return;
+                }
+                let rt = &mut self.core.blocks[to.0];
+                rt.incoming = rt.incoming.saturating_sub(1);
+                self.leave(item, carrier);
+                self.arrive(item, to, port);
+            }
+        }
+        self.flush_doomed();
     }
 
     fn try_send(&mut self, from: BlockId) {
@@ -830,7 +1024,10 @@ impl Simulation {
             match self.find_destination(from, pending) {
                 Some(to) => {
                     self.core.blocks[from.0].outbox.remove(i);
-                    self.transfer(pending.item, from, to);
+                    match self.core.blocks[from.0].transport {
+                        Some(carrier) => self.reserve_transport(pending.item, from, to, carrier),
+                        None => self.transfer(pending.item, from, to),
+                    }
                 }
                 None => i += 1,
             }
@@ -842,7 +1039,8 @@ impl Simulation {
         let item = &self.core.items[pending.item];
         let open = |&(to, in_port): &(BlockId, usize)| {
             let rt = &self.core.blocks[to.0];
-            rt.stops == 0 && self.behaviors[to.0].accepts(item, rt.contents.len(), in_port)
+            let content = rt.contents.len() + rt.incoming;
+            rt.stops == 0 && self.behaviors[to.0].accepts(item, content, in_port)
         };
         match pending.port {
             Some(port) => outputs.get(port).copied().filter(open),
@@ -851,8 +1049,40 @@ impl Simulation {
     }
 
     fn transfer(&mut self, item: ItemId, from: BlockId, (to, in_port): (BlockId, usize)) {
-        let now = self.core.now;
+        self.leave(item, from);
+        self.arrive(item, to, in_port);
+    }
 
+    /// Room in `to` is reserved; the item stays in `from` until the carrier picks it up.
+    fn reserve_transport(
+        &mut self,
+        item: ItemId,
+        from: BlockId,
+        (to, port): (BlockId, usize),
+        carrier: BlockId,
+    ) {
+        self.core.blocks[to.0].incoming += 1;
+        self.core.items[item].awaiting_transport = true;
+        let cx = &mut Ctx {
+            core: &mut self.core,
+            me: from,
+        };
+        cx.request_task(
+            carrier,
+            TaskKind::Transport {
+                item,
+                from,
+                to,
+                port,
+            },
+            0,
+        );
+        cx.send(from, MSG_TRANSPORT_RESERVED, item_key(item));
+    }
+
+    /// First half of a move: the item leaves `from` (stats, `on_exit`, upstream retry).
+    fn leave(&mut self, item: ItemId, from: BlockId) {
+        let now = self.core.now;
         let entered = self.core.items[item].entered_at;
         self.core.take_item_from(from, item);
         let stats = &mut self.core.blocks[from.0].stats;
@@ -864,27 +1094,31 @@ impl Simulation {
             } = self;
             behaviors[from.0].on_exit(&mut Ctx { core, me: from }, item);
         }
+        // `from` has room again: let its upstream blocks retry, in input-port order.
+        for k in 0..self.core.blocks[from.0].inputs.len() {
+            let up = self.core.blocks[from.0].inputs[k];
+            self.core.mark_dirty(up);
+        }
+        self.core.pending_move_from = Some(from);
+    }
 
+    /// Second half of a move: the item enters `to` through input `port`.
+    fn arrive(&mut self, item: ItemId, to: BlockId, port: usize) {
+        let from = self.core.pending_move_from.take().map_or(to.0, |b| b.0);
         self.core.put_item_into(to, item);
         self.core.blocks[to.0].stats.input += 1;
         self.core.emit(TraceEvent::Moved {
             item: item_key(item),
-            from: from.0,
+            from,
             to: to.0,
         });
         {
             let Simulation {
                 core, behaviors, ..
             } = self;
-            behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item, in_port);
+            behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item, port);
         }
         self.flush_doomed();
-
-        // `from` has room again: let its upstream blocks retry, in input-port order.
-        for k in 0..self.core.blocks[from.0].inputs.len() {
-            let up = self.core.blocks[from.0].inputs[k];
-            self.core.mark_dirty(up);
-        }
     }
 
     fn flush_doomed(&mut self) {

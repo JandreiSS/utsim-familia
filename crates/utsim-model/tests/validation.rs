@@ -330,3 +330,115 @@ fn replay_trace_is_consistent_with_the_report() {
         assert_eq!(moved_into(i), b.input, "entradas de {}", b.name);
     }
 }
+
+#[test]
+fn forklift_carries_items_with_exact_travel_times() {
+    // Queue at (0,0), machine at (6,8): 10 units apart; forklift speed 2 -> 5 per trip.
+    // Item 0 (t=0): forklift already there, delivered at 5, done at 6.
+    // Item n >= 1 (t=10n): forklift returns (5) and comes back (5): delivered 10n+10,
+    // done 10n+11, so 11 time units in the system. By t=100 items 0..=8 are done.
+    // The machine has capacity 2 on purpose: room is reserved when the transport is
+    // requested, so with capacity 1 an item arriving while the previous one is still
+    // on the forklift could not be dispatched yet (simuladores comerciais does the same).
+    let m = model(
+        r#"Model(
+            name: "empilhadeira",
+            run: (stop_time: 100.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(10.0), first_at_zero: true)),
+                (name: "q", kind: Queue(), transport: "empilhadeira"),
+                (name: "p", kind: Processor(capacity: 2, process: Const(1.0)), position: (6.0, 8.0, 0.0)),
+                (name: "out", kind: Sink, position: (6.0, 8.0, 0.0)),
+                (name: "empilhadeira", kind: Transporter(speed: 2.0)),
+            ],
+            connections: [("src", "q"), ("q", "p"), ("p", "out")],
+        )"#,
+    );
+    let r = &m.run_replications().unwrap()[0];
+    let out = r.block("out").unwrap();
+    assert_eq!(out.input, 9);
+    let tis = &out.extra["time_in_system"];
+    assert_close("primeiro item", tis.min, 6.0, 1e-12);
+    assert_close("demais itens", tis.max, 11.0, 1e-12);
+    let f = r.block("empilhadeira").unwrap();
+    assert_eq!(f.input, 10, "itens carregados (o 10º chega em t=100)");
+    // Travelling 5 + 5 per cycle except the very first trip: busy almost all the time.
+    assert!(
+        f.states["travel_loaded"] > 0.45 && f.states["travel_empty"] > 0.4,
+        "{:?}",
+        f.states
+    );
+    let q = r.block("q").unwrap();
+    assert_close(
+        "espera média na fila",
+        q.staytime.mean,
+        5.0 * 9.0 / 10.0,
+        1e-9,
+    );
+}
+
+#[test]
+fn dispatcher_shares_work_between_two_forklifts() {
+    // Same layout, items every 5: one forklift (10 per cycle) could not keep up,
+    // two alternate and keep the queue short.
+    let text = |carrier: &str| {
+        format!(
+            r#"Model(
+            name: "frota",
+            run: (stop_time: 1000.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(5.0), first_at_zero: true)),
+                (name: "q", kind: Queue(), transport: "{carrier}"),
+                (name: "p", kind: Processor(capacity: 5, process: Const(1.0)), position: (6.0, 8.0, 0.0)),
+                (name: "out", kind: Sink, position: (6.0, 8.0, 0.0)),
+                (name: "f1", kind: Transporter(speed: 2.0)),
+                (name: "f2", kind: Transporter(speed: 2.0)),
+                (name: "frota", kind: Dispatcher(team: ["f1", "f2"])),
+            ],
+            connections: [("src", "q"), ("q", "p"), ("p", "out")],
+        )"#
+        )
+    };
+    let one = &model(&text("f1")).run_replications().unwrap()[0];
+    let two = &model(&text("frota")).run_replications().unwrap()[0];
+    assert!(
+        one.block("q").unwrap().content_mean > 10.0,
+        "um só transportador acumula fila"
+    );
+    assert!(
+        two.block("q").unwrap().content_mean < 1.0,
+        "a frota dá conta"
+    );
+    let (a, b) = (
+        two.block("f1").unwrap().input,
+        two.block("f2").unwrap().input,
+    );
+    assert!(a > 50 && b > 50, "as duas trabalham: {a} e {b}");
+}
+
+#[test]
+fn mobile_resources_are_validated() {
+    let m = Model::parse(
+        r#"Model(
+            name: "ruim",
+            run: (stop_time: 10.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1.0)), transport: "out"),
+                (name: "out", kind: Sink),
+                (name: "f", kind: Transporter(speed: 0.0)),
+                (name: "d", kind: Dispatcher(team: ["out"])),
+            ],
+            connections: [("src", "out"), ("src", "f")],
+        )"#,
+    )
+    .unwrap();
+    let err = m.validate().unwrap_err().to_string();
+    for expected in [
+        "transport 'out' precisa ser um Transporter",
+        "speed deve ser finita e > 0",
+        "membro 'out' da equipe precisa ser um Transporter",
+        "'f' é um recurso móvel",
+    ] {
+        assert!(err.contains(expected), "faltou '{expected}' em:\n{err}");
+    }
+}

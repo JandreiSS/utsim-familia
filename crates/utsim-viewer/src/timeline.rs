@@ -249,6 +249,8 @@ impl Timeline {
                         track.states.push((t, *state));
                     }
                 }
+                // Mobile resources are animated from phase 4 on.
+                TraceEvent::Travel { .. } => {}
             }
         }
         // Items only seen as containers (no own event) never exist visually.

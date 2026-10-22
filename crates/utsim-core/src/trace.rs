@@ -26,6 +26,12 @@ pub enum TraceEvent {
     Destroyed { item: u64 },
     /// The block entered a new state.
     State { block: usize, state: State },
+    /// A mobile resource starts moving along `path`, arriving after `duration`.
+    Travel {
+        carrier: usize,
+        path: Vec<[f64; 3]>,
+        duration: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

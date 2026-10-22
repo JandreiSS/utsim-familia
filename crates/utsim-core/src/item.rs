@@ -53,6 +53,8 @@ pub struct Item {
     pub container: Option<ItemId>,
     /// Items packed inside this one (pallets, totes...).
     pub contents: Vec<ItemId>,
+    /// Released and assigned to a transporter, waiting to be picked up.
+    pub awaiting_transport: bool,
 }
 
 impl Item {

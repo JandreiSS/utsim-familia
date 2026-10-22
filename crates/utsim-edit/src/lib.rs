@@ -327,13 +327,15 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
 }
 
 /// Object types offered by the editor palette, with Portuguese labels.
-pub const LIBRARY: [(&str, &str); 6] = [
+pub const LIBRARY: [(&str, &str); 8] = [
     ("Source", "Chegada"),
     ("Queue", "Fila"),
     ("Processor", "Processo"),
     ("Combiner", "Montagem"),
     ("Separator", "Desmontagem"),
     ("Sink", "Saída"),
+    ("Transporter", "Transportador"),
+    ("Dispatcher", "Despachante"),
 ];
 
 /// A new object of `kind` (one of [`LIBRARY`]) with sensible defaults.
@@ -355,6 +357,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             capacity: 1,
             setup: None,
             process: Dist::Const(1.0),
+            operators: None,
         },
         "Combiner" => ObjectKind::Combiner {
             components: vec![1],
@@ -367,6 +370,18 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             process: Dist::Const(1.0),
         },
         "Sink" => ObjectKind::Sink,
+        "Transporter" => ObjectKind::Transporter {
+            speed: 1.0,
+            acceleration: None,
+            deceleration: None,
+            capacity: 1,
+            load_time: Dist::Const(0.0),
+            unload_time: Dist::Const(0.0),
+        },
+        "Dispatcher" => ObjectKind::Dispatcher {
+            team: Vec::new(),
+            rule: Default::default(),
+        },
         _ => return None,
     };
     Some(ObjectDef {
@@ -376,6 +391,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         position,
         downtime: None,
         shifts: None,
+        transport: None,
     })
 }
 
