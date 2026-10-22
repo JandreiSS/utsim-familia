@@ -377,6 +377,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             capacity: 1,
             load_time: Dist::Const(0.0),
             unload_time: Dist::Const(0.0),
+            home: false,
         },
         "Dispatcher" => ObjectKind::Dispatcher {
             team: Vec::new(),
