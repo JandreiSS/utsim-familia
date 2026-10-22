@@ -447,3 +447,25 @@ fn mm1_built_only_with_a_flow_matches_queueing_theory() {
         0.05,
     );
 }
+
+#[test]
+fn flow_only_model_is_valid() {
+    let m = utsim_model::Model::parse(
+        r#"Model(
+            name: "só fluxo",
+            run: (stop_time: 10.0),
+            objects: [],
+            flows: [(
+                name: "f",
+                activities: [
+                    (name: "gerar", kind: Source(interarrival: Const(1.0)), next: ["fim"]),
+                    (name: "fim", kind: Sink),
+                ],
+            )],
+        )"#,
+    )
+    .unwrap();
+    m.validate().expect("um modelo só com fluxo é válido");
+    let r = &m.run_replications().unwrap()[0];
+    assert_eq!(r.block("f").unwrap().extra["fim.tempo_no_fluxo"].count, 10);
+}
