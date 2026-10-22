@@ -180,7 +180,13 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
     let (kind_name, kind_fields): (&str, &[&str]) = match &obj.kind {
         ObjectKind::Source { .. } => (
             "Source",
-            &["interarrival", "first_at_zero", "max_arrivals", "labels"],
+            &[
+                "interarrival",
+                "first_at_zero",
+                "max_arrivals",
+                "labels",
+                "on_blocked",
+            ],
         ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
         ObjectKind::Processor { .. } => ("Processor", &["capacity", "setup", "process"]),
@@ -193,6 +199,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Source { first_at_zero, .. }, "first_at_zero") => set!(*first_at_zero),
         (ObjectKind::Source { max_arrivals, .. }, "max_arrivals") => set!(*max_arrivals),
         (ObjectKind::Source { labels, .. }, "labels") => set!(*labels),
+        (ObjectKind::Source { on_blocked, .. }, "on_blocked") => set!(*on_blocked),
         (ObjectKind::Queue { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Queue { discipline, .. }, "discipline") => set!(*discipline),
         (ObjectKind::Queue { batch, .. }, "batch") => set!(*batch),
@@ -319,6 +326,7 @@ mod tests {
         let m = set(&[
             ("q.discipline", "Lifo"),
             ("src.first_at_zero", "true"),
+            ("src.on_blocked", "Drop"),
             ("src.labels", r#"{"tipo": Uniform(min: 1.0, max: 2.0)}"#),
             ("m.output", "RoundRobin"),
             ("m.position", "(1.0, 2.0, 3.0)"),
@@ -335,10 +343,12 @@ mod tests {
         match kind(&m, "src") {
             ObjectKind::Source {
                 first_at_zero,
+                on_blocked,
                 labels,
                 ..
             } => {
                 assert!(*first_at_zero);
+                assert_eq!(*on_blocked, utsim_objects::OnBlocked::Drop);
                 assert!(labels.contains_key("tipo"));
             }
             _ => unreachable!(),

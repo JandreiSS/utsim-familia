@@ -11,8 +11,8 @@ use utsim_core::{
     Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError, Simulation,
 };
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Discipline, Processor, Queue, SeparateMode, Separator, Sink,
-    Source,
+    Batch, CombineMode, Combiner, Discipline, OnBlocked, Processor, Queue, SeparateMode, Separator,
+    Sink, Source,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +83,9 @@ pub enum ObjectKind {
         max_arrivals: Option<u64>,
         #[serde(default)]
         labels: BTreeMap<String, Dist>,
+        /// What to do with an item that cannot leave when created.
+        #[serde(default)]
+        on_blocked: OnBlocked,
     },
     Queue {
         #[serde(default)]
@@ -361,8 +364,10 @@ impl Model {
                     first_at_zero,
                     max_arrivals,
                     labels,
+                    on_blocked,
                 } => {
                     let source = Source::new(interarrival.clone())
+                        .on_blocked(*on_blocked)
                         .first_at_zero(*first_at_zero)
                         .max_arrivals(*max_arrivals);
                     Box::new(
