@@ -76,8 +76,8 @@ a situação atual e onde está a prova de que funciona.
 | RF-64 | simular direto do editor e voltar a editar | 3 | 🔄 |
 | RF-70 | ter veículos que levam itens de um objeto a outro, com tempo de viagem real (velocidade, aceleração, carga e descarga) | 4 | 🔄 (transportador de referência ✅, `forklift_carries_items_with_exact_travel_times`) |
 | RF-71 | distribuir tarefas entre vários recursos (despachante) por regra: primeiro livre, rodízio, mais próximo | 4 | 🔄 (primeiro livre ✅) |
-| RF-72 | usar operadores que precisam ir até a máquina para preparar ou processar | 4 | 🔄 |
-| RF-73 | fazer os veículos andarem por uma rede de caminhos, pelo trajeto mais curto | 4 | 🔄 |
+| RF-72 | usar operadores que precisam ir até a máquina para preparar ou processar | 4 | ✅ | `tests/operators.rs` (7 casos exatos + M/M/1) |
+| RF-73 | fazer os veículos andarem por uma rede de caminhos, pelo trajeto mais curto | 4 | ✅ | `tests/network.rs` (rotas exatas, mão única, rede partida) |
 | RF-74 | reservar lugar no destino ao pedir o transporte, para nunca entregar onde não cabe | 4 | ✅ |
 | RF-80 | ter esteiras com acúmulo e armazéns endereçáveis (racks) | 5 | ⏳ |
 | RF-90 | descrever a lógica com fluxos de tokens e scripts | 6 | ⏳ |
