@@ -5968,6 +5968,7 @@ dependencies = [
 name = "utsim-opt"
 version = "0.1.0"
 dependencies = [
+ "rand 0.9.5",
  "ron 0.8.1",
  "serde",
  "utsim-core",
