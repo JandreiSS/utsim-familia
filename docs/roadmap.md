@@ -21,6 +21,49 @@ validação da anterior passa.
 - [ ] Quebras (MTBF/MTTR) e tabelas de turnos (estado `down`)
 - [ ] **Validação:** M/M/c, M/M/1/K e redes de Jackson contra a teoria
 
+## Fase 1b: modelagem de dados de entrada (ajuste de distribuições)
+A partir de dados reais (intervalos entre chegadas, tempos de processo, tempos de reparo...),
+o UTSim testa **todas** as distribuições candidatas, mostra o resultado de cada uma e
+justifica a escolha com métricas estatísticas. A ideia vem de ferramentas como o ferramentas acadêmicas e
+o ferramentas de ajuste, mas o desenho é nosso.
+
+**Entrada e diagnóstico dos dados**
+- [ ] Leitura de CSV/TXT (uma coluna, ou coluna escolhida), com timestamps opcionais para gerar intervalos
+- [ ] Estatística descritiva: n, média, mediana, desvio, CV, assimetria, curtose, mín/máx, quartis
+- [ ] Verificação das hipóteses, com aviso quando falharem:
+  - independência (autocorrelação por lag e gráfico de dispersão x[i] × x[i+1], teste de corridas)
+  - estacionariedade (tendência ao longo do tempo, teste de Mann-Kendall)
+  - valores atípicos (IQR) e empates/arredondamento (dados discretizados)
+- [ ] Recomendação quando os dados não forem i.i.d. (separar por turno/período, usar série empírica)
+
+**Ajuste**
+- [ ] Candidatas contínuas: Exponencial, Erlang, Gama, Weibull, Lognormal, Normal (truncada),
+  Triangular, Uniforme, Beta (com min/máx), Log-logística, Pearson V e VI; com e sem
+  deslocamento (*location*); discretas: Poisson, Geométrica, Binomial, Binomial Negativa
+- [ ] Estimação por máxima verossimilhança (MLE), com método dos momentos como ponto de partida e alternativa
+- [ ] Distribuição empírica (contínua por interpolação, ou discreta) como alternativa quando nenhuma paramétrica passar
+
+**Testes e métricas (para todas as candidatas, numa tabela única)**
+- [ ] Kolmogorov-Smirnov, com p-valor por *bootstrap* paramétrico, porque os parâmetros são estimados dos próprios dados
+- [ ] Anderson-Darling, mais sensível às caudas, também com bootstrap
+- [ ] Qui-quadrado com classes equiprováveis e graus de liberdade corrigidos pelos parâmetros estimados
+- [ ] Log-verossimilhança, AIC, BIC e pesos de Akaike
+- [ ] Erro quadrático entre histograma e densidade, e erro máximo da P-P
+
+**Escolha e justificativa**
+- [ ] Ranking transparente: primeiro descarta quem é rejeitado nos testes (α configurável), depois ordena por AIC/BIC e estatística A-D. A regra aparece no relatório.
+- [ ] Texto explicando por que o modelo vencedor ganhou e por que os outros perderam
+  (ex.: "Weibull rejeitada no A-D, p=0,01, cauda direita subestimada")
+- [ ] Aviso quando dois modelos são praticamente equivalentes (ΔAIC < 2)
+- [ ] Gráficos: histograma com as densidades sobrepostas, Q-Q, P-P e ECDF × CDF teórica
+- [ ] Saída pronta para o modelo: a linha `Dist` do `.ron` (ex.: `Weibull(shape: 1.8, scale: 4.2)`)
+- [ ] CLI `utsim fit dados.csv [--coluna ...] [--alpha 0.05] [--html relatorio.html]`; depois no editor (fase 3)
+
+**Validação**
+- [ ] Gerar amostras de distribuições conhecidas e verificar que o ajuste recupera a família e os parâmetros
+- [ ] Taxa de erro tipo I dos testes ≈ α (com bootstrap) em amostras simuladas
+- [ ] Comparar estimativas MLE com valores de referência da literatura (Law, *Simulation Modeling and Analysis*, cap. 6)
+
 ## Fase 2: visualização 3D (só leitura)
 - [ ] Registro de trajetórias (`t0, t1, origem, destino`) emitido pelo motor
 - [ ] Visualizador Bevy: carrega o `.ron`, desenha objetos em `position`, anima itens
@@ -52,6 +95,5 @@ validação da anterior passa.
 
 ## Fase 7+: avançado
 - [ ] Otimização de parâmetros (metaheurísticas)
-- [ ] Ajuste de distribuições a partir de dados
 - [ ] Fluidos, AGVs, emulação via OPC UA, interface para aprendizado por reforço
 - [ ] Build WASM: rodar modelos no navegador
