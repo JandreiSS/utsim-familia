@@ -13,4 +13,4 @@ pub use processor::Processor;
 pub use queue::{Batch, Discipline, Queue};
 pub use separator::{SeparateMode, Separator};
 pub use sink::Sink;
-pub use source::Source;
+pub use source::{OnBlocked, Source};

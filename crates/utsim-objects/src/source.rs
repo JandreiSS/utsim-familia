@@ -1,11 +1,26 @@
+use serde::{Deserialize, Serialize};
 use utsim_core::{Behavior, Ctx, Dist, EventId, Item, ItemId, State, Time};
 
 const ARRIVAL: u32 = 0;
+const LOST_CHECK: u32 = 1;
 
-/// Creates items. The next inter-arrival time starts when the previous item
-/// leaves, so a blocked source stops generating (put a queue after it to get
-/// true arrival-to-arrival timing). A breakdown pauses the arrival clock.
+/// What the source does with an item that cannot leave at the instant it is created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OnBlocked {
+    /// Keep the item and stop generating until it leaves.
+    #[default]
+    Wait,
+    /// Destroy the item (counted as `lost`) and keep the arrival clock running.
+    Drop,
+}
+
+/// Creates items. With `OnBlocked::Wait` the next inter-arrival time starts when
+/// the previous item leaves, so a blocked source stops generating (put a queue
+/// after it to get true arrival-to-arrival timing). With `OnBlocked::Drop` an item
+/// that cannot leave at once is destroyed and recorded as `lost`, so arrivals form
+/// a renewal process. A breakdown pauses the arrival clock.
 pub struct Source {
+    on_blocked: OnBlocked,
     interarrival: Dist,
     first_at_zero: bool,
     max_arrivals: Option<u64>,
@@ -20,6 +35,7 @@ pub struct Source {
 impl Source {
     pub fn new(interarrival: Dist) -> Self {
         Source {
+            on_blocked: OnBlocked::Wait,
             interarrival,
             first_at_zero: false,
             max_arrivals: None,
@@ -28,6 +44,11 @@ impl Source {
             next: None,
             paused: None,
         }
+    }
+
+    pub fn on_blocked(mut self, mode: OnBlocked) -> Self {
+        self.on_blocked = mode;
+        self
     }
 
     /// Creates the first item at time 0 instead of after one inter-arrival time.
@@ -83,7 +104,21 @@ impl Behavior for Source {
         false
     }
 
-    fn on_event(&mut self, cx: &mut Ctx, tag: u32, _item: Option<ItemId>) {
+    fn on_event(&mut self, cx: &mut Ctx, tag: u32, item: Option<ItemId>) {
+        if tag == LOST_CHECK {
+            // The kernel has resolved transfers by now: if the item is still here, it is lost.
+            if let Some(id) = item.filter(|id| cx.contents().contains(id)) {
+                cx.destroy(id);
+                cx.record("lost", 1.0);
+                if cx.is_down() {
+                    // Stopped in this same instant: park the clock until resume.
+                    self.paused = Some(cx.sample_duration(&self.interarrival));
+                } else {
+                    self.schedule_next(cx);
+                }
+            }
+            return;
+        }
         if tag != ARRIVAL {
             return;
         }
@@ -96,6 +131,9 @@ impl Behavior for Source {
         self.created += 1;
         cx.set_state(State::Blocked);
         cx.release(id);
+        if self.on_blocked == OnBlocked::Drop {
+            cx.schedule(0.0, LOST_CHECK, Some(id));
+        }
     }
 
     fn on_exit(&mut self, cx: &mut Ctx, _item: ItemId) {

@@ -70,7 +70,7 @@ Model(
 
 | Objeto | Campos |
 |---|---|
-| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }` |
+| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }`, `on_blocked: Wait \| Drop` (`Drop` descarta e conta em `lost` o item que não consegue sair) |
 | `Queue` | `capacity` (vazio = ilimitada), `discipline: Fifo \| Lifo` |
 | `Processor` | `capacity` (padrão 1), `setup` (opcional), `process` |
 | `Sink` | registra `time_in_system` e destrói o item |
