@@ -5832,6 +5832,8 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "clap",
+ "ron 0.8.1",
+ "serde",
  "serde_json",
  "utsim-core",
  "utsim-edit",

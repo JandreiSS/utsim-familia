@@ -95,3 +95,65 @@ O workflow `.github/workflows/ci.yml` roda em push e pull request:
   checar portabilidade sem comparar snapshots.
 - **viewer (ubuntu-latest):** instala as bibliotecas do Bevy e roda clippy e `cargo test -p utsim-viewer`
   (índice da linha do tempo contra `RunReport.series`, layout, carregamento). Localmente: `UTSIM_VIEWER=1 bash scripts/verificar.sh`.
+
+## Testes roteirizados da interface
+
+O `utsim-view` tem um modo roteirizado que abre a janela de verdade, executa um roteiro RON
+com entrada sintética (mouse e teclado entram pelas mesmas mensagens do Bevy que a janela
+produz, então o editor e o egui reagem como a um usuário) e grava capturas de tela em PNG.
+Serve para testar o editor de ponta a ponta sem ninguém na frente da tela.
+
+```bash
+utsim-view <modelo.ron | --novo | replay.json> --roteiro <roteiro.ron> --capturas <pasta>
+# exemplo
+cargo run -p utsim-viewer -- --novo --roteiro crates/utsim-viewer/roteiros/editor_basico.ron --capturas saida/editor_basico
+```
+
+- A janela abre em 1280x800 (fator de escala 1) e o roteiro começa depois de ~2,5 s, quando o
+  Bevy terminou de compilar os pipelines (antes disso os blocos ainda não aparecem nas capturas).
+- Um modelo `.ron` existente é **copiado para a pasta de capturas** e a cópia é a editada, então
+  `examples/` nunca é alterado. Para salvar um modelo novo, digite o caminho no diálogo com
+  `Digitar("{capturas}/novo.ron")` (`{capturas}` vira a pasta de capturas).
+- Saída: `<pasta>/<nome>.png` de cada `Captura`, e `<pasta>/log.txt` com uma linha por passo
+  (índice, ação, resultado e o estado do editor: modo, selecionado, ferramenta, nº de objetos,
+  ligações e problemas, `sujo`, título da janela, texto de status e tempo simulado).
+- Código de saída 0 se todos os passos passaram; 1 no primeiro que falhar, com o número do passo
+  e o motivo em `stderr` (e no `log.txt`).
+
+Passos (`Passo`, em `crates/utsim-viewer/src/roteiro.rs`):
+
+| Passo | Efeito |
+|---|---|
+| `Esperar(quadros: 10)`, `EsperarSegundos(1.5)` | espera quadros ou segundos |
+| `EsperarAte(Modo(Simular), 30.0)` | espera uma condição ficar verdadeira (falha no limite, em segundos) |
+| `MoverPara(alvo)` | move o ponteiro |
+| `Clicar(Esquerdo)`, `Pressionar(..)`, `Soltar(..)` | botões `Esquerdo` ou `Direito` |
+| `Arrastar(de: alvo, para: alvo)` | pressiona, move em 8 quadros e solta |
+| `Rolar(3.0)` | roda do mouse, em linhas (positivo aproxima) |
+| `Tecla("Delete")`, `Atalho(["Ctrl", "Z"])` | teclas por nome: letras, dígitos, `Delete`, `Esc`, `Enter`, `Tab`, `Space`, `Backspace`, setas (`SetaCima`...), `F1`-`F5`, modificadores `Ctrl`/`Shift`/`Alt` |
+| `Digitar("texto")` | digita no campo egui focado |
+| `ClicarBotao("▶ Simular")` | clica no centro do widget com esse rótulo |
+| `Captura("nome")` | grava `<pasta>/nome.png` e espera o arquivo existir |
+| `Afirmar(condição)` | falha a execução se a condição não valer |
+
+Alvos: `Objeto("fila")` (centro do bloco), `Mundo(x, y)` (chão, coordenadas do modelo),
+`Tela(px, py)` (pixels lógicos da janela), `Botao("rótulo")` (texto egui visível) e
+`Deslocado(alvo, dx, dy)` (outro alvo deslocado em pixels, para alcançar o campo ao lado de um rótulo).
+`Objeto` e `Mundo` são projetados com a câmera ativa, então os roteiros sobrevivem a mudanças de câmera.
+
+Condições: `ObjetosIgual(n)`, `LigacoesIgual(n)`, `ProblemasIgual(n)`, `Selecionado(Some("fila"))`,
+`Modo(Editar | Simular)`, `Sujo(true)`, `Ferramenta("Selecionar" | "Colocar:Queue" | "Ligar:fila")`,
+`ObjetoExiste("x")`, `PosicaoDe("fila", (x, y))` (tolerância 0,05), `PosicaoPerto("fila", (x, y), tol)`,
+`StatusContem("texto")`, `TituloContem("texto")`, `TempoSimuladoMin(t)` e `Nao(condição)`.
+
+**Como os botões são achados.** O egui 0.36 usado aqui não tem a árvore de acessibilidade
+(sem `accesskit`), então, depois de cada passe do egui, o executor guarda todos os textos
+desenhados no quadro com seus retângulos (lendo `EguiFullOutput`). `Botao("rótulo")` e
+`ClicarBotao("rótulo")` escolhem o texto visível mais ao topo igual ao rótulo (ou, se não houver,
+que o contenha) e miram o centro dele, que cai dentro do widget dono do texto (botão, rótulo
+selecionável, link, caixa de seleção). Rótulos repetidos na tela: o último desenhado vence; use
+`Deslocado` ou `Tela` para os demais.
+
+Os roteiros de exemplo estão em `crates/utsim-viewer/roteiros/`: `editor_basico.ron` (`--novo`),
+`propriedades.ron` (com `examples/mm1.ron`) e `simular_paletes.ron` (com `examples/montagem_paletes.ron`).
+A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
