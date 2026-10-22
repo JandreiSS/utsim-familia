@@ -1,6 +1,14 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# The 3D viewer pulls in Bevy (slow to build): it is opt-in (`-p utsim-viewer`).
+default-members = [
+    "crates/utsim-cli",
+    "crates/utsim-core",
+    "crates/utsim-fit",
+    "crates/utsim-model",
+    "crates/utsim-objects",
+]
 
 [workspace.package]
 version = "0.1.0"

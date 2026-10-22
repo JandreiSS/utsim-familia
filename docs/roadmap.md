@@ -69,10 +69,10 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Comparar estimativas MLE com valores de referência da literatura (Law, *Simulation Modeling and Analysis*, cap. 6)
 
 ## Fase 2: visualização 3D (só leitura)
-- [ ] Registro de trajetórias (`t0, t1, origem, destino`) emitido pelo motor
-- [ ] Visualizador Bevy: carrega o `.ron`, desenha objetos em `position`, anima itens
-- [ ] Controle de velocidade, pausa e passo a passo
-- [ ] **Validação:** a animação bate com o log de eventos
+- [x] Registro de trajetórias (rastro `TraceEvent`) emitido pelo motor
+- [x] Visualizador Bevy (`utsim-view`): carrega o `.ron` ou o replay `.json`, desenha objetos em `position` (ou layout automático), anima itens
+- [x] Controle de velocidade, pausa, passo a passo e barra de tempo
+- [x] **Validação:** o índice da linha do tempo reproduz as séries amostradas (`timeline.rs`); a conferência visual em janela ainda é manual
 
 ## Fase 3: editor
 - [ ] Arrastar objetos da biblioteca, mover/rotacionar (gizmos), grade

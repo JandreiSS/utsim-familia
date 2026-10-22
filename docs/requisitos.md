@@ -66,8 +66,8 @@ a situação atual e onde está a prova de que funciona.
 
 | Código | O sistema deve... | Fase | Situação |
 |---|---|---|---|
-| RF-50 | mostrar o modelo em 3D e animar os itens a partir da simulação | 2 | ⏳ |
-| RF-51 | controlar a animação: velocidade, pausa, passo a passo | 2 | ⏳ |
+| RF-50 | mostrar o modelo em 3D e animar os itens a partir da simulação | 2 | 🔄 |
+| RF-51 | controlar a animação: velocidade, pausa, passo a passo | 2 | 🔄 |
 | RF-60 | montar o modelo arrastando objetos e ligando portas com o mouse | 3 | ⏳ |
 | RF-61 | editar as propriedades dos objetos num painel e salvar o `.ron` | 3 | ⏳ |
 | RF-70 | ter operadores e veículos que se deslocam e executam tarefas | 4 | ⏳ |
@@ -93,6 +93,6 @@ a situação atual e onde está a prova de que funciona.
 | RNF-10 | funcionar em Windows e Linux | ✅ | CI (`windows-latest` e `ubuntu-latest`) |
 | RNF-11 | manter a qualidade: formatação, zero avisos do clippy, todos os testes passando | ✅ | `scripts/verificar.sh` / `.ps1`, CI |
 | RNF-12 | ser extensível: blocos novos sem mexer no kernel | ✅ | trait `Behavior`; Combiner/Separator feitos sem tocar no núcleo |
-| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ⏳ | contrato `Observer` da fase 2 |
+| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ✅ | `utsim-view` só lê um `Replay`; `timeline.rs` bate com `RunReport.series` |
 | RNF-14 | falar português com o usuário (mensagens, relatórios, docs) e usar inglês no código | ✅ | revisão nos merges |
 | RNF-15 | ter documentação sempre atualizada: requisitos, arquitetura, roteiro e processo | ✅ | regra do `processo.md` |

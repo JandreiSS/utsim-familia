@@ -16,19 +16,19 @@ passo() {
     echo "==> $1"
 }
 
-passo "1/5 Formatação (cargo fmt --check)"
+passo "1/6 Formatação (cargo fmt --check)"
 cargo fmt --all -- --check || falha "formatação fora do padrão. Rode: cargo fmt --all"
 
-passo "2/5 Lints (cargo clippy -D warnings)"
-cargo clippy --workspace --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
+passo "2/6 Lints (cargo clippy -D warnings)"
+cargo clippy --workspace --exclude utsim-viewer --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
 
-passo "3/5 Testes (cargo test --workspace)"
-cargo test --workspace || falha "testes falharam"
+passo "3/6 Testes (cargo test --workspace --exclude utsim-viewer)"
+cargo test --workspace --exclude utsim-viewer || falha "testes falharam"
 
-passo "4/5 Build de release (utsim-cli)"
+passo "4/6 Build de release (utsim-cli)"
 cargo build --release -p utsim-cli || falha "build de release falhou"
 
-passo "5/5 Validação dos modelos (utsim check)"
+passo "5/6 Validação dos modelos (utsim check)"
 BIN="target/release/utsim"
 if [ ! -x "$BIN" ]; then
     BIN="target/release/utsim.exe"
@@ -40,6 +40,14 @@ for modelo in examples/*.ron; do
     esac
     "$BIN" check "$modelo" || falha "modelo inválido: $modelo"
 done
+
+passo "6/6 Visualizador 3D (opcional: UTSIM_VIEWER=1)"
+if [ "${UTSIM_VIEWER:-}" = "1" ]; then
+    cargo clippy -p utsim-viewer --all-targets -- -D warnings || falha "clippy do utsim-viewer encontrou avisos ou erros"
+    cargo test -p utsim-viewer || falha "testes do utsim-viewer falharam"
+else
+    echo "(pulado; defina UTSIM_VIEWER=1 para incluir o utsim-viewer)"
+fi
 
 echo
 echo "Tudo certo"

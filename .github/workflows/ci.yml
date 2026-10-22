@@ -28,6 +28,22 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude utsim-viewer --all-targets -- -D warnings
       - name: Testes sem golden
-        run: cargo test --workspace -- --skip golden
+        run: cargo test --workspace --exclude utsim-viewer -- --skip golden
+
+  viewer:
+    name: Visualizador 3D (Bevy, clippy e testes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependências do Bevy no Linux
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy do utsim-viewer
+        run: cargo clippy -p utsim-viewer --all-targets -- -D warnings
+      - name: Testes do utsim-viewer
+        run: cargo test -p utsim-viewer

@@ -51,7 +51,7 @@ ponto flutuante diferentes em outros sistemas, o job Linux do CI roda com
 Testes completos:
 
 ```bash
-cargo test --workspace
+cargo test --workspace --exclude utsim-viewer
 ```
 
 Só os golden:
@@ -82,7 +82,7 @@ Os dois scripts rodam, nesta ordem, e param no primeiro passo que falhar:
 
 1. `cargo fmt --all -- --check`
 2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cargo test --workspace`
+3. `cargo test --workspace --exclude utsim-viewer`
 4. `cargo build --release -p utsim-cli`
 5. `utsim check` em cada `examples/*.ron` (arquivos `experimento*` são ignorados)
 
@@ -91,5 +91,7 @@ Os dois scripts rodam, nesta ordem, e param no primeiro passo que falhar:
 O workflow `.github/workflows/ci.yml` roda em push e pull request:
 
 - **windows-latest:** executa `scripts/verificar.ps1` inteiro, incluindo os golden.
-- **ubuntu-latest:** roda clippy e `cargo test --workspace -- --skip golden`, para
+- **ubuntu-latest:** roda clippy e `cargo test --workspace --exclude utsim-viewer -- --skip golden`, para
   checar portabilidade sem comparar snapshots.
+- **viewer (ubuntu-latest):** instala as bibliotecas do Bevy e roda clippy e `cargo test -p utsim-viewer`
+  (índice da linha do tempo contra `RunReport.series`, layout, carregamento). Localmente: `UTSIM_VIEWER=1 bash scripts/verificar.sh`.
