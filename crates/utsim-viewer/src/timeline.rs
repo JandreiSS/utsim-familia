@@ -239,6 +239,8 @@ pub struct Timeline {
     slots: HashMap<(usize, usize), Vec<(f64, usize)>>,
     /// Highest slot seen per rack block.
     max_slot: HashMap<usize, usize>,
+    /// Token counts per (flow block, activity), from the flow engine's trace events.
+    tokens: crate::flows::TokenTrack,
 }
 
 /// Block kinds whose items sit at a modelled position (no visual transit).
@@ -281,6 +283,7 @@ impl Timeline {
         let mut belt_halted: HashMap<usize, bool> = HashMap::new();
         let mut slots: HashMap<(usize, usize), Vec<(f64, usize)>> = HashMap::new();
         let mut max_slot: HashMap<usize, usize> = HashMap::new();
+        let mut tokens = crate::flows::TokenTrack::default();
         let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
         let mut n_travels = 0usize;
 
@@ -428,8 +431,11 @@ impl Timeline {
                         legs.entry(*carrier).or_default().push(leg);
                     }
                 }
-                // Token counts are shown by the phase 6 flow view.
-                TraceEvent::Tokens { .. } => {}
+                TraceEvent::Tokens {
+                    flow,
+                    activity,
+                    count,
+                } => tokens.push(t, *flow, *activity, *count),
                 TraceEvent::Slot { item, block, slot } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     slots.entry((*block, i)).or_default().push((t, *slot));
@@ -518,6 +524,7 @@ impl Timeline {
             end,
             slots,
             max_slot,
+            tokens,
         }
     }
 
@@ -624,6 +631,16 @@ impl Timeline {
         };
         let k = track.content.partition_point(|s| s.0 <= t);
         k.checked_sub(1).map_or(0, |k| track.content[k].1)
+    }
+
+    /// Tokens in activity `activity` of flow block `flow` at time `t`.
+    pub fn tokens_at(&self, flow: usize, activity: usize, t: f64) -> u32 {
+        self.tokens.at(flow, activity, t)
+    }
+
+    /// Whether the trace has any token count (the model has a running flow).
+    pub fn has_tokens(&self) -> bool {
+        !self.tokens.is_empty()
     }
 
     /// Items that had arrived at block `b` by `t` (what a sink shows: it holds nothing).
@@ -977,5 +994,27 @@ mod tests {
         assert!(TravelLeg::new(0.0, 1.0, &[]).is_none());
         let still = TravelLeg::new(0.0, 0.0, &[[1.0, 2.0, 3.0]]).unwrap();
         assert_eq!(still.at(5.0), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn token_events_become_a_step_function_per_activity() {
+        let mut rep = replay_of(MODEL);
+        let at = |t, flow, activity, count| utsim_core::TraceRecord {
+            t,
+            event: TraceEvent::Tokens {
+                flow,
+                activity,
+                count,
+            },
+        };
+        let n = rep.blocks.len();
+        rep.records.push(at(30.0, n, 1, 2));
+        rep.records.push(at(40.0, n, 1, 0));
+        let tl = Timeline::build(&rep, TransitSetting::Auto);
+        assert!(tl.has_tokens());
+        assert_eq!(tl.tokens_at(n, 1, 29.9), 0);
+        assert_eq!(tl.tokens_at(n, 1, 35.0), 2);
+        assert_eq!(tl.tokens_at(n, 1, 40.0), 0);
+        assert_eq!(tl.tokens_at(n, 0, 35.0), 0);
     }
 }
