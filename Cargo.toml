@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/jandreiss/utsim"
+
+[workspace.dependencies]
+utsim-core = { path = "crates/utsim-core" }
+utsim-objects = { path = "crates/utsim-objects" }
+utsim-model = { path = "crates/utsim-model" }
+
+rand = "0.9"
+rand_distr = "0.5"
+rand_pcg = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.8"
+slotmap = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+
+[profile.release]
+debug = "line-tables-only"

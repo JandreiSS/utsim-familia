@@ -1,0 +1,15 @@
+[package]
+name = "utsim-model"
+description = "Model file format (RON) and replication runner for UTSim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-objects.workspace = true
+serde.workspace = true
+ron.workspace = true
+rayon.workspace = true
+thiserror.workspace = true

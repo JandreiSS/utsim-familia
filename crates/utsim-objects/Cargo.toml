@@ -1,0 +1,11 @@
+[package]
+name = "utsim-objects"
+description = "Standard flow blocks for UTSim: Source, Queue, Processor, Sink"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+serde.workspace = true
