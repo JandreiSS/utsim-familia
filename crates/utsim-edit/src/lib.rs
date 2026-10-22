@@ -17,7 +17,7 @@ use utsim_objects::{CombineMode, SeparateMode};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     /// Adds an object; the name must be unique (see [`Document::unique_name`]).
-    Add(ObjectDef),
+    Add(Box<ObjectDef>),
     /// Removes an object and every connection touching it.
     Remove {
         name: String,
@@ -256,7 +256,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
             if exists(model, &object.name) {
                 return Err(format!("já existe um objeto chamado \"{}\"", object.name));
             }
-            model.objects.push(object.clone());
+            model.objects.push((**object).clone());
         }
         Command::Remove { name } => {
             let before = model.objects.len();
@@ -407,7 +407,7 @@ mod tests {
         ];
         for (i, (kind, name)) in parts.into_iter().enumerate() {
             let object = template(kind, name, [3.0 * i as f64, 0.0, 0.0]).unwrap();
-            doc.apply(Command::Add(object)).unwrap();
+            doc.apply(Command::Add(Box::new(object))).unwrap();
         }
         for (a, b) in [
             ("chegada", "fila"),
@@ -439,7 +439,7 @@ mod tests {
     fn incomplete_model_reports_issues_per_object() {
         let mut doc = Document::new("t");
         let object = template("Processor", "maquina", [0.0; 3]).unwrap();
-        doc.apply(Command::Add(object)).unwrap();
+        doc.apply(Command::Add(Box::new(object))).unwrap();
         let issues = doc.issues();
         assert!(
             issues
