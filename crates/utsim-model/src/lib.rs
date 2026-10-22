@@ -146,6 +146,9 @@ pub enum ObjectKind {
         load_time: Dist,
         #[serde(default = "zero")]
         unload_time: Dist,
+        /// Drive back to this object's position when idle with nothing queued.
+        #[serde(default)]
+        home: bool,
     },
     /// Hands work to a team of transporters.
     Dispatcher {
@@ -328,6 +331,7 @@ impl Model {
                     capacity,
                     load_time,
                     unload_time,
+                    ..
                 } => {
                     if !(speed.is_finite() && *speed > 0.0) {
                         errors.push(format!("{}: speed deve ser finita e > 0", obj.name));
@@ -574,12 +578,16 @@ impl Model {
                     speed,
                     acceleration,
                     deceleration,
+                    capacity,
                     load_time,
                     unload_time,
+                    home,
                     ..
                 } => Box::new(
                     Transporter::new(*speed)
                         .acceleration(*acceleration, *deceleration)
+                        .capacity(*capacity)
+                        .home(*home)
                         .handling(load_time.clone(), unload_time.clone())
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),
