@@ -192,3 +192,8 @@ a diferença de cada ponto para o melhor (Δ ± intervalo de 95%), marca com `�
 se distinguem estatisticamente e imprime o cenário (`set: { ... }`) pronto para colar em
 um arquivo de experimento. O `--html` inclui gráficos do objetivo por ordem de avaliação
 e dos 10 melhores pontos.
+
+Observações: com `refine`, os melhores pontos são re-simulados com mais replicações e a
+comparação final (melhor e equivalentes) usa essa lista; o relatório mostra as duas
+tabelas. As métricas `<bloco>.lost.*` ainda não servem de objetivo (só `.mean` é exposto e
+vale sempre 1); use, por exemplo, as entradas da Sink com peso negativo.
