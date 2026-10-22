@@ -5,6 +5,7 @@ members = ["crates/*"]
 default-members = [
     "crates/utsim-cli",
     "crates/utsim-core",
+    "crates/utsim-edit",
     "crates/utsim-fit",
     "crates/utsim-model",
     "crates/utsim-objects",
@@ -22,6 +23,7 @@ utsim-core = { path = "crates/utsim-core" }
 utsim-objects = { path = "crates/utsim-objects" }
 utsim-model = { path = "crates/utsim-model" }
 utsim-fit = { path = "crates/utsim-fit" }
+utsim-edit = { path = "crates/utsim-edit" }
 
 rand = "0.9"
 rand_distr = "0.5"

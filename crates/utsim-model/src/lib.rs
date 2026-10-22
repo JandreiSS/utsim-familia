@@ -28,7 +28,7 @@ pub enum ModelError {
     Sim(#[from] SimError),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Model {
     pub name: String,
     #[serde(default)]
@@ -40,7 +40,7 @@ pub struct Model {
     pub connections: Vec<(String, String)>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RunSettings {
     pub stop_time: f64,
     #[serde(default)]
@@ -57,7 +57,7 @@ pub struct RunSettings {
     pub histogram_bins: Option<usize>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ObjectDef {
     pub name: String,
     pub kind: ObjectKind,
@@ -74,7 +74,7 @@ pub struct ObjectDef {
     pub shifts: Option<ShiftTable>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ObjectKind {
     Source {
         interarrival: Dist,

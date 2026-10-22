@@ -5781,6 +5781,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-edit"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "utsim-core",
+ "utsim-model",
+ "utsim-objects",
+]
+
+[[package]]
 name = "utsim-fit"
 version = "0.1.0"
 dependencies = [
@@ -5822,6 +5833,7 @@ dependencies = [
  "clap",
  "serde_json",
  "utsim-core",
+ "utsim-edit",
  "utsim-model",
 ]
 
