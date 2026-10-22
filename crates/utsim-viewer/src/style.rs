@@ -76,6 +76,10 @@ pub enum Shape {
     Vehicle,
     /// Dispatcher: small marker.
     Flag,
+    /// Conveyor: a long flat belt (its real size comes from the model, see `geometry`).
+    Belt,
+    /// Rack: bays x levels frame (real size from the model).
+    Rack,
 }
 
 pub fn shape_of(kind: &str) -> Shape {
@@ -87,6 +91,8 @@ pub fn shape_of(kind: &str) -> Shape {
         "Sink" => Shape::Cylinder,
         "Transporter" => Shape::Vehicle,
         "Dispatcher" => Shape::Flag,
+        "Conveyor" => Shape::Belt,
+        "Rack" => Shape::Rack,
         _ => Shape::Box,
     }
 }
@@ -102,6 +108,9 @@ pub fn extents(shape: Shape) -> ([f32; 3], f32) {
         Shape::Cylinder => ([0.9, 0.5, 0.9], 1.0),
         Shape::Vehicle => ([0.55, 0.2, 0.4], 0.4),
         Shape::Flag => ([0.2, 0.4, 0.2], 0.8),
+        // Defaults for a conveyor/rack of unknown size; `geometry::Geom` has the real ones.
+        Shape::Belt => ([2.5, 0.125, 0.55], 0.25),
+        Shape::Rack => ([2.0, 1.5, 0.5], 3.0),
     }
 }
 
