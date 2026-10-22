@@ -16,8 +16,9 @@ Vale para pessoas e para agentes de IA. O roteiro de funcionalidades está em
    do commit do contrato.
 4. **Revisão e integração.** O coordenador lê o diff, integra com `merge --no-ff`
    (um merge por frente), resolve conflitos e roda a verificação completa (seção 3).
-5. **Fechamento.** Atualizar `roadmap.md` (marcar itens), `arquitetura.md` (semântica
-   nova) e os snapshots golden, se houve mudança intencional de comportamento.
+5. **Fechamento.** Atualizar [requisitos.md](requisitos.md) (RF/RNF: situação e teste
+   que comprova), `roadmap.md` (marcar itens), `arquitetura.md` (semântica nova) e os
+   snapshots golden, se houve mudança intencional de comportamento.
 
 ## 2. Quem faz o quê
 
@@ -62,13 +63,38 @@ As camadas de teste estão descritas em [testes.md](testes.md):
 commit precisa explicar o porquê e mostrar o diff dos `.json`.
 
 **Regras para coisas novas:**
+- Toda funcionalidade tem um código em `requisitos.md` (RF-xx ou RNF-xx), atualizado no mesmo commit.
 - Bloco novo → teste determinístico exato em `objects.rs` + exemplo em `examples/` (que ganha snapshot golden).
 - Campo novo em `ObjectKind` → braço correspondente no patcher de cenários (`experiment.rs`).
   O compilador obriga a tratar variantes novas, mas **não** campos novos.
 - Semântica nova → seção em `arquitetura.md`, marcando "Nosso jeito" quando diferir do simuladores comerciais.
 - Funcionalidade com resultado conhecido na teoria → teste contra a teoria, com tolerância justificada.
 
-## 4. Plano das próximas fases
+## 4. Mapa de paralelismo
+
+Fases que não dependem uma da outra correm ao mesmo tempo. Dentro de cada fase, as
+frentes também correm em paralelo depois do contrato.
+
+```
+           contrato         frentes em paralelo                          integração
+Fase 1  ── turnos (Opus) ─┬─ Sonnet: perda de chegadas + M/M/1/K ──────┐
+                          └─ Haiku: testes e exemplo de turnos ────────┴─ merge + verificar
+Fase 1b ── utsim-fit ─────┬─ Sonnet A: famílias + MLE (+ Dist novas)  ─┐
+           (Opus)         ├─ Sonnet B: KS, AD, χ², bootstrap ──────────┤
+                          ├─ Sonnet C: diagnóstico dos dados ──────────┤
+                          └─ Sonnet D: relatório + `utsim fit` ────────┴─ merge ─ Haiku: testes de recuperação
+Fase 2  ── Observer ──────┬─ Sonnet: visualizador Bevy (replay) ───────┐
+           (Opus)         └─ Haiku: consistência replay × eventos ─────┴─ merge + verificar
+```
+
+Regras para rodar em paralelo sem conflito:
+- Cada frente tem **arquivos próprios**. Quando duas precisam do mesmo arquivo, uma delas
+  só registra o mínimo (uma linha de `mod`, um subcomando).
+- Só **um** agente por vez mexe em cada arquivo do núcleo (`engine.rs`, `dist.rs`...).
+- Frentes que dependem do resultado de outra (ex.: testes de recuperação dependem dos
+  estimadores) esperam a integração da anterior.
+
+## 5. Plano das próximas fases
 
 ### Fase 1: fechamento
 - Integrar a rede de segurança (golden, scripts, CI) e gravar os snapshots dos exemplos novos.

@@ -7,7 +7,7 @@ o comportamento é especificado por nós, em [docs/arquitetura.md](docs/arquitet
 
 > **Status: fase 0.** O motor de eventos, os blocos Source, Queue, Processor e Sink,
 > o formato de modelo e a CLI estão prontos e validados contra a teoria das filas.
-> Ainda não há 3D nem editor. Veja o [roteiro](docs/roadmap.md).
+> Ainda não há 3D nem editor. Veja o [roteiro](docs/roadmap.md) e os [requisitos](docs/requisitos.md).
 
 ## Rodando
 
@@ -91,7 +91,7 @@ crates/
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
 examples/         modelos de exemplo
-docs/             arquitetura e roteiro
+docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
 
 ## Licença
