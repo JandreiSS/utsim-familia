@@ -141,6 +141,8 @@ struct BlockTrack {
     states: Vec<(f64, State)>,
     /// Content count right after each change (sorted by time).
     content: Vec<(f64, usize)>,
+    /// Times at which an item moved into the block (sorted).
+    arrivals: Vec<f64>,
 }
 
 /// Interval-stabbing helper: items sorted by creation time with a max-destroy segment
@@ -305,6 +307,9 @@ impl Timeline {
                     ));
                     bump(&mut blocks, &mut counts, *from, t, false);
                     bump(&mut blocks, &mut counts, *to, t, true);
+                    if let Some(track) = blocks.get_mut(*to) {
+                        track.arrivals.push(t);
+                    }
                     at[i] = Some(*to);
                 }
                 TraceEvent::Packed { item, container } => {
@@ -484,6 +489,13 @@ impl Timeline {
         k.checked_sub(1).map_or(0, |k| track.content[k].1)
     }
 
+    /// Items that had arrived at block `b` by `t` (what a sink shows: it holds nothing).
+    pub fn block_received(&self, b: usize, t: f64) -> usize {
+        self.blocks
+            .get(b)
+            .map_or(0, |track| track.arrivals.partition_point(|&a| a <= t))
+    }
+
     /// Creation block of an item (for coloring), if known.
     pub fn item_origin(&self, item: usize) -> Option<usize> {
         match self.items.get(item)?.steps.first()?.1 {
@@ -623,6 +635,19 @@ mod tests {
         // The sink destroys what arrives, so it never holds anything.
         assert_eq!(tl.block_content(s, 2.6), 0);
         assert_eq!(tl.block_content(q, 100.0), tl.block_content(q, 20.0));
+    }
+
+    #[test]
+    fn sink_counts_what_it_received() {
+        let rep = replay_of(MODEL);
+        let tl = Timeline::build(&rep, TransitSetting::Auto);
+        let sink = 3;
+        assert_eq!(tl.block_received(sink, 0.0), 0);
+        let (mid, end) = (tl.block_received(sink, 10.0), tl.block_received(sink, 20.0));
+        assert!(mid > 0 && end > mid);
+        assert_eq!(end, rep.report.blocks[sink].input as usize);
+        assert_eq!(tl.block_content(sink, 20.0), 0, "a sink holds nothing");
+        assert_eq!(tl.block_received(99, 20.0), 0);
     }
 
     #[test]
