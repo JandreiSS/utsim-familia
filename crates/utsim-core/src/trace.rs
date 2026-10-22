@@ -33,6 +33,14 @@ pub enum TraceEvent {
         activity: usize,
         count: u32,
     },
+    /// Fluid network `net`: node `node` (index in the model's fluid nodes) now has
+    /// `level` (tanks; 0 for other nodes) and changes at `rate` per time unit.
+    Fluid {
+        net: usize,
+        node: usize,
+        level: f64,
+        rate: f64,
+    },
     /// The item was put in storage position `slot` of `block` (racks).
     Slot {
         item: u64,

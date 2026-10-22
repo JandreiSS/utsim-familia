@@ -62,6 +62,9 @@ pub struct BlockReport {
     pub states: BTreeMap<String, f64>,
     /// Tallies recorded by the block itself (e.g. `time_in_system` at a sink).
     pub extra: BTreeMap<String, TallySummary>,
+    /// Metrics computed by the block itself (`Behavior::custom_metrics`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub custom: BTreeMap<String, f64>,
     /// Time series sampled every `sample_interval` (empty when sampling is off).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub series: Vec<SeriesPoint>,
@@ -98,6 +101,9 @@ impl RunReport {
             }
             for (k, t) in &b.extra {
                 m.insert(format!("{n}.{k}.mean"), t.mean);
+            }
+            for (k, v) in &b.custom {
+                m.insert(format!("{n}.{k}"), *v);
             }
         }
         m

@@ -40,6 +40,7 @@ pub fn state_label(state: Option<State>) -> &'static str {
         Some(State::Loading) => "carregando",
         Some(State::Unloading) => "descarregando",
         Some(State::Utilize) => "trabalhando no posto",
+        Some(State::Stopped) => "parado (comando externo)",
     }
 }
 

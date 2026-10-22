@@ -14,6 +14,7 @@ use utsim_core::{
     Simulation,
 };
 use utsim_flow::{Flow, FlowDef};
+use utsim_fluid::{FluidDef, FluidNet};
 use utsim_objects::network::NetworkDef;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
@@ -49,6 +50,9 @@ pub struct Model {
     /// Token flows: user logic as graphs of activities (phase 6).
     #[serde(default)]
     pub flows: Vec<FlowDef>,
+    /// Continuous (fluid) network (phase 7).
+    #[serde(default)]
+    pub fluids: Option<FluidDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -158,6 +162,10 @@ pub enum ObjectKind {
         /// Drive back to this object's position when idle with nothing queued.
         #[serde(default)]
         home: bool,
+        /// Follow the network edge by edge under traffic control (edge capacities),
+        /// waiting when an edge is full. The AGV front implements it.
+        #[serde(default)]
+        agv: bool,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -257,7 +265,7 @@ impl Model {
             errors.push("run.histogram_bins deve ser >= 1".to_string());
         }
 
-        if self.objects.is_empty() && self.flows.is_empty() {
+        if self.objects.is_empty() && self.flows.is_empty() && self.fluids.is_none() {
             errors.push("o modelo está vazio: adicione objetos ou fluxos".to_string());
         }
         let mut names = HashSet::new();
@@ -594,6 +602,15 @@ impl Model {
             }
             errors.extend(flow.validate(&objects));
         }
+        if let Some(fluids) = &self.fluids {
+            if objects.contains(fluids.name.as_str()) || flow_names.contains(fluids.name.as_str()) {
+                errors.push(format!(
+                    "rede de fluidos '{}': o nome já é usado por outro objeto ou fluxo",
+                    fluids.name
+                ));
+            }
+            errors.extend(fluids.validate(&objects));
+        }
         for obj in &self.objects {
             if let Some(src) = &obj.on_entry {
                 if let Err(e) = utsim_script::compile_item_script(src) {
@@ -753,6 +770,11 @@ impl Model {
         for flow in &self.flows {
             let behavior = Box::new(Flow::new(flow.clone(), objects.clone()));
             sim.add_block(flow.name.clone(), OutputRule::FirstAvailable, behavior);
+        }
+        // The fluid network is the last block (after objects and flows).
+        if let Some(fluids) = &self.fluids {
+            let behavior = Box::new(FluidNet::new(fluids.clone(), objects.clone()));
+            sim.add_block(fluids.name.clone(), OutputRule::FirstAvailable, behavior);
         }
         sim.set_router(utsim_objects::network::router(self.network.as_ref()));
         sim

@@ -25,6 +25,9 @@ pub struct Replay {
     pub connections: Vec<(usize, usize)>,
     pub records: Vec<TraceRecord>,
     pub report: RunReport,
+    /// Fluid network layout (node names, kinds, positions), when the model has one.
+    #[serde(default)]
+    pub fluids: Option<utsim_fluid::FluidDef>,
 }
 
 pub fn kind_name(kind: &ObjectKind) -> &'static str {
@@ -73,6 +76,11 @@ impl Model {
                     kind: "Flow".to_string(),
                     position: [0.0; 3],
                 }))
+                .chain(self.fluids.iter().map(|f| ReplayBlock {
+                    name: f.name.clone(),
+                    kind: "Fluid".to_string(),
+                    position: [0.0; 3],
+                }))
                 .collect(),
             connections: self
                 .connections
@@ -81,6 +89,7 @@ impl Model {
                 .collect(),
             records: sim.take_trace(),
             report,
+            fluids: self.fluids.clone(),
         })
     }
 }

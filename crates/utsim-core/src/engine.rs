@@ -215,6 +215,9 @@ pub struct Core {
     router: Arc<dyn Router>,
     /// Origin of the move in progress, between `leave` and `arrive` (for the trace).
     pending_move_from: Option<BlockId>,
+    /// Decisions waiting for an external answer, oldest first.
+    decisions: VecDeque<Decision>,
+    next_decision: u64,
 }
 
 impl Core {
@@ -537,6 +540,17 @@ impl Ctx<'_> {
         });
     }
 
+    /// Records a fluid node's level and rate (fluid networks), for the 3D view.
+    pub fn trace_fluid(&mut self, node: usize, level: f64, rate: f64) {
+        let net = self.me.0;
+        self.core.emit(TraceEvent::Fluid {
+            net,
+            node,
+            level,
+            rate,
+        });
+    }
+
     /// Records the storage position of an item in this block (racks), for the 3D view.
     pub fn trace_slot(&mut self, item: ItemId, slot: usize) {
         let block = self.me.0;
@@ -590,6 +604,23 @@ impl Ctx<'_> {
             into,
             port,
         });
+        id
+    }
+
+    /// Asks the external agent to choose one of `options`; the run pauses after the
+    /// current event and the answer arrives as a `MSG_DECISION` message (payload =
+    /// option index). Several requests are answered in order.
+    pub fn request_decision(&mut self, options: usize, observation: Vec<f64>) -> u64 {
+        self.core.next_decision += 1;
+        let id = self.core.next_decision;
+        let decision = Decision {
+            id,
+            block: self.me,
+            time: self.core.now,
+            options,
+            observation,
+        };
+        self.core.decisions.push_back(decision);
         id
     }
 
@@ -705,12 +736,38 @@ const DOWNTIME_STREAMS: u64 = 1 << 40;
 /// Stop reasons. A block runs only when no reason is active.
 const BREAKDOWN: u8 = 1;
 const OFF_SHIFT: u8 = 2;
+/// Stopped from outside the model (emulation, an operator pressing "stop").
+const EXTERNAL: u8 = 4;
+
+/// A question the simulation asks an external agent (reinforcement learning,
+/// a human): pick one of `options`. The run pauses until [`Simulation::decide`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct Decision {
+    pub id: u64,
+    pub block: BlockId,
+    pub time: Time,
+    pub options: usize,
+    /// Numbers describing the situation (chosen by the model).
+    pub observation: Vec<f64>,
+}
+
+/// Outcome of advancing the simulation step by step.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Step {
+    /// Reached the requested time with no pending decision.
+    Paused(Time),
+    /// Waiting for [`Simulation::decide`].
+    Decision(Decision),
+    /// No events left before the stop time (call [`Simulation::finish`]).
+    Finished,
+}
 
 /// A runnable model instance: one replication.
 pub struct Simulation {
     core: Core,
     behaviors: Vec<Box<dyn Behavior>>,
     config: RunConfig,
+    started: bool,
 }
 
 impl Simulation {
@@ -735,9 +792,12 @@ impl Simulation {
                 next_request: 0,
                 router: Arc::new(StraightLine),
                 pending_move_from: None,
+                decisions: VecDeque::new(),
+                next_decision: 0,
             },
             behaviors: Vec::new(),
             config,
+            started: false,
         }
     }
 
@@ -857,10 +917,39 @@ impl Simulation {
         self.core.now
     }
 
+    /// Runs the whole replication. A model that asks for external decisions cannot
+    /// run this way: use [`Simulation::run_until`] and [`Simulation::decide`].
     pub fn run(&mut self) -> Result<RunReport, SimError> {
-        self.start()?;
-        let stop = self.config.stop_time;
-        while self.core.events.peek().is_some_and(|ev| ev.time <= stop) {
+        match self.run_until(f64::INFINITY)? {
+            Step::Decision(d) => Err(SimError::Model {
+                time: d.time,
+                messages: vec![format!(
+                    "{}: o modelo pede uma decisão externa (agente); rode passo a passo",
+                    self.core.blocks[d.block.0].name
+                )],
+            }),
+            _ => Ok(self.finish()),
+        }
+    }
+
+    /// Initializes the run (blocks' `reset`). Called automatically by the stepping API.
+    pub fn begin(&mut self) -> Result<(), SimError> {
+        if self.started {
+            return Ok(());
+        }
+        self.started = true;
+        self.start()
+    }
+
+    /// Processes events up to time `t` (and never beyond the stop time). Stops early
+    /// when a decision is pending.
+    pub fn run_until(&mut self, t: Time) -> Result<Step, SimError> {
+        self.begin()?;
+        if let Some(d) = self.core.decisions.front() {
+            return Ok(Step::Decision(d.clone()));
+        }
+        let limit = t.min(self.config.stop_time);
+        while self.core.events.peek().is_some_and(|ev| ev.time <= limit) {
             let ev = self.core.events.pop().expect("peeked");
             if self.core.cancelled.remove(&ev.seq) {
                 continue;
@@ -872,11 +961,99 @@ impl Simulation {
             self.dispatch(ev.kind);
             self.resolve();
             self.check()?;
+            if let Some(d) = self.core.decisions.front() {
+                return Ok(Step::Decision(d.clone()));
+            }
         }
-        if stop.is_finite() {
-            self.core.now = stop;
+        let pending =
+            self.core.events.iter().any(|ev| {
+                ev.time <= self.config.stop_time && !self.core.cancelled.contains(&ev.seq)
+            });
+        if !pending || limit >= self.config.stop_time {
+            return Ok(Step::Finished);
         }
-        Ok(self.report())
+        if t.is_finite() && t > self.core.now {
+            self.core.now = t;
+        }
+        Ok(Step::Paused(self.core.now))
+    }
+
+    /// The oldest decision waiting for an answer.
+    pub fn pending_decision(&self) -> Option<&Decision> {
+        self.core.decisions.front()
+    }
+
+    /// Answers the oldest pending decision with option `choice` (0-based).
+    pub fn decide(&mut self, choice: usize) -> Result<(), SimError> {
+        let Some(d) = self.core.decisions.pop_front() else {
+            return Err(SimError::Model {
+                time: self.core.now,
+                messages: vec!["nenhuma decisão pendente".into()],
+            });
+        };
+        if choice >= d.options {
+            let name = self.core.blocks[d.block.0].name.clone();
+            self.core.decisions.push_front(d);
+            return Err(SimError::Model {
+                time: self.core.now,
+                messages: vec![format!("{name}: opção fora do intervalo")],
+            });
+        }
+        self.core.ops.push_back(KernelOp::Message {
+            to: d.block,
+            from: d.block,
+            tag: crate::task::MSG_DECISION,
+            payload: choice as u64,
+        });
+        self.resolve();
+        self.check()
+    }
+
+    /// Ends the run at the stop time and returns the report.
+    pub fn finish(&mut self) -> RunReport {
+        if self.config.stop_time.is_finite() && self.core.now < self.config.stop_time {
+            self.core.now = self.config.stop_time;
+        }
+        self.report()
+    }
+
+    /// Stops a block from outside the model (emulation): ports close, timers pause.
+    pub fn stop_block(&mut self, block: BlockId) {
+        if self.core.blocks[block.0].stops & EXTERNAL == 0 {
+            self.stop(block, EXTERNAL);
+            self.resolve();
+        }
+    }
+
+    pub fn resume_block(&mut self, block: BlockId) {
+        if self.core.blocks[block.0].stops & EXTERNAL != 0 {
+            self.resume(block, EXTERNAL);
+            self.resolve();
+        }
+    }
+
+    /// Current simulation time.
+    pub fn time(&self) -> Time {
+        self.core.now
+    }
+
+    pub fn stop_time(&self) -> Time {
+        self.config.stop_time
+    }
+
+    /// Live view of every block (name, state, content), for emulation and agents.
+    pub fn block_status(&self) -> Vec<(String, Option<State>, usize)> {
+        self.core
+            .blocks
+            .iter()
+            .map(|rt| {
+                (
+                    rt.name.clone(),
+                    rt.stats.states.current(),
+                    rt.contents.len(),
+                )
+            })
+            .collect()
     }
 
     fn start(&mut self) -> Result<(), SimError> {
@@ -987,6 +1164,8 @@ impl Simulation {
     fn stopped_state(stops: u8) -> State {
         if stops & BREAKDOWN != 0 {
             State::Down
+        } else if stops & EXTERNAL != 0 {
+            State::Stopped
         } else {
             State::OffShift
         }
@@ -1072,6 +1251,15 @@ impl Simulation {
                     .blocks
                     .iter_mut()
                     .for_each(|rt| rt.stats.reset(now));
+                for b in 0..self.behaviors.len() {
+                    let Simulation {
+                        core, behaviors, ..
+                    } = self;
+                    behaviors[b].on_warmup(&mut Ctx {
+                        core,
+                        me: BlockId(b),
+                    });
+                }
             }
         }
     }
@@ -1333,7 +1521,8 @@ impl Simulation {
             .core
             .blocks
             .iter()
-            .map(|rt| BlockReport {
+            .zip(&self.behaviors)
+            .map(|(rt, behavior)| BlockReport {
                 name: rt.name.clone(),
                 kind: rt.kind.to_string(),
                 input: rt.stats.input,
@@ -1355,6 +1544,7 @@ impl Simulation {
                     .iter()
                     .map(|(k, t)| (k.clone(), TallySummary::with_histogram(t, bins)))
                     .collect(),
+                custom: behavior.custom_metrics(now).into_iter().collect(),
                 series: rt.series.clone(),
             })
             .collect();

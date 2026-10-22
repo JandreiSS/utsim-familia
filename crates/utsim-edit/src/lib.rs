@@ -380,6 +380,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             load_time: Dist::Const(0.0),
             unload_time: Dist::Const(0.0),
             home: false,
+            agv: false,
         },
         "Conveyor" => ObjectKind::Conveyor {
             length: 5.0,

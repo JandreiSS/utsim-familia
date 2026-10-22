@@ -21,6 +21,10 @@ pub struct EdgeDef {
     /// Travel allowed in both directions.
     #[serde(default = "yes")]
     pub two_way: bool,
+    /// Vehicles allowed on this edge at the same time (AGV traffic control);
+    /// `None` = unlimited (vehicles pass through each other).
+    #[serde(default)]
+    pub capacity: Option<usize>,
 }
 
 fn yes() -> bool {

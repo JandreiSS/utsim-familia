@@ -17,6 +17,7 @@ fn edge(from: &str, to: &str, two_way: bool) -> EdgeDef {
         from: from.into(),
         to: to.into(),
         two_way,
+        capacity: None,
     }
 }
 

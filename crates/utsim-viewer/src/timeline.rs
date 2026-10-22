@@ -436,6 +436,8 @@ impl Timeline {
                     activity,
                     count,
                 } => tokens.push(t, *flow, *activity, *count),
+                // Fluid levels are drawn by the phase 7 fluid view.
+                TraceEvent::Fluid { .. } => {}
                 TraceEvent::Slot { item, block, slot } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     slots.entry((*block, i)).or_default().push((t, *slot));

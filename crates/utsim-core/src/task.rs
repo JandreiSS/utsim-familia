@@ -54,6 +54,8 @@ pub const MSG_IDLE: u32 = 4;
 pub const MSG_ITEM_ENTERED: u32 = 5;
 /// An item left a block this block subscribed to (payload: item key; `from` = that block).
 pub const MSG_ITEM_EXITED: u32 = 6;
+/// The external agent answered a decision this block requested (payload: option index).
+pub const MSG_DECISION: u32 = 7;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path

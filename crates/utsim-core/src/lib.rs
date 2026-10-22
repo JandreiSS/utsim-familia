@@ -22,7 +22,7 @@ pub type Time = f64;
 
 pub use block::{Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftTable, State};
 pub use dist::Dist;
-pub use engine::{Ctx, EventId, RunConfig, SimError, Simulation};
+pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
 pub use item::{Item, ItemId, Value};
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, summarize};
 pub use stats::Histogram;

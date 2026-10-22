@@ -78,6 +78,9 @@ pub enum DecideRule {
     ByLabel(String),
     /// One condition per `next`: the first true one wins; none true = last branch.
     Condition(Vec<String>),
+    /// An external agent chooses the branch (reinforcement learning, a person):
+    /// the simulation pauses with the values of `observation` (expressions).
+    Agent { observation: Vec<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -271,6 +274,9 @@ enum Rule {
     Probability(Vec<f64>),
     ByLabel(String),
     Condition(Vec<Expr>),
+    /// Observation expressions; the runtime is implemented by the RL front.
+    #[allow(dead_code)]
+    Agent(Vec<Expr>),
 }
 
 enum Op {
@@ -401,6 +407,12 @@ impl Plan {
                     DecideRule::ByLabel(l) => Rule::ByLabel(l.clone()),
                     DecideRule::Condition(c) => Rule::Condition(
                         c.iter()
+                            .filter_map(|s| compile(s, &mut errors))
+                            .collect::<Vec<_>>(),
+                    ),
+                    DecideRule::Agent { observation } => Rule::Agent(
+                        observation
+                            .iter()
                             .filter_map(|s| compile(s, &mut errors))
                             .collect::<Vec<_>>(),
                     ),
@@ -701,6 +713,9 @@ impl Rt {
                             }
                         }
                         pick
+                    }
+                    Rule::Agent(_) => {
+                        return Err("decisão por agente: em construção (fase 7)".into());
                     }
                 };
                 let next = *plan.next[at].get(k).ok_or("ramo de saída inexistente")?;

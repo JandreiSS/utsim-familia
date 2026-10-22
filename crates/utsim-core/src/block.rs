@@ -33,6 +33,8 @@ pub enum State {
     Unloading,
     /// A mobile resource working at a station (operator).
     Utilize,
+    /// Stopped from outside the model (emulation, operator command).
+    Stopped,
 }
 
 impl State {
@@ -55,6 +57,7 @@ impl State {
             State::Loading => "loading",
             State::Unloading => "unloading",
             State::Utilize => "utilize",
+            State::Stopped => "stopped",
         }
     }
 }
@@ -171,6 +174,18 @@ pub trait Behavior: Send {
     fn on_task(&mut self, cx: &mut Ctx, request: TaskRequest) {
         let _ = request;
         cx.error("este objeto não executa tarefas de transporte ou operação");
+    }
+
+    /// The warm-up period ended: blocks with their own statistics restart them.
+    fn on_warmup(&mut self, cx: &mut Ctx) {
+        let _ = cx;
+    }
+
+    /// Block-specific metrics for the report (e.g. tank levels), as `(name, value)`;
+    /// they appear as `<block>.<name>` in `RunReport::metrics`.
+    fn custom_metrics(&self, now: crate::Time) -> Vec<(String, f64)> {
+        let _ = now;
+        Vec::new()
     }
 
     /// A message from another block (`MSG_*` tags in [`crate::task`]).
