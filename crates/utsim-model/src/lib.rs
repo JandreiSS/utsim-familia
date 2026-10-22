@@ -1,5 +1,7 @@
 //! Model description: what is written in a `.ron` file and how it becomes a [`Simulation`].
 
+pub mod experiment;
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 

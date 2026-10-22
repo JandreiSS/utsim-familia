@@ -148,7 +148,11 @@ fn bundled_examples_are_valid() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().is_some_and(|e| e == "ron") {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if name.starts_with("experimento") {
+            // Experiment files are checked by running them.
+            utsim_model::experiment::Experiment::load(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
+        } else if path.extension().is_some_and(|e| e == "ron") {
             let m = Model::load(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             m.validate().unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         }
