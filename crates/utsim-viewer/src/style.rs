@@ -72,6 +72,10 @@ pub enum Shape {
     Funnel,
     Frustum,
     Cylinder,
+    /// Transporter: low flat body with a mast (the mast is added by the scene).
+    Vehicle,
+    /// Dispatcher: small marker.
+    Flag,
 }
 
 pub fn shape_of(kind: &str) -> Shape {
@@ -81,6 +85,8 @@ pub fn shape_of(kind: &str) -> Shape {
         "Combiner" => Shape::Funnel,
         "Separator" => Shape::Frustum,
         "Sink" => Shape::Cylinder,
+        "Transporter" => Shape::Vehicle,
+        "Dispatcher" => Shape::Flag,
         _ => Shape::Box,
     }
 }
@@ -94,6 +100,8 @@ pub fn extents(shape: Shape) -> ([f32; 3], f32) {
         Shape::Funnel => ([1.0, 0.5, 1.0], 1.0),
         Shape::Frustum => ([1.0, 0.5, 1.0], 1.0),
         Shape::Cylinder => ([0.9, 0.5, 0.9], 1.0),
+        Shape::Vehicle => ([0.55, 0.2, 0.4], 0.4),
+        Shape::Flag => ([0.2, 0.4, 0.2], 0.8),
     }
 }
 
@@ -141,6 +149,11 @@ mod tests {
             State::WaitingTransport,
             State::Down,
             State::OffShift,
+            State::TravelEmpty,
+            State::TravelLoaded,
+            State::Loading,
+            State::Unloading,
+            State::Utilize,
         ] {
             let c = state_color(Some(s));
             assert!(c.iter().all(|v| (0.0..=1.0).contains(v)));
@@ -170,5 +183,17 @@ mod tests {
         assert!(slot_offset(Shape::LongBox, 30)[1] > a[1]);
         assert_eq!(shape_of("Queue"), Shape::LongBox);
         assert_eq!(shape_of("Processor"), Shape::Box);
+    }
+
+    #[test]
+    fn mobile_resources_have_their_own_shapes() {
+        assert_eq!(shape_of("Transporter"), Shape::Vehicle);
+        assert_eq!(shape_of("Dispatcher"), Shape::Flag);
+        // Items carried by a vehicle sit on top of it.
+        assert!(slot_offset(Shape::Vehicle, 0)[1] > 2.0 * extents(Shape::Vehicle).0[1]);
+        assert_ne!(
+            state_color(Some(State::TravelEmpty)),
+            state_color(Some(State::Loading))
+        );
     }
 }

@@ -23,6 +23,18 @@ pub fn usizes(xs: &[usize]) -> String {
     list(xs, |x| x.to_string())
 }
 
+pub fn strings(xs: &[String]) -> String {
+    list(xs, |x| string(x))
+}
+
+/// A processor's `operators` section (`OperatorUse`).
+pub fn operators(team: &str, count: usize, setup: bool, process: bool) -> String {
+    format!(
+        "(team: {}, count: {count}, setup: {setup}, process: {process})",
+        string(team)
+    )
+}
+
 pub fn string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
