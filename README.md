@@ -220,19 +220,6 @@ utsim otimizar examples/otimizacao_servidores.ron --html relatorio.html
 ```
 
 Todos os pontos usam as mesmas sementes, então a comparação é pareada: o relatório mostra
-a diferença de cada ponto para o melhor (Δ ± intervalo de 95
-## Otimização
-
-`utsim otimizar` procura os valores de parâmetros do modelo (número de servidores,
-capacidade de fila, tempos de serviço) que minimizam ou maximizam um objetivo, respeitando
-restrições. O problema é um arquivo RON (veja `examples/otimizacao_servidores.ron`):
-
-```bash
-utsim otimizar examples/otimizacao_servidores.ron --html relatorio.html
-# opções: --json saida.json  --reps N  --orcamento N
-```
-
-Todos os pontos usam as mesmas sementes, então a comparação é pareada: o relatório mostra
 a diferença de cada ponto para o melhor (Δ ± intervalo de 95%), marca com `≈` os que não
 se distinguem estatisticamente e imprime o cenário (`set: { ... }`) pronto para colar em
 um arquivo de experimento. O `--html` inclui gráficos do objetivo por ordem de avaliação

@@ -51,7 +51,7 @@ impl Model {
         self.validate()?;
         let mut sim = self.build(replication);
         sim.enable_trace();
-        let report = sim.run()?;
+        let report = self.drive(&mut sim)?;
         let index = |name: &str| {
             self.objects
                 .iter()

@@ -153,9 +153,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             "warmup" => set!(run.warmup),
             "seed" => set!(run.seed),
             "replications" => set!(run.replications),
+            "default_decision" => set!(run.default_decision),
             _ => {
                 return Err(invalid(format!(
-                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications"
+                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications, default_decision"
                 )));
             }
         }

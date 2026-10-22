@@ -109,6 +109,17 @@ impl FluidDef {
                 errors.push(format!("{at}: parâmetros inválidos (valores devem ser > 0; nível inicial dentro da capacidade)"));
             }
         }
+        let mut targets = HashSet::new();
+        for n in &self.nodes {
+            if let FluidKind::ToItems { object, .. } = &n.kind
+                && !targets.insert(object.as_str())
+            {
+                errors.push(format!(
+                    "fluidos.{}: o objeto '{object}' já recebe itens de outro conversor ToItems",
+                    n.name
+                ));
+            }
+        }
         for (a, b) in &self.links {
             for end in [a, b] {
                 if !names.contains(end.as_str()) {

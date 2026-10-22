@@ -72,6 +72,11 @@ pub struct RunSettings {
     /// Build histograms with this many bins (None = off).
     #[serde(default)]
     pub histogram_bins: Option<usize>,
+    /// For models that ask an external agent (`Decide` with `Agent`): the option
+    /// chosen when the model runs without one (`utsim run`, replay, 3D). `None`:
+    /// such models only run through the step-by-step API (e.g. `utsim-env`).
+    #[serde(default)]
+    pub default_decision: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -801,7 +806,23 @@ impl Model {
         let iter = (0..self.run.replications).into_par_iter();
         #[cfg(not(feature = "parallel"))]
         let iter = 0..self.run.replications;
-        iter.map(|r| self.build(r).run().map_err(ModelError::from))
-            .collect()
+        iter.map(|r| self.drive(&mut self.build(r))).collect()
+    }
+
+    /// Runs a built simulation to the end, answering agent decisions with
+    /// `run.default_decision` when it is set.
+    pub fn drive(&self, sim: &mut Simulation) -> Result<RunReport, ModelError> {
+        let Some(choice) = self.run.default_decision else {
+            return Ok(sim.run()?);
+        };
+        loop {
+            match sim.run_until(f64::INFINITY)? {
+                utsim_core::Step::Decision(d) => {
+                    sim.decide(choice.min(d.options.saturating_sub(1)))?
+                }
+                utsim_core::Step::Paused(_) => {}
+                utsim_core::Step::Finished => return Ok(sim.finish()),
+            }
+        }
     }
 }
