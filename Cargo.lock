@@ -453,6 +453,7 @@ dependencies = [
  "serde",
  "serde_json",
  "utsim-core",
+ "utsim-fit",
  "utsim-model",
 ]
 
@@ -476,6 +477,7 @@ dependencies = [
  "rand_distr",
  "ron",
  "serde",
+ "serde_json",
  "utsim-core",
 ]
 

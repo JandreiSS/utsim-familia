@@ -7,7 +7,9 @@
 //!    AIC wins, and ties are broken by the smaller Anderson-Darling statistic;
 //! 4. if no family is accepted there is no winner and the empirical distribution is
 //!    recommended;
-//! 5. accepted families within ΔAIC < 2 of the winner are flagged as equivalent.
+//! 5. accepted families within ΔAIC < 2 of the lowest AIC are statistically
+//!    equivalent; among them the one with fewer parameters wins (parsimony), and
+//!    the lowest AIC breaks ties.
 
 use serde::Serialize;
 use utsim_core::Dist;
@@ -19,7 +21,7 @@ pub const RULE: &str = "1) famílias que não se aplicam aos dados ficam por úl
 2) uma família é rejeitada se algum teste de aderência (KS, Anderson-Darling, qui-quadrado) tiver p < α; \
 3) entre as não rejeitadas vence o menor AIC (empate: menor estatística de Anderson-Darling); \
 4) se todas forem rejeitadas, recomenda-se a distribuição empírica; \
-5) candidatas com ΔAIC < 2 em relação à vencedora são consideradas equivalentes.";
+5) candidatas aceitas com ΔAIC < 2 em relação ao menor AIC são equivalentes; entre elas vence a de menos parâmetros (parcimônia).";
 
 /// Outcome of one candidate, everything the report needs.
 #[derive(Serialize)]
@@ -164,37 +166,66 @@ pub fn rank(mut candidates: Vec<CandidateResult>, alpha: f64) -> Ranking {
             .then_with(|| a.family.cmp(&b.family))
     });
 
-    let best = candidates.first().filter(|c| c.accepted()).map(|_| 0);
+    // Rule 5: among the accepted candidates equivalent to the lowest AIC, the most
+    // parsimonious wins. Accepted candidates are sorted by AIC, so the block is a prefix.
+    let min_aic = candidates.first().filter(|c| c.accepted()).map(|c| c.aic);
+    let mut parsimony = false;
+    if let Some(min_aic) = min_aic {
+        let block = candidates
+            .iter()
+            .take_while(|c| c.accepted() && c.aic - min_aic < 2.0)
+            .count();
+        let pick = (0..block)
+            .min_by_key(|&i| candidates[i].n_params)
+            .unwrap_or(0);
+        parsimony = candidates[pick].n_params < candidates[0].n_params;
+        let chosen = candidates.remove(pick);
+        candidates.insert(0, chosen);
+    }
+
+    let best = min_aic.map(|_| 0);
     let mut explanation = Vec::new();
     let mut equivalent = Vec::new();
-    match best {
-        Some(_) => {
+    match (best, min_aic) {
+        (Some(_), Some(min_aic)) => {
             let w = &candidates[0];
+            let why = if parsimony {
+                format!(
+                    "é estatisticamente equivalente à de menor AIC (ΔAIC = {}) e tem menos parâmetros ({}), então foi preferida por parcimônia",
+                    num(w.aic - min_aic),
+                    w.n_params
+                )
+            } else {
+                format!("tem o menor AIC entre as aceitas (AIC = {})", num(w.aic))
+            };
             explanation.push(format!(
-                "{} foi a escolhida: {}; tem o menor AIC entre as aceitas (AIC = {}, peso de Akaike = {}%).",
+                "{} foi a escolhida: {}; {} (peso de Akaike = {}%).",
                 w.family,
                 passed_tests(w, alpha),
-                num(w.aic),
+                why,
                 num(100.0 * w.akaike_weight)
             ));
             for c in candidates.iter().skip(1).filter(|c| c.accepted()) {
-                let delta = c.aic - w.aic;
+                let delta = c.aic - min_aic;
                 if delta < 2.0 {
                     equivalent.push(c.family.clone());
+                    explanation.push(format!(
+                        "{}: também aceita e equivalente (ΔAIC = {}), mas com {} parâmetros contra {} da escolhida.",
+                        c.family,
+                        num(delta),
+                        c.n_params,
+                        w.n_params
+                    ));
+                } else {
+                    explanation.push(format!(
+                        "{}: também aceita, mas com AIC maior (ΔAIC = {}).",
+                        c.family,
+                        num(delta)
+                    ));
                 }
-                explanation.push(format!(
-                    "{}: também aceita, mas com AIC maior (ΔAIC = {}){}.",
-                    c.family,
-                    num(delta),
-                    if delta < 2.0 {
-                        "; na prática é equivalente à escolhida"
-                    } else {
-                        ""
-                    }
-                ));
             }
         }
-        None => {
+        _ => {
             let least_bad = candidates.iter().find(|c| c.fit_error.is_none());
             explanation.push(match least_bad {
                 Some(c) => format!(
@@ -340,6 +371,27 @@ mod tests {
         assert_eq!(r.equivalent, vec!["Gama".to_string()]);
         let w: f64 = r.candidates.iter().map(|c| c.akaike_weight).sum();
         assert!((w - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parsimony_picks_fewer_parameters_among_equivalents() {
+        let mut three = cand("Weibull deslocada", 100.0, 0.5, (0.3, 0.5));
+        three.n_params = 3;
+        let mut two = cand("Gama", 100.4, 0.6, (0.2, 0.6));
+        two.n_params = 2;
+        let r = rank(vec![three, two], 0.05);
+        assert_eq!(r.candidates[0].family, "Gama");
+        assert!(
+            r.explanation[0].contains("parcimônia"),
+            "{}",
+            r.explanation[0]
+        );
+        assert_eq!(r.equivalent, vec!["Weibull deslocada".to_string()]);
+        // Outside the ΔAIC < 2 band, AIC wins even with more parameters.
+        let mut three = cand("Weibull deslocada", 100.0, 0.5, (0.3, 0.5));
+        three.n_params = 3;
+        let r = rank(vec![three, cand("Gama", 103.0, 0.6, (0.2, 0.6))], 0.05);
+        assert_eq!(r.candidates[0].family, "Weibull deslocada");
     }
 
     #[test]
