@@ -35,8 +35,8 @@ a situação atual e onde está a prova de que funciona.
 | Código | O sistema deve... | Fase | Situação | Verificação |
 |---|---|---|---|---|
 | RF-20 | simular quebras aleatórias (MTBF/MTTR), pausando o trabalho em andamento | 1 | ✅ | `breakdowns_follow_availability` |
-| RF-21 | simular turnos: pausas, noites e folgas que se repetem | 1 | ✅ | `shifts_close_the_block_on_schedule` (testes completos 🔄) |
-| RF-22 | combinar quebra e turno no mesmo objeto, mostrando qual dos dois está ativo | 1 | ✅ | testes de turnos 🔄 |
+| RF-21 | simular turnos: pausas, noites e folgas que se repetem | 1 | ✅ | `tests/shifts.rs`, `touching_shift_windows_stay_closed` |
+| RF-22 | combinar quebra e turno no mesmo objeto, mostrando qual dos dois está ativo | 1 | ✅ | `tests/shifts.rs` (caso d) |
 
 ### Resultados e análise
 
@@ -55,19 +55,20 @@ a situação atual e onde está a prova de que funciona.
 
 | Código | O sistema deve... | Fase | Situação | Verificação |
 |---|---|---|---|---|
-| RF-40 | ler dados reais (CSV) de chegadas, processos ou reparos | 1b | ⏳ | |
-| RF-41 | diagnosticar os dados: independência, tendência, valores atípicos | 1b | ⏳ | |
-| RF-42 | ajustar **todas** as distribuições candidatas e mostrar o resultado de cada uma | 1b | ⏳ | |
-| RF-43 | testar a aderência (KS, Anderson-Darling, qui-quadrado) e comparar por AIC/BIC | 1b | ⏳ | |
-| RF-44 | indicar a melhor distribuição e **explicar por que** ela venceu e as outras perderam | 1b | ⏳ | |
-| RF-45 | mostrar gráficos (histograma com as curvas, Q-Q, P-P) e gerar a linha pronta para o modelo | 1b | ⏳ | |
+| RF-40 | ler dados reais (CSV/TXT, padrão brasileiro com `;` e vírgula decimal), escolher a coluna e converter horários em intervalos | 1b | ✅ | `data.rs` |
+| RF-41 | diagnosticar os dados: independência (sequências, Ljung-Box), tendência (Mann-Kendall), atípicos, empates | 1b | ✅ | `diagnostics.rs` |
+| RF-42 | ajustar **todas** as 20 distribuições candidatas (máxima verossimilhança) e mostrar o resultado de cada uma | 1b | ✅ | `families/tests.rs` (recuperação de parâmetros) |
+| RF-43 | testar a aderência (KS, Anderson-Darling com bootstrap paramétrico, qui-quadrado) e comparar por AIC/BIC e pesos de Akaike | 1b | ✅ | `gof.rs` (erro tipo I ≈ α) |
+| RF-44 | indicar a melhor distribuição pela regra publicada e **explicar por que** ela venceu e cada outra perdeu | 1b | ✅ | `rank.rs`, `tests/recovery.rs` 🔄 |
+| RF-45 | mostrar gráficos (histograma com as curvas, Q-Q, P-P, ECDF, dispersão x[i]×x[i+1]) em HTML e gerar a linha pronta para o `.ron` | 1b | ✅ | `plots.rs`, `utsim fit --html` |
 
 ### Fases seguintes
 
 | Código | O sistema deve... | Fase | Situação |
 |---|---|---|---|
-| RF-50 | mostrar o modelo em 3D e animar os itens a partir da simulação | 2 | ⏳ |
-| RF-51 | controlar a animação: velocidade, pausa, passo a passo | 2 | ⏳ |
+| RF-46 | gravar o rastro completo de uma replicação (replay) para análise ou animação | 2 | ✅ |
+| RF-50 | mostrar o modelo em 3D e animar os itens a partir da simulação | 2 | 🔄 |
+| RF-51 | controlar a animação: velocidade, pausa, passo a passo | 2 | 🔄 |
 | RF-60 | montar o modelo arrastando objetos e ligando portas com o mouse | 3 | ⏳ |
 | RF-61 | editar as propriedades dos objetos num painel e salvar o `.ron` | 3 | ⏳ |
 | RF-70 | ter operadores e veículos que se deslocam e executam tarefas | 4 | ⏳ |
@@ -93,6 +94,8 @@ a situação atual e onde está a prova de que funciona.
 | RNF-10 | funcionar em Windows e Linux | ✅ | CI (`windows-latest` e `ubuntu-latest`) |
 | RNF-11 | manter a qualidade: formatação, zero avisos do clippy, todos os testes passando | ✅ | `scripts/verificar.sh` / `.ps1`, CI |
 | RNF-12 | ser extensível: blocos novos sem mexer no kernel | ✅ | trait `Behavior`; Combiner/Separator feitos sem tocar no núcleo |
-| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ⏳ | contrato `Observer` da fase 2 |
+| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ✅ | `Observer`/rastro só leem; teste "rastrear não muda o resultado" |
 | RNF-14 | falar português com o usuário (mensagens, relatórios, docs) e usar inglês no código | ✅ | revisão nos merges |
 | RNF-15 | ter documentação sempre atualizada: requisitos, arquitetura, roteiro e processo | ✅ | regra do `processo.md` |
+| RNF-16 | ser transparente nas escolhas estatísticas: regra de decisão publicada, todos os candidatos e métricas visíveis | ✅ | `RULE` em `rank.rs`, impressa em todo relatório |
+| RNF-17 | analisar um conjunto de dados (300 valores, 20 famílias, bootstrap 300) em poucos segundos | ✅ | ≈ 2 s em release |

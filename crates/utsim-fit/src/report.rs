@@ -118,12 +118,19 @@ impl FitReport {
     }
 
     /// The `Dist` of the winner as one line of RON, ready to paste into a model.
+    /// The `.ron` distribution for the model: the winner, or the empirical
+    /// distribution of the data when every candidate was rejected.
     pub fn ron_line(&self) -> Option<String> {
-        let dist = self
-            .ranking
-            .best
-            .and_then(|i| self.ranking.candidates[i].dist.as_ref())?;
-        ron::ser::to_string(dist).ok()
+        if let Some(i) = self.ranking.best {
+            return self.ranking.candidates[i]
+                .dist
+                .as_ref()
+                .and_then(|d| ron::ser::to_string(d).ok());
+        }
+        if !self.ranking.recommend_empirical {
+            return None;
+        }
+        ron::ser::to_string(&empirical(&self.data)?).ok()
     }
 
     /// One row per candidate: position, family, parameters, p-values, AIC, ΔAIC, weight, status.
@@ -600,5 +607,46 @@ mod tests {
         if let Some(line) = report.ron_line() {
             assert!(line.contains('(') && !line.contains('\n'), "{line}");
         }
+    }
+}
+
+/// Empirical distribution of a sample: frequencies for integer data, otherwise
+/// the piecewise-linear interpolation of the sorted observations.
+pub fn empirical(data: &[f64]) -> Option<utsim_core::Dist> {
+    let mut xs: Vec<f64> = data.iter().copied().filter(|x| x.is_finite()).collect();
+    if xs.is_empty() {
+        return None;
+    }
+    xs.sort_by(f64::total_cmp);
+    if xs.iter().all(|x| x.fract() == 0.0) {
+        let mut table: Vec<(f64, f64)> = Vec::new();
+        for x in xs {
+            match table.last_mut() {
+                Some((v, w)) if *v == x => *w += 1.0,
+                _ => table.push((x, 1.0)),
+            }
+        }
+        return Some(utsim_core::Dist::Discrete(table));
+    }
+    Some(utsim_core::Dist::Empirical(xs))
+}
+
+#[cfg(test)]
+mod empirical_tests {
+    use super::*;
+    use utsim_core::Dist;
+
+    #[test]
+    fn empirical_is_discrete_for_integers_and_sorted_otherwise() {
+        assert_eq!(
+            empirical(&[2.0, 1.0, 2.0]),
+            Some(Dist::Discrete(vec![(1.0, 1.0), (2.0, 2.0)]))
+        );
+        assert_eq!(
+            empirical(&[0.5, 0.2]),
+            Some(Dist::Empirical(vec![0.2, 0.5]))
+        );
+        assert_eq!(empirical(&[]), None);
+        empirical(&[3.2, 1.1, 2.5]).unwrap().validate().unwrap();
     }
 }

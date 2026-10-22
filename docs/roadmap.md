@@ -19,10 +19,11 @@ validação da anterior passa.
 - [x] Exportação CSV
 - [x] Combiner, Separator e Queue com lote
 - [x] Quebras (MTBF/MTTR) com pausa dos tempos em andamento
-- [ ] Tabelas de turnos (parada programada)
+- [x] Tabelas de turnos (parada programada), combináveis com quebras
 - [x] Roteamento ponderado (`Weighted`) e eventos canceláveis
 - [x] **Validação:** M/M/c (Erlang C), redes de Jackson, LIFO, disponibilidade com quebras
-- [ ] **Validação:** M/M/1/K (precisa de perda de chegadas na Source)
+- [x] Perda de chegadas na Source (`on_blocked: Drop`)
+- [x] **Validação:** M/M/1/K e M/M/1/1 (perda de Erlang)
 - [x] Rede de segurança: snapshots golden, `scripts/verificar`, CI
 
 ## Fase 1b: modelagem de dados de entrada (ajuste de distribuições)
@@ -32,44 +33,45 @@ justifica a escolha com métricas estatísticas. A ideia vem de ferramentas como
 o ferramentas de ajuste, mas o desenho é nosso.
 
 **Entrada e diagnóstico dos dados**
-- [ ] Leitura de CSV/TXT (uma coluna, ou coluna escolhida), com timestamps opcionais para gerar intervalos
-- [ ] Estatística descritiva: n, média, mediana, desvio, CV, assimetria, curtose, mín/máx, quartis
-- [ ] Verificação das hipóteses, com aviso quando falharem:
+- [x] Leitura de CSV/TXT (uma coluna, ou coluna escolhida), com timestamps opcionais para gerar intervalos
+- [x] Estatística descritiva: n, média, mediana, desvio, CV, assimetria, curtose, mín/máx, quartis
+- [x] Verificação das hipóteses, com aviso quando falharem:
   - independência (autocorrelação por lag e gráfico de dispersão x[i] × x[i+1], teste de corridas)
   - estacionariedade (tendência ao longo do tempo, teste de Mann-Kendall)
   - valores atípicos (IQR) e empates/arredondamento (dados discretizados)
-- [ ] Recomendação quando os dados não forem i.i.d. (separar por turno/período, usar série empírica)
+- [x] Recomendação quando os dados não forem i.i.d. (separar por turno/período, usar série empírica)
 
 **Ajuste**
-- [ ] Candidatas contínuas: Exponencial, Erlang, Gama, Weibull, Lognormal, Normal (truncada),
+- [x] Candidatas contínuas: Exponencial, Erlang, Gama, Weibull, Lognormal, Normal (truncada),
   Triangular, Uniforme, Beta (com min/máx), Log-logística, Pearson V e VI; com e sem
   deslocamento (*location*); discretas: Poisson, Geométrica, Binomial, Binomial Negativa
-- [ ] Estimação por máxima verossimilhança (MLE), com método dos momentos como ponto de partida e alternativa
-- [ ] Distribuição empírica (contínua por interpolação, ou discreta) como alternativa quando nenhuma paramétrica passar
+- [x] Estimação por máxima verossimilhança (MLE), com método dos momentos como ponto de partida e alternativa
+- [x] Distribuição empírica (contínua por interpolação, ou discreta) como alternativa quando nenhuma paramétrica passar, com a linha `.ron` gerada
 
 **Testes e métricas (para todas as candidatas, numa tabela única)**
-- [ ] Kolmogorov-Smirnov, com p-valor por *bootstrap* paramétrico, porque os parâmetros são estimados dos próprios dados
-- [ ] Anderson-Darling, mais sensível às caudas, também com bootstrap
-- [ ] Qui-quadrado com classes equiprováveis e graus de liberdade corrigidos pelos parâmetros estimados
-- [ ] Log-verossimilhança, AIC, BIC e pesos de Akaike
-- [ ] Erro quadrático entre histograma e densidade, e erro máximo da P-P
+- [x] Kolmogorov-Smirnov, com p-valor por *bootstrap* paramétrico, porque os parâmetros são estimados dos próprios dados
+- [x] Anderson-Darling, mais sensível às caudas, também com bootstrap
+- [x] Qui-quadrado com classes equiprováveis e graus de liberdade corrigidos pelos parâmetros estimados
+- [x] Log-verossimilhança, AIC, BIC e pesos de Akaike
+- [x] Erro quadrático entre histograma e densidade, e erro máximo da P-P
 
 **Escolha e justificativa**
-- [ ] Ranking transparente: primeiro descarta quem é rejeitado nos testes (α configurável), depois ordena por AIC/BIC e estatística A-D. A regra aparece no relatório.
-- [ ] Texto explicando por que o modelo vencedor ganhou e por que os outros perderam
+- [x] Ranking transparente: descarta quem é rejeitado nos testes (α configurável), ordena por AIC, desempata por A-D e aplica parcimônia entre equivalentes (ΔAIC < 2). A regra aparece no relatório.
+- [x] Texto explicando por que o modelo vencedor ganhou e por que os outros perderam
   (ex.: "Weibull rejeitada no A-D, p=0,01, cauda direita subestimada")
-- [ ] Aviso quando dois modelos são praticamente equivalentes (ΔAIC < 2)
-- [ ] Gráficos: histograma com as densidades sobrepostas, Q-Q, P-P e ECDF × CDF teórica
-- [ ] Saída pronta para o modelo: a linha `Dist` do `.ron` (ex.: `Weibull(shape: 1.8, scale: 4.2)`)
-- [ ] CLI `utsim fit dados.csv [--coluna ...] [--alpha 0.05] [--html relatorio.html]`; depois no editor (fase 3)
+- [x] Aviso quando dois modelos são praticamente equivalentes (ΔAIC < 2)
+- [x] Gráficos: histograma com as densidades sobrepostas, Q-Q, P-P e ECDF × CDF teórica
+- [x] Saída pronta para o modelo: a linha `Dist` do `.ron` (ex.: `Weibull(shape: 1.8, scale: 4.2)`)
+- [x] CLI `utsim fit dados.csv [--coluna ...] [--alpha 0.05] [--html relatorio.html]`
+- [ ] Ajuste dentro do editor (fase 3)
 
 **Validação**
-- [ ] Gerar amostras de distribuições conhecidas e verificar que o ajuste recupera a família e os parâmetros
-- [ ] Taxa de erro tipo I dos testes ≈ α (com bootstrap) em amostras simuladas
+- [ ] Gerar amostras de distribuições conhecidas e verificar que o ajuste recupera a família e os parâmetros (em andamento)
+- [x] Taxa de erro tipo I dos testes ≈ α (com bootstrap) em amostras simuladas
 - [ ] Comparar estimativas MLE com valores de referência da literatura (Law, *Simulation Modeling and Analysis*, cap. 6)
 
 ## Fase 2: visualização 3D (só leitura)
-- [ ] Registro de trajetórias (`t0, t1, origem, destino`) emitido pelo motor
+- [x] Rastro de eventos emitido pelo motor (`Observer`, `utsim replay`)
 - [ ] Visualizador Bevy: carrega o `.ron`, desenha objetos em `position`, anima itens
 - [ ] Controle de velocidade, pausa e passo a passo
 - [ ] **Validação:** a animação bate com o log de eventos
