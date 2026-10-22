@@ -13,6 +13,7 @@ pub mod family;
 pub mod gof;
 pub mod rank;
 pub mod report;
+pub mod special;
 
 pub use family::{Family, Fitted, FittedModel};
 pub use rank::{CandidateResult, Ranking};

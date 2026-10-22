@@ -474,6 +474,7 @@ version = "0.1.0"
 dependencies = [
  "rand",
  "rand_distr",
+ "ron",
  "serde",
  "utsim-core",
 ]

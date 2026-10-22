@@ -1,5 +1,19 @@
-//! Candidate families. The exponential is the reference implementation of the
-//! [`Family`] contract; the others are added following the same pattern.
+//! Candidate families, all fitted by maximum likelihood. The exponential is the
+//! reference implementation of the [`Family`] contract; the others follow the same
+//! pattern, one module per group (see each family's doc comment for its method).
+
+mod bounded;
+mod common;
+mod discrete;
+mod gamma;
+mod logistic;
+mod normal;
+mod pearson6;
+mod shifted;
+mod weibull;
+
+#[cfg(test)]
+mod tests;
 
 use rand::Rng;
 use utsim_core::Dist;
@@ -7,15 +21,45 @@ use utsim_core::rng::SimRng;
 
 use crate::family::{Family, Fitted, FittedModel};
 
-/// Every candidate tested by `utsim fit`, in report order.
+pub use bounded::{Beta, Triangular, Uniform};
+pub use discrete::{Binomial, Geometric, NegBinomial, Poisson};
+pub use gamma::{Erlang, Gamma, PearsonV};
+pub use logistic::LogLogistic;
+pub use normal::{Lognormal, Normal};
+pub use pearson6::PearsonVI;
+pub use shifted::{ShiftedExponential, ShiftedFamily};
+pub use weibull::Weibull;
+
+/// Every candidate tested by `utsim fit`, in report order: continuous first, then discrete.
 pub fn all() -> Vec<Box<dyn Family>> {
-    vec![Box::new(Exponential)]
+    vec![
+        Box::new(Exponential),
+        Box::new(Erlang),
+        Box::new(Gamma),
+        Box::new(Weibull),
+        Box::new(Lognormal),
+        Box::new(Normal),
+        Box::new(Uniform),
+        Box::new(Triangular),
+        Box::new(Beta),
+        Box::new(LogLogistic),
+        Box::new(PearsonV),
+        Box::new(PearsonVI),
+        Box::new(ShiftedExponential),
+        Box::new(ShiftedFamily::weibull()),
+        Box::new(ShiftedFamily::gamma()),
+        Box::new(ShiftedFamily::lognormal()),
+        Box::new(Poisson),
+        Box::new(Geometric),
+        Box::new(Binomial),
+        Box::new(NegBinomial),
+    ]
 }
 
 pub struct Exponential;
 
-struct ExponentialModel {
-    mean: f64,
+pub(crate) struct ExponentialModel {
+    pub(crate) mean: f64,
 }
 
 impl FittedModel for ExponentialModel {
@@ -57,6 +101,9 @@ impl Family for Exponential {
         if data.is_empty() {
             return Err("sem dados".into());
         }
+        if data.iter().any(|x| !x.is_finite()) {
+            return Err("há valores não finitos (NaN ou infinito)".into());
+        }
         if data.iter().any(|&x| x < 0.0) {
             return Err("há valores negativos".into());
         }
@@ -75,7 +122,7 @@ impl Family for Exponential {
 }
 
 #[cfg(test)]
-mod tests {
+mod exponential_tests {
     use super::*;
     use utsim_core::rng::stream;
 
