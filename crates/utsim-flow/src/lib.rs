@@ -33,7 +33,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
-use utsim_core::task::{MSG_ITEM_ENTERED, MSG_ITEM_EXITED};
+use utsim_core::task::{MSG_DECISION, MSG_ITEM_ENTERED, MSG_ITEM_EXITED};
 use utsim_core::trace::item_key;
 use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, ItemId, State, Time, Value};
 use utsim_script::{Expr, ExprEnv, compile_expr};
@@ -247,6 +247,16 @@ fn expression_errors(a: &ActivityDef, at: &str) -> Vec<String> {
                 errors.extend(check(format!("condição {}", k + 1), src));
             }
         }
+        Activity::Decide {
+            rule: DecideRule::Agent { observation },
+        } => {
+            for (k, src) in observation.iter().enumerate() {
+                errors.extend(check(format!("observação {}", k + 1), src));
+            }
+            if a.next.len() < 2 {
+                errors.push(format!("{at}: o agente precisa de ao menos 2 ramos (next)"));
+            }
+        }
         _ => {}
     }
     errors
@@ -274,8 +284,7 @@ enum Rule {
     Probability(Vec<f64>),
     ByLabel(String),
     Condition(Vec<Expr>),
-    /// Observation expressions; the runtime is implemented by the RL front.
-    #[allow(dead_code)]
+    /// Observation expressions; the token parks until the external agent answers.
     Agent(Vec<Expr>),
 }
 
@@ -516,6 +525,9 @@ struct Rt {
     res_queue: Vec<VecDeque<(u32, usize, usize)>>,
     /// FIFO queues of tokens waiting in `WaitFor` and `Batch` activities.
     waiters: Vec<VecDeque<u32>>,
+    /// Tokens parked at an `Agent` decision, oldest first: (token, activity). The
+    /// kernel answers the block's requests in order, so one FIFO serves all of them.
+    agent_wait: VecDeque<(u32, usize)>,
     /// Tokens created by each `Source`.
     generated: Vec<u64>,
     /// `(activity, count)` for each timer event of a `Schedule`.
@@ -714,8 +726,18 @@ impl Rt {
                         }
                         pick
                     }
-                    Rule::Agent(_) => {
-                        return Err("decisão por agente: em construção (fase 7)".into());
+                    Rule::Agent(obs) => {
+                        let mut values = Vec::with_capacity(obs.len());
+                        for e in obs {
+                            let v = self.eval(cx, tid, e)?;
+                            values.push(
+                                v.as_num()
+                                    .ok_or("a observação do agente deve ser numérica")?,
+                            );
+                        }
+                        cx.request_decision(n, values);
+                        self.agent_wait.push_back((tid, at));
+                        return Ok(Step::Wait);
                     }
                 };
                 let next = *plan.next[at].get(k).ok_or("ramo de saída inexistente")?;
@@ -942,7 +964,33 @@ impl Rt {
         }
     }
 
+    /// The agent chose branch `choice` for the oldest parked token.
+    fn answer(&mut self, plan: &Plan, cx: &mut Ctx, choice: u64) {
+        let Some((tid, at)) = self.agent_wait.pop_front() else {
+            cx.error("resposta do agente sem token à espera".to_string());
+            return;
+        };
+        match plan.next[at].get(choice as usize) {
+            Some(&next) => {
+                self.leave(plan, cx, tid, at);
+                self.ready.push_back((tid, next));
+            }
+            None => {
+                cx.error(format!(
+                    "atividade '{}': a opção {choice} do agente não existe",
+                    plan.names[at]
+                ));
+                self.tokens.remove(&tid);
+            }
+        }
+    }
+
     fn message(&mut self, plan: &Plan, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
+        if tag == MSG_DECISION {
+            self.answer(plan, cx, payload);
+            self.drive(plan, cx);
+            return;
+        }
         let ev = match tag {
             MSG_ITEM_ENTERED => BlockEvent::Entry,
             MSG_ITEM_EXITED => BlockEvent::Exit,

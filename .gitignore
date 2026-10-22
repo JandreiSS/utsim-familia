@@ -2,3 +2,4 @@
 *.json.out
 /.claude/
 /web/dist/
+/crates/utsim-py/target/

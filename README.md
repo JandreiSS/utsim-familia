@@ -148,10 +148,55 @@ crates/
   utsim-objects/  Source, Queue, Processor, Sink
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
+  utsim-env/      ambiente de aprendizado por reforço (estilo Gym) e Q-learning tabular
+  utsim-py/       ligações Python do ambiente (PyO3), fora do workspace principal
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
+
+## Aprendizado por reforço
+
+Um modelo pode **pausar e perguntar a um agente** o que fazer: no fluxo de tokens, a
+atividade `Decide` com regra `Agent(observation: [...])` para a simulação, entrega a
+observação e espera a escolha de um ramo. A crate `utsim-env` transforma isso num ambiente
+no estilo Gym:
+
+```rust
+use utsim_env::{Env, EnvConfig, RewardTerm};
+
+let modelo = utsim_model::Model::load("examples/roteamento_rl.ron")?;
+let config = EnvConfig {
+    // recompensa = -(área sob o número de itens na fila rápida) entre decisões
+    reward: vec![RewardTerm::integral("fila_rapida.content.mean", -1.0)],
+    observe_blocks: vec!["fila_rapida+maquina_rapida".into(), "fila_lenta+maquina_lenta".into()],
+    episode_length: Some(100.0),
+    ..EnvConfig::default()
+};
+let mut env = Env::new(modelo, config)?;
+let mut obs = env.reset(1)?;              // roda até a primeira decisão
+while obs.options > 0 {
+    let r = env.step(0)?;                 // responde e roda até a próxima
+    obs = r.observation;
+    if r.done { break; }
+}
+```
+
+- **Observação:** o vetor do `Decide`, o conteúdo dos blocos de `observe_blocks` (`"a+b"`
+  soma) e as métricas de `observe_metrics`.
+- **Recompensa:** Σ peso·Δmétrica entre decisões, menos `decision_cost`. Com
+  `RewardTerm::integral` (média no tempo × tempo decorrido) a recompensa é a área acumulada;
+  com peso −1 nos conteúdos dos blocos, o retorno do episódio é o oposto da soma dos
+  tempos no sistema.
+- **Linha de base:** `utsim_env::qlearning` traz um Q-learning tabular (faixas por
+  dimensão, ε-guloso). No exemplo `examples/roteamento_rl.ron` (linha rápida de 1 máquina ×
+  linha lenta de 2 máquinas), 1000 episódios de treino (~9 s em debug) bastam para vencer a
+  política aleatória e ficar a ~4% da heurística "menor atraso esperado"
+  (`cargo test -p utsim-env --test learning -- --nocapture` mostra os números).
+- **Python:** `crates/utsim-py` expõe `utsim.Env` (listas e dicionários simples, sem numpy).
+  Compile à parte, pois exige Python: `cd crates/utsim-py && maturin develop --release`
+  (ou `cargo build --release` e renomeie `utsim.dll`/`libutsim.so` para `utsim.pyd`/`utsim.so`).
+  Depois rode `python crates/utsim-py/python/exemplo_gym.py`.
 
 ## Licença
 
