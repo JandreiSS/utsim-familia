@@ -21,4 +21,5 @@ pub use block::{Behavior, BlockId, Downtime, OutputRule, State};
 pub use dist::Dist;
 pub use engine::{Ctx, EventId, RunConfig, SimError, Simulation};
 pub use item::{Item, ItemId, Value};
-pub use report::{BlockReport, RunReport, TallySummary, summarize};
+pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, summarize};
+pub use stats::Histogram;

@@ -35,6 +35,16 @@ cargo run --release -p utsim-cli -- run examples/linha_com_bloqueio.ron -n 20 --
 cargo run --release -p utsim-cli -- check examples/roteamento_por_tipo.ron
 ```
 
+Séries temporais, histogramas e exportação CSV:
+
+```bash
+cargo run --release -p utsim-cli -- run examples/mm1.ron --sample 100 --bins 20 --csv saida/
+```
+
+- `--sample <intervalo>` (ou `run.sample_interval`) registra conteúdo e estado de cada objeto a cada intervalo, a partir do aquecimento.
+- `--bins <n>` (ou `run.histogram_bins`) gera histogramas da permanência e das métricas extras (ex.: `time_in_system`).
+- `--csv <dir>` grava `resumo.csv`, `replicacoes.csv` e, quando existem, `series.csv` e `histogramas.csv`.
+
 ```bash
 cargo test --workspace
 ```

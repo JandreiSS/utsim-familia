@@ -10,7 +10,7 @@ use crate::Time;
 use crate::block::{Behavior, BlockId, Downtime, OutputRule, State};
 use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
-use crate::report::{BlockReport, RunReport, TallySummary};
+use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
 use crate::stats::{StateTracker, Tally, TimeWeighted};
 
@@ -21,6 +21,10 @@ pub struct RunConfig {
     pub warmup: Time,
     pub seed: u64,
     pub replication: u32,
+    /// Sample every block's content and state at this interval, from the warm-up time on.
+    pub sample_interval: Option<Time>,
+    /// Keep raw observations and build histograms with this many bins.
+    pub histogram_bins: Option<usize>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +43,8 @@ enum EventKind {
     Fail(BlockId),
     Repair(BlockId),
     EndWarmup,
+    /// Records the time series; internal, not counted in `events_processed`.
+    Sample,
 }
 
 struct Scheduled {
@@ -90,9 +96,9 @@ impl BlockStats {
         self.input = 0;
         self.output = 0;
         self.content.reset(t);
-        self.staytime = Tally::default();
+        self.staytime = self.staytime.cleared();
         self.states.reset(t);
-        self.extra.values_mut().for_each(|tally| *tally = Tally::default());
+        self.extra.values_mut().for_each(|tally| *tally = tally.cleared());
     }
 }
 
@@ -112,6 +118,7 @@ struct BlockRuntime {
     contents: Vec<ItemId>,
     outbox: VecDeque<Pending>,
     stats: BlockStats,
+    series: Vec<SeriesPoint>,
     rng: SimRng,
     rr_next: usize,
     dirty: bool,
@@ -132,6 +139,10 @@ pub struct Core {
     events_processed: u64,
     /// Sequence numbers of cancelled events still sitting in the heap.
     cancelled: HashSet<u64>,
+    /// Whether tallies keep raw observations (histograms on).
+    keep_raw: bool,
+    /// Number of samples taken so far; sample `k` happens at `warmup + k * interval`.
+    samples_taken: u64,
 }
 
 impl Core {
@@ -333,8 +344,12 @@ impl Ctx<'_> {
 
     /// Adds an observation to a named per-block tally (shown in the report).
     pub fn record(&mut self, name: &str, value: f64) {
+        let keep_raw = self.core.keep_raw;
         let extra = &mut self.core.blocks[self.me.0].stats.extra;
-        extra.entry(name.to_string()).or_default().record(value);
+        extra
+            .entry(name.to_string())
+            .or_insert_with(|| if keep_raw { Tally::with_raw() } else { Tally::default() })
+            .record(value);
     }
 
     /// Reports a modelling error; the run stops after the current event.
@@ -413,6 +428,8 @@ impl Simulation {
                 errors: Vec::new(),
                 events_processed: 0,
                 cancelled: HashSet::new(),
+                keep_raw: config.histogram_bins.is_some_and(|b| b > 0),
+                samples_taken: 0,
             },
             behaviors: Vec::new(),
             config,
@@ -438,7 +455,12 @@ impl Simulation {
             state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
-            stats: BlockStats::default(),
+            stats: if self.core.keep_raw {
+                BlockStats { staytime: Tally::with_raw(), ..BlockStats::default() }
+            } else {
+                BlockStats::default()
+            },
+            series: Vec::new(),
             rng: rng::stream(self.config.seed, self.config.replication, id.0 as u64),
             rr_next: 0,
             dirty: false,
@@ -477,7 +499,9 @@ impl Simulation {
                 continue;
             }
             self.core.now = ev.time;
-            self.core.events_processed += 1;
+            if !matches!(ev.kind, EventKind::Sample) {
+                self.core.events_processed += 1;
+            }
             self.dispatch(ev.kind);
             self.resolve();
             self.check()?;
@@ -501,8 +525,29 @@ impl Simulation {
         for b in 0..self.core.blocks.len() {
             self.schedule_failure(BlockId(b));
         }
+        if self.sample_interval().is_some() {
+            self.core.schedule_at(self.config.warmup, EventKind::Sample);
+        }
         self.resolve();
         self.check()
+    }
+
+    fn sample_interval(&self) -> Option<Time> {
+        self.config.sample_interval.filter(|dt| dt.is_finite() && *dt > 0.0)
+    }
+
+    /// Records every block's content and state, then schedules the next sample.
+    fn sample(&mut self) {
+        let now = self.core.now;
+        for rt in &mut self.core.blocks {
+            let state = rt.stats.states.current().map_or("none", State::name);
+            rt.series.push(SeriesPoint { t: now, content: rt.contents.len(), state: state.to_string() });
+        }
+        self.core.samples_taken += 1;
+        if let Some(dt) = self.sample_interval() {
+            let next = self.config.warmup + self.core.samples_taken as f64 * dt;
+            self.core.schedule_at(next, EventKind::Sample);
+        }
     }
 
     fn schedule_failure(&mut self, b: BlockId) {
@@ -568,6 +613,7 @@ impl Simulation {
             }
             EventKind::Fail(b) => self.fail(b),
             EventKind::Repair(b) => self.repair(b),
+            EventKind::Sample => self.sample(),
             EventKind::EndWarmup => {
                 let now = self.core.now;
                 self.core.blocks.iter_mut().for_each(|rt| rt.stats.reset(now));
@@ -656,6 +702,7 @@ impl Simulation {
 
     pub fn report(&self) -> RunReport {
         let now = self.core.now;
+        let bins = self.config.histogram_bins;
         let blocks = self
             .core
             .blocks
@@ -668,7 +715,7 @@ impl Simulation {
                 content_now: rt.contents.len(),
                 content_mean: rt.stats.content.mean(now),
                 content_max: rt.stats.content.max(),
-                staytime: TallySummary::from(&rt.stats.staytime),
+                staytime: TallySummary::with_histogram(&rt.stats.staytime, bins),
                 states: rt
                     .stats
                     .states
@@ -676,7 +723,13 @@ impl Simulation {
                     .into_iter()
                     .map(|(s, f)| (s.name().to_string(), f))
                     .collect(),
-                extra: rt.stats.extra.iter().map(|(k, t)| (k.clone(), TallySummary::from(t))).collect(),
+                extra: rt
+                    .stats
+                    .extra
+                    .iter()
+                    .map(|(k, t)| (k.clone(), TallySummary::with_histogram(t, bins)))
+                    .collect(),
+                series: rt.series.clone(),
             })
             .collect();
         RunReport {
