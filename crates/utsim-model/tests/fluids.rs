@@ -298,3 +298,38 @@ fn long_run_conserves_mass() {
     );
     assert!(get("a.nivel_max") <= 5.0 + 1e-9 && get("c.nivel_max") <= 20.0 + 1e-9);
 }
+
+// A converter whose object is full waits. Tank starts at 20 and feeds a ToItems of 1
+// unit per item at up to 2/h (an item every 0.5) into a Queue of capacity 2, served by
+// a processor taking 2 time units per item (0.5 items/h).
+// t=0.5, 1.0, 1.5: items 1-3 accepted (1 in the processor, 2 queued: queue full).
+// t=2.0: item 4 refused -> the unit goes back to the converter, which blocks (rate 0)
+// until the processor takes the next queued item at t=2.5 (queue exit); the retry
+// succeeds at once and the converter runs 0.5 more (1 unit) until the next refusal at
+// t=3.0. The pattern repeats every 2 time units: accepted at 4.5, 6.5, 8.5.
+// Stop at 10: 7 items entered the queue (0.5, 1, 1.5, 2.5, 4.5, 6.5, 8.5) and 4 reached
+// the sink (processor finishes at 2.5, 4.5, 6.5, 8.5). The tank lost 2*2 (t<2) + 1 per
+// 0.5-run at 2.5-3, 4.5-5, 6.5-7, 8.5-9 = 8 -> level 12; 7 units became items and
+// 1 waits inside the blocked converter (8 received).
+#[test]
+fn converter_waits_when_object_is_full() {
+    let m = model(
+        10.0,
+        0.0,
+        r#"(name: "fila", kind: Queue(capacity: Some(2))),
+           (name: "rotuladora", kind: Processor(capacity: 1, process: Const(2.0))),
+           (name: "saida", kind: Sink)"#,
+        r#"("fila", "rotuladora"), ("rotuladora", "saida")"#,
+        r#"nodes: [
+            (name: "reserva", kind: Tank(capacity: 100.0, initial: 20.0)),
+            (name: "envase", kind: ToItems(object: "fila", volume: 1.0, max_rate: Some(2.0))),
+        ],
+        links: [("reserva", "envase")],"#,
+    );
+    let r = run(&m);
+    assert_eq!(r.block("fila").unwrap().input, 7);
+    assert_eq!(r.block("saida").unwrap().input, 4);
+    let m = r.metrics();
+    near(&m, "fluidos.reserva.nivel_final", 12.0);
+    near(&m, "fluidos.envase.volume", 8.0);
+}
