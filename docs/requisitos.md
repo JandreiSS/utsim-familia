@@ -92,7 +92,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-104 | pausar a simulação para um agente externo decidir (base para aprendizado por reforço) | 7 | 🔄 (contrato ✅) |
 | RF-105 | simular fluidos: tanques, tubos, fontes, sumidouros e conversão entre itens e volume | 7 | 🔄 (contrato ✅) |
 | RF-106 | controlar o tráfego de AGVs na rede (capacidade por trecho, espera, impasse) | 7 | 🔄 (contrato ✅) |
-| RF-107 | conectar a simulação a um CLP real ou simulado por OPC UA, em tempo real | 7 | ⏳ |
+| RF-107 | conectar a simulação a um CLP real ou simulado por OPC UA, em tempo real | 7 | ✅ (`utsim-emu/tests`) |
 | RF-108 | treinar agentes de aprendizado por reforço sobre o modelo (ambiente estilo Gym) | 7 | ⏳ |
 | RF-109 | ver o modelo em 3D no navegador | 7 | ⏳ |
 

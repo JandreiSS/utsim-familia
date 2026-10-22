@@ -107,6 +107,44 @@ automaticamente. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz in
 ajuste é feito sobre os intervalos), `--alpha 0.05`, `--bootstrap 300`, `--seed 1`,
 `--html relatorio.html` (histograma, Q-Q, P-P e ECDF) e `--json saida.json`.
 
+## Emulação (OPC UA)
+
+O UTSim pode rodar um modelo **em tempo real** e expô-lo por um servidor OPC UA, para
+comissionamento virtual: um CLP, um SCADA ou qualquer cliente OPC UA lê o estado dos blocos
+e comanda paradas como se fosse a planta.
+
+```bash
+cargo run --release -p utsim-cli -- emular examples/linha_com_bloqueio.ron --velocidade 10 --porta 4840 --gravar comandos.ron
+# Servidor OPC UA em opc.tcp://127.0.0.1:4840/
+```
+
+Opções: `--porta` (padrão 4840; 0 escolhe uma porta livre), `--velocidade` (1.0 = tempo
+real, 10.0 = dez vezes mais rápido; uma unidade de tempo do modelo vale 1 s de relógio na
+velocidade 1.0), `--ate T` (tempo simulado final; padrão `run.stop_time`), `--gravar f.ron`
+(grava os comandos recebidos) e `--reproduzir f.ron` (reaplica os comandos nos mesmos tempos
+simulados, sem OPC UA e sem esperar o relógio; produz o mesmo relatório). Ctrl-C encerra e
+grava o log.
+
+**Espaço de endereços** (namespace `urn:utsim:emulacao`, nós de texto, endpoint sem
+segurança e com acesso anônimo; use só em rede confiável):
+
+| Nó (`UTSim/<modelo>/...`) | Tipo | Acesso | Significado |
+|---|---|---|---|
+| `TempoSimulado` | Double | leitura | tempo simulado atual |
+| `Velocidade` | Double | leitura/escrita | fator de velocidade (maior que 0) |
+| `<bloco>/Conteudo` | UInt32 | leitura | itens dentro do bloco |
+| `<bloco>/Estado` | String | leitura | estado atual (`idle`, `processing`, `stopped`...) |
+| `<bloco>/Entradas` | UInt64 | leitura | itens que entraram |
+| `<bloco>/Saidas` | UInt64 | leitura | itens que saíram |
+| `<bloco>/Parar` | Boolean | leitura/escrita | `true` para o bloco, `false` o retoma |
+
+Os valores são atualizados a cada tick (50 ms) e as escritas são aplicadas no tick
+seguinte, no tempo simulado corrente; a simulação continua num só thread e determinística
+para a mesma sequência de comandos. Exemplo com um cliente genérico (UaExpert ou
+`opcua-commander`): conecte em `opc.tcp://127.0.0.1:4840/`, expanda `Objects > UTSim >
+<modelo>`, assine `fila/Conteudo` e `maquina/Estado` e escreva `true` em `maquina/Parar`:
+o estado muda para `stopped` e a fila passa a crescer.
+
 ## Formato do modelo
 
 Os modelos são arquivos de texto [RON](https://github.com/ron-rs/ron): legíveis,
@@ -148,6 +186,7 @@ crates/
   utsim-objects/  Source, Queue, Processor, Sink
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
+  utsim-emu/      emulação em tempo real e servidor OPC UA (só nativo, fora do build wasm)
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes

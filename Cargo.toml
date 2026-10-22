@@ -33,6 +33,7 @@ utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
+utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
