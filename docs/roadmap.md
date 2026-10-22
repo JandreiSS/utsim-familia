@@ -102,12 +102,16 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Estado próprio para armazenagem ("armazenando") no porta-paletes, em vez de `releasing`
 - [ ] Prioridade de tarefas configurável no modelo (o kernel hoje pede sempre prioridade 0)
 - [ ] Painel do visualizador: tirar o "(0)" redundante ao lado de "recebidos: N" na saída
-- [ ] Roteiros de QA mais robustos: passos condicionais (ex.: pausar só se estiver reproduzindo)
+- [ ] Roteiros de QA mais robustos: passos condicionais (ex.: pausar só se estiver reproduzindo), `Digitar` com espaços
+- [ ] Diagrama de fluxo: arrastar caixas, zoom; arestas longas desviando das caixas
+- [ ] Linha de status do Simular não deve contar os blocos de fluxo
+- [ ] Scripts: evitar a conversão de rótulos quando o script não usa `item` (custo por chamada)
 
 ## Fase 6: lógica do usuário
-- [ ] Fluxo de tokens no estilo fluxo de processo (create, delay, decide, acquire/release, wait)
-- [ ] Script embutido (Rhai ou Lua) para gatilhos
-- [ ] **Validação:** WMS simples implementado fora dos objetos físicos
+- [x] Fluxo de tokens (gerar, agenda, ao evento, esperar, decidir, atribuir, adquirir/liberar recurso, aguardar evento, criar item, lote, fim)
+- [x] Scripts em Rhai: expressões, gatilho de entrada (`on_entry`) e regra de saída por script, com limites de segurança
+- [x] Diagrama dos fluxos no editor, edição de atividades e contagem de tokens ao vivo
+- [x] **Validação:** M/M/1, M/M/3 e Jackson só com fluxos; lei de Little; roteamento por script reprodutível; docas de recebimento (`examples/fluxo_docas.ron`)
 
 ## Fase 7+: avançado
 - [ ] Otimização de parâmetros (metaheurísticas)
