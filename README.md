@@ -46,8 +46,30 @@ cargo run --release -p utsim-cli -- run examples/mm1.ron --sample 100 --bins 20 
 - `--csv <dir>` grava `resumo.csv`, `replicacoes.csv` e, quando existem, `series.csv` e `histogramas.csv`.
 
 ```bash
-cargo test --workspace
+cargo test --workspace --exclude utsim-viewer
 ```
+
+## Visualização 3D
+
+O visualizador (`utsim-view`) só **lê** um replay gravado: a simulação nunca é conduzida por ele.
+Por trazer o Bevy, ele não entra no build padrão do workspace; compile-o explicitamente.
+
+```bash
+# simula e abre a janela (a partir de um modelo)
+cargo run --release -p utsim-viewer -- examples/montagem_paletes.ron --stop 500
+
+# ou grava o replay antes e abre depois
+cargo run --release -p utsim-cli -- replay examples/mm1.ron --out replay.json
+cargo run --release -p utsim-viewer -- replay.json
+
+# verifica sem abrir janela (carrega, monta linha do tempo e layout, imprime um resumo)
+cargo run --release -p utsim-viewer -- examples/mm1.ron --stop 200 --headless-check
+```
+
+- Opções: `--rep N` (replicação), `--stop T` (substitui `run.stop_time`, evita replays enormes), `--transit D` (duração visual das transferências).
+- Controles: `Espaço` reproduz/pausa, `+`/`-` mudam a velocidade (×0,1 a ×1000), `→`/`←` pulam para o evento seguinte/anterior; a barra de tempo permite arrastar. Mouse: botão esquerdo move a câmera e, num clique, seleciona um bloco (estatísticas no painel); botão direito gira; roda aproxima.
+- Sem posições no modelo (tudo em 0,0,0), o layout é automático (camadas ao longo de X). Convenção: posição do modelo `(x, y, z)` vira Bevy `(x, z, -y)`, com `z` como altura.
+- Verificação do visualizador: `UTSIM_VIEWER=1 bash scripts/verificar.sh` (clippy e testes de `utsim-viewer`; no Linux, o Bevy pede `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev`).
 
 ## Ajuste de distribuições
 
@@ -106,6 +128,7 @@ crates/
   utsim-objects/  Source, Queue, Processor, Sink
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
+  utsim-viewer/   binário `utsim-view`: visualizador 3D (Bevy), só lê um replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```

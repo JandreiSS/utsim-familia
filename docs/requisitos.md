@@ -94,7 +94,7 @@ a situação atual e onde está a prova de que funciona.
 | RNF-10 | funcionar em Windows e Linux | ✅ | CI (`windows-latest` e `ubuntu-latest`) |
 | RNF-11 | manter a qualidade: formatação, zero avisos do clippy, todos os testes passando | ✅ | `scripts/verificar.sh` / `.ps1`, CI |
 | RNF-12 | ser extensível: blocos novos sem mexer no kernel | ✅ | trait `Behavior`; Combiner/Separator feitos sem tocar no núcleo |
-| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ✅ | `Observer`/rastro só leem; teste "rastrear não muda o resultado" |
+| RNF-13 | separar simulação e visualização (o 3D só lê o estado) | ✅ | rastro só lê (teste "rastrear não muda o resultado"); `utsim-view` só lê um `Replay` e `timeline.rs` bate com as séries |
 | RNF-14 | falar português com o usuário (mensagens, relatórios, docs) e usar inglês no código | ✅ | revisão nos merges |
 | RNF-15 | ter documentação sempre atualizada: requisitos, arquitetura, roteiro e processo | ✅ | regra do `processo.md` |
 | RNF-16 | ser transparente nas escolhas estatísticas: regra de decisão publicada, todos os candidatos e métricas visíveis | ✅ | `RULE` em `rank.rs`, impressa em todo relatório |
