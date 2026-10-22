@@ -92,6 +92,9 @@ Fase 4  ── transporte ────┬─ Sonnet A: transportadores e regras 
            (Opus)         ├─ Sonnet B: rede de caminhos ───────────────┤
                           ├─ Sonnet C: operadores nos processadores ───┤
                           └─ Sonnet D: veículos no 3D e propriedades ──┴─ merge + verificar
+Fase 5  ── esteira/rack ──┬─ Sonnet A: esteira cinemática ─────────────┐
+           (Opus)         ├─ Haiku B: porta-paletes ────────────────────┤
+                          └─ (depois) Sonnet: esteira/rack no 3D ───────┴─ merge + verificar
 QA da UI  ── Sonnet: modo roteirizado (entrada sintética + capturas) ───── o coordenador roda
              os roteiros, olha as capturas e delega as correções
 ```
