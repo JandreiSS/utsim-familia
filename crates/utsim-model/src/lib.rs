@@ -6,6 +6,7 @@ pub mod replay;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{
@@ -757,12 +758,16 @@ impl Model {
         sim
     }
 
-    /// Runs `run.replications` independent replications in parallel.
+    /// Runs `run.replications` independent replications (in parallel with the `parallel` feature).
+    /// Without the `parallel` feature (WebAssembly) they run one after another,
+    /// with identical results and order.
     pub fn run_replications(&self) -> Result<Vec<RunReport>, ModelError> {
         self.validate()?;
-        (0..self.run.replications)
-            .into_par_iter()
-            .map(|r| self.build(r).run().map_err(ModelError::from))
+        #[cfg(feature = "parallel")]
+        let iter = (0..self.run.replications).into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = 0..self.run.replications;
+        iter.map(|r| self.build(r).run().map_err(ModelError::from))
             .collect()
     }
 }

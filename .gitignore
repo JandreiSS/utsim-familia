@@ -1,3 +1,4 @@
 /target
 *.json.out
 /.claude/
+/web/dist/

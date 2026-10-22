@@ -13,8 +13,13 @@ utsim-flow.workspace = true
 utsim-script.workspace = true
 serde.workspace = true
 ron.workspace = true
-rayon.workspace = true
+rayon = { workspace = true, optional = true }
 thiserror.workspace = true
+
+[features]
+# Replications run on rayon threads; disable for WebAssembly (sequential, same results).
+default = ["parallel"]
+parallel = ["dep:rayon"]
 
 [dev-dependencies]
 serde_json.workspace = true

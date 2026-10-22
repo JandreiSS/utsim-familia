@@ -87,7 +87,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-92 | ver e editar os fluxos no editor, com a contagem de tokens durante a simulação | 6 | ✅ | `flows.rs`/`flows_ui.rs` do visualizador, roteiros `fluxos.ron` e `fluxos_simular.ron` |
 | RF-100 | buscar automaticamente os melhores parâmetros, com objetivo de custo e restrições | 7 | 🔄 (busca exaustiva ✅) |
 | RF-102 | dizer se o melhor ponto é estatisticamente melhor que os outros (comparação pareada com as mesmas sementes) | 7 | ✅ (`utsim-opt`) |
-| RF-101 | rodar modelos no navegador | 7 | ⏳ |
+| RF-101 | rodar modelos no navegador | 7 | ✅ (`utsim-web`, `web/`; testes em `crates/utsim-web`, smoke `web/smoke.mjs`) |
 
 ## Requisitos não funcionais (RNF)
 
