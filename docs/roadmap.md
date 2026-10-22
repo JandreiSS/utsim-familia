@@ -94,13 +94,15 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [x] Esteiras cinemáticas com e sem acúmulo (`Conveyor`)
 - [ ] Fotocélulas e transferências dedicadas (junções usam filas e regras de saída)
 - [x] Porta-paletes endereçável (`Rack`)
-- [ ] Esteiras e porta-paletes no 3D (em andamento)
+- [x] Esteiras e porta-paletes no 3D (posições reconstruídas do rastro, conferidas contra o kernel)
 - [x] **Validação:** centro de distribuição (`examples/centro_de_distribuicao.ron`): conservação de itens, vazão, lei de Little no porta-paletes, determinismo
 
 ## Melhorias anotadas (dos relatórios das frentes)
 - [ ] Relatório com contagem de itens criados e destruídos por bloco (hoje só no rastro)
 - [ ] Estado próprio para armazenagem ("armazenando") no porta-paletes, em vez de `releasing`
 - [ ] Prioridade de tarefas configurável no modelo (o kernel hoje pede sempre prioridade 0)
+- [ ] Painel do visualizador: tirar o "(0)" redundante ao lado de "recebidos: N" na saída
+- [ ] Roteiros de QA mais robustos: passos condicionais (ex.: pausar só se estiver reproduzindo)
 
 ## Fase 6: lógica do usuário
 - [ ] Fluxo de tokens no estilo fluxo de processo (create, delay, decide, acquire/release, wait)

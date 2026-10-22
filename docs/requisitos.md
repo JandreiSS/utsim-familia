@@ -81,7 +81,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-74 | reservar lugar no destino ao pedir o transporte, para nunca entregar onde não cabe | 4 | ✅ |
 | RF-80 | ter esteiras com comprimento, velocidade e espaço por item, com ou sem acúmulo | 5 | ✅ | `tests/conveyor.rs` (10 casos à mão + vazão) |
 | RF-81 | ter porta-paletes com posições endereçáveis (colunas × níveis), regra de ocupação e tempo mínimo armazenado | 5 | ✅ | `tests/rack.rs` (posições exatas, quebra, M/M/∞) |
-| RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ⏳ |
+| RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ✅ | `tests/handling.rs` (posições batem com o kernel), roteiro `esteiras_e_armazem.ron` |
 | RF-90 | descrever a lógica com fluxos de tokens e scripts | 6 | ⏳ |
 | RF-100 | buscar automaticamente os melhores parâmetros (otimização) | 7 | ⏳ |
 | RF-101 | rodar modelos no navegador | 7 | ⏳ |
