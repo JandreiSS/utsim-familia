@@ -79,7 +79,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-72 | usar operadores que precisam ir até a máquina para preparar ou processar | 4 | ✅ | `tests/operators.rs` (7 casos exatos + M/M/1) |
 | RF-73 | fazer os veículos andarem por uma rede de caminhos, pelo trajeto mais curto | 4 | ✅ | `tests/network.rs` (rotas exatas, mão única, rede partida) |
 | RF-74 | reservar lugar no destino ao pedir o transporte, para nunca entregar onde não cabe | 4 | ✅ |
-| RF-80 | ter esteiras com comprimento, velocidade e espaço por item, com ou sem acúmulo | 5 | 🔄 |
+| RF-80 | ter esteiras com comprimento, velocidade e espaço por item, com ou sem acúmulo | 5 | ✅ | `tests/conveyor.rs` (10 casos à mão + vazão) |
 | RF-81 | ter porta-paletes com posições endereçáveis (colunas × níveis), regra de ocupação e tempo mínimo armazenado | 5 | ✅ | `tests/rack.rs` (posições exatas, quebra, M/M/∞) |
 | RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ⏳ |
 | RF-90 | descrever a lógica com fluxos de tokens e scripts | 6 | ⏳ |
