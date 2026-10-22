@@ -74,8 +74,8 @@ a situação atual e onde está a prova de que funciona.
 | RF-62 | desfazer e refazer qualquer alteração (arrastar conta como um passo só) | 3 | ✅ (núcleo) |
 | RF-63 | mostrar os problemas do modelo enquanto ele é montado, apontando o objeto | 3 | ✅ (núcleo) |
 | RF-64 | simular direto do editor e voltar a editar | 3 | 🔄 |
-| RF-70 | ter veículos que levam itens de um objeto a outro, com tempo de viagem real (velocidade, aceleração, carga e descarga) | 4 | 🔄 (transportador de referência ✅, `forklift_carries_items_with_exact_travel_times`) |
-| RF-71 | distribuir tarefas entre vários recursos (despachante) por regra: primeiro livre, rodízio, mais próximo | 4 | 🔄 (primeiro livre ✅) |
+| RF-70 | ter veículos que levam itens de um objeto a outro, com tempo de viagem real (velocidade, aceleração, carga e descarga), capacidade para várias peças e volta à base | 4 | ✅ | `tests/transport.rs` (18 casos à mão + M/D/1) |
+| RF-71 | distribuir tarefas entre vários recursos (despachante) por regra: primeiro livre, rodízio, mais próximo | 4 | ✅ | `tests/transport.rs` |
 | RF-72 | usar operadores que precisam ir até a máquina para preparar ou processar | 4 | ✅ | `tests/operators.rs` (7 casos exatos + M/M/1) |
 | RF-73 | fazer os veículos andarem por uma rede de caminhos, pelo trajeto mais curto | 4 | ✅ | `tests/network.rs` (rotas exatas, mão única, rede partida) |
 | RF-74 | reservar lugar no destino ao pedir o transporte, para nunca entregar onde não cabe | 4 | ✅ |
