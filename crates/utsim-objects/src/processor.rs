@@ -33,7 +33,13 @@ pub struct Processor {
 
 impl Processor {
     pub fn new(process: Dist) -> Self {
-        Processor { capacity: 1, setup: None, process, phases: Vec::new(), timers: Vec::new() }
+        Processor {
+            capacity: 1,
+            setup: None,
+            process,
+            phases: Vec::new(),
+            timers: Vec::new(),
+        }
     }
 
     pub fn capacity(mut self, capacity: usize) -> Self {
@@ -55,7 +61,13 @@ impl Processor {
 
     fn start_timer(&mut self, cx: &mut Ctx, item: ItemId, tag: u32, duration: Time) {
         let event = Some(cx.schedule(duration, tag, Some(item)));
-        self.timers.push(Timer { item, tag, event, due: cx.now() + duration, remaining: 0.0 });
+        self.timers.push(Timer {
+            item,
+            tag,
+            event,
+            due: cx.now() + duration,
+            remaining: 0.0,
+        });
     }
 
     fn start_process(&mut self, cx: &mut Ctx, item: ItemId) {

@@ -34,7 +34,11 @@ fn assembly(mode: &str, tail_objects: &str, tail_connections: &str) -> String {
 
 #[test]
 fn combiner_pack_emits_only_containers() {
-    let r = run(&assembly("Pack", r#"(name: "out", kind: Sink)"#, r#"("comb", "out")"#));
+    let r = run(&assembly(
+        "Pack",
+        r#"(name: "out", kind: Sink)"#,
+        r#"("comb", "out")"#,
+    ));
     assert_eq!(input(&r, "out"), 10);
     assert_eq!(r.block("comb").unwrap().output, 10);
     assert_eq!(r.block("comb").unwrap().content_now, 0);
@@ -57,7 +61,11 @@ fn separator_unpack_restores_the_boxes() {
 
 #[test]
 fn combiner_join_destroys_components() {
-    let r = run(&assembly("Join", r#"(name: "out", kind: Sink)"#, r#"("comb", "out")"#));
+    let r = run(&assembly(
+        "Join",
+        r#"(name: "out", kind: Sink)"#,
+        r#"("comb", "out")"#,
+    ));
     assert_eq!(input(&r, "out"), 10);
     assert_eq!(r.block("comb").unwrap().output, 10);
     assert_eq!(r.block("comb").unwrap().content_now, 0);
@@ -65,15 +73,18 @@ fn combiner_join_destroys_components() {
 
 #[test]
 fn combiner_batch_releases_container_and_components() {
-    let r = run(&assembly("Batch", r#"(name: "out", kind: Sink)"#, r#"("comb", "out")"#));
+    let r = run(&assembly(
+        "Batch",
+        r#"(name: "out", kind: Sink)"#,
+        r#"("comb", "out")"#,
+    ));
     assert_eq!(input(&r, "out"), 10 * (1 + 4));
 }
 
 #[test]
 fn combiner_waits_for_every_component_port() {
     // Two component ports (2 screws + 1 cap); caps are scarce, so they set the pace.
-    let r = run(
-        r#"Model(
+    let r = run(r#"Model(
             name: "duas_portas",
             run: (stop_time: 100.0),
             objects: [
@@ -84,16 +95,14 @@ fn combiner_waits_for_every_component_port() {
                 (name: "out", kind: Sink),
             ],
             connections: [("base", "comb"), ("parafusos", "comb"), ("tampas", "comb"), ("comb", "out")],
-        )"#,
-    );
+        )"#);
     // Caps arrive at t=10,20,...,100 (the last one right at stop_time still counts).
     assert_eq!(input(&r, "out"), 10);
 }
 
 #[test]
 fn separator_split_triples_the_flow() {
-    let r = run(
-        r#"Model(
+    let r = run(r#"Model(
             name: "split",
             run: (stop_time: 1000.0),
             objects: [
@@ -102,8 +111,7 @@ fn separator_split_triples_the_flow() {
                 (name: "out", kind: Sink),
             ],
             connections: [("src", "sep"), ("sep", "out")],
-        )"#,
-    );
+        )"#);
     assert_eq!(input(&r, "out"), 21);
 }
 

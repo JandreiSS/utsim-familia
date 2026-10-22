@@ -20,12 +20,19 @@ pub struct Tally {
 impl Tally {
     /// A tally that also keeps every observation (for histograms).
     pub fn with_raw() -> Self {
-        Tally { raw: Some(Vec::new()), ..Tally::default() }
+        Tally {
+            raw: Some(Vec::new()),
+            ..Tally::default()
+        }
     }
 
     /// An empty tally with the same raw-keeping setting as `self`.
     pub fn cleared(&self) -> Self {
-        if self.raw.is_some() { Tally::with_raw() } else { Tally::default() }
+        if self.raw.is_some() {
+            Tally::with_raw()
+        } else {
+            Tally::default()
+        }
     }
 
     pub fn raw(&self) -> Option<&[f64]> {
@@ -58,7 +65,11 @@ impl Tally {
     }
 
     pub fn std_dev(&self) -> f64 {
-        if self.n < 2 { 0.0 } else { (self.m2 / (self.n - 1) as f64).sqrt() }
+        if self.n < 2 {
+            0.0
+        } else {
+            (self.m2 / (self.n - 1) as f64).sqrt()
+        }
     }
 
     pub fn min(&self) -> f64 {
@@ -175,10 +186,19 @@ impl Histogram {
         let bin_width = (max - min) / bins as f64;
         let mut counts = vec![0u64; bins];
         for &x in xs {
-            let k = if bin_width > 0.0 { (((x - min) / bin_width) as usize).min(bins - 1) } else { 0 };
+            let k = if bin_width > 0.0 {
+                (((x - min) / bin_width) as usize).min(bins - 1)
+            } else {
+                0
+            };
             counts[k] += 1;
         }
-        Some(Histogram { min, max, bin_width, counts })
+        Some(Histogram {
+            min,
+            max,
+            bin_width,
+            counts,
+        })
     }
 
     /// `[start, end)` edges of bin `k`.
@@ -203,17 +223,26 @@ impl Summary {
         let mut tally = Tally::default();
         xs.iter().for_each(|&x| tally.record(x));
         let std_dev = tally.std_dev();
-        let half_width = if n < 2 { f64::NAN } else { t_975(n - 1) * std_dev / (n as f64).sqrt() };
-        Summary { n, mean: tally.mean(), std_dev, half_width }
+        let half_width = if n < 2 {
+            f64::NAN
+        } else {
+            t_975(n - 1) * std_dev / (n as f64).sqrt()
+        };
+        Summary {
+            n,
+            mean: tally.mean(),
+            std_dev,
+            half_width,
+        }
     }
 }
 
 /// Two-sided 95% Student-t quantile.
 fn t_975(df: usize) -> f64 {
     const TABLE: [f64; 30] = [
-        12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179,
-        2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064,
-        2.060, 2.056, 2.052, 2.048, 2.045, 2.042,
+        12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160,
+        2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056,
+        2.052, 2.048, 2.045, 2.042,
     ];
     match df {
         0 => f64::NAN,
@@ -232,7 +261,9 @@ mod tests {
     #[test]
     fn tally_mean_and_std_dev() {
         let mut t = Tally::default();
-        [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0].iter().for_each(|&x| t.record(x));
+        [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+            .iter()
+            .for_each(|&x| t.record(x));
         assert_eq!(t.mean(), 5.0);
         assert!((t.std_dev() - 2.138_089_935).abs() < 1e-9);
         assert_eq!((t.min(), t.max()), (2.0, 9.0));

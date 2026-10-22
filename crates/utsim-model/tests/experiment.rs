@@ -42,7 +42,11 @@ fn faster_machine_lowers_queue_and_base_matches_direct_run() {
     let key = "fila.content.mean";
     let base = &result.scenarios[0];
     let fast = &result.scenarios[1];
-    assert_eq!(base.summary.len(), 2, "only the requested measures are kept");
+    assert_eq!(
+        base.summary.len(),
+        2,
+        "only the requested measures are kept"
+    );
     assert!(fast.summary[key].mean < base.summary[key].mean);
 
     let direct = summarize(&Model::parse(MODEL).unwrap().run_replications().unwrap());
@@ -59,8 +63,15 @@ fn replications_override_and_error_names_scenario() {
     std::fs::write(dir.join("m.ron"), MODEL).unwrap();
     let text = r#"Experiment(name: "e", model: "m.ron", replications: 2,
         scenarios: [(name: "ruim", set: {"maquina.nada": "1"})])"#;
-    let err = Experiment::parse(text, &dir).unwrap().run().unwrap_err().to_string();
-    assert!(err.contains("cenário 'ruim'") && err.contains("nada"), "{err}");
+    let err = Experiment::parse(text, &dir)
+        .unwrap()
+        .run()
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("cenário 'ruim'") && err.contains("nada"),
+        "{err}"
+    );
 
     let ok = text.replace(r#"set: {"maquina.nada": "1"}"#, "");
     let result = Experiment::parse(&ok, &dir).unwrap().run().unwrap();

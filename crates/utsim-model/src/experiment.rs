@@ -85,9 +85,16 @@ impl Experiment {
             if !self.measures.is_empty() {
                 summary.retain(|k, _| self.measures.contains(k));
             }
-            scenarios.push(ScenarioResult { name: sc.name.clone(), summary });
+            scenarios.push(ScenarioResult {
+                name: sc.name.clone(),
+                summary,
+            });
         }
-        Ok(ExperimentResult { name: self.name.clone(), measures: self.measures.clone(), scenarios })
+        Ok(ExperimentResult {
+            name: self.name.clone(),
+            measures: self.measures.clone(),
+            scenarios,
+        })
     }
 }
 
@@ -111,9 +118,11 @@ fn parse_value<T: DeserializeOwned>(key: &str, text: &str) -> Result<T, ModelErr
 ///
 /// Typed on purpose: going through `ron::Value` loses enum variants.
 pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError> {
-    let (target, field) = key
-        .split_once('.')
-        .ok_or_else(|| invalid(format!("chave '{key}' inválida: use <objeto>.<campo> ou run.<campo>")))?;
+    let (target, field) = key.split_once('.').ok_or_else(|| {
+        invalid(format!(
+            "chave '{key}' inválida: use <objeto>.<campo> ou run.<campo>"
+        ))
+    })?;
 
     macro_rules! set {
         ($place:expr) => {
@@ -138,9 +147,16 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
     }
 
     let known: Vec<String> = model.objects.iter().map(|o| o.name.clone()).collect();
-    let obj = model.objects.iter_mut().find(|o| o.name == target).ok_or_else(|| {
-        invalid(format!("'{key}': objeto '{target}' não existe; objetos: {}", known.join(", ")))
-    })?;
+    let obj = model
+        .objects
+        .iter_mut()
+        .find(|o| o.name == target)
+        .ok_or_else(|| {
+            invalid(format!(
+                "'{key}': objeto '{target}' não existe; objetos: {}",
+                known.join(", ")
+            ))
+        })?;
 
     match field {
         "output" => {
@@ -158,7 +174,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         _ => {}
     }
     let (kind_name, kind_fields): (&str, &[&str]) = match &obj.kind {
-        ObjectKind::Source { .. } => ("Source", &["interarrival", "first_at_zero", "max_arrivals", "labels"]),
+        ObjectKind::Source { .. } => (
+            "Source",
+            &["interarrival", "first_at_zero", "max_arrivals", "labels"],
+        ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
         ObjectKind::Processor { .. } => ("Processor", &["capacity", "setup", "process"]),
         ObjectKind::Combiner { .. } => ("Combiner", &["components", "mode", "setup", "process"]),
@@ -183,8 +202,11 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Separator { mode, .. }, "mode") => set!(*mode),
         (ObjectKind::Separator { process, .. }, "process") => set!(*process),
         _ => {
-            let valid: Vec<&str> =
-                kind_fields.iter().copied().chain(["output", "position", "downtime"]).collect();
+            let valid: Vec<&str> = kind_fields
+                .iter()
+                .copied()
+                .chain(["output", "position", "downtime"])
+                .collect();
             return Err(invalid(format!(
                 "'{key}': '{target}' ({kind_name}) não tem o campo '{field}'; campos válidos: {}",
                 valid.join(", ")
@@ -219,7 +241,10 @@ mod tests {
     }
 
     fn set(pairs: &[(&str, &str)]) -> Result<Model, ModelError> {
-        let map = pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let map = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         apply_patches(&model(), &map)
     }
 
@@ -229,10 +254,17 @@ mod tests {
 
     #[test]
     fn patches_dist_and_primitive_fields() {
-        let m = set(&[("m.process", "Const(2.5)"), ("m.capacity", "3"), ("run.stop_time", "50.0"), ("run.seed", "9")])
-            .unwrap();
+        let m = set(&[
+            ("m.process", "Const(2.5)"),
+            ("m.capacity", "3"),
+            ("run.stop_time", "50.0"),
+            ("run.seed", "9"),
+        ])
+        .unwrap();
         match kind(&m, "m") {
-            ObjectKind::Processor { capacity, process, .. } => {
+            ObjectKind::Processor {
+                capacity, process, ..
+            } => {
                 assert_eq!(*capacity, 3);
                 assert_eq!(*process, Dist::Const(2.5));
             }
@@ -243,13 +275,39 @@ mod tests {
 
     #[test]
     fn patches_options_with_implicit_some() {
-        let m = set(&[("q.capacity", "5"), ("m.setup", "Const(1.0)"), ("src.max_arrivals", "10")]).unwrap();
-        assert!(matches!(kind(&m, "q"), ObjectKind::Queue { capacity: Some(5), .. }));
-        assert!(matches!(kind(&m, "m"), ObjectKind::Processor { setup: Some(Dist::Const(_)), .. }));
-        assert!(matches!(kind(&m, "src"), ObjectKind::Source { max_arrivals: Some(10), .. }));
+        let m = set(&[
+            ("q.capacity", "5"),
+            ("m.setup", "Const(1.0)"),
+            ("src.max_arrivals", "10"),
+        ])
+        .unwrap();
+        assert!(matches!(
+            kind(&m, "q"),
+            ObjectKind::Queue {
+                capacity: Some(5),
+                ..
+            }
+        ));
+        assert!(matches!(
+            kind(&m, "m"),
+            ObjectKind::Processor {
+                setup: Some(Dist::Const(_)),
+                ..
+            }
+        ));
+        assert!(matches!(
+            kind(&m, "src"),
+            ObjectKind::Source {
+                max_arrivals: Some(10),
+                ..
+            }
+        ));
         let mut m = m;
         patch(&mut m, "q.capacity", "None").unwrap();
-        assert!(matches!(kind(&m, "q"), ObjectKind::Queue { capacity: None, .. }));
+        assert!(matches!(
+            kind(&m, "q"),
+            ObjectKind::Queue { capacity: None, .. }
+        ));
     }
 
     #[test]
@@ -263,9 +321,19 @@ mod tests {
             ("m.downtime", "(mtbf: Exp(mean: 50.0), mttr: Const(2.0))"),
         ])
         .unwrap();
-        assert!(matches!(kind(&m, "q"), ObjectKind::Queue { discipline: Discipline::Lifo, .. }));
+        assert!(matches!(
+            kind(&m, "q"),
+            ObjectKind::Queue {
+                discipline: Discipline::Lifo,
+                ..
+            }
+        ));
         match kind(&m, "src") {
-            ObjectKind::Source { first_at_zero, labels, .. } => {
+            ObjectKind::Source {
+                first_at_zero,
+                labels,
+                ..
+            } => {
                 assert!(*first_at_zero);
                 assert!(labels.contains_key("tipo"));
             }
@@ -279,16 +347,29 @@ mod tests {
 
     #[test]
     fn unknown_object_lists_valid_ones() {
-        let e = set(&[("xyz.process", "Const(1.0)")]).unwrap_err().to_string();
-        assert!(e.contains("objeto 'xyz' não existe") && e.contains("src, q, m, out"), "{e}");
+        let e = set(&[("xyz.process", "Const(1.0)")])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("objeto 'xyz' não existe") && e.contains("src, q, m, out"),
+            "{e}"
+        );
     }
 
     #[test]
     fn unknown_field_lists_valid_ones() {
         let e = set(&[("m.velocidade", "1")]).unwrap_err().to_string();
-        assert!(e.contains("Processor") && e.contains("capacity, setup, process, output"), "{e}");
-        let e = set(&[("out.process", "Const(1.0)")]).unwrap_err().to_string();
-        assert!(e.contains("Sink") && e.contains("output, position, downtime"), "{e}");
+        assert!(
+            e.contains("Processor") && e.contains("capacity, setup, process, output"),
+            "{e}"
+        );
+        let e = set(&[("out.process", "Const(1.0)")])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("Sink") && e.contains("output, position, downtime"),
+            "{e}"
+        );
         let e = set(&[("run.foo", "1")]).unwrap_err().to_string();
         assert!(e.contains("stop_time, warmup, seed, replications"), "{e}");
         let e = set(&[("semponto", "1")]).unwrap_err().to_string();
@@ -298,7 +379,10 @@ mod tests {
     #[test]
     fn bad_value_reports_key_and_text() {
         let e = set(&[("m.capacity", "muitas")]).unwrap_err().to_string();
-        assert!(e.contains("valor inválido para 'm.capacity' (muitas)"), "{e}");
+        assert!(
+            e.contains("valor inválido para 'm.capacity' (muitas)"),
+            "{e}"
+        );
         let e = set(&[("m.process", "Exp(")]).unwrap_err().to_string();
         assert!(e.contains("m.process"), "{e}");
     }

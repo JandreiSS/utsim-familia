@@ -7,9 +7,12 @@ use std::path::Path;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, SimError, Simulation};
+use utsim_core::{
+    Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, SimError, Simulation,
+};
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Discipline, Processor, Queue, SeparateMode, Separator, Sink, Source,
+    Batch, CombineMode, Combiner, Discipline, Processor, Queue, SeparateMode, Separator, Sink,
+    Source,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -147,7 +150,10 @@ impl Model {
             errors.push("run.replications deve ser >= 1".to_string());
         }
 
-        if run.sample_interval.is_some_and(|v| !(v.is_finite() && v > 0.0)) {
+        if run
+            .sample_interval
+            .is_some_and(|v| !(v.is_finite() && v > 0.0))
+        {
             errors.push("run.sample_interval deve ser finito e > 0".to_string());
         }
         if run.histogram_bins == Some(0) {
@@ -163,11 +169,17 @@ impl Model {
             }
             let mut dists: Vec<(String, &Dist)> = Vec::new();
             match &obj.kind {
-                ObjectKind::Source { interarrival, labels, .. } => {
+                ObjectKind::Source {
+                    interarrival,
+                    labels,
+                    ..
+                } => {
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
                 }
-                ObjectKind::Queue { capacity, batch, .. } => {
+                ObjectKind::Queue {
+                    capacity, batch, ..
+                } => {
                     if *capacity == Some(0) {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
@@ -176,7 +188,10 @@ impl Model {
                             errors.push(format!("{}: batch.size deve ser >= 1", obj.name));
                         }
                         if !(b.max_wait.is_finite() && b.max_wait >= 0.0) {
-                            errors.push(format!("{}: batch.max_wait deve ser finito e >= 0", obj.name));
+                            errors.push(format!(
+                                "{}: batch.max_wait deve ser finito e >= 0",
+                                obj.name
+                            ));
                         }
                         if let Some(cap) = capacity {
                             if *cap < b.size {
@@ -188,14 +203,29 @@ impl Model {
                         }
                     }
                 }
-                ObjectKind::Combiner { components, setup, process, .. } => {
+                ObjectKind::Combiner {
+                    components,
+                    setup,
+                    process,
+                    ..
+                } => {
                     if components.is_empty() {
-                        errors.push(format!("{}: components precisa de ao menos uma porta de componentes", obj.name));
+                        errors.push(format!(
+                            "{}: components precisa de ao menos uma porta de componentes",
+                            obj.name
+                        ));
                     }
                     if components.contains(&0) {
-                        errors.push(format!("{}: cada entrada de components deve ser >= 1", obj.name));
+                        errors.push(format!(
+                            "{}: cada entrada de components deve ser >= 1",
+                            obj.name
+                        ));
                     }
-                    let n_in = self.connections.iter().filter(|(_, to)| *to == obj.name).count();
+                    let n_in = self
+                        .connections
+                        .iter()
+                        .filter(|(_, to)| *to == obj.name)
+                        .count();
                     if n_in != components.len() + 1 {
                         errors.push(format!(
                             "{}: Combiner precisa de {} entradas (1 contêiner + {} de componentes), mas tem {n_in}",
@@ -215,7 +245,11 @@ impl Model {
                     }
                     dists.push(("process".into(), process));
                 }
-                ObjectKind::Processor { capacity, setup, process } => {
+                ObjectKind::Processor {
+                    capacity,
+                    setup,
+                    process,
+                } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
@@ -237,13 +271,19 @@ impl Model {
             }
             if let OutputRule::ByLabel(label) = &obj.output {
                 if label.trim().is_empty() {
-                    errors.push(format!("{}: ByLabel precisa do nome de um rótulo", obj.name));
+                    errors.push(format!(
+                        "{}: ByLabel precisa do nome de um rótulo",
+                        obj.name
+                    ));
                 }
             }
         }
 
-        let kind_of: HashMap<&str, &ObjectKind> =
-            self.objects.iter().map(|o| (o.name.as_str(), &o.kind)).collect();
+        let kind_of: HashMap<&str, &ObjectKind> = self
+            .objects
+            .iter()
+            .map(|o| (o.name.as_str(), &o.kind))
+            .collect();
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -252,11 +292,15 @@ impl Model {
             }
             for end in [from, to] {
                 if !kind_of.contains_key(end.as_str()) {
-                    errors.push(format!("conexão ({from} -> {to}): objeto '{end}' não existe"));
+                    errors.push(format!(
+                        "conexão ({from} -> {to}): objeto '{end}' não existe"
+                    ));
                 }
             }
             if from == to {
-                errors.push(format!("conexão ({from} -> {to}): um objeto não pode ligar em si mesmo"));
+                errors.push(format!(
+                    "conexão ({from} -> {to}): um objeto não pode ligar em si mesmo"
+                ));
             }
             if matches!(kind_of.get(from.as_str()), Some(ObjectKind::Sink)) {
                 errors.push(format!("conexão ({from} -> {to}): Sink não tem saída"));
@@ -269,7 +313,10 @@ impl Model {
         for obj in &self.objects {
             let n_out = outputs.get(obj.name.as_str()).copied().unwrap_or(0);
             if !matches!(obj.kind, ObjectKind::Sink) && n_out == 0 {
-                errors.push(format!("{}: não tem saída conectada (os itens ficariam presos)", obj.name));
+                errors.push(format!(
+                    "{}: não tem saída conectada (os itens ficariam presos)",
+                    obj.name
+                ));
             }
             if let OutputRule::Weighted(weights) = &obj.output {
                 let valid = weights.iter().all(|w| w.is_finite() && *w >= 0.0)
@@ -283,7 +330,11 @@ impl Model {
             }
         }
 
-        if errors.is_empty() { Ok(()) } else { Err(ModelError::Invalid(errors)) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(ModelError::Invalid(errors))
+        }
     }
 
     /// Builds one replication. Call [`Model::validate`] first.
@@ -299,24 +350,46 @@ impl Model {
         let mut ids = HashMap::new();
         for obj in &self.objects {
             let behavior: Box<dyn Behavior> = match &obj.kind {
-                ObjectKind::Source { interarrival, first_at_zero, max_arrivals, labels } => {
+                ObjectKind::Source {
+                    interarrival,
+                    first_at_zero,
+                    max_arrivals,
+                    labels,
+                } => {
                     let source = Source::new(interarrival.clone())
                         .first_at_zero(*first_at_zero)
                         .max_arrivals(*max_arrivals);
-                    Box::new(labels.iter().fold(source, |s, (k, d)| s.label(k.clone(), d.clone())))
+                    Box::new(
+                        labels
+                            .iter()
+                            .fold(source, |s, (k, d)| s.label(k.clone(), d.clone())),
+                    )
                 }
-                ObjectKind::Queue { capacity, discipline, batch } => {
-                    Box::new(Queue::new(*capacity).discipline(*discipline).batch(*batch))
-                }
-                ObjectKind::Combiner { components, mode, setup, process } => Box::new(
+                ObjectKind::Queue {
+                    capacity,
+                    discipline,
+                    batch,
+                } => Box::new(Queue::new(*capacity).discipline(*discipline).batch(*batch)),
+                ObjectKind::Combiner {
+                    components,
+                    mode,
+                    setup,
+                    process,
+                } => Box::new(
                     Combiner::new(components.clone(), *mode, process.clone()).setup(setup.clone()),
                 ),
                 ObjectKind::Separator { mode, process } => {
                     Box::new(Separator::new(*mode, process.clone()))
                 }
-                ObjectKind::Processor { capacity, setup, process } => {
-                    Box::new(Processor::new(process.clone()).capacity(*capacity).setup(setup.clone()))
-                }
+                ObjectKind::Processor {
+                    capacity,
+                    setup,
+                    process,
+                } => Box::new(
+                    Processor::new(process.clone())
+                        .capacity(*capacity)
+                        .setup(setup.clone()),
+                ),
                 ObjectKind::Sink => Box::new(Sink),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);

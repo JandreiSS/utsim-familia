@@ -84,7 +84,9 @@ impl Combiner {
             Phase::Setup => State::Setup,
             Phase::Processing => State::Processing,
             Phase::Releasing => State::Blocked,
-            Phase::Collecting if self.container.is_none() && self.components.is_empty() => State::Idle,
+            Phase::Collecting if self.container.is_none() && self.components.is_empty() => {
+                State::Idle
+            }
             Phase::Collecting => State::Collecting,
         };
         cx.set_state(state);
@@ -141,7 +143,10 @@ impl Behavior for Combiner {
         if port == 0 {
             self.container.is_none()
         } else {
-            self.received.get(port - 1).zip(self.needed.get(port - 1)).is_some_and(|(r, n)| r < n)
+            self.received
+                .get(port - 1)
+                .zip(self.needed.get(port - 1))
+                .is_some_and(|(r, n)| r < n)
         }
     }
 

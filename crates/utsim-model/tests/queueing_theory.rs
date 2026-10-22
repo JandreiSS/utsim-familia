@@ -23,7 +23,11 @@ fn model(text: &str) -> Model {
 
 fn assert_close(what: &str, got: f64, want: f64, rel_tol: f64) {
     let rel = (got - want).abs() / want.abs().max(1e-12);
-    assert!(rel <= rel_tol, "{what}: obtido {got:.4}, esperado {want:.4} (erro {:.2}%)", rel * 100.0);
+    assert!(
+        rel <= rel_tol,
+        "{what}: obtido {got:.4}, esperado {want:.4} (erro {:.2}%)",
+        rel * 100.0
+    );
 }
 
 /// Probabilidade de espera Erlang C para c servidores e carga a = λ/μ (exige a < c).
@@ -66,7 +70,12 @@ fn mmc_matches_erlang_c() {
     let wq = lq / lambda;
     let w = wq + 1.0 / mu;
 
-    assert_close("ocupação média dos servidores (a)", s["maquina.content.mean"].mean, a, 0.02);
+    assert_close(
+        "ocupação média dos servidores (a)",
+        s["maquina.content.mean"].mean,
+        a,
+        0.02,
+    );
     assert_close("Lq", s["fila.content.mean"].mean, lq, 0.08);
     assert_close("Wq", s["fila.staytime.mean"].mean, wq, 0.08);
     assert_close("W", s["saida.time_in_system.mean"].mean, w, 0.05);

@@ -22,13 +22,26 @@ fn row(out: &mut String, fields: &[String]) {
 
 /// Numbers are written with Rust's shortest round-trip format; NaN becomes an empty cell.
 fn num(x: f64) -> String {
-    if x.is_nan() { String::new() } else { x.to_string() }
+    if x.is_nan() {
+        String::new()
+    } else {
+        x.to_string()
+    }
 }
 
 fn summary_csv(reports: &[RunReport]) -> String {
     let mut out = String::from("metrica,n,media,desvio_padrao,meia_largura_95\n");
     for (metric, s) in summarize(reports) {
-        row(&mut out, &[metric, s.n.to_string(), num(s.mean), num(s.std_dev), num(s.half_width)]);
+        row(
+            &mut out,
+            &[
+                metric,
+                s.n.to_string(),
+                num(s.mean),
+                num(s.std_dev),
+                num(s.half_width),
+            ],
+        );
     }
     out
 }
@@ -48,7 +61,16 @@ fn series_csv(reports: &[RunReport]) -> String {
     for r in reports {
         for b in &r.blocks {
             for p in &b.series {
-                row(&mut out, &[r.replication.to_string(), b.name.clone(), num(p.t), p.content.to_string(), p.state.clone()]);
+                row(
+                    &mut out,
+                    &[
+                        r.replication.to_string(),
+                        b.name.clone(),
+                        num(p.t),
+                        p.content.to_string(),
+                        p.state.clone(),
+                    ],
+                );
             }
         }
     }
@@ -67,7 +89,14 @@ fn histograms_csv(reports: &[RunReport]) -> String {
                     let (start, end) = h.edges(k);
                     row(
                         &mut out,
-                        &[r.replication.to_string(), b.name.clone(), metric.to_string(), num(start), num(end), count.to_string()],
+                        &[
+                            r.replication.to_string(),
+                            b.name.clone(),
+                            metric.to_string(),
+                            num(start),
+                            num(end),
+                            count.to_string(),
+                        ],
                     );
                 }
             }
@@ -83,7 +112,10 @@ pub fn export(dir: &Path, reports: &[RunReport]) -> io::Result<Vec<String>> {
         ("resumo.csv", summary_csv(reports)),
         ("replicacoes.csv", replications_csv(reports)),
     ];
-    if reports.iter().any(|r| r.blocks.iter().any(|b| !b.series.is_empty())) {
+    if reports
+        .iter()
+        .any(|r| r.blocks.iter().any(|b| !b.series.is_empty()))
+    {
         files.push(("series.csv", series_csv(reports)));
     }
     let has_histograms = reports

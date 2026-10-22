@@ -10,15 +10,39 @@ use crate::rng::SimRng;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Dist {
     Const(f64),
-    Uniform { min: f64, max: f64 },
-    Exp { mean: f64 },
-    Triangular { min: f64, mode: f64, max: f64 },
-    Normal { mean: f64, sd: f64 },
+    Uniform {
+        min: f64,
+        max: f64,
+    },
+    Exp {
+        mean: f64,
+    },
+    Triangular {
+        min: f64,
+        mode: f64,
+        max: f64,
+    },
+    Normal {
+        mean: f64,
+        sd: f64,
+    },
     /// Parameterised by the mean and standard deviation of the variable itself.
-    LogNormal { mean: f64, sd: f64 },
-    Gamma { shape: f64, scale: f64 },
-    Erlang { k: u32, mean: f64 },
-    Weibull { shape: f64, scale: f64 },
+    LogNormal {
+        mean: f64,
+        sd: f64,
+    },
+    Gamma {
+        shape: f64,
+        scale: f64,
+    },
+    Erlang {
+        k: u32,
+        mean: f64,
+    },
+    Weibull {
+        shape: f64,
+        scale: f64,
+    },
     /// `(value, weight)` pairs; weights need not sum to 1.
     Discrete(Vec<(f64, f64)>),
 }
@@ -100,9 +124,10 @@ impl Dist {
         let finite = |xs: &[f64]| xs.iter().all(|x| x.is_finite());
         match self {
             Dist::Const(v) => ok(v.is_finite(), "Const precisa de um valor finito"),
-            Dist::Uniform { min, max } => {
-                ok(finite(&[*min, *max]) && min <= max, "Uniform exige min <= max")
-            }
+            Dist::Uniform { min, max } => ok(
+                finite(&[*min, *max]) && min <= max,
+                "Uniform exige min <= max",
+            ),
             Dist::Exp { mean } => ok(mean.is_finite() && *mean > 0.0, "Exp exige mean > 0"),
             Dist::Triangular { min, mode, max } => ok(
                 finite(&[*min, *mode, *max]) && min <= mode && mode <= max,
@@ -129,7 +154,9 @@ impl Dist {
             ),
             Dist::Discrete(table) => ok(
                 !table.is_empty()
-                    && table.iter().all(|(v, w)| v.is_finite() && w.is_finite() && *w >= 0.0)
+                    && table
+                        .iter()
+                        .all(|(v, w)| v.is_finite() && w.is_finite() && *w >= 0.0)
                     && table.iter().any(|(_, w)| *w > 0.0),
                 "Discrete exige ao menos um par (valor, peso) com peso > 0",
             ),
@@ -180,12 +207,25 @@ mod tests {
             Dist::Const(3.0),
             Dist::Uniform { min: 1.0, max: 5.0 },
             Dist::Exp { mean: 2.0 },
-            Dist::Triangular { min: 1.0, mode: 2.0, max: 6.0 },
-            Dist::Normal { mean: 10.0, sd: 2.0 },
+            Dist::Triangular {
+                min: 1.0,
+                mode: 2.0,
+                max: 6.0,
+            },
+            Dist::Normal {
+                mean: 10.0,
+                sd: 2.0,
+            },
             Dist::LogNormal { mean: 4.0, sd: 1.5 },
-            Dist::Gamma { shape: 2.0, scale: 1.5 },
+            Dist::Gamma {
+                shape: 2.0,
+                scale: 1.5,
+            },
             Dist::Erlang { k: 3, mean: 6.0 },
-            Dist::Weibull { shape: 1.5, scale: 2.0 },
+            Dist::Weibull {
+                shape: 1.5,
+                scale: 2.0,
+            },
             Dist::Discrete(vec![(1.0, 0.25), (2.0, 0.75)]),
         ];
         for d in &cases {

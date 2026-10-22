@@ -39,7 +39,11 @@ pub struct EventId(u64);
 
 #[derive(Clone, Copy, Debug)]
 enum EventKind {
-    Block { block: BlockId, tag: u32, item: Option<ItemId> },
+    Block {
+        block: BlockId,
+        tag: u32,
+        item: Option<ItemId>,
+    },
     Fail(BlockId),
     Repair(BlockId),
     EndWarmup,
@@ -56,7 +60,10 @@ struct Scheduled {
 // Min-heap on (time, seq): simultaneous events run in the order they were scheduled.
 impl Ord for Scheduled {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.time.total_cmp(&self.time).then_with(|| other.seq.cmp(&self.seq))
+        other
+            .time
+            .total_cmp(&self.time)
+            .then_with(|| other.seq.cmp(&self.seq))
     }
 }
 
@@ -98,7 +105,9 @@ impl BlockStats {
         self.content.reset(t);
         self.staytime = self.staytime.cleared();
         self.states.reset(t);
-        self.extra.values_mut().for_each(|tally| *tally = tally.cleared());
+        self.extra
+            .values_mut()
+            .for_each(|tally| *tally = tally.cleared());
     }
 }
 
@@ -148,7 +157,11 @@ pub struct Core {
 impl Core {
     fn schedule_at(&mut self, time: Time, kind: EventKind) -> EventId {
         self.seq += 1;
-        self.events.push(Scheduled { time, seq: self.seq, kind });
+        self.events.push(Scheduled {
+            time,
+            seq: self.seq,
+            kind,
+        });
         EventId(self.seq)
     }
 
@@ -207,7 +220,14 @@ impl Ctx<'_> {
     /// Schedules [`Behavior::on_event`] on this block after `delay`.
     pub fn schedule(&mut self, delay: Time, tag: u32, item: Option<ItemId>) -> EventId {
         let time = self.core.now + delay.max(0.0);
-        self.core.schedule_at(time, EventKind::Block { block: self.me, tag, item })
+        self.core.schedule_at(
+            time,
+            EventKind::Block {
+                block: self.me,
+                tag,
+                item,
+            },
+        )
     }
 
     /// Cancels an event scheduled earlier. Cancelling a fired event is a no-op.
@@ -348,7 +368,13 @@ impl Ctx<'_> {
         let extra = &mut self.core.blocks[self.me.0].stats.extra;
         extra
             .entry(name.to_string())
-            .or_insert_with(|| if keep_raw { Tally::with_raw() } else { Tally::default() })
+            .or_insert_with(|| {
+                if keep_raw {
+                    Tally::with_raw()
+                } else {
+                    Tally::default()
+                }
+            })
             .record(value);
     }
 
@@ -450,13 +476,20 @@ impl Simulation {
             outputs: Vec::new(),
             rule,
             downtime: None,
-            downtime_rng: rng::stream(self.config.seed, self.config.replication, DOWNTIME_STREAMS + id.0 as u64),
+            downtime_rng: rng::stream(
+                self.config.seed,
+                self.config.replication,
+                DOWNTIME_STREAMS + id.0 as u64,
+            ),
             down: false,
             state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
             stats: if self.core.keep_raw {
-                BlockStats { staytime: Tally::with_raw(), ..BlockStats::default() }
+                BlockStats {
+                    staytime: Tally::with_raw(),
+                    ..BlockStats::default()
+                }
             } else {
                 BlockStats::default()
             },
@@ -483,7 +516,11 @@ impl Simulation {
     }
 
     pub fn block_id(&self, name: &str) -> Option<BlockId> {
-        self.core.blocks.iter().position(|b| b.name == name).map(BlockId)
+        self.core
+            .blocks
+            .iter()
+            .position(|b| b.name == name)
+            .map(BlockId)
     }
 
     pub fn now(&self) -> Time {
@@ -515,12 +552,15 @@ impl Simulation {
     fn start(&mut self) -> Result<(), SimError> {
         for b in 0..self.behaviors.len() {
             let me = BlockId(b);
-            let Simulation { core, behaviors, .. } = self;
+            let Simulation {
+                core, behaviors, ..
+            } = self;
             behaviors[b].reset(&mut Ctx { core, me });
             self.flush_doomed();
         }
         if self.config.warmup > 0.0 {
-            self.core.schedule_at(self.config.warmup, EventKind::EndWarmup);
+            self.core
+                .schedule_at(self.config.warmup, EventKind::EndWarmup);
         }
         for b in 0..self.core.blocks.len() {
             self.schedule_failure(BlockId(b));
@@ -533,7 +573,9 @@ impl Simulation {
     }
 
     fn sample_interval(&self) -> Option<Time> {
-        self.config.sample_interval.filter(|dt| dt.is_finite() && *dt > 0.0)
+        self.config
+            .sample_interval
+            .filter(|dt| dt.is_finite() && *dt > 0.0)
     }
 
     /// Records every block's content and state, then schedules the next sample.
@@ -541,7 +583,11 @@ impl Simulation {
         let now = self.core.now;
         for rt in &mut self.core.blocks {
             let state = rt.stats.states.current().map_or("none", State::name);
-            rt.series.push(SeriesPoint { t: now, content: rt.contents.len(), state: state.to_string() });
+            rt.series.push(SeriesPoint {
+                t: now,
+                content: rt.contents.len(),
+                state: state.to_string(),
+            });
         }
         self.core.samples_taken += 1;
         if let Some(dt) = self.sample_interval() {
@@ -565,9 +611,14 @@ impl Simulation {
         rt.state_when_up = rt.stats.states.current();
         rt.down = true;
         rt.stats.states.set(now, State::Down);
-        let repair = rt.downtime.as_ref().map_or(0.0, |dt| dt.mttr.sample(&mut rt.downtime_rng).max(0.0));
+        let repair = rt
+            .downtime
+            .as_ref()
+            .map_or(0.0, |dt| dt.mttr.sample(&mut rt.downtime_rng).max(0.0));
         self.core.schedule_at(now + repair, EventKind::Repair(b));
-        let Simulation { core, behaviors, .. } = self;
+        let Simulation {
+            core, behaviors, ..
+        } = self;
         behaviors[b.0].on_stop(&mut Ctx { core, me: b });
         self.flush_doomed();
     }
@@ -580,7 +631,9 @@ impl Simulation {
             rt.stats.states.set(now, state);
         }
         {
-            let Simulation { core, behaviors, .. } = self;
+            let Simulation {
+                core, behaviors, ..
+            } = self;
             behaviors[b.0].on_resume(&mut Ctx { core, me: b });
         }
         self.flush_doomed();
@@ -597,7 +650,10 @@ impl Simulation {
         if self.core.errors.is_empty() {
             Ok(())
         } else {
-            Err(SimError::Model { time: self.core.now, messages: std::mem::take(&mut self.core.errors) })
+            Err(SimError::Model {
+                time: self.core.now,
+                messages: std::mem::take(&mut self.core.errors),
+            })
         }
     }
 
@@ -607,7 +663,9 @@ impl Simulation {
                 if item.is_some_and(|id| !self.core.items.contains_key(id)) {
                     return;
                 }
-                let Simulation { core, behaviors, .. } = self;
+                let Simulation {
+                    core, behaviors, ..
+                } = self;
                 behaviors[block.0].on_event(&mut Ctx { core, me: block }, tag, item);
                 self.flush_doomed();
             }
@@ -616,7 +674,10 @@ impl Simulation {
             EventKind::Sample => self.sample(),
             EventKind::EndWarmup => {
                 let now = self.core.now;
-                self.core.blocks.iter_mut().for_each(|rt| rt.stats.reset(now));
+                self.core
+                    .blocks
+                    .iter_mut()
+                    .for_each(|rt| rt.stats.reset(now));
             }
         }
     }
@@ -668,14 +729,18 @@ impl Simulation {
         stats.output += 1;
         stats.staytime.record(now - entered);
         {
-            let Simulation { core, behaviors, .. } = self;
+            let Simulation {
+                core, behaviors, ..
+            } = self;
             behaviors[from.0].on_exit(&mut Ctx { core, me: from }, item);
         }
 
         self.core.put_item_into(to, item);
         self.core.blocks[to.0].stats.input += 1;
         {
-            let Simulation { core, behaviors, .. } = self;
+            let Simulation {
+                core, behaviors, ..
+            } = self;
             behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item, in_port);
         }
         self.flush_doomed();
@@ -689,7 +754,9 @@ impl Simulation {
 
     fn flush_doomed(&mut self) {
         while let Some(id) = self.core.doomed.pop() {
-            let Some(item) = self.core.items.remove(id) else { continue };
+            let Some(item) = self.core.items.remove(id) else {
+                continue;
+            };
             if let Some(b) = item.location {
                 self.core.take_item_from(b, id);
             }
@@ -735,7 +802,11 @@ impl Simulation {
         RunReport {
             replication: self.config.replication,
             seed: self.config.seed,
-            stats_from: if now >= self.config.warmup { self.config.warmup } else { 0.0 },
+            stats_from: if now >= self.config.warmup {
+                self.config.warmup
+            } else {
+                0.0
+            },
             end_time: now,
             events: self.core.events_processed,
             blocks,

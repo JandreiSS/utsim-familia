@@ -13,7 +13,11 @@ fn model(text: &str) -> Model {
 
 fn assert_close(what: &str, got: f64, want: f64, rel_tol: f64) {
     let rel = (got - want).abs() / want.abs().max(1e-12);
-    assert!(rel <= rel_tol, "{what}: obtido {got:.4}, esperado {want:.4} (erro {:.2}%)", rel * 100.0);
+    assert!(
+        rel <= rel_tol,
+        "{what}: obtido {got:.4}, esperado {want:.4} (erro {:.2}%)",
+        rel * 100.0
+    );
 }
 
 #[test]
@@ -35,9 +39,24 @@ fn mm1_matches_queueing_theory() {
     let (lambda, mu) = (1.0, 1.25);
     let rho: f64 = lambda / mu;
     assert_close("rho", s["maquina.state.processing"].mean, rho, 0.02);
-    assert_close("Lq", s["fila.content.mean"].mean, rho * rho / (1.0 - rho), 0.08);
-    assert_close("Wq", s["fila.staytime.mean"].mean, rho / (mu - lambda), 0.08);
-    assert_close("W", s["saida.time_in_system.mean"].mean, 1.0 / (mu - lambda), 0.06);
+    assert_close(
+        "Lq",
+        s["fila.content.mean"].mean,
+        rho * rho / (1.0 - rho),
+        0.08,
+    );
+    assert_close(
+        "Wq",
+        s["fila.staytime.mean"].mean,
+        rho / (mu - lambda),
+        0.08,
+    );
+    assert_close(
+        "W",
+        s["saida.time_in_system.mean"].mean,
+        1.0 / (mu - lambda),
+        0.06,
+    );
 }
 
 #[test]
@@ -61,7 +80,12 @@ fn deterministic_line_is_exact() {
     assert_eq!(r.block("out").unwrap().input, 500);
     assert_close("utilização", p.states["processing"], 0.5, 1e-9);
     assert_eq!(r.block("q").unwrap().content_mean, 0.0);
-    assert_close("tempo no sistema", r.block("out").unwrap().extra["time_in_system"].mean, 1.0, 1e-12);
+    assert_close(
+        "tempo no sistema",
+        r.block("out").unwrap().extra["time_in_system"].mean,
+        1.0,
+        1e-12,
+    );
 }
 
 #[test]
@@ -84,13 +108,24 @@ fn blocking_without_buffer() {
     let p1 = r.block("p1").unwrap();
     assert_close("p1 processing", p1.states["processing"], 0.5, 1e-6);
     assert_close("p1 blocked", p1.states["blocked"], 0.5, 1e-6);
-    assert_close("p2 processing", r.block("p2").unwrap().states["processing"], 1.0, 1e-9);
-    assert_close("vazão", r.block("out").unwrap().input as f64, 9900.0 / 2.0, 1e-3);
+    assert_close(
+        "p2 processing",
+        r.block("p2").unwrap().states["processing"],
+        1.0,
+        1e-9,
+    );
+    assert_close(
+        "vazão",
+        r.block("out").unwrap().input as f64,
+        9900.0 / 2.0,
+        1e-3,
+    );
 }
 
 #[test]
 fn same_seed_same_result_and_replications_differ() {
-    let m = Model::load(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/mm1.ron")).unwrap();
+    let m =
+        Model::load(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/mm1.ron")).unwrap();
     let a = m.build(0).run().unwrap().metrics();
     let b = m.build(0).run().unwrap().metrics();
     let c = m.build(1).run().unwrap().metrics();
@@ -151,10 +186,12 @@ fn bundled_examples_are_valid() {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         if name.starts_with("experimento") {
             // Experiment files are checked by running them.
-            utsim_model::experiment::Experiment::load(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
+            utsim_model::experiment::Experiment::load(&path)
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
         } else if path.extension().is_some_and(|e| e == "ron") {
             let m = Model::load(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-            m.validate().unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            m.validate()
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         }
     }
 }
@@ -184,7 +221,11 @@ fn breakdowns_follow_availability() {
     for r in &reports {
         let p = r.block("p").unwrap();
         let busy = p.states["processing"] * (r.end_time - r.stats_from);
-        assert!((p.output as f64 - busy).abs() <= 2.0, "saídas {} vs tempo produtivo {busy}", p.output);
+        assert!(
+            (p.output as f64 - busy).abs() <= 2.0,
+            "saídas {} vs tempo produtivo {busy}",
+            p.output
+        );
     }
 }
 
@@ -203,5 +244,10 @@ fn weighted_routing_splits_flow() {
         )"#,
     );
     let r = &m.run_replications().unwrap()[0];
-    assert_close("fração para b", r.block("b").unwrap().input as f64 / 100000.0, 0.75, 0.01);
+    assert_close(
+        "fração para b",
+        r.block("b").unwrap().input as f64 / 100000.0,
+        0.75,
+        0.01,
+    );
 }

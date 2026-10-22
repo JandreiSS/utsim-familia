@@ -36,7 +36,11 @@ fn deterministic_line_is_sampled_every_unit() {
         // Arrivals (and starts) at even t, completions at odd t.
         let busy = k % 2 == 0;
         assert_eq!(point.content, usize::from(busy), "content at t={k}");
-        assert_eq!(point.state, if busy { "processing" } else { "idle" }, "state at t={k}");
+        assert_eq!(
+            point.state,
+            if busy { "processing" } else { "idle" },
+            "state at t={k}"
+        );
     }
     assert!(r.block("q").unwrap().series.iter().all(|s| s.content == 0));
     assert!(r.blocks.iter().all(|b| b.series.len() == 11));
@@ -95,7 +99,11 @@ fn histogram_counts_add_up_to_the_tally() {
         }
     }
     assert!(checked >= 4);
-    assert!(r.block("saida").unwrap().extra["time_in_system"].histogram.is_some());
+    assert!(
+        r.block("saida").unwrap().extra["time_in_system"]
+            .histogram
+            .is_some()
+    );
 }
 
 #[test]

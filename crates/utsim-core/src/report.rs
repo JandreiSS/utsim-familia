@@ -113,7 +113,10 @@ pub fn summarize(reports: &[RunReport]) -> BTreeMap<String, Summary> {
     keys.dedup();
     keys.into_iter()
         .map(|k| {
-            let xs: Vec<f64> = per_rep.iter().map(|m| m.get(k).copied().unwrap_or(0.0)).collect();
+            let xs: Vec<f64> = per_rep
+                .iter()
+                .map(|m| m.get(k).copied().unwrap_or(0.0))
+                .collect();
             (k.clone(), Summary::from_samples(&xs))
         })
         .collect()
