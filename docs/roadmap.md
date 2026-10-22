@@ -23,7 +23,7 @@ validação da anterior passa.
 - [x] Roteamento ponderado (`Weighted`) e eventos canceláveis
 - [x] **Validação:** M/M/c (Erlang C), redes de Jackson, LIFO, disponibilidade com quebras
 - [ ] **Validação:** M/M/1/K (precisa de perda de chegadas na Source)
-- [ ] Rede de segurança: snapshots golden, `scripts/verificar`, CI
+- [x] Rede de segurança: snapshots golden, `scripts/verificar`, CI
 
 ## Fase 1b: modelagem de dados de entrada (ajuste de distribuições)
 A partir de dados reais (intervalos entre chegadas, tempos de processo, tempos de reparo...),
