@@ -14,13 +14,14 @@
 //!    changed and schedules the earliest next boundary event: a tank reaching 0 or its
 //!    capacity, or a converter completing a volume.
 //!
-//! Limitations of the current kernel contract: a `ToItems` object that cannot accept the
-//! new item (full) makes the kernel stop the run with a modelling error, because the
-//! context offers no way to ask beforehand whether an object has room.
+//! A `ToItems` converter creates its item with `try_inject_item`. When the object
+//! refuses (full or stopped) the kernel answers `MSG_INJECT_REFUSED`: the converter
+//! keeps the full volume, becomes `blocked` (accepted rate 0, so upstream tanks fill)
+//! and retries when an item leaves the object (it subscribes to the object's exits).
 
 use std::collections::HashMap;
 
-use utsim_core::task::MSG_ITEM_ENTERED;
+use utsim_core::task::{MSG_INJECT_REFUSED, MSG_ITEM_ENTERED, MSG_ITEM_EXITED};
 use utsim_core::{Behavior, BlockId, Ctx, EventId, Item, State, Time};
 
 use crate::solver::{Graph, Role, SolveError, solve};
@@ -45,6 +46,8 @@ pub struct FluidNet {
     level: Vec<f64>,
     /// Per node: `ToItems` accumulation.
     acc: Vec<f64>,
+    /// Per node: a `ToItems` converter whose object refused the last item.
+    blocked: Vec<bool>,
     /// Per link: current rate.
     rate: Vec<f64>,
     /// Per node: total volume passed or received since the warm-up.
@@ -81,6 +84,7 @@ impl FluidNet {
             graph,
             level: vec![0.0; n],
             acc: vec![0.0; n],
+            blocked: vec![false; n],
             rate: vec![0.0; nl],
             vol: vec![0.0; n],
             area: vec![0.0; n],
@@ -103,6 +107,7 @@ impl FluidNet {
             };
         }
         self.acc = vec![0.0; n];
+        self.blocked = vec![false; n];
         self.rate = vec![0.0; self.graph.links.len()];
         self.vol = vec![0.0; n];
         self.area = vec![0.0; n];
@@ -169,7 +174,11 @@ impl FluidNet {
                 max_rate: max_rate.unwrap_or(inf),
             },
             FluidKind::ToItems { max_rate, .. } => Role::Drain {
-                max_rate: max_rate.unwrap_or(inf),
+                max_rate: if self.blocked[i] {
+                    0.0
+                } else {
+                    max_rate.unwrap_or(inf)
+                },
             },
             FluidKind::FromItems { .. } => Role::Idle,
         }
@@ -214,13 +223,14 @@ impl FluidNet {
             };
             let (volume, e) = (*volume, eps(*volume));
             let target = self.objects.get(object).copied();
-            while self.acc[i] >= volume - e {
+            while !self.blocked[i] && self.acc[i] >= volume - e {
                 self.acc[i] = (self.acc[i] - volume).max(0.0);
                 if self.acc[i] < e {
                     self.acc[i] = 0.0;
                 }
+                // A refusal comes back as MSG_INJECT_REFUSED, which returns the volume.
                 if let Some(b) = target {
-                    cx.inject_item(b, 0);
+                    cx.try_inject_item(b, 0);
                 }
             }
         }
@@ -352,9 +362,10 @@ impl Behavior for FluidNet {
                     Some(&b) => cx.subscribe(b, true, false),
                     None => cx.error(format!("fluidos: objeto '{object}' não existe")),
                 },
-                FluidKind::ToItems { object, .. } if !self.objects.contains_key(object) => {
-                    cx.error(format!("fluidos: objeto '{object}' não existe"));
-                }
+                FluidKind::ToItems { object, .. } => match self.objects.get(object) {
+                    Some(&b) => cx.subscribe(b, false, true),
+                    None => cx.error(format!("fluidos: objeto '{object}' não existe")),
+                },
                 _ => {}
             }
             if matches!(self.def.nodes[i].kind, FluidKind::FromItems { .. })
@@ -383,7 +394,34 @@ impl Behavior for FluidNet {
         self.resolve(cx);
     }
 
-    fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, _payload: u64) {
+    fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
+        if tag == MSG_INJECT_REFUSED {
+            self.advance(cx.now());
+            for i in 0..self.def.nodes.len() {
+                if let FluidKind::ToItems { object, volume, .. } = &self.def.nodes[i].kind
+                    && self.objects.get(object).map(|b| b.0 as u64) == Some(payload)
+                {
+                    // One message per refused item: every one returns its volume.
+                    self.acc[i] += *volume;
+                    self.blocked[i] = true;
+                }
+            }
+            self.resolve(cx);
+            return;
+        }
+        if tag == MSG_ITEM_EXITED {
+            self.advance(cx.now());
+            for i in 0..self.def.nodes.len() {
+                if let FluidKind::ToItems { object, .. } = &self.def.nodes[i].kind
+                    && self.objects.get(object) == Some(&from)
+                {
+                    self.blocked[i] = false;
+                }
+            }
+            self.complete_batches(cx);
+            self.resolve(cx);
+            return;
+        }
         if tag != MSG_ITEM_ENTERED {
             return;
         }
