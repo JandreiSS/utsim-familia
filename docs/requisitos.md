@@ -91,7 +91,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-103 | rodar o modelo passo a passo, parar e retomar objetos por comando externo | 7 | ✅ | `tests/stepping.rs` |
 | RF-104 | pausar a simulação para um agente externo decidir (base para aprendizado por reforço) | 7 | 🔄 (contrato ✅) |
 | RF-105 | simular fluidos: tanques, tubos, fontes, sumidouros e conversão entre itens e volume | 7 | 🔄 (contrato ✅) |
-| RF-106 | controlar o tráfego de AGVs na rede (capacidade por trecho, espera, impasse) | 7 | 🔄 (contrato ✅) |
+| RF-106 | controlar o tráfego de AGVs na rede (capacidade por trecho, espera, impasse) | 7 | ✅ | `tests/agv.rs` (10 casos à mão, impasse detectado) |
 | RF-107 | conectar a simulação a um CLP real ou simulado por OPC UA, em tempo real | 7 | ⏳ |
 | RF-108 | treinar agentes de aprendizado por reforço sobre o modelo (ambiente estilo Gym) | 7 | ⏳ |
 | RF-109 | ver o modelo em 3D no navegador | 7 | ⏳ |
