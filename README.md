@@ -49,26 +49,46 @@ cargo run --release -p utsim-cli -- run examples/mm1.ron --sample 100 --bins 20 
 cargo test --workspace --exclude utsim-viewer
 ```
 
-## Visualização 3D
+## Editor e visualização 3D
 
-O visualizador (`utsim-view`) só **lê** um replay gravado: a simulação nunca é conduzida por ele.
-Por trazer o Bevy, ele não entra no build padrão do workspace; compile-o explicitamente.
+O `utsim-view` tem dois modos: **Editar** (monta e altera o modelo em 3D) e **Simular** (anima uma replicação gravada).
+A simulação nunca é conduzida pela janela: o botão "▶ Simular" roda o motor em outra thread e a janela só **lê** o replay resultante.
+Por trazer o Bevy, o binário não entra no build padrão do workspace; compile-o explicitamente.
 
 ```bash
-# simula e abre a janela (a partir de um modelo)
-cargo run --release -p utsim-viewer -- examples/montagem_paletes.ron --stop 500
+# edita um modelo existente (ou cria o arquivo no primeiro Ctrl+S, se não existir)
+cargo run --release -p utsim-viewer -- examples/montagem_paletes.ron
 
-# ou grava o replay antes e abre depois
+# começa do zero
+cargo run --release -p utsim-viewer -- --novo
+
+# abre um replay gravado (somente leitura, só o modo Simular)
 cargo run --release -p utsim-cli -- replay examples/mm1.ron --out replay.json
 cargo run --release -p utsim-viewer -- replay.json
 
-# verifica sem abrir janela (carrega, monta linha do tempo e layout, imprime um resumo)
-cargo run --release -p utsim-viewer -- examples/mm1.ron --stop 200 --headless-check
+# verifica sem abrir janela (carrega, valida, simula e imprime um resumo)
+cargo run --release -p utsim-viewer -- examples/mm1.ron --headless-check
 ```
 
-- Opções: `--rep N` (replicação), `--stop T` (substitui `run.stop_time`, evita replays enormes), `--transit D` (duração visual das transferências).
-- Controles: `Espaço` reproduz/pausa, `+`/`-` mudam a velocidade (×0,1 a ×1000), `→`/`←` pulam para o evento seguinte/anterior; a barra de tempo permite arrastar. Mouse: botão esquerdo move a câmera e, num clique, seleciona um bloco (estatísticas no painel); botão direito gira; roda aproxima.
-- Sem posições no modelo (tudo em 0,0,0), o layout é automático (camadas ao longo de X). Convenção: posição do modelo `(x, y, z)` vira Bevy `(x, z, -y)`, com `z` como altura.
+- Opções: `--stop T` (tempo máximo das simulações rápidas; padrão: o menor entre `run.stop_time` e 2000, editável na barra superior), `--transit D` (duração visual das transferências), `--rep N` (replicação, para `.json`).
+- Sem posições no modelo (tudo em 0,0,0), o layout automático é aplicado uma vez ao abrir, como um passo desfazível que vai para o arquivo ao salvar. Convenção: posição do modelo `(x, y, z)` vira Bevy `(x, z, -y)`, com `z` como altura.
+
+| Modo | Ação | Como |
+|---|---|---|
+| Editar | Adicionar bloco | escolha o tipo na paleta e clique no chão (grade de 1 unidade) |
+| Editar | Selecionar / mover | clique no bloco / arraste-o no chão (um arrasto = um passo de desfazer) |
+| Editar | Ligar blocos | com um bloco selecionado, `C` ou "Ligar" e clique no destino |
+| Editar | Remover ligação | clique na seta, ou `✕` na lista de ligações do painel |
+| Editar | Excluir bloco | `Delete` |
+| Editar | Desfazer / refazer | `Ctrl+Z` / `Ctrl+Y` (ou `Ctrl+Shift+Z`) |
+| Editar | Salvar / novo | `Ctrl+S` (pede um nome se não houver arquivo) / `Ctrl+N` |
+| Editar | Cancelar ferramenta | `Esc` |
+| Editar | Problemas do modelo | listados no painel; blocos com problema ficam com contorno vermelho |
+| Simular | Reproduzir / pausar | `Espaço` |
+| Simular | Velocidade | `+` / `-` |
+| Simular | Evento anterior / seguinte | `←` / `→` |
+| Ambos | Câmera | botão esquerdo no vazio arrasta, direito gira, roda aproxima |
+
 - Verificação do visualizador: `UTSIM_VIEWER=1 bash scripts/verificar.sh` (clippy e testes de `utsim-viewer`; no Linux, o Bevy pede `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev`).
 
 ## Ajuste de distribuições
@@ -128,7 +148,7 @@ crates/
   utsim-objects/  Source, Queue, Processor, Sink
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
-  utsim-viewer/   binário `utsim-view`: visualizador 3D (Bevy), só lê um replay
+  utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
