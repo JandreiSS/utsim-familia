@@ -452,6 +452,13 @@ mod tests {
     }
 
     #[test]
+    fn empty_model_is_not_ready_to_run() {
+        let issues = Document::new("vazio").issues();
+        assert_eq!(issues.len(), 1);
+        assert!(issues[0].message.contains("vazio"));
+    }
+
+    #[test]
     fn incomplete_model_reports_issues_per_object() {
         let mut doc = Document::new("t");
         let object = template("Processor", "maquina", [0.0; 3]).unwrap();
