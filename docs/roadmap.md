@@ -117,4 +117,4 @@ o ferramentas de ajuste, mas o desenho é nosso.
 ## Fase 7+: avançado
 - [ ] Otimização de parâmetros (metaheurísticas)
 - [ ] Fluidos, AGVs, emulação via OPC UA, interface para aprendizado por reforço
-- [ ] Build WASM: rodar modelos no navegador
+- [x] Build WASM: rodar modelos no navegador (`utsim-web`, página `web/`, `scripts/web.sh`)

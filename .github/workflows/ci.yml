@@ -32,6 +32,26 @@ jobs:
       - name: Testes sem golden
         run: cargo test --workspace --exclude utsim-viewer -- --skip golden
 
+  web:
+    name: Navegador (WebAssembly e página autocontida)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Portabilidade das bibliotecas (sem rayon)
+        run: cargo build --target wasm32-unknown-unknown -p utsim-model -p utsim-fit --no-default-features
+      - name: Construir a página (scripts/web.sh instala o wasm-bindgen-cli)
+        run: bash scripts/web.sh
+      - name: Teste de fumaça em Node
+        run: node web/smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utsim-html
+          path: web/dist/utsim.html
+
   viewer:
     name: Visualizador 3D (Bevy, clippy e testes)
     runs-on: ubuntu-latest

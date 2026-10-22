@@ -12,6 +12,7 @@ default-members = [
     "crates/utsim-objects",
     "crates/utsim-opt",
     "crates/utsim-script",
+    "crates/utsim-web",
 ]
 
 [workspace.package]
@@ -30,10 +31,11 @@ utsim-edit = { path = "crates/utsim-edit" }
 utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-opt = { path = "crates/utsim-opt" }
+utsim-web = { path = "crates/utsim-web" }
 
-rand = "0.9"
-rand_distr = "0.5"
-rand_pcg = "0.9"
+rand = { version = "0.9", default-features = false, features = ["std"] }
+rand_distr = { version = "0.5", default-features = false, features = ["std"] }
+rand_pcg = { version = "0.9", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ron = "0.8"
@@ -41,6 +43,7 @@ slotmap = "1"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 rayon = "1"
+wasm-bindgen = "0.2"
 rhai = { version = "1", default-features = false, features = ["std", "sync", "no_time", "no_module"] }
 
 # Numeric crates are optimised even in debug builds: the statistical tests
@@ -53,3 +56,12 @@ opt-level = 2
 
 [profile.release]
 debug = "line-tables-only"
+
+# Size-optimised build of the browser module (`scripts/web.sh`).
+[profile.web]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = false
+panic = "abort"

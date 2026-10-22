@@ -6001,6 +6001,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-web"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "utsim-core",
+ "utsim-fit",
+ "utsim-model",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "uuid"
 version = "1.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
