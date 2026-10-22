@@ -5,6 +5,7 @@ pub mod replay;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -16,6 +17,7 @@ use utsim_core::{
 use utsim_flow::{Flow, FlowDef};
 use utsim_fluid::{FluidDef, FluidNet};
 use utsim_objects::network::NetworkDef;
+use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
     OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
@@ -642,6 +644,12 @@ impl Model {
             .enumerate()
             .map(|(i, o)| (o.name.as_str(), BlockId(i)))
             .collect();
+        // One router and one traffic state per simulation (AGV edge control).
+        let net_router = utsim_objects::network::network_router(self.network.as_ref());
+        let traffic = match (&self.network, &net_router) {
+            (Some(def), Some(r)) => Some(Arc::new(Mutex::new(Traffic::new(def, r.clone())))),
+            _ => None,
+        };
         let dispatcher_of: HashMap<&str, BlockId> = self
             .objects
             .iter()
@@ -710,9 +718,10 @@ impl Model {
                     load_time,
                     unload_time,
                     home,
-                    ..
+                    agv,
                 } => Box::new(
                     Transporter::new(*speed)
+                        .agv(if *agv { traffic.clone() } else { None })
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
                         .home(*home)
@@ -776,7 +785,10 @@ impl Model {
             let behavior = Box::new(FluidNet::new(fluids.clone(), objects.clone()));
             sim.add_block(fluids.name.clone(), OutputRule::FirstAvailable, behavior);
         }
-        sim.set_router(utsim_objects::network::router(self.network.as_ref()));
+        match net_router {
+            Some(r) => sim.set_router(r),
+            None => sim.set_router(utsim_objects::network::router(None)),
+        }
         sim
     }
 
