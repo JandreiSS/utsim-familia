@@ -91,9 +91,16 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] **Validação:** empilhadeira atendendo 3 postos, conferida à mão
 
 ## Fase 5: manuseio de materiais
-- [ ] Esteiras cinemáticas com acúmulo, junções, fotocélulas
-- [ ] Rack / armazenagem endereçável
-- [ ] **Validação:** centro de distribuição simples
+- [x] Esteiras cinemáticas com e sem acúmulo (`Conveyor`)
+- [ ] Fotocélulas e transferências dedicadas (junções usam filas e regras de saída)
+- [x] Porta-paletes endereçável (`Rack`)
+- [ ] Esteiras e porta-paletes no 3D (em andamento)
+- [x] **Validação:** centro de distribuição (`examples/centro_de_distribuicao.ron`): conservação de itens, vazão, lei de Little no porta-paletes, determinismo
+
+## Melhorias anotadas (dos relatórios das frentes)
+- [ ] Relatório com contagem de itens criados e destruídos por bloco (hoje só no rastro)
+- [ ] Estado próprio para armazenagem ("armazenando") no porta-paletes, em vez de `releasing`
+- [ ] Prioridade de tarefas configurável no modelo (o kernel hoje pede sempre prioridade 0)
 
 ## Fase 6: lógica do usuário
 - [ ] Fluxo de tokens no estilo fluxo de processo (create, delay, decide, acquire/release, wait)
