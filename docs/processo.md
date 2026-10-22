@@ -99,6 +99,10 @@ Fase 6  ── tokens/scripts ┬─ Sonnet A: motor do fluxo de tokens ──�
            (Opus)         ├─ Sonnet B: scripts em Rhai ────────────────┤
                           ├─ Sonnet C: fluxos e scripts no editor ─────┤
                           └─ (depois) Haiku: teoria com fluxos ────────┴─ merge + verificar
+Fase 7  ── utsim-opt ─────┬─ Sonnet A: recozimento, genético, refinamento ─┐
+           (Opus)         ├─ Sonnet B: `utsim otimizar` e relatório ───────┤
+                          ├─ Haiku C: ótimos conhecidos (Erlang C, M/M/1/K) ┤
+                          └─ Sonnet D: navegador (WebAssembly) ────────────┴─ merge + verificar
 QA da UI  ── Sonnet: modo roteirizado (entrada sintética + capturas) ───── o coordenador roda
              os roteiros, olha as capturas e delega as correções
 ```
