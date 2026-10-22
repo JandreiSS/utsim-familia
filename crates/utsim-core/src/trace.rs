@@ -26,6 +26,12 @@ pub enum TraceEvent {
     Destroyed { item: u64 },
     /// The block entered a new state.
     State { block: usize, state: State },
+    /// The item was put in storage position `slot` of `block` (racks).
+    Slot {
+        item: u64,
+        block: usize,
+        slot: usize,
+    },
     /// A mobile resource starts moving along `path`, arriving after `duration`.
     Travel {
         carrier: usize,

@@ -344,6 +344,8 @@ impl Timeline {
                         legs.entry(*carrier).or_default().push(leg);
                     }
                 }
+                // Rack slots are drawn by the phase 5 viewer front.
+                TraceEvent::Slot { .. } => {}
             }
         }
         // Items only seen as containers (no own event) never exist visually.

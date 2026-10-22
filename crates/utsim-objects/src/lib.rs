@@ -1,10 +1,12 @@
 //! Standard fixed-resource blocks.
 
 mod combiner;
+mod conveyor;
 mod dispatcher;
 pub mod network;
 mod processor;
 mod queue;
+mod rack;
 mod separator;
 mod sink;
 mod source;
@@ -12,9 +14,11 @@ mod timer;
 mod transporter;
 
 pub use combiner::{CombineMode, Combiner};
+pub use conveyor::Conveyor;
 pub use dispatcher::{DispatchRule, Dispatcher};
 pub use processor::{OperatorUse, Processor};
 pub use queue::{Batch, Discipline, Queue};
+pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
 pub use sink::Sink;
 pub use source::{OnBlocked, Source};

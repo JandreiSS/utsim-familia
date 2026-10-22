@@ -37,6 +37,8 @@ pub fn kind_name(kind: &ObjectKind) -> &'static str {
         ObjectKind::Sink => "Sink",
         ObjectKind::Transporter { .. } => "Transporter",
         ObjectKind::Dispatcher { .. } => "Dispatcher",
+        ObjectKind::Conveyor { .. } => "Conveyor",
+        ObjectKind::Rack { .. } => "Rack",
     }
 }
 

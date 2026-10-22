@@ -327,13 +327,15 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
 }
 
 /// Object types offered by the editor palette, with Portuguese labels.
-pub const LIBRARY: [(&str, &str); 8] = [
+pub const LIBRARY: [(&str, &str); 10] = [
     ("Source", "Chegada"),
     ("Queue", "Fila"),
     ("Processor", "Processo"),
     ("Combiner", "Montagem"),
     ("Separator", "Desmontagem"),
     ("Sink", "Saída"),
+    ("Conveyor", "Esteira"),
+    ("Rack", "Porta-paletes"),
     ("Transporter", "Transportador"),
     ("Dispatcher", "Despachante"),
 ];
@@ -378,6 +380,20 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             load_time: Dist::Const(0.0),
             unload_time: Dist::Const(0.0),
             home: false,
+        },
+        "Conveyor" => ObjectKind::Conveyor {
+            length: 5.0,
+            speed: 1.0,
+            item_length: 1.0,
+            accumulating: true,
+        },
+        "Rack" => ObjectKind::Rack {
+            bays: 4,
+            levels: 3,
+            dwell: None,
+            placement: Default::default(),
+            bay_width: 1.0,
+            level_height: 1.0,
         },
         "Dispatcher" => ObjectKind::Dispatcher {
             team: Vec::new(),

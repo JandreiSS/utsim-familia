@@ -14,8 +14,9 @@ use utsim_core::{
 };
 use utsim_objects::network::NetworkDef;
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Discipline, DispatchRule, Dispatcher, OnBlocked, OperatorUse,
-    Processor, Queue, SeparateMode, Separator, Sink, Source, Transporter,
+    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
+    OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
+    Transporter,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -150,12 +151,44 @@ pub enum ObjectKind {
         #[serde(default)]
         home: bool,
     },
+    /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
+    Conveyor {
+        length: f64,
+        speed: f64,
+        item_length: f64,
+        /// Items queue up at the end when blocked (true) or the whole belt stops (false).
+        #[serde(default = "yes")]
+        accumulating: bool,
+    },
+    /// Addressable storage: `bays` × `levels` positions.
+    Rack {
+        bays: usize,
+        levels: usize,
+        /// Minimum time each item stays stored.
+        #[serde(default)]
+        dwell: Option<Dist>,
+        #[serde(default)]
+        placement: RackPlacement,
+        /// 3D spacing between bays and between levels.
+        #[serde(default = "one_f64")]
+        bay_width: f64,
+        #[serde(default = "one_f64")]
+        level_height: f64,
+    },
     /// Hands work to a team of transporters.
     Dispatcher {
         team: Vec<String>,
         #[serde(default)]
         rule: DispatchRule,
     },
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn one_f64() -> f64 {
+    1.0
 }
 
 fn zero() -> Dist {
@@ -349,6 +382,48 @@ impl Model {
                     }
                     dists.push(("load_time".into(), load_time));
                     dists.push(("unload_time".into(), unload_time));
+                }
+                ObjectKind::Conveyor {
+                    length,
+                    speed,
+                    item_length,
+                    ..
+                } => {
+                    let positive = |v: f64| v.is_finite() && v > 0.0;
+                    if !(positive(*length) && positive(*speed) && positive(*item_length)) {
+                        errors.push(format!(
+                            "{}: length, speed e item_length devem ser finitos e > 0",
+                            obj.name
+                        ));
+                    } else if item_length > length {
+                        errors.push(format!(
+                            "{}: item_length maior que length: nenhum item cabe na esteira",
+                            obj.name
+                        ));
+                    }
+                }
+                ObjectKind::Rack {
+                    bays,
+                    levels,
+                    dwell,
+                    bay_width,
+                    level_height,
+                    ..
+                } => {
+                    if *bays == 0 || *levels == 0 {
+                        errors.push(format!("{}: bays e levels devem ser >= 1", obj.name));
+                    }
+                    if !(bay_width.is_finite() && *bay_width > 0.0)
+                        || !(level_height.is_finite() && *level_height > 0.0)
+                    {
+                        errors.push(format!(
+                            "{}: bay_width e level_height devem ser > 0",
+                            obj.name
+                        ));
+                    }
+                    if let Some(d) = dwell {
+                        dists.push(("dwell".into(), d));
+                    }
                 }
                 ObjectKind::Dispatcher { team, .. } => {
                     if team.is_empty() {
@@ -591,6 +666,19 @@ impl Model {
                         .handling(load_time.clone(), unload_time.clone())
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),
+                ObjectKind::Conveyor {
+                    length,
+                    speed,
+                    item_length,
+                    accumulating,
+                } => Box::new(Conveyor::new(*length, *speed, *item_length, *accumulating)),
+                ObjectKind::Rack {
+                    bays,
+                    levels,
+                    dwell,
+                    placement,
+                    ..
+                } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement)),
                 ObjectKind::Dispatcher { team, rule } => Box::new(Dispatcher::new(
                     team.iter().map(|m| ids[m.as_str()]).collect(),
                     *rule,

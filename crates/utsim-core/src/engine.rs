@@ -505,6 +505,25 @@ impl Ctx<'_> {
         self.core.ops.push_back(KernelOp::Task { to, request });
     }
 
+    /// The input side reopened for a reason other than an item leaving (e.g. a
+    /// conveyor's entry zone cleared): lets the upstream blocks retry now.
+    pub fn wake_inputs(&mut self) {
+        for k in 0..self.core.blocks[self.me.0].inputs.len() {
+            let up = self.core.blocks[self.me.0].inputs[k];
+            self.core.mark_dirty(up);
+        }
+    }
+
+    /// Records the storage position of an item in this block (racks), for the 3D view.
+    pub fn trace_slot(&mut self, item: ItemId, slot: usize) {
+        let block = self.me.0;
+        self.core.emit(TraceEvent::Slot {
+            item: item_key(item),
+            block,
+            slot,
+        });
+    }
+
     /// Sends a message to another block, delivered right after the current hook.
     pub fn send(&mut self, to: BlockId, tag: u32, payload: u64) {
         let from = self.me;
