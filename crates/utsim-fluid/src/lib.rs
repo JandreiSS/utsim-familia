@@ -10,7 +10,10 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, BlockId, Ctx, Item, State};
+mod net;
+pub mod solver;
+
+pub use net::FluidNet;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FluidDef {
@@ -148,34 +151,6 @@ fn has_cycle(def: &FluidDef) -> bool {
         }
     }
     seen != def.nodes.len()
-}
-
-/// The fluid network block. Contract stub — the fluid front implements it.
-pub struct FluidNet {
-    pub def: FluidDef,
-    /// Discrete object name → block id (converters).
-    pub objects: HashMap<String, BlockId>,
-}
-
-impl FluidNet {
-    pub fn new(def: FluidDef, objects: HashMap<String, BlockId>) -> Self {
-        FluidNet { def, objects }
-    }
-}
-
-impl Behavior for FluidNet {
-    fn kind(&self) -> &'static str {
-        "fluid"
-    }
-
-    fn reset(&mut self, cx: &mut Ctx) {
-        cx.set_state(State::Idle);
-        cx.error("rede de fluidos: em construção na fase 7");
-    }
-
-    fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {
-        false
-    }
 }
 
 #[cfg(test)]
