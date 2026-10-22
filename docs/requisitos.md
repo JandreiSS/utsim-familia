@@ -59,7 +59,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-41 | diagnosticar os dados: independência (sequências, Ljung-Box), tendência (Mann-Kendall), atípicos, empates | 1b | ✅ | `diagnostics.rs` |
 | RF-42 | ajustar **todas** as 20 distribuições candidatas (máxima verossimilhança) e mostrar o resultado de cada uma | 1b | ✅ | `families/tests.rs` (recuperação de parâmetros) |
 | RF-43 | testar a aderência (KS, Anderson-Darling com bootstrap paramétrico, qui-quadrado) e comparar por AIC/BIC e pesos de Akaike | 1b | ✅ | `gof.rs` (erro tipo I ≈ α) |
-| RF-44 | indicar a melhor distribuição pela regra publicada e **explicar por que** ela venceu e cada outra perdeu | 1b | ✅ | `rank.rs`, `tests/recovery.rs` 🔄 |
+| RF-44 | indicar a melhor distribuição pela regra publicada e **explicar por que** ela venceu e cada outra perdeu | 1b | ✅ | `rank.rs`, `tests/recovery.rs` (8 famílias reconhecidas) |
 | RF-45 | mostrar gráficos (histograma com as curvas, Q-Q, P-P, ECDF, dispersão x[i]×x[i+1]) em HTML e gerar a linha pronta para o `.ron` | 1b | ✅ | `plots.rs`, `utsim fit --html` |
 
 ### Fases seguintes

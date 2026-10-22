@@ -169,7 +169,6 @@ fn identifies_uniform() {
 /// (p ~ 0.005), while the ranking would otherwise recover it. Kept as an ignored test so
 /// the assertion stays strict; run with `--ignored` to reproduce.
 #[test]
-#[ignore = "achado genuíno: qui-quadrado rejeita a Triangular verdadeira (p = 0,005) com seed 107"]
 fn identifies_triangular() {
     check_case(
         "Triangular(1, 3, 9)",

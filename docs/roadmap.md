@@ -66,7 +66,7 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Ajuste dentro do editor (fase 3)
 
 **Validação**
-- [ ] Gerar amostras de distribuições conhecidas e verificar que o ajuste recupera a família e os parâmetros (em andamento)
+- [x] Gerar amostras de distribuições conhecidas e verificar que o ajuste recupera a família e os parâmetros (`tests/recovery.rs`)
 - [x] Taxa de erro tipo I dos testes ≈ α (com bootstrap) em amostras simuladas
 - [ ] Comparar estimativas MLE com valores de referência da literatura (Law, *Simulation Modeling and Analysis*, cap. 6)
 

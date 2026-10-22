@@ -72,11 +72,14 @@ pub fn evaluate(
 
     let d_obs = ks_statistic(model, &sorted, discrete);
     let a_obs = (!discrete).then(|| ad_statistic(model, &sorted));
+    let chi_obs = chi_square_statistic(fitted, &sorted, discrete, config.chi2_bins);
 
     // Parametric bootstrap: simulate from the fitted model, refit, recompute.
     let mut boot = None;
+    let mut chi_boot = None;
     if config.bootstrap > 0 {
         let (mut ge_d, mut ge_a, mut valid) = (0usize, 0usize, 0usize);
+        let (mut ge_chi, mut valid_chi) = (0usize, 0usize);
         let mut sample = vec![0.0; n];
         for b in 1..=config.bootstrap {
             let mut refit = None;
@@ -104,10 +107,23 @@ pub fn evaluate(
             {
                 ge_a += 1;
             }
+            // χ² is bootstrapped too: with estimated bounds (Uniform, Triangular, Beta,
+            // shifted families) the asymptotic χ²(k − 1 − p) reference is not valid.
+            if let Some(obs) = &chi_obs
+                && let Some(b) = chi_square_statistic(&f, &sample, discrete, config.chi2_bins)
+            {
+                valid_chi += 1;
+                if b.statistic >= obs.statistic {
+                    ge_chi += 1;
+                }
+            }
         }
         if valid > 0 {
             let p = |ge: usize| (1 + ge) as f64 / (valid + 1) as f64;
             boot = Some((p(ge_d), p(ge_a), valid));
+        }
+        if valid_chi > 0 {
+            chi_boot = Some(((1 + ge_chi) as f64 / (valid_chi + 1) as f64, valid_chi));
         }
     }
 
@@ -153,7 +169,17 @@ pub fn evaluate(
         },
     });
 
-    let chi_square = chi_square_test(fitted, &sorted, discrete, config.chi2_bins);
+    let chi_square = chi_obs.map(|obs| match chi_boot {
+        Some((p, valid)) => TestStat {
+            statistic: obs.statistic,
+            p_value: p,
+            method: format!(
+                "{}; p por bootstrap paramétrico ({valid} réplicas)",
+                obs.method
+            ),
+        },
+        None => obs,
+    });
 
     GofResult {
         ks,
@@ -243,9 +269,9 @@ fn ad_asymptotic_p(a: f64) -> f64 {
     (1.0 - cdf).clamp(0.0, 1.0)
 }
 
-/// χ² test with equiprobable classes (continuous) or classes of expected count ≥ 5
-/// (discrete). Degrees of freedom: classes − 1 − estimated parameters.
-fn chi_square_test(
+/// χ² statistic with equiprobable classes (continuous) or classes of expected count ≥ 5
+/// (discrete), with its asymptotic p-value (d.o.f. = classes − 1 − estimated parameters).
+fn chi_square_statistic(
     fitted: &Fitted,
     sorted: &[f64],
     discrete: bool,
