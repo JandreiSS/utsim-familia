@@ -50,6 +50,10 @@ pub const MSG_ARRIVED: u32 = 2;
 pub const MSG_RELEASE: u32 = 3;
 /// A team member became free and can take work (sent to its dispatcher).
 pub const MSG_IDLE: u32 = 4;
+/// An item entered a block this block subscribed to (payload: item key; `from` = that block).
+pub const MSG_ITEM_ENTERED: u32 = 5;
+/// An item left a block this block subscribed to (payload: item key; `from` = that block).
+pub const MSG_ITEM_EXITED: u32 = 6;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path

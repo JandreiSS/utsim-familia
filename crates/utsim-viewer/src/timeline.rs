@@ -428,6 +428,8 @@ impl Timeline {
                         legs.entry(*carrier).or_default().push(leg);
                     }
                 }
+                // Token counts are shown by the phase 6 flow view.
+                TraceEvent::Tokens { .. } => {}
                 TraceEvent::Slot { item, block, slot } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     slots.entry((*block, i)).or_default().push((t, *slot));

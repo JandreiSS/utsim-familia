@@ -7,8 +7,10 @@ default-members = [
     "crates/utsim-core",
     "crates/utsim-edit",
     "crates/utsim-fit",
+    "crates/utsim-flow",
     "crates/utsim-model",
     "crates/utsim-objects",
+    "crates/utsim-script",
 ]
 
 [workspace.package]
@@ -24,6 +26,8 @@ utsim-objects = { path = "crates/utsim-objects" }
 utsim-model = { path = "crates/utsim-model" }
 utsim-fit = { path = "crates/utsim-fit" }
 utsim-edit = { path = "crates/utsim-edit" }
+utsim-script = { path = "crates/utsim-script" }
+utsim-flow = { path = "crates/utsim-flow" }
 
 rand = "0.9"
 rand_distr = "0.5"

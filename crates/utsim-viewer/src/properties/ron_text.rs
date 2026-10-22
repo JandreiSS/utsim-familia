@@ -129,6 +129,7 @@ pub fn output(rule: &OutputRule) -> String {
         OutputRule::Random => "Random".into(),
         OutputRule::ByLabel(label) => format!("ByLabel({})", string(label)),
         OutputRule::Weighted(w) => format!("Weighted({})", floats(w)),
+        OutputRule::Script(src) => format!("Script({})", string(src)),
     }
 }
 

@@ -86,7 +86,7 @@ fn item_of(event: &TraceEvent) -> Option<u64> {
         | TraceEvent::Unpacked { item, .. }
         | TraceEvent::Destroyed { item } => Some(item),
         TraceEvent::Slot { item, .. } => Some(item),
-        TraceEvent::State { .. } | TraceEvent::Travel { .. } => None,
+        TraceEvent::State { .. } | TraceEvent::Travel { .. } | TraceEvent::Tokens { .. } => None,
     }
 }
 
@@ -164,6 +164,7 @@ impl Ledger {
             }
             TraceEvent::Travel { carrier, .. } => check_block(carrier)?,
             TraceEvent::Slot { block, .. } => check_block(block)?,
+            TraceEvent::Tokens { flow, .. } => check_block(flow)?,
             TraceEvent::Unpacked { item, block } => {
                 check_block(block)?;
                 let Loc::Packed(container) = self.loc_of(item)? else {

@@ -13,8 +13,12 @@ use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
+use crate::script::{ItemScript, PortScript, ScriptEnv};
 use crate::stats::{StateTracker, Tally, TimeWeighted};
-use crate::task::{MSG_TRANSPORT_RESERVED, RequestId, Router, StraightLine, TaskKind, TaskRequest};
+use crate::task::{
+    MSG_ITEM_ENTERED, MSG_ITEM_EXITED, MSG_TRANSPORT_RESERVED, RequestId, Router, StraightLine,
+    TaskKind, TaskRequest,
+};
 use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
 #[derive(Clone, Debug)]
@@ -148,6 +152,10 @@ struct BlockRuntime {
     transport: Option<BlockId>,
     /// Items on their way here (room reserved by a transport request).
     incoming: usize,
+    /// Blocks notified when items enter (`.0`) or leave (`.1`) this block.
+    subscribers: Vec<(BlockId, bool, bool)>,
+    entry_script: Option<Box<dyn ItemScript>>,
+    port_script: Option<Box<dyn PortScript>>,
 }
 
 /// Work that involves another block's hooks, run by the kernel after the current
@@ -171,6 +179,11 @@ enum KernelOp {
         carrier: BlockId,
         item: ItemId,
         to: BlockId,
+        port: usize,
+    },
+    Inject {
+        item: ItemId,
+        into: BlockId,
         port: usize,
     },
 }
@@ -514,6 +527,16 @@ impl Ctx<'_> {
         }
     }
 
+    /// Records how many tokens activity `activity` of this flow block now holds.
+    pub fn trace_tokens(&mut self, activity: usize, count: u32) {
+        let flow = self.me.0;
+        self.core.emit(TraceEvent::Tokens {
+            flow,
+            activity,
+            count,
+        });
+    }
+
     /// Records the storage position of an item in this block (racks), for the 3D view.
     pub fn trace_slot(&mut self, item: ItemId, slot: usize) {
         let block = self.me.0;
@@ -522,6 +545,52 @@ impl Ctx<'_> {
             block,
             slot,
         });
+    }
+
+    /// Asks to be told (`MSG_ITEM_ENTERED` / `MSG_ITEM_EXITED` messages) when items
+    /// enter and/or leave `block`. Used by token flows to wait for events.
+    pub fn subscribe(&mut self, block: BlockId, entry: bool, exit: bool) {
+        let me = self.me;
+        let subs = &mut self.core.blocks[block.0].subscribers;
+        match subs.iter_mut().find(|(b, _, _)| *b == me) {
+            Some(s) => {
+                s.1 |= entry;
+                s.2 |= exit;
+            }
+            None => subs.push((me, entry, exit)),
+        }
+    }
+
+    /// The live item with this trace key (as carried by `MSG_ITEM_*` payloads).
+    pub fn item_by_key(&self, key: u64) -> Option<ItemId> {
+        let id = ItemId::from(slotmap::KeyData::from_ffi(key));
+        self.core.items.contains_key(id).then_some(id)
+    }
+
+    /// Creates an item and places it into input `port` of `into` right after the
+    /// current hook (as if it arrived there). The target must accept it, otherwise the
+    /// run stops with a modelling error. Returns the new item so labels can be set now.
+    pub fn inject_item(&mut self, into: BlockId, port: usize) -> ItemId {
+        let now = self.core.now;
+        let id = self.core.items.insert(Item {
+            labels: BTreeMap::new(),
+            created_at: now,
+            entered_at: now,
+            location: None,
+            container: None,
+            contents: Vec::new(),
+            awaiting_transport: false,
+        });
+        self.core.emit(TraceEvent::Created {
+            item: item_key(id),
+            block: into.0,
+        });
+        self.core.ops.push_back(KernelOp::Inject {
+            item: id,
+            into,
+            port,
+        });
+        id
     }
 
     /// Sends a message to another block, delivered right after the current hook.
@@ -577,6 +646,38 @@ impl Ctx<'_> {
                     x -= w;
                 }
                 Some(port)
+            }
+            OutputRule::Script(_) => {
+                let name = rt.name.clone();
+                match rt.port_script.as_mut() {
+                    Some(script) => {
+                        let mut env = ScriptEnv {
+                            now: core.now,
+                            rng: &mut rt.rng,
+                            block: &name,
+                        };
+                        match script.port(&core.items[id], n, &mut env) {
+                            Ok(p) if p < n => Some(p),
+                            Ok(p) => {
+                                core.errors.push(format!(
+                                    "{name}: o script de saída devolveu a porta {} (existem 1..={n})",
+                                    p + 1
+                                ));
+                                None
+                            }
+                            Err(e) => {
+                                core.errors
+                                    .push(format!("{name}: erro no script de saída: {e}"));
+                                None
+                            }
+                        }
+                    }
+                    None => {
+                        core.errors
+                            .push(format!("{name}: regra Script sem script compilado"));
+                        None
+                    }
+                }
             }
             OutputRule::ByLabel(label) => {
                 match core.items[id].label(label).and_then(Value::as_num) {
@@ -680,6 +781,9 @@ impl Simulation {
             position: [0.0; 3],
             transport: None,
             incoming: 0,
+            subscribers: Vec::new(),
+            entry_script: None,
+            port_script: None,
         });
         self.behaviors.push(behavior);
         id
@@ -710,6 +814,16 @@ impl Simulation {
     /// Replaces the straight-line router (e.g. by a path network).
     pub fn set_router(&mut self, router: Arc<dyn Router>) {
         self.core.router = router;
+    }
+
+    /// Script run on every item entering `block`, before the block's `on_entry`.
+    pub fn set_entry_script(&mut self, block: BlockId, script: Box<dyn ItemScript>) {
+        self.core.blocks[block.0].entry_script = Some(script);
+    }
+
+    /// Script choosing the output port of `block` (used by `OutputRule::Script`).
+    pub fn set_port_script(&mut self, block: BlockId, script: Box<dyn PortScript>) {
+        self.core.blocks[block.0].port_script = Some(script);
     }
 
     /// Enables a repeating shift table (scheduled off-shift windows) on a block.
@@ -1029,6 +1143,24 @@ impl Simulation {
                 self.leave(item, carrier);
                 self.arrive(item, to, port);
             }
+            KernelOp::Inject { item, into, port } => {
+                let accepted = {
+                    let rt = &self.core.blocks[into.0];
+                    let content = rt.contents.len() + rt.incoming;
+                    rt.stops == 0
+                        && self.behaviors[into.0].accepts(&self.core.items[item], content, port)
+                };
+                if accepted {
+                    self.core.pending_move_from = Some(into);
+                    self.arrive(item, into, port);
+                } else {
+                    let name = self.core.blocks[into.0].name.clone();
+                    self.core.items.remove(item);
+                    self.core.errors.push(format!(
+                        "{name}: não aceitou o item criado pelo fluxo (cheio ou parado)"
+                    ));
+                }
+            }
         }
         self.flush_doomed();
     }
@@ -1118,6 +1250,7 @@ impl Simulation {
             let up = self.core.blocks[from.0].inputs[k];
             self.core.mark_dirty(up);
         }
+        self.notify(from, MSG_ITEM_EXITED, item);
         self.core.pending_move_from = Some(from);
     }
 
@@ -1126,18 +1259,55 @@ impl Simulation {
         let from = self.core.pending_move_from.take().map_or(to.0, |b| b.0);
         self.core.put_item_into(to, item);
         self.core.blocks[to.0].stats.input += 1;
-        self.core.emit(TraceEvent::Moved {
-            item: item_key(item),
-            from,
-            to: to.0,
-        });
+        if from != to.0 {
+            self.core.emit(TraceEvent::Moved {
+                item: item_key(item),
+                from,
+                to: to.0,
+            });
+        }
+        self.run_entry_script(item, to);
         {
             let Simulation {
                 core, behaviors, ..
             } = self;
             behaviors[to.0].on_entry(&mut Ctx { core, me: to }, item, port);
         }
+        self.notify(to, MSG_ITEM_ENTERED, item);
         self.flush_doomed();
+    }
+
+    fn run_entry_script(&mut self, item: ItemId, block: BlockId) {
+        let core = &mut self.core;
+        let rt = &mut core.blocks[block.0];
+        let Some(script) = rt.entry_script.as_mut() else {
+            return;
+        };
+        let mut env = ScriptEnv {
+            now: core.now,
+            rng: &mut rt.rng,
+            block: &rt.name,
+        };
+        if let Err(e) = script.run(&mut core.items[item], &mut env) {
+            let message = format!("{}: erro no script de entrada: {e}", rt.name);
+            core.errors.push(message);
+        }
+    }
+
+    /// Tells the subscribers of `block` that `item` entered or left it.
+    fn notify(&mut self, block: BlockId, tag: u32, item: ItemId) {
+        let entry = tag == MSG_ITEM_ENTERED;
+        for k in 0..self.core.blocks[block.0].subscribers.len() {
+            let (sub, on_entry, on_exit) = self.core.blocks[block.0].subscribers[k];
+            if (entry && on_entry) || (!entry && on_exit) {
+                self.core.ops.push_back(KernelOp::Message {
+                    to: sub,
+                    from: block,
+                    tag,
+                    payload: item_key(item),
+                });
+            }
+        }
     }
 
     fn flush_doomed(&mut self) {

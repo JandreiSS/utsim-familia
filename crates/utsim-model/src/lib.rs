@@ -12,6 +12,7 @@ use utsim_core::{
     Behavior, BlockId, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError,
     Simulation,
 };
+use utsim_flow::{Flow, FlowDef};
 use utsim_objects::network::NetworkDef;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
@@ -44,6 +45,9 @@ pub struct Model {
     /// Paths for mobile resources (straight lines when absent).
     #[serde(default)]
     pub network: Option<NetworkDef>,
+    /// Token flows: user logic as graphs of activities (phase 6).
+    #[serde(default)]
+    pub flows: Vec<FlowDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -82,6 +86,9 @@ pub struct ObjectDef {
     /// (instead of handing them over instantly).
     #[serde(default)]
     pub transport: Option<String>,
+    /// Script run on every item entering this object (e.g. to set labels).
+    #[serde(default)]
+    pub on_entry: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -459,6 +466,7 @@ impl Model {
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
         self.validate_mobile(&kind_of, &mut errors);
+        self.validate_logic(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -569,6 +577,33 @@ impl Model {
         }
         if let Some(net) = &self.network {
             errors.extend(net.validate());
+        }
+    }
+
+    /// Flows and object scripts (phase 6).
+    fn validate_logic(&self, errors: &mut Vec<String>) {
+        let objects: HashSet<&str> = self.objects.iter().map(|o| o.name.as_str()).collect();
+        let mut flow_names = HashSet::new();
+        for flow in &self.flows {
+            if objects.contains(flow.name.as_str()) || !flow_names.insert(flow.name.as_str()) {
+                errors.push(format!(
+                    "fluxo '{}': o nome já é usado por outro objeto ou fluxo",
+                    flow.name
+                ));
+            }
+            errors.extend(flow.validate(&objects));
+        }
+        for obj in &self.objects {
+            if let Some(src) = &obj.on_entry {
+                if let Err(e) = utsim_script::compile_item_script(src) {
+                    errors.push(format!("{}: on_entry: {e}", obj.name));
+                }
+            }
+            if let OutputRule::Script(src) = &obj.output {
+                if let Err(e) = utsim_script::compile_port_script(src) {
+                    errors.push(format!("{}: regra de saída Script: {e}", obj.name));
+                }
+            }
         }
     }
 
@@ -689,6 +724,18 @@ impl Model {
             if let Some(t) = &obj.transport {
                 sim.set_transport(id, ids[t.as_str()]);
             }
+            if let Some(script) = obj
+                .on_entry
+                .as_deref()
+                .and_then(|s| utsim_script::compile_item_script(s).ok())
+            {
+                sim.set_entry_script(id, script);
+            }
+            if let OutputRule::Script(src) = &obj.output {
+                if let Ok(script) = utsim_script::compile_port_script(src) {
+                    sim.set_port_script(id, script);
+                }
+            }
             if let Some(dt) = &obj.downtime {
                 sim.set_downtime(id, dt.clone());
             }
@@ -698,6 +745,13 @@ impl Model {
         }
         for (from, to) in &self.connections {
             sim.connect(ids[from.as_str()], ids[to.as_str()]);
+        }
+        // Flows run as extra blocks after the objects (their ids follow object order).
+        let objects: HashMap<String, BlockId> =
+            ids.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        for flow in &self.flows {
+            let behavior = Box::new(Flow::new(flow.clone(), objects.clone()));
+            sim.add_block(flow.name.clone(), OutputRule::FirstAvailable, behavior);
         }
         sim.set_router(utsim_objects::network::router(self.network.as_ref()));
         sim

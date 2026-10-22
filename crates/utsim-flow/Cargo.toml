@@ -1,0 +1,12 @@
+[package]
+name = "utsim-flow"
+description = "Token flows (fluxo de processo style) for UTSim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-script.workspace = true
+serde.workspace = true

@@ -74,6 +74,9 @@ pub enum OutputRule {
     ByLabel(String),
     /// A random port with the given relative weights, one per output port.
     Weighted(Vec<f64>),
+    /// A user script returns the port (1-based in the script language; the model
+    /// compiles it into a [`crate::script::PortScript`]).
+    Script(String),
 }
 
 /// Repeating schedule of off-shift windows (breaks, nights, weekends).

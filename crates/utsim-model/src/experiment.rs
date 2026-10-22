@@ -130,6 +130,22 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         };
     }
 
+    if target == "flow" {
+        // `flow.<name>`: replaces (or adds) the whole flow; `None` removes it.
+        let name = field;
+        if text.trim() == "None" {
+            model.flows.retain(|f| f.name != name);
+            return Ok(());
+        }
+        let mut flow: utsim_flow::FlowDef = parse_value(key, text)?;
+        flow.name = name.to_string();
+        match model.flows.iter_mut().find(|f| f.name == name) {
+            Some(existing) => *existing = flow,
+            None => model.flows.push(flow),
+        }
+        return Ok(());
+    }
+
     if target == "run" {
         let run = &mut model.run;
         match field {
@@ -177,6 +193,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         }
         "transport" => {
             set!(obj.transport);
+            return Ok(());
+        }
+        "on_entry" => {
+            set!(obj.on_entry);
             return Ok(());
         }
         _ => {}
@@ -270,7 +290,14 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             let valid: Vec<&str> = kind_fields
                 .iter()
                 .copied()
-                .chain(["output", "position", "downtime", "shifts", "transport"])
+                .chain([
+                    "output",
+                    "position",
+                    "downtime",
+                    "shifts",
+                    "transport",
+                    "on_entry",
+                ])
                 .collect();
             return Err(invalid(format!(
                 "'{key}': '{target}' ({kind_name}) não tem o campo '{field}'; campos válidos: {}",

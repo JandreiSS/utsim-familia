@@ -12,6 +12,7 @@ pub mod engine;
 pub mod item;
 pub mod report;
 pub mod rng;
+pub mod script;
 pub mod stats;
 pub mod task;
 pub mod trace;

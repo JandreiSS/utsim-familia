@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 utsim-core.workspace = true
 utsim-objects.workspace = true
+utsim-flow.workspace = true
+utsim-script.workspace = true
 serde.workspace = true
 ron.workspace = true
 rayon.workspace = true

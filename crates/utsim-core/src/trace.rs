@@ -26,6 +26,13 @@ pub enum TraceEvent {
     Destroyed { item: u64 },
     /// The block entered a new state.
     State { block: usize, state: State },
+    /// Number of tokens now in activity `activity` (index in the flow definition)
+    /// of flow block `flow`.
+    Tokens {
+        flow: usize,
+        activity: usize,
+        count: u32,
+    },
     /// The item was put in storage position `slot` of `block` (racks).
     Slot {
         item: u64,

@@ -82,7 +82,9 @@ a situação atual e onde está a prova de que funciona.
 | RF-80 | ter esteiras com comprimento, velocidade e espaço por item, com ou sem acúmulo | 5 | ✅ | `tests/conveyor.rs` (10 casos à mão + vazão) |
 | RF-81 | ter porta-paletes com posições endereçáveis (colunas × níveis), regra de ocupação e tempo mínimo armazenado | 5 | ✅ | `tests/rack.rs` (posições exatas, quebra, M/M/∞) |
 | RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ✅ | `tests/handling.rs` (posições batem com o kernel), roteiro `esteiras_e_armazem.ron` |
-| RF-90 | descrever a lógica com fluxos de tokens e scripts | 6 | ⏳ |
+| RF-90 | descrever lógica com fluxos de tokens: gerar, esperar, decidir, atribuir, recursos, eventos de objetos, criar itens, lotes | 6 | 🔄 (contrato ✅) |
+| RF-91 | escrever expressões e scripts (Rhai) para rótulos, condições, regra de saída e gatilho de entrada | 6 | 🔄 (contrato ✅, `logic_contract.rs`) |
+| RF-92 | ver e editar os fluxos no editor, com a contagem de tokens durante a simulação | 6 | ⏳ |
 | RF-100 | buscar automaticamente os melhores parâmetros (otimização) | 7 | ⏳ |
 | RF-101 | rodar modelos no navegador | 7 | ⏳ |
 

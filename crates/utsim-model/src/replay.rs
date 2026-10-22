@@ -67,6 +67,12 @@ impl Model {
                     kind: kind_name(&o.kind).to_string(),
                     position: o.position,
                 })
+                // Flows are blocks too (no position): keeps trace indices aligned.
+                .chain(self.flows.iter().map(|f| ReplayBlock {
+                    name: f.name.clone(),
+                    kind: "Flow".to_string(),
+                    position: [0.0; 3],
+                }))
                 .collect(),
             connections: self
                 .connections

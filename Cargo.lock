@@ -5805,6 +5805,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-flow"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-core",
+ "utsim-script",
+]
+
+[[package]]
 name = "utsim-model"
 version = "0.1.0"
 dependencies = [
@@ -5814,7 +5823,9 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "utsim-core",
+ "utsim-flow",
  "utsim-objects",
+ "utsim-script",
 ]
 
 [[package]]
@@ -5822,6 +5833,13 @@ name = "utsim-objects"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "utsim-core",
+]
+
+[[package]]
+name = "utsim-script"
+version = "0.1.0"
+dependencies = [
  "utsim-core",
 ]
 

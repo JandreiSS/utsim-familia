@@ -1,0 +1,10 @@
+[package]
+name = "utsim-script"
+description = "User scripts and expressions for UTSim (Rhai)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
