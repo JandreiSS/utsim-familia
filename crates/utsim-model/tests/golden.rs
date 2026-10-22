@@ -33,6 +33,19 @@ fn repo_path(relative: &str) -> PathBuf {
         .join(relative)
 }
 
+/// Roda uma replicação; modelos que pedem decisões externas (agente) recebem a política
+/// fixa "sempre a opção 0".
+fn run_with_fixed_policy(model: &Model, r: u32) -> Result<utsim_core::RunReport, String> {
+    let mut sim = model.build(r);
+    loop {
+        match sim.run_until(f64::INFINITY).map_err(|e| e.to_string())? {
+            utsim_core::Step::Decision(_) => sim.decide(0).map_err(|e| e.to_string())?,
+            utsim_core::Step::Paused(_) => {}
+            utsim_core::Step::Finished => return Ok(sim.finish()),
+        }
+    }
+}
+
 /// Roda o modelo com os limites de golden e devolve o snapshot correspondente.
 fn run_snapshot(mut model: Model) -> Result<Snapshot, String> {
     let stop = model.run.stop_time.min(MAX_STOP_TIME);
@@ -42,10 +55,8 @@ fn run_snapshot(mut model: Model) -> Result<Snapshot, String> {
 
     let mut replications = Vec::new();
     for r in 0..REPLICATIONS {
-        let report = model
-            .build(r)
-            .run()
-            .map_err(|e| format!("replicação {r}: {e}"))?;
+        let report =
+            run_with_fixed_policy(&model, r).map_err(|e| format!("replicação {r}: {e}"))?;
         let mut metrics = report.metrics();
         metrics.insert("events".to_string(), report.events as f64);
         replications.push(metrics);
