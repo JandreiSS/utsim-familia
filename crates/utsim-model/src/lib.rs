@@ -6,7 +6,9 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{Behavior, Dist, Downtime, OutputRule, RunConfig, RunReport, SimError, Simulation};
-use utsim_objects::{Discipline, Processor, Queue, Sink, Source};
+use utsim_objects::{
+    Batch, CombineMode, Combiner, Discipline, Processor, Queue, SeparateMode, Separator, Sink, Source,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
@@ -73,12 +75,29 @@ pub enum ObjectKind {
         capacity: Option<usize>,
         #[serde(default)]
         discipline: Discipline,
+        /// Holds items and releases them in groups.
+        #[serde(default)]
+        batch: Option<Batch>,
     },
     Processor {
         #[serde(default = "one_usize")]
         capacity: usize,
         #[serde(default)]
         setup: Option<Dist>,
+        process: Dist,
+    },
+    /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
+    Combiner {
+        components: Vec<usize>,
+        #[serde(default)]
+        mode: CombineMode,
+        #[serde(default)]
+        setup: Option<Dist>,
+        process: Dist,
+    },
+    Separator {
+        #[serde(default)]
+        mode: SeparateMode,
         process: Dist,
     },
     Sink,
@@ -133,10 +152,53 @@ impl Model {
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
                 }
-                ObjectKind::Queue { capacity, .. } => {
+                ObjectKind::Queue { capacity, batch, .. } => {
                     if *capacity == Some(0) {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
+                    if let Some(b) = batch {
+                        if b.size == 0 {
+                            errors.push(format!("{}: batch.size deve ser >= 1", obj.name));
+                        }
+                        if !(b.max_wait.is_finite() && b.max_wait >= 0.0) {
+                            errors.push(format!("{}: batch.max_wait deve ser finito e >= 0", obj.name));
+                        }
+                        if let Some(cap) = capacity {
+                            if *cap < b.size {
+                                errors.push(format!(
+                                    "{}: capacity ({cap}) menor que batch.size ({}): o lote nunca fecharia",
+                                    obj.name, b.size
+                                ));
+                            }
+                        }
+                    }
+                }
+                ObjectKind::Combiner { components, setup, process, .. } => {
+                    if components.is_empty() {
+                        errors.push(format!("{}: components precisa de ao menos uma porta de componentes", obj.name));
+                    }
+                    if components.contains(&0) {
+                        errors.push(format!("{}: cada entrada de components deve ser >= 1", obj.name));
+                    }
+                    let n_in = self.connections.iter().filter(|(_, to)| *to == obj.name).count();
+                    if n_in != components.len() + 1 {
+                        errors.push(format!(
+                            "{}: Combiner precisa de {} entradas (1 contêiner + {} de componentes), mas tem {n_in}",
+                            obj.name,
+                            components.len() + 1,
+                            components.len()
+                        ));
+                    }
+                    if let Some(s) = setup {
+                        dists.push(("setup".into(), s));
+                    }
+                    dists.push(("process".into(), process));
+                }
+                ObjectKind::Separator { mode, process } => {
+                    if *mode == SeparateMode::Split(0) {
+                        errors.push(format!("{}: Split(n) exige n >= 1", obj.name));
+                    }
+                    dists.push(("process".into(), process));
                 }
                 ObjectKind::Processor { capacity, setup, process } => {
                     if *capacity == 0 {
@@ -226,8 +288,14 @@ impl Model {
                         .max_arrivals(*max_arrivals);
                     Box::new(labels.iter().fold(source, |s, (k, d)| s.label(k.clone(), d.clone())))
                 }
-                ObjectKind::Queue { capacity, discipline } => {
-                    Box::new(Queue::new(*capacity).discipline(*discipline))
+                ObjectKind::Queue { capacity, discipline, batch } => {
+                    Box::new(Queue::new(*capacity).discipline(*discipline).batch(*batch))
+                }
+                ObjectKind::Combiner { components, mode, setup, process } => Box::new(
+                    Combiner::new(components.clone(), *mode, process.clone()).setup(setup.clone()),
+                ),
+                ObjectKind::Separator { mode, process } => {
+                    Box::new(Separator::new(*mode, process.clone()))
                 }
                 ObjectKind::Processor { capacity, setup, process } => {
                     Box::new(Processor::new(process.clone()).capacity(*capacity).setup(setup.clone()))
