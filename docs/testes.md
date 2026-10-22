@@ -145,6 +145,9 @@ Condições: `ObjetosIgual(n)`, `LigacoesIgual(n)`, `ProblemasIgual(n)`, `Seleci
 `Modo(Editar | Simular)`, `Sujo(true)`, `Ferramenta("Selecionar" | "Colocar:Queue" | "Ligar:fila")`,
 `ObjetoExiste("x")`, `PosicaoDe("fila", (x, y))` (tolerância 0,05), `PosicaoPerto("fila", (x, y), tol)`,
 `StatusContem("texto")`, `TituloContem("texto")`, `TempoSimuladoMin(t)` e `Nao(condição)`.
+Para o painel de fluxos: `FluxosIgual(n)`, `AtividadesIgual("fluxo", n)`,
+`AtividadeSelecionada(Some("decide"))` e `PainelFluxos(true)`. Os nomes das atividades são textos
+desenhados no diagrama, então `ClicarBotao("decide")` seleciona a caixa.
 
 **Como os botões são achados.** O egui 0.36 usado aqui não tem a árvore de acessibilidade
 (sem `accesskit`), então, depois de cada passe do egui, o executor guarda todos os textos
@@ -159,6 +162,11 @@ Os roteiros de exemplo estão em `crates/utsim-viewer/roteiros/`: `editor_basico
 `esteiras_e_armazem.ron` (com `examples/linha_com_esteiras.ron --stop 700` e com `examples/armazem.ron --stop 400`:
 itens sobre a correia, acúmulo no fim e porta-paletes enchendo). As posições na correia são reconstruídas do
 rastro (`handling.rs`) e testadas em `crates/utsim-viewer/tests/handling.rs`.
+Fluxos de tokens e scripts (fase 6): `fluxos.ron` (com `roteiros/fluxos_modelo.ron`: painel Fluxos, diagrama,
+atividade selecionada, expressão com erro em linha, novo fluxo, desfazer, `on_entry` e regra de saída por
+script) e `fluxos_simular.ron` (com `examples/fluxo_docas.ron`: contagem de tokens ao vivo no diagrama em
+Simular). O botão "Fluxos" da barra tem o mesmo rótulo do título do painel, então os roteiros o clicam por
+`Tela(611.0, 12.0)`. `Digitar` não digita espaços (use `2+x`, sem espaços).
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a
