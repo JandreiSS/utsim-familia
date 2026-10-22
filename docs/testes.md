@@ -155,7 +155,10 @@ selecionável, link, caixa de seleção). Rótulos repetidos na tela: o último 
 `Deslocado` ou `Tela` para os demais.
 
 Os roteiros de exemplo estão em `crates/utsim-viewer/roteiros/`: `editor_basico.ron` (`--novo`),
-`propriedades.ron` (com `examples/mm1.ron`) e `simular_paletes.ron` (com `examples/montagem_paletes.ron`).
+`propriedades.ron` (com `examples/mm1.ron`), `simular_paletes.ron` (com `examples/montagem_paletes.ron`) e
+`esteiras_e_armazem.ron` (com `examples/linha_com_esteiras.ron --stop 700` e com `examples/armazem.ron --stop 400`:
+itens sobre a correia, acúmulo no fim e porta-paletes enchendo). As posições na correia são reconstruídas do
+rastro (`handling.rs`) e testadas em `crates/utsim-viewer/tests/handling.rs`.
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a

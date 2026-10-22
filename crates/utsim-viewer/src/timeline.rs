@@ -18,11 +18,18 @@
 //! The trapezoidal speed profile (acceleration/deceleration) cannot be inferred from
 //! the trace alone, which carries only path and duration, so it is not applied; the
 //! leg endpoints and total time are exact, only the mid-leg phase differs.
+//!
+//! Material handling (phase 5). Moves into or out of a conveyor or a rack are not
+//! tweened either: an item on a belt is at the distance [`Timeline::belt_position`]
+//! reconstructs (see [`crate::handling`]), and an item in a rack sits in the slot of
+//! its `Slot` event ([`Timeline::rack_slot`]).
 
 use std::collections::HashMap;
 
 use utsim_core::{State, TraceEvent};
 use utsim_model::replay::Replay;
+
+use crate::handling::{BeltEv, BeltParams, BeltTrack};
 
 /// Where an item is, at one instant.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -223,6 +230,20 @@ pub struct Timeline {
     /// Travel legs per mobile block, in time order.
     legs: HashMap<usize, Vec<TravelLeg>>,
     n_travels: usize,
+    /// Per conveyor block: its events in trace order, and the motion rebuilt from them.
+    belt_events: HashMap<usize, Vec<BeltEv>>,
+    belts: HashMap<usize, BeltTrack>,
+    /// End of the recording, used to finish the open belt visits.
+    end: f64,
+    /// Storage slots per (rack block, item), in time order.
+    slots: HashMap<(usize, usize), Vec<(f64, usize)>>,
+    /// Highest slot seen per rack block.
+    max_slot: HashMap<usize, usize>,
+}
+
+/// Block kinds whose items sit at a modelled position (no visual transit).
+fn is_positioned_kind(kind: &str) -> bool {
+    matches!(kind, "Conveyor" | "Rack")
 }
 
 fn median(values: &mut [f64]) -> Option<f64> {
@@ -249,6 +270,17 @@ impl Timeline {
             .map(|b| is_mobile_kind(&b.kind))
             .collect();
         let is_mobile = |b: usize| mobile.get(b).copied().unwrap_or(false);
+        let positioned: Vec<bool> = replay
+            .blocks
+            .iter()
+            .map(|b| is_positioned_kind(&b.kind))
+            .collect();
+        let is_positioned = |b: usize| positioned.get(b).copied().unwrap_or(false);
+        let is_belt = |b: usize| replay.blocks.get(b).is_some_and(|x| x.kind == "Conveyor");
+        let mut belt_events: HashMap<usize, Vec<BeltEv>> = HashMap::new();
+        let mut belt_halted: HashMap<usize, bool> = HashMap::new();
+        let mut slots: HashMap<(usize, usize), Vec<(f64, usize)>> = HashMap::new();
+        let mut max_slot: HashMap<usize, usize> = HashMap::new();
         let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
         let mut n_travels = 0usize;
 
@@ -291,6 +323,12 @@ impl Timeline {
                     items[i].steps.push((t, ItemStep::Created(*block)));
                     at[i] = Some(*block);
                     bump(&mut blocks, &mut counts, *block, t, true);
+                    if is_belt(*block) {
+                        belt_events
+                            .entry(*block)
+                            .or_default()
+                            .push(BeltEv::In { t, item: i });
+                    }
                 }
                 TraceEvent::Moved { item, from, to } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
@@ -310,6 +348,18 @@ impl Timeline {
                     if let Some(track) = blocks.get_mut(*to) {
                         track.arrivals.push(t);
                     }
+                    if is_belt(*from) {
+                        belt_events
+                            .entry(*from)
+                            .or_default()
+                            .push(BeltEv::Out { t, item: i });
+                    }
+                    if is_belt(*to) {
+                        belt_events
+                            .entry(*to)
+                            .or_default()
+                            .push(BeltEv::In { t, item: i });
+                    }
                     at[i] = Some(*to);
                 }
                 TraceEvent::Packed { item, container } => {
@@ -318,6 +368,12 @@ impl Timeline {
                     items[i].steps.push((t, ItemStep::Packed(c)));
                     if let Some(b) = at[i].take() {
                         bump(&mut blocks, &mut counts, b, t, false);
+                        if is_belt(b) {
+                            belt_events
+                                .entry(b)
+                                .or_default()
+                                .push(BeltEv::Out { t, item: i });
+                        }
                     }
                 }
                 TraceEvent::Unpacked { item, block } => {
@@ -325,6 +381,12 @@ impl Timeline {
                     items[i].steps.push((t, ItemStep::Unpacked(*block)));
                     at[i] = Some(*block);
                     bump(&mut blocks, &mut counts, *block, t, true);
+                    if is_belt(*block) {
+                        belt_events
+                            .entry(*block)
+                            .or_default()
+                            .push(BeltEv::In { t, item: i });
+                    }
                 }
                 TraceEvent::Destroyed { item } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
@@ -332,11 +394,28 @@ impl Timeline {
                     items[i].destroyed = items[i].destroyed.min(t);
                     if let Some(b) = at[i].take() {
                         bump(&mut blocks, &mut counts, b, t, false);
+                        if is_belt(b) {
+                            belt_events
+                                .entry(b)
+                                .or_default()
+                                .push(BeltEv::Out { t, item: i });
+                        }
                     }
                 }
                 TraceEvent::State { block, state } => {
                     if let Some(track) = blocks.get_mut(*block) {
                         track.states.push((t, *state));
+                    }
+                    if is_belt(*block) {
+                        // A breakdown or a shift stops the belt (the kernel shows these states).
+                        let on = matches!(state, State::Down | State::OffShift);
+                        let was = belt_halted.insert(*block, on).unwrap_or(false);
+                        if on != was {
+                            belt_events
+                                .entry(*block)
+                                .or_default()
+                                .push(BeltEv::Halt { t, on });
+                        }
                     }
                 }
                 TraceEvent::Travel {
@@ -349,8 +428,12 @@ impl Timeline {
                         legs.entry(*carrier).or_default().push(leg);
                     }
                 }
-                // Rack slots are drawn by the phase 5 viewer front.
-                TraceEvent::Slot { .. } => {}
+                TraceEvent::Slot { item, block, slot } => {
+                    let i = item_index(*item, &mut index, &mut items, &mut at);
+                    slots.entry((*block, i)).or_default().push((t, *slot));
+                    let m = max_slot.entry(*block).or_insert(0);
+                    *m = (*m).max(*slot);
+                }
             }
         }
         // Items only seen as containers (no own event) never exist visually.
@@ -387,7 +470,11 @@ impl Timeline {
             for (k, step) in it.steps.iter_mut().enumerate() {
                 if let ItemStep::Moved { from, to, transit } = &mut step.1 {
                     // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
-                    if is_mobile(*from) || is_mobile(*to) {
+                    if is_mobile(*from)
+                        || is_mobile(*to)
+                        || is_positioned(*from)
+                        || is_positioned(*to)
+                    {
                         *transit = 0.0;
                         continue;
                     }
@@ -404,6 +491,16 @@ impl Timeline {
             TransitSetting::Fixed(v) => v,
             TransitSetting::Auto => global_default,
         };
+        let end = if replay.stop_time.is_finite() {
+            replay.stop_time
+        } else {
+            span
+        }
+        .max(span);
+        let belts = belt_events
+            .iter()
+            .map(|(&b, ev)| (b, BeltTrack::build(BeltParams::default(), ev, end)))
+            .collect();
         Timeline {
             blocks,
             items,
@@ -414,7 +511,43 @@ impl Timeline {
             mobile,
             legs,
             n_travels,
+            belt_events,
+            belts,
+            end,
+            slots,
+            max_slot,
         }
+    }
+
+    /// Rebuilds the motion on conveyor block `b` with its real parameters (a replay
+    /// carries only kind names; the model has the rest).
+    pub fn set_belt_params(&mut self, b: usize, params: BeltParams) {
+        if let Some(events) = self.belt_events.get(&b) {
+            self.belts
+                .insert(b, BeltTrack::build(params, events, self.end));
+        }
+    }
+
+    /// Motion rebuilt for conveyor block `b` (`None` when it never carried an item).
+    pub fn belt_track(&self, b: usize) -> Option<&BeltTrack> {
+        self.belts.get(&b)
+    }
+
+    /// Distance from the start of conveyor `b` of `item` at `t`.
+    pub fn belt_position(&self, b: usize, item: usize, t: f64) -> Option<f64> {
+        self.belts.get(&b)?.position_of(item, t)
+    }
+
+    /// Storage slot (`level * bays + bay`) of `item` in rack `b` at `t`.
+    pub fn rack_slot(&self, b: usize, item: usize, t: f64) -> Option<usize> {
+        let list = self.slots.get(&(b, item))?;
+        let k = list.partition_point(|s| s.0 <= t).checked_sub(1)?;
+        Some(list[k].1)
+    }
+
+    /// Highest storage slot seen in rack `b`.
+    pub fn max_slot(&self, b: usize) -> Option<usize> {
+        self.max_slot.get(&b).copied()
     }
 
     /// Whether block `b` is a mobile resource (transporter or dispatcher).
