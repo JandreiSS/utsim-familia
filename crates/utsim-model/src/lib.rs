@@ -41,6 +41,12 @@ pub struct RunSettings {
     pub seed: u64,
     #[serde(default = "one_u32")]
     pub replications: u32,
+    /// Sample block content/state every this many time units (None = off).
+    #[serde(default)]
+    pub sample_interval: Option<f64>,
+    /// Build histograms with this many bins (None = off).
+    #[serde(default)]
+    pub histogram_bins: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -118,6 +124,13 @@ impl Model {
         }
         if run.replications == 0 {
             errors.push("run.replications deve ser >= 1".to_string());
+        }
+
+        if run.sample_interval.is_some_and(|v| !(v.is_finite() && v > 0.0)) {
+            errors.push("run.sample_interval deve ser finito e > 0".to_string());
+        }
+        if run.histogram_bins == Some(0) {
+            errors.push("run.histogram_bins deve ser >= 1".to_string());
         }
 
         let mut names = HashSet::new();
@@ -216,6 +229,8 @@ impl Model {
             warmup: self.run.warmup,
             seed: self.run.seed,
             replication,
+            sample_interval: self.run.sample_interval,
+            histogram_bins: self.run.histogram_bins,
         });
         let mut ids = HashMap::new();
         for obj in &self.objects {

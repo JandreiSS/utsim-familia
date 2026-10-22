@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::Time;
-use crate::stats::{Summary, Tally};
+use crate::stats::{Histogram, Summary, Tally};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TallySummary {
@@ -14,12 +14,38 @@ pub struct TallySummary {
     pub std_dev: f64,
     pub min: f64,
     pub max: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub histogram: Option<Histogram>,
 }
 
 impl From<&Tally> for TallySummary {
     fn from(t: &Tally) -> Self {
-        TallySummary { count: t.count(), mean: t.mean(), std_dev: t.std_dev(), min: t.min(), max: t.max() }
+        TallySummary {
+            count: t.count(),
+            mean: t.mean(),
+            std_dev: t.std_dev(),
+            min: t.min(),
+            max: t.max(),
+            histogram: None,
+        }
     }
+}
+
+impl TallySummary {
+    /// Summary plus a histogram with `bins` bins when the tally kept raw observations.
+    pub fn with_histogram(t: &Tally, bins: Option<usize>) -> Self {
+        let mut s = TallySummary::from(t);
+        s.histogram = bins.and_then(|b| Histogram::build(t.raw()?, b));
+        s
+    }
+}
+
+/// Block content and state at one sampling instant.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SeriesPoint {
+    pub t: Time,
+    pub content: usize,
+    pub state: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,6 +62,9 @@ pub struct BlockReport {
     pub states: BTreeMap<String, f64>,
     /// Tallies recorded by the block itself (e.g. `time_in_system` at a sink).
     pub extra: BTreeMap<String, TallySummary>,
+    /// Time series sampled every `sample_interval` (empty when sampling is off).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub series: Vec<SeriesPoint>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
