@@ -10,6 +10,7 @@ default-members = [
     "crates/utsim-flow",
     "crates/utsim-model",
     "crates/utsim-objects",
+    "crates/utsim-opt",
     "crates/utsim-script",
 ]
 
@@ -28,6 +29,7 @@ utsim-fit = { path = "crates/utsim-fit" }
 utsim-edit = { path = "crates/utsim-edit" }
 utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
+utsim-opt = { path = "crates/utsim-opt" }
 
 rand = "0.9"
 rand_distr = "0.5"

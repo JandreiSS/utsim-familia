@@ -5965,6 +5965,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-opt"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "utsim-core",
+ "utsim-model",
+]
+
+[[package]]
 name = "utsim-script"
 version = "0.1.0"
 dependencies = [

@@ -85,7 +85,8 @@ a situação atual e onde está a prova de que funciona.
 | RF-90 | descrever lógica com fluxos de tokens: gerar, esperar, decidir, atribuir, recursos, eventos de objetos, criar itens, lotes | 6 | ✅ | `tests/flows.rs` (16 casos à mão + M/M/1 só com fluxo) |
 | RF-91 | escrever expressões e scripts (Rhai) para rótulos, condições, regra de saída e gatilho de entrada | 6 | ✅ | `tests/scripts.rs`, `logic_contract.rs` |
 | RF-92 | ver e editar os fluxos no editor, com a contagem de tokens durante a simulação | 6 | ✅ | `flows.rs`/`flows_ui.rs` do visualizador, roteiros `fluxos.ron` e `fluxos_simular.ron` |
-| RF-100 | buscar automaticamente os melhores parâmetros (otimização) | 7 | ⏳ |
+| RF-100 | buscar automaticamente os melhores parâmetros, com objetivo de custo e restrições | 7 | 🔄 (busca exaustiva ✅) |
+| RF-102 | dizer se o melhor ponto é estatisticamente melhor que os outros (comparação pareada com as mesmas sementes) | 7 | ✅ (`utsim-opt`) |
 | RF-101 | rodar modelos no navegador | 7 | ⏳ |
 
 ## Requisitos não funcionais (RNF)
