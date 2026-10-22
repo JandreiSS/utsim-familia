@@ -9,6 +9,15 @@
 //! eye, a `Moved` event is drawn as a *transit* from `from` to `to` that starts at the
 //! event time and lasts `transit` time units (never past the item's next event). The
 //! simulation-true content counts already include a transiting item in `to`.
+//!
+//! Mobile resources (phase 4). Moves into or out of a transporter are real pick-ups
+//! and drop-offs, so they get no visual transit: the item simply sits inside the
+//! carrier ([`ItemPos::At`] of the transporter block) and the carrier's own motion,
+//! from `Travel` events, shows the movement. The carrier's position is piecewise
+//! linear along the path by arc length, and linear in time over the leg's duration.
+//! The trapezoidal speed profile (acceleration/deceleration) cannot be inferred from
+//! the trace alone, which carries only path and duration, so it is not applied; the
+//! leg endpoints and total time are exact, only the mid-leg phase differs.
 
 use std::collections::HashMap;
 
@@ -62,6 +71,69 @@ struct ItemTrack {
     steps: Vec<(f64, ItemStep)>,
     created: f64,
     destroyed: f64,
+}
+
+/// One `Travel` event of a mobile resource.
+#[derive(Clone, Debug)]
+struct TravelLeg {
+    t0: f64,
+    duration: f64,
+    path: Vec<[f64; 3]>,
+    /// Arc length from the start of the path to each point.
+    cum: Vec<f64>,
+}
+
+impl TravelLeg {
+    fn new(t0: f64, duration: f64, path: &[[f64; 3]]) -> Option<Self> {
+        if path.is_empty() {
+            return None;
+        }
+        let mut cum = Vec::with_capacity(path.len());
+        let mut total = 0.0;
+        cum.push(0.0);
+        for w in path.windows(2) {
+            total += dist3(w[0], w[1]);
+            cum.push(total);
+        }
+        Some(TravelLeg {
+            t0,
+            duration,
+            path: path.to_vec(),
+            cum,
+        })
+    }
+
+    fn at(&self, t: f64) -> [f64; 3] {
+        let last = self.path.len() - 1;
+        let total = self.cum[last];
+        let elapsed = t - self.t0;
+        if self.duration <= 0.0 || elapsed >= self.duration || total <= 0.0 {
+            return self.path[last];
+        }
+        let target = (elapsed / self.duration).clamp(0.0, 1.0) * total;
+        let k = self.cum.partition_point(|&c| c <= target).clamp(1, last);
+        let (c0, c1) = (self.cum[k - 1], self.cum[k]);
+        let f = if c1 > c0 {
+            (target - c0) / (c1 - c0)
+        } else {
+            0.0
+        };
+        let (a, b) = (self.path[k - 1], self.path[k]);
+        [
+            a[0] + (b[0] - a[0]) * f,
+            a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
+        ]
+    }
+}
+
+fn dist3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// Block kinds that move (their items are carried, not shown on a fixed surface).
+pub fn is_mobile_kind(kind: &str) -> bool {
+    matches!(kind, "Transporter" | "Dispatcher")
 }
 
 #[derive(Clone, Debug, Default)]
@@ -144,6 +216,11 @@ pub struct Timeline {
     event_times: Vec<f64>,
     n_records: usize,
     transit_default: f64,
+    /// Per block: whether it is a mobile resource.
+    mobile: Vec<bool>,
+    /// Travel legs per mobile block, in time order.
+    legs: HashMap<usize, Vec<TravelLeg>>,
+    n_travels: usize,
 }
 
 fn median(values: &mut [f64]) -> Option<f64> {
@@ -164,6 +241,14 @@ impl Timeline {
         let mut at: Vec<Option<usize>> = Vec::new();
         let mut counts = vec![0usize; n_blocks];
         let mut event_times: Vec<f64> = Vec::new();
+        let mobile: Vec<bool> = replay
+            .blocks
+            .iter()
+            .map(|b| is_mobile_kind(&b.kind))
+            .collect();
+        let is_mobile = |b: usize| mobile.get(b).copied().unwrap_or(false);
+        let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
+        let mut n_travels = 0usize;
 
         let item_index = |key: u64,
                           index: &mut HashMap<u64, usize>,
@@ -249,8 +334,16 @@ impl Timeline {
                         track.states.push((t, *state));
                     }
                 }
-                // Mobile resources are animated from phase 4 on.
-                TraceEvent::Travel { .. } => {}
+                TraceEvent::Travel {
+                    carrier,
+                    path,
+                    duration,
+                } => {
+                    n_travels += 1;
+                    if let Some(leg) = TravelLeg::new(t, *duration, path) {
+                        legs.entry(*carrier).or_default().push(leg);
+                    }
+                }
             }
         }
         // Items only seen as containers (no own event) never exist visually.
@@ -285,7 +378,12 @@ impl Timeline {
             };
             let times: Vec<f64> = it.steps.iter().map(|s| s.0).collect();
             for (k, step) in it.steps.iter_mut().enumerate() {
-                if let ItemStep::Moved { transit, .. } = &mut step.1 {
+                if let ItemStep::Moved { from, to, transit } = &mut step.1 {
+                    // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
+                    if is_mobile(*from) || is_mobile(*to) {
+                        *transit = 0.0;
+                        continue;
+                    }
                     let gap = times
                         .get(k + 1)
                         .map_or(f64::INFINITY, |next| next - times[k]);
@@ -306,7 +404,34 @@ impl Timeline {
             event_times,
             n_records: replay.records.len(),
             transit_default,
+            mobile,
+            legs,
+            n_travels,
         }
+    }
+
+    /// Whether block `b` is a mobile resource (transporter or dispatcher).
+    pub fn is_mobile(&self, b: usize) -> bool {
+        self.mobile.get(b).copied().unwrap_or(false)
+    }
+
+    /// Number of mobile resources (transporters and dispatchers).
+    pub fn mobile_count(&self) -> usize {
+        self.mobile.iter().filter(|m| **m).count()
+    }
+
+    /// Number of `Travel` events in the trace.
+    pub fn travel_count(&self) -> usize {
+        self.n_travels
+    }
+
+    /// Model-space position `(x, y, z)` of mobile block `b` at `t`, or `None` while it
+    /// has not started any travel (then it rests at its layout position). Stationary at
+    /// the last point of its latest leg between and after travels.
+    pub fn carrier_pos(&self, b: usize, t: f64) -> Option<[f64; 3]> {
+        let legs = self.legs.get(&b)?;
+        let k = legs.partition_point(|l| l.t0 <= t).checked_sub(1)?;
+        Some(legs[k].at(t))
     }
 
     pub fn block_count(&self) -> usize {
@@ -605,5 +730,90 @@ mod tests {
             }
         }
         assert!(inside > 0);
+    }
+
+    const CARRIER_MODEL: &str = r#"Model(
+        name: "t",
+        run: (stop_time: 40.0, seed: 1, replications: 1),
+        objects: [
+            (name: "src", kind: Source(interarrival: Const(5.0), first_at_zero: true, max_arrivals: 2),
+                position: (0.0, 0.0, 0.0), transport: Some("emp")),
+            (name: "proc", kind: Processor(process: Const(1.0)), position: (10.0, 0.0, 0.0)),
+            (name: "sink", kind: Sink, position: (20.0, 0.0, 0.0)),
+            (name: "emp", kind: Transporter(speed: 2.0), position: (0.0, 4.0, 0.0)),
+        ],
+        connections: [("src", "proc"), ("proc", "sink")],
+    )"#;
+
+    #[test]
+    fn carrier_moves_along_its_travels_and_carries_items() {
+        let rep = replay_of(CARRIER_MODEL);
+        let tl = Timeline::build(&rep, TransitSetting::Fixed(0.3));
+        let emp = rep.blocks.iter().position(|b| b.name == "emp").unwrap();
+        assert!(tl.is_mobile(emp));
+        assert_eq!(tl.mobile_count(), 1);
+        assert!(tl.travel_count() > 0);
+        // Before the first travel it has no trace position.
+        assert_eq!(tl.carrier_pos(emp, -1.0), None);
+        let (t0, path, duration) = rep
+            .records
+            .iter()
+            .find_map(|r| match &r.event {
+                TraceEvent::Travel {
+                    carrier,
+                    path,
+                    duration,
+                } if *carrier == emp && *duration > 0.0 => Some((r.t, path.clone(), *duration)),
+                _ => None,
+            })
+            .unwrap();
+        let start = tl.carrier_pos(emp, t0).unwrap();
+        assert_eq!(start, path[0]);
+        let end = tl.carrier_pos(emp, t0 + duration).unwrap();
+        assert_eq!(end, *path.last().unwrap());
+        // Items moved into/out of the carrier have no visual transit.
+        let mut checked = false;
+        for r in &rep.records {
+            if let TraceEvent::Moved { to, from, .. } = r.event
+                && (to == emp || from == emp)
+            {
+                for i in 0..tl.item_count() {
+                    let p = tl.item_pos(i, r.t + 1e-6);
+                    assert!(
+                        !matches!(p, ItemPos::Transit { from: f, to: d, .. } if f == emp || d == emp),
+                        "{p:?}"
+                    );
+                }
+                checked = true;
+            }
+        }
+        assert!(checked, "the example must move items through the carrier");
+        // Some item sits inside the carrier at some instant.
+        let mut inside = false;
+        let mut t = 0.0;
+        while t < 40.0 {
+            let mut live = Vec::new();
+            tl.live_items(t, &mut live);
+            inside |= live.iter().any(|&i| tl.item_pos(i, t) == ItemPos::At(emp));
+            t += 0.05;
+        }
+        assert!(inside);
+    }
+
+    #[test]
+    fn travel_leg_interpolates_by_arc_length() {
+        let leg = TravelLeg::new(
+            10.0,
+            4.0,
+            &[[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [3.0, 1.0, 0.0]],
+        )
+        .unwrap();
+        assert_eq!(leg.at(10.0), [0.0, 0.0, 0.0]);
+        assert_eq!(leg.at(13.0), [3.0, 0.0, 0.0]);
+        assert_eq!(leg.at(11.0), [1.0, 0.0, 0.0]);
+        assert_eq!(leg.at(100.0), [3.0, 1.0, 0.0]);
+        assert!(TravelLeg::new(0.0, 1.0, &[]).is_none());
+        let still = TravelLeg::new(0.0, 0.0, &[[1.0, 2.0, 3.0]]).unwrap();
+        assert_eq!(still.at(5.0), [1.0, 2.0, 3.0]);
     }
 }
