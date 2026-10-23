@@ -98,7 +98,7 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [x] **Validação:** centro de distribuição (`examples/centro_de_distribuicao.ron`): conservação de itens, vazão, lei de Little no porta-paletes, determinismo
 
 ## 3D realista e realidade virtual (plano em `docs/plano_3d_realista.md`)
-- [ ] A3D-1: cena independente de motor (`utsim-scene`), `utsim cena`, visualizador usando a cena
+- [x] A3D-1: cena independente de motor (`utsim-scene`), `utsim cena`, visualizador usando a cena
 - [ ] A3D-2: modelos articulados gerados por código (empilhadeira, AGV, porta-paletes...) e carga de glTF
 - [ ] A3D-3: pessoas animadas, itens presos às mãos e aos garfos, garfos até o nível, giro suave
 - [ ] A3D-4: câmeras de seguir e de primeira pessoa; instâncias e níveis de detalhe

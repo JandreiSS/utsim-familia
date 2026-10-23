@@ -81,7 +81,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-74 | reservar lugar no destino ao pedir o transporte, para nunca entregar onde não cabe | 4 | ✅ |
 | RF-80 | ter esteiras com comprimento, velocidade e espaço por item, com ou sem acúmulo | 5 | ✅ | `tests/conveyor.rs` (10 casos à mão + vazão) |
 | RF-81 | ter porta-paletes com posições endereçáveis (colunas × níveis), regra de ocupação e tempo mínimo armazenado | 5 | ✅ | `tests/rack.rs` (posições exatas, quebra, M/M/∞) |
-| RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ✅ | `tests/handling.rs` (posições batem com o kernel), roteiro `esteiras_e_armazem.ron` |
+| RF-82 | mostrar esteiras e porta-paletes no 3D, com os itens na posição certa | 5 | ✅ | `utsim-scene/tests/handling.rs` (posições batem com o kernel), roteiro `esteiras_e_armazem.ron` |
 | RF-90 | descrever lógica com fluxos de tokens: gerar, esperar, decidir, atribuir, recursos, eventos de objetos, criar itens, lotes | 6 | ✅ | `tests/flows.rs` (16 casos à mão + M/M/1 só com fluxo) |
 | RF-91 | escrever expressões e scripts (Rhai) para rótulos, condições, regra de saída e gatilho de entrada | 6 | ✅ | `tests/scripts.rs`, `logic_contract.rs` |
 | RF-92 | ver e editar os fluxos no editor, com a contagem de tokens durante a simulação | 6 | ✅ | `flows.rs`/`flows_ui.rs` do visualizador, roteiros `fluxos.ron` e `fluxos_simular.ron` |
@@ -95,6 +95,10 @@ a situação atual e onde está a prova de que funciona.
 | RF-107 | conectar a simulação a um CLP real ou simulado por OPC UA, em tempo real | 7 | ✅ | `utsim-emu/tests` (servidor OPC UA, ritmo em tempo real, registro de comandos); `utsim emular` |
 | RF-108 | treinar agentes de aprendizado por reforço sobre o modelo (ambiente estilo Gym) | 7 | ✅ | `utsim-env` (`Env`, Q-learning tabular): `tests/env.rs` (recompensa conferida à mão, determinismo), `tests/learning.rs` (Q-learning vence a política aleatória e fica a ~4% da heurística), ligações Python em `crates/utsim-py` |
 | RF-109 | ver o modelo em 3D no navegador | 7 | ✅ | aba 3D de `web/` (visualizador Bevy em WebGL2, `web/viewer.html`), testada à mão com `mm1` e `armazem`; build no job `web` da CI |
+| RF-110 | entregar a cena 3D de uma rodada a qualquer motor gráfico: pose, papel (pessoa, empilhadeira, AGV) e movimento (andando, carregando, garfos subindo) de cada entidade, em metros e com Z para cima | 8 | ✅ | `utsim-scene/tests/scene.rs` (11 casos conferidos à mão); `utsim cena` grava o fluxo `utsim-scene/1` |
+| RF-111 | abrir modelos de versões anteriores do formato e recusar com clareza os de versões mais novas | 8 | ✅ | `utsim-model/tests/formato.rs` e testes de migração em `utsim-model` |
+| RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | ⏳ | plano em `docs/plano_3d_realista.md` |
+| RF-113 | visitar o modelo em realidade virtual | A3D | ⏳ | cena já preparada (escala real, protocolo versionado); cliente Unreal/OpenXR planejado |
 
 ## Requisitos não funcionais (RNF)
 
@@ -123,3 +127,5 @@ a situação atual e onde está a prova de que funciona.
 | RNF-21 | manter o custo dos scripts baixo: cerca de 1 µs por chamada (um modelo de 100 mil itens com script de entrada roda em ~0,2 s) | ✅ | medido na frente 6B; o motor sem script leva ~0,6 µs por item |
 | RNF-22 | rodar sem instalar nada: a página do navegador é um único arquivo (~5,5 MB) que funciona sem servidor | ✅ | `scripts/web.sh`, `web/smoke.mjs`, job `web` do CI |
 | RNF-23 | otimizar rápido: um problema de 15 pontos × 5 replicações + refinamento em ~0,3 s | ✅ | `utsim otimizar examples/otimizacao_servidores.ron` |
+| RNF-24 | manter o cálculo da cena 3D puro e independente de motor gráfico (sem Bevy), compilando também para o navegador | ✅ | `cargo build -p utsim-scene --target wasm32-unknown-unknown` |
+| RNF-25 | publicar versões com binários para Windows, Linux e a página web a cada tag | 🔄 | `.github/workflows/release.yml` (ainda não rodou no GitHub) |
