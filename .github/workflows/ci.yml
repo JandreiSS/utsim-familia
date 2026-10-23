@@ -43,14 +43,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Portabilidade das bibliotecas (sem rayon)
         run: cargo build --target wasm32-unknown-unknown -p utsim-model -p utsim-fit --no-default-features
-      - name: Construir a página (scripts/web.sh instala o wasm-bindgen-cli)
+      - name: Construir a página e o visualizador 3D (scripts/web.sh instala o wasm-bindgen-cli)
         run: bash scripts/web.sh
+      - name: Tamanho do visualizador 3D (wasm)
+        run: ls -l web/dist/viewer
       - name: Teste de fumaça em Node
         run: node web/smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: utsim-html
           path: web/dist/utsim.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utsim-viewer-wasm
+          path: web/dist/viewer
 
   viewer:
     name: Visualizador 3D (Bevy, clippy e testes)
