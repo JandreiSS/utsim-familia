@@ -123,5 +123,5 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [x] AGVs: capacidade por trecho, espera FIFO, detecção de impasse (`examples/agvs.ron`)
 - [x] Emulação via OPC UA em tempo real, com gravação e reprodução de comandos (`utsim emular`)
 - [x] Visualizador 3D no navegador (WebGL2, aba 3D da página)
-- [ ] Fluidos e AGVs desenhados no 3D (níveis dos tanques, trechos controlados)
+- [x] Fluidos e AGVs desenhados no 3D (níveis dos tanques, trechos controlados; roteiros `fluidos_tanques.ron` e `agvs.ron`)
 - [x] Build WASM: rodar modelos no navegador (`utsim-web`, página `web/`, `scripts/web.sh`)
