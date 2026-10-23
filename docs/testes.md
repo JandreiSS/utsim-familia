@@ -167,6 +167,9 @@ atividade selecionada, expressão com erro em linha, novo fluxo, desfazer, `on_e
 script) e `fluxos_simular.ron` (com `examples/fluxo_docas.ron`: contagem de tokens ao vivo no diagrama em
 Simular). O botão "Fluxos" da barra tem o mesmo rótulo do título do painel, então os roteiros o clicam por
 `Tela(611.0, 12.0)`. `Digitar` não digita espaços (use `2+x`, sem espaços).
+Fluidos e AGVs (fase 7): `fluidos_tanques.ron` (com `examples/tanques.ron`: tanques enchendo e esvaziando,
+seleção pela lista e por clique, painel com nível e taxa) e `agvs.ron` (com `examples/agvs.ron`: aresta com
+capacidade em vermelho, AGVs andando e um AGV bloqueado esperando a pista única).
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a

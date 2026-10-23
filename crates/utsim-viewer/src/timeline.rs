@@ -241,6 +241,19 @@ pub struct Timeline {
     max_slot: HashMap<usize, usize>,
     /// Token counts per (flow block, activity), from the flow engine's trace events.
     tokens: crate::flows::TokenTrack,
+    /// Fluid samples per (network block, node): `(t, level, rate)` in time order.
+    fluid: FluidSeries,
+}
+
+/// Samples `(t, level, rate)` of each fluid node, by (network block, node).
+type FluidSeries = HashMap<(usize, usize), Vec<(f64, f64, f64)>>;
+
+/// Level and rate of a fluid node at one instant.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FluidSample {
+    pub level: f64,
+    /// Change per time unit (tanks: net rate; other nodes: flow through them).
+    pub rate: f64,
 }
 
 /// Block kinds whose items sit at a modelled position (no visual transit).
@@ -284,6 +297,7 @@ impl Timeline {
         let mut slots: HashMap<(usize, usize), Vec<(f64, usize)>> = HashMap::new();
         let mut max_slot: HashMap<usize, usize> = HashMap::new();
         let mut tokens = crate::flows::TokenTrack::default();
+        let mut fluid = FluidSeries::new();
         let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
         let mut n_travels = 0usize;
 
@@ -436,8 +450,15 @@ impl Timeline {
                     activity,
                     count,
                 } => tokens.push(t, *flow, *activity, *count),
-                // Fluid levels are drawn by the phase 7 fluid view.
-                TraceEvent::Fluid { .. } => {}
+                TraceEvent::Fluid {
+                    net,
+                    node,
+                    level,
+                    rate,
+                } => fluid
+                    .entry((*net, *node))
+                    .or_default()
+                    .push((t, *level, *rate)),
                 TraceEvent::Slot { item, block, slot } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     slots.entry((*block, i)).or_default().push((t, *slot));
@@ -527,6 +548,7 @@ impl Timeline {
             slots,
             max_slot,
             tokens,
+            fluid,
         }
     }
 
@@ -638,6 +660,30 @@ impl Timeline {
     /// Tokens in activity `activity` of flow block `flow` at time `t`.
     pub fn tokens_at(&self, flow: usize, activity: usize, t: f64) -> u32 {
         self.tokens.at(flow, activity, t)
+    }
+
+    /// Level and rate of node `node` of fluid network `net` (its block index) at `t`, or
+    /// `None` before the first sample. Between samples the level changes linearly:
+    /// `level + rate * (t - t_sample)`, kept within `0..=capacity` (`None` = no upper
+    /// bound; pass the tank's capacity).
+    pub fn fluid_at(
+        &self,
+        net: usize,
+        node: usize,
+        t: f64,
+        capacity: Option<f64>,
+    ) -> Option<FluidSample> {
+        let samples = self.fluid.get(&(net, node))?;
+        let k = samples.partition_point(|s| s.0 <= t).checked_sub(1)?;
+        let (t0, level, rate) = samples[k];
+        let level = (level + rate * (t - t0)).max(0.0);
+        let level = capacity.map_or(level, |c| level.min(c));
+        Some(FluidSample { level, rate })
+    }
+
+    /// Whether the trace has any fluid sample (the model has a fluid network).
+    pub fn has_fluid(&self) -> bool {
+        !self.fluid.is_empty()
     }
 
     /// Whether the trace has any token count (the model has a running flow).
@@ -1018,5 +1064,92 @@ mod tests {
         assert_eq!(tl.tokens_at(n, 1, 35.0), 2);
         assert_eq!(tl.tokens_at(n, 1, 40.0), 0);
         assert_eq!(tl.tokens_at(n, 0, 35.0), 0);
+    }
+
+    #[test]
+    fn fluid_example_levels_match_the_next_trace_sample() {
+        // Linear extrapolation from one sample must land on the next sample's level
+        // (tanks only), which is what makes the 3D animation continuous.
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/tanques.ron"
+        ))
+        .unwrap();
+        let mut model = Model::parse(&text).unwrap();
+        model.run.stop_time = 300.0;
+        model.run.warmup = 0.0;
+        let rep = model.replay(0).unwrap();
+        let net = rep.blocks.iter().position(|b| b.kind == "Fluid").unwrap();
+        let tl = Timeline::build(&rep, TransitSetting::Auto);
+        assert!(tl.has_fluid());
+        // Node 1 is the storage tank (capacity 100, initial level 20).
+        let start = tl.fluid_at(net, 1, 0.0, Some(100.0)).unwrap();
+        assert_eq!(start.level, 20.0);
+        let mut checked = 0;
+        let samples: Vec<(f64, f64)> = rep
+            .records
+            .iter()
+            .filter_map(|r| match r.event {
+                TraceEvent::Fluid {
+                    net: n,
+                    node: 1,
+                    level,
+                    ..
+                } if n == net => Some((r.t, level)),
+                _ => None,
+            })
+            .collect();
+        for w in samples.windows(2) {
+            let ((t0, _), (t1, l1)) = (w[0], w[1]);
+            if t1 > t0 {
+                // Just before the next sample the extrapolated level approaches it,
+                // unless that sample is a jump (a truck unloading), which is the
+                // case when the extrapolation stops short of it.
+                let before = tl.fluid_at(net, 1, t1 - 1e-9, Some(100.0)).unwrap().level;
+                if (before - l1).abs() < 1e-6 {
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 5, "only {checked} continuous segments");
+    }
+
+    #[test]
+    fn fluid_levels_interpolate_linearly_and_stay_in_range() {
+        let mut rep = replay_of(MODEL);
+        let at = |t, node, level, rate| utsim_core::TraceRecord {
+            t,
+            event: TraceEvent::Fluid {
+                net: 9,
+                node,
+                level,
+                rate,
+            },
+        };
+        rep.records.push(at(10.0, 0, 20.0, 2.0));
+        rep.records.push(at(20.0, 0, 40.0, -4.0));
+        rep.records.push(at(30.0, 0, 0.0, 0.0));
+        rep.records.push(at(10.0, 1, 0.0, 1.5));
+        rep.records.push(at(10.0, 3, 5.0, -2.0));
+        let tl = Timeline::build(&rep, TransitSetting::Auto);
+        assert!(tl.has_fluid());
+        // Before the first sample nothing is known.
+        assert_eq!(tl.fluid_at(9, 0, 9.9, Some(100.0)), None);
+        let s = tl.fluid_at(9, 0, 10.0, Some(100.0)).unwrap();
+        assert_eq!((s.level, s.rate), (20.0, 2.0));
+        // Filling: 20 + 2 * 5.
+        assert_eq!(tl.fluid_at(9, 0, 15.0, Some(100.0)).unwrap().level, 30.0);
+        // Draining: 40 - 4 * 2.5.
+        let s = tl.fluid_at(9, 0, 22.5, Some(100.0)).unwrap();
+        assert_eq!((s.level, s.rate), (30.0, -4.0));
+        // Never below zero nor above the capacity, even past the next event.
+        assert_eq!(tl.fluid_at(9, 0, 100.0, Some(100.0)).unwrap().level, 0.0);
+        assert_eq!(tl.fluid_at(9, 0, 29.0, Some(100.0)).unwrap().level, 4.0);
+        assert_eq!(tl.fluid_at(9, 3, 100.0, Some(100.0)).unwrap().level, 0.0);
+        assert_eq!(tl.fluid_at(9, 1, 1000.0, Some(50.0)).unwrap().level, 50.0);
+        assert_eq!(tl.fluid_at(9, 1, 1000.0, None).unwrap().level, 1485.0);
+        // Another node or network has its own series.
+        assert_eq!(tl.fluid_at(9, 2, 15.0, None), None);
+        assert_eq!(tl.fluid_at(8, 0, 15.0, None), None);
     }
 }
