@@ -24,20 +24,57 @@ use utsim_objects::{
     Transporter,
 };
 
+/// Reads only the `format` field; every other field is ignored.
+#[derive(Deserialize)]
+#[serde(rename = "Model")]
+struct FormatProbe {
+    #[serde(default)]
+    format: Option<u32>,
+}
+
+/// One migration step: rewrites RON text from one format version to the next. It works on
+/// text (not on a generic `ron::Value`) because a `Value` loses enum variants, which would
+/// corrupt the typed deserialization that follows.
+type Migration = fn(&str) -> Result<String, ModelError>;
+
+/// Migrations to the current format, as `(source version, step)` in ascending order.
+/// To add format 2: bump [`FORMAT_VERSION`], push `(1, v1_to_v2)` here (the step rewrites
+/// the text and sets `format: 2`), keep an old-format example in the tests, and document it.
+const MIGRATIONS: &[(u32, Migration)] = &[];
+
+/// Applies every step whose source version is `>= from`, in order. A model already at the
+/// current version passes through untouched.
+fn migrate(text: &str, from: u32, steps: &[(u32, Migration)]) -> Result<String, ModelError> {
+    let mut text = text.to_string();
+    for (_, step) in steps.iter().filter(|(source, _)| *source >= from) {
+        text = step(&text)?;
+    }
+    Ok(text)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
     #[error("não foi possível ler o modelo: {0}")]
     Io(#[from] std::io::Error),
     #[error("erro de sintaxe no modelo: {0}")]
     Parse(#[from] ron::error::SpannedError),
+    #[error("modelo no formato {found}; esta versão do UTSim lê até {supported}")]
+    Format { found: u32, supported: u32 },
     #[error("modelo inválido:\n  - {}", .0.join("\n  - "))]
     Invalid(Vec<String>),
     #[error(transparent)]
     Sim(#[from] SimError),
 }
 
+/// Current version of the model file format (see `docs/versionamento.md`).
+/// Files without a `format` field are version 1.
+pub const FORMAT_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Model {
+    /// Format version of the file. Absent means 1; newer than [`FORMAT_VERSION`] is rejected.
+    #[serde(default)]
+    pub format: Option<u32>,
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -265,7 +302,15 @@ impl Model {
     pub fn parse(text: &str) -> Result<Model, ModelError> {
         let options = ron::Options::default()
             .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
-        Ok(options.from_str(text)?)
+        let found = options.from_str::<FormatProbe>(text)?.format.unwrap_or(1);
+        if found > FORMAT_VERSION {
+            return Err(ModelError::Format {
+                found,
+                supported: FORMAT_VERSION,
+            });
+        }
+        let text = migrate(text, found, MIGRATIONS)?;
+        Ok(options.from_str(&text)?)
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Model, ModelError> {
@@ -847,5 +892,45 @@ impl Model {
                 utsim_core::Step::Finished => return Ok(sim.finish()),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+
+    const MINIMAL: &str = "Model(name: \"m\", run: (stop_time: 1.0), objects: [])";
+
+    fn fake_v0_to_v1(text: &str) -> Result<String, ModelError> {
+        // Fake rule: v0 called the model name `titulo`.
+        Ok(text
+            .replace("titulo:", "name:")
+            .replace("format: 0", "format: 1"))
+    }
+
+    #[test]
+    fn migrate_runs_steps() {
+        let v0 = "Model(format: 0, titulo: \"m\", run: (stop_time: 1.0), objects: [])";
+        assert!(Model::parse(v0).is_err());
+        let steps: &[(u32, Migration)] = &[(0, fake_v0_to_v1)];
+        let moved = migrate(v0, 0, steps).unwrap();
+        assert_eq!(Model::parse(&moved).unwrap().name, "m");
+        // Already at version 1: the v0 step is skipped.
+        assert_eq!(migrate(v0, 1, steps).unwrap(), v0);
+    }
+
+    #[test]
+    fn absent_format_is_version_1() {
+        assert_eq!(Model::parse(MINIMAL).unwrap().format, None);
+    }
+
+    #[test]
+    fn newer_format_is_rejected() {
+        let text = MINIMAL.replace("Model(", "Model(format: 99, ");
+        let err = Model::parse(&text).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            format!("modelo no formato 99; esta versão do UTSim lê até {FORMAT_VERSION}")
+        );
     }
 }
