@@ -106,6 +106,8 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Diagrama de fluxo: arrastar caixas, zoom; arestas longas desviando das caixas
 - [ ] Linha de status do Simular não deve contar os blocos de fluxo
 - [ ] Scripts: evitar a conversão de rótulos quando o script não usa `item` (custo por chamada)
+- [ ] Página web: o visualizador 3D tem 36 MB (testar `wasm-opt`, compressão); rodar a simulação num Web Worker; as métricas próprias (níveis de tanques) viram colunas largas na tabela
+- [ ] Emulação OPC UA: segurança (certificados, usuário) e publicação mais barata a cada tick
 - [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
 
 ## Fase 6: lógica do usuário
@@ -117,5 +119,9 @@ o ferramentas de ajuste, mas o desenho é nosso.
 ## Fase 7+: avançado
 - [x] Otimização de parâmetros: grade, recozimento simulado, genético, refinamento, comparação pareada (`utsim otimizar`)
 - [x] Aprendizado por reforço: decisão por agente no fluxo, ambiente estilo Gym (`utsim-env`), Q-learning tabular, ligações Python (`crates/utsim-py`)
-- [ ] Fluidos, AGVs, emulação via OPC UA
+- [x] Fluidos: tanques, tubos, fontes, sumidouros, conversores item↔volume (`utsim-fluid`, `examples/tanques.ron`)
+- [x] AGVs: capacidade por trecho, espera FIFO, detecção de impasse (`examples/agvs.ron`)
+- [x] Emulação via OPC UA em tempo real, com gravação e reprodução de comandos (`utsim emular`)
+- [x] Visualizador 3D no navegador (WebGL2, aba 3D da página)
+- [ ] Fluidos e AGVs desenhados no 3D (níveis dos tanques, trechos controlados)
 - [x] Build WASM: rodar modelos no navegador (`utsim-web`, página `web/`, `scripts/web.sh`)
