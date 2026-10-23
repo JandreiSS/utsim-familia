@@ -67,3 +67,5 @@ lto = true
 codegen-units = 1
 debug = false
 panic = "abort"
+# Drops the wasm `name` section (29 MB of the 65 MB 3D viewer module).
+strip = "symbols"

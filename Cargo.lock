@@ -6000,6 +6000,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "clap",
+ "js-sys",
  "ron 0.8.1",
  "serde",
  "serde_json",
@@ -6008,6 +6009,8 @@ dependencies = [
  "utsim-flow",
  "utsim-model",
  "utsim-script",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
