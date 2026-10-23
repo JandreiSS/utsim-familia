@@ -101,6 +101,29 @@ pub struct ObjectDef {
     /// Script run on every item entering this object (e.g. to set labels).
     #[serde(default)]
     pub on_entry: Option<String>,
+    /// How the object looks in 3D (asset, scale, colour). Presentation only: never
+    /// read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visual: Option<VisualDef>,
+}
+
+/// Look of an object in 3D. Every field is optional; the viewer falls back to the
+/// default shape of the object's kind.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct VisualDef {
+    /// Asset from the built-in library (e.g. "empilhadeira", "operador", "agv",
+    /// "porta_paletes") or a `.glb` file, relative to the model file.
+    #[serde(default)]
+    pub asset: Option<String>,
+    /// Uniform scale applied to the asset (1.0 = the asset's own size, in metres).
+    #[serde(default)]
+    pub scale: Option<f64>,
+    /// Rotation around the vertical axis, in degrees (counter-clockwise seen from above).
+    #[serde(default)]
+    pub yaw: Option<f64>,
+    /// Colour override, "#rrggbb".
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

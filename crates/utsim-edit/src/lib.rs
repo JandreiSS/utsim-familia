@@ -411,6 +411,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         shifts: None,
         transport: None,
         on_entry: None,
+        visual: None,
     })
 }
 

@@ -6875,6 +6875,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-scene"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "utsim-core",
+ "utsim-fluid",
+ "utsim-model",
+]
+
+[[package]]
 name = "utsim-script"
 version = "0.1.0"
 dependencies = [
