@@ -147,3 +147,24 @@ fn decisions_pause_the_run_and_route_items() {
     assert_eq!(r.block("a").unwrap().input, 6);
     assert_eq!(r.block("b").unwrap().input, 5);
 }
+
+#[test]
+fn default_decision_lets_agent_models_run_without_an_agent() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/roteamento_rl.ron");
+    let mut m = Model::load(&path).unwrap();
+    assert!(
+        m.run.default_decision.is_some(),
+        "o exemplo define a decisão padrão"
+    );
+    m.run.replications = 2;
+    assert_eq!(
+        m.run_replications().unwrap().len(),
+        2,
+        "utsim run funciona com a política padrão"
+    );
+    assert!(!m.replay(0).unwrap().records.is_empty(), "replay também");
+    m.run.default_decision = None;
+    let err = m.run_replications().unwrap_err().to_string();
+    assert!(err.contains("agente"), "{err}");
+}

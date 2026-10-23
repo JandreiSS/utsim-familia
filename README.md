@@ -107,6 +107,44 @@ automaticamente. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz in
 ajuste é feito sobre os intervalos), `--alpha 0.05`, `--bootstrap 300`, `--seed 1`,
 `--html relatorio.html` (histograma, Q-Q, P-P e ECDF) e `--json saida.json`.
 
+## Emulação (OPC UA)
+
+O UTSim pode rodar um modelo **em tempo real** e expô-lo por um servidor OPC UA, para
+comissionamento virtual: um CLP, um SCADA ou qualquer cliente OPC UA lê o estado dos blocos
+e comanda paradas como se fosse a planta.
+
+```bash
+cargo run --release -p utsim-cli -- emular examples/linha_com_bloqueio.ron --velocidade 10 --porta 4840 --gravar comandos.ron
+# Servidor OPC UA em opc.tcp://127.0.0.1:4840/
+```
+
+Opções: `--porta` (padrão 4840; 0 escolhe uma porta livre), `--velocidade` (1.0 = tempo
+real, 10.0 = dez vezes mais rápido; uma unidade de tempo do modelo vale 1 s de relógio na
+velocidade 1.0), `--ate T` (tempo simulado final; padrão `run.stop_time`), `--gravar f.ron`
+(grava os comandos recebidos) e `--reproduzir f.ron` (reaplica os comandos nos mesmos tempos
+simulados, sem OPC UA e sem esperar o relógio; produz o mesmo relatório). Ctrl-C encerra e
+grava o log.
+
+**Espaço de endereços** (namespace `urn:utsim:emulacao`, nós de texto, endpoint sem
+segurança e com acesso anônimo; use só em rede confiável):
+
+| Nó (`UTSim/<modelo>/...`) | Tipo | Acesso | Significado |
+|---|---|---|---|
+| `TempoSimulado` | Double | leitura | tempo simulado atual |
+| `Velocidade` | Double | leitura/escrita | fator de velocidade (maior que 0) |
+| `<bloco>/Conteudo` | UInt32 | leitura | itens dentro do bloco |
+| `<bloco>/Estado` | String | leitura | estado atual (`idle`, `processing`, `stopped`...) |
+| `<bloco>/Entradas` | UInt64 | leitura | itens que entraram |
+| `<bloco>/Saidas` | UInt64 | leitura | itens que saíram |
+| `<bloco>/Parar` | Boolean | leitura/escrita | `true` para o bloco, `false` o retoma |
+
+Os valores são atualizados a cada tick (50 ms) e as escritas são aplicadas no tick
+seguinte, no tempo simulado corrente; a simulação continua num só thread e determinística
+para a mesma sequência de comandos. Exemplo com um cliente genérico (UaExpert ou
+`opcua-commander`): conecte em `opc.tcp://127.0.0.1:4840/`, expanda `Objects > UTSim >
+<modelo>`, assine `fila/Conteudo` e `maquina/Estado` e escreva `true` em `maquina/Parar`:
+o estado muda para `stopped` e a fila passa a crescer.
+
 ## Formato do modelo
 
 Os modelos são arquivos de texto [RON](https://github.com/ron-rs/ron): legíveis,
@@ -148,10 +186,56 @@ crates/
   utsim-objects/  Source, Queue, Processor, Sink
   utsim-model/    formato .ron, validação, replicações em paralelo (rayon)
   utsim-cli/      binário `utsim`
+  utsim-env/      ambiente de aprendizado por reforço (estilo Gym) e Q-learning tabular
+  utsim-py/       ligações Python do ambiente (PyO3), fora do workspace principal
+  utsim-emu/      emulação em tempo real e servidor OPC UA (só nativo, fora do build wasm)
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
+
+## Aprendizado por reforço
+
+Um modelo pode **pausar e perguntar a um agente** o que fazer: no fluxo de tokens, a
+atividade `Decide` com regra `Agent(observation: [...])` para a simulação, entrega a
+observação e espera a escolha de um ramo. A crate `utsim-env` transforma isso num ambiente
+no estilo Gym:
+
+```rust
+use utsim_env::{Env, EnvConfig, RewardTerm};
+
+let modelo = utsim_model::Model::load("examples/roteamento_rl.ron")?;
+let config = EnvConfig {
+    // recompensa = -(área sob o número de itens na fila rápida) entre decisões
+    reward: vec![RewardTerm::integral("fila_rapida.content.mean", -1.0)],
+    observe_blocks: vec!["fila_rapida+maquina_rapida".into(), "fila_lenta+maquina_lenta".into()],
+    episode_length: Some(100.0),
+    ..EnvConfig::default()
+};
+let mut env = Env::new(modelo, config)?;
+let mut obs = env.reset(1)?;              // roda até a primeira decisão
+while obs.options > 0 {
+    let r = env.step(0)?;                 // responde e roda até a próxima
+    obs = r.observation;
+    if r.done { break; }
+}
+```
+
+- **Observação:** o vetor do `Decide`, o conteúdo dos blocos de `observe_blocks` (`"a+b"`
+  soma) e as métricas de `observe_metrics`.
+- **Recompensa:** Σ peso·Δmétrica entre decisões, menos `decision_cost`. Com
+  `RewardTerm::integral` (média no tempo × tempo decorrido) a recompensa é a área acumulada;
+  com peso −1 nos conteúdos dos blocos, o retorno do episódio é o oposto da soma dos
+  tempos no sistema.
+- **Linha de base:** `utsim_env::qlearning` traz um Q-learning tabular (faixas por
+  dimensão, ε-guloso). No exemplo `examples/roteamento_rl.ron` (linha rápida de 1 máquina ×
+  linha lenta de 2 máquinas), 1000 episódios de treino (~9 s em debug) bastam para vencer a
+  política aleatória e ficar a ~4% da heurística "menor atraso esperado"
+  (`cargo test -p utsim-env --test learning -- --nocapture` mostra os números).
+- **Python:** `crates/utsim-py` expõe `utsim.Env` (listas e dicionários simples, sem numpy).
+  Compile à parte, pois exige Python: `cd crates/utsim-py && maturin develop --release`
+  (ou `cargo build --release` e renomeie `utsim.dll`/`libutsim.so` para `utsim.pyd`/`utsim.so`).
+  Depois rode `python crates/utsim-py/python/exemplo_gym.py`.
 
 ## Licença
 
@@ -163,19 +247,6 @@ Quem distribuir uma versão modificada precisa mantê-la sob a mesma licença e 
 o código-fonte. Modelos `.ron` e resultados de simulação feitos com o UTSim pertencem
 a quem os criou e não são afetados pela licença.
 
-## Otimização
-
-`utsim otimizar` procura os valores de parâmetros do modelo (número de servidores,
-capacidade de fila, tempos de serviço) que minimizam ou maximizam um objetivo, respeitando
-restrições. O problema é um arquivo RON (veja `examples/otimizacao_servidores.ron`):
-
-```bash
-utsim otimizar examples/otimizacao_servidores.ron --html relatorio.html
-# opções: --json saida.json  --reps N  --orcamento N
-```
-
-Todos os pontos usam as mesmas sementes, então a comparação é pareada: o relatório mostra
-a diferença de cada ponto para o melhor (Δ ± intervalo de 95
 ## Otimização
 
 `utsim otimizar` procura os valores de parâmetros do modelo (número de servidores,

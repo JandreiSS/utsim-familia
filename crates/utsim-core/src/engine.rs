@@ -185,6 +185,8 @@ enum KernelOp {
         item: ItemId,
         into: BlockId,
         port: usize,
+        /// Who to tell if the target refuses (`None`: refusal is a modelling error).
+        notify: Option<BlockId>,
     },
 }
 
@@ -585,6 +587,19 @@ impl Ctx<'_> {
     /// current hook (as if it arrived there). The target must accept it, otherwise the
     /// run stops with a modelling error. Returns the new item so labels can be set now.
     pub fn inject_item(&mut self, into: BlockId, port: usize) -> ItemId {
+        self.inject(into, port, None)
+    }
+
+    /// Like [`Ctx::inject_item`], but a refusal (target full or stopped) is not an
+    /// error: the item is discarded and this block receives `MSG_INJECT_REFUSED`
+    /// (payload: the target's index), so it can wait and retry (e.g. on the target's
+    /// exits, via [`Ctx::subscribe`]).
+    pub fn try_inject_item(&mut self, into: BlockId, port: usize) -> ItemId {
+        let me = self.me;
+        self.inject(into, port, Some(me))
+    }
+
+    fn inject(&mut self, into: BlockId, port: usize, notify: Option<BlockId>) -> ItemId {
         let now = self.core.now;
         let id = self.core.items.insert(Item {
             labels: BTreeMap::new(),
@@ -603,6 +618,7 @@ impl Ctx<'_> {
             item: id,
             into,
             port,
+            notify,
         });
         id
     }
@@ -1331,7 +1347,12 @@ impl Simulation {
                 self.leave(item, carrier);
                 self.arrive(item, to, port);
             }
-            KernelOp::Inject { item, into, port } => {
+            KernelOp::Inject {
+                item,
+                into,
+                port,
+                notify,
+            } => {
                 let accepted = {
                     let rt = &self.core.blocks[into.0];
                     let content = rt.contents.len() + rt.incoming;
@@ -1342,11 +1363,24 @@ impl Simulation {
                     self.core.pending_move_from = Some(into);
                     self.arrive(item, into, port);
                 } else {
-                    let name = self.core.blocks[into.0].name.clone();
                     self.core.items.remove(item);
-                    self.core.errors.push(format!(
-                        "{name}: não aceitou o item criado pelo fluxo (cheio ou parado)"
-                    ));
+                    self.core.emit(TraceEvent::Destroyed {
+                        item: item_key(item),
+                    });
+                    match notify {
+                        Some(requester) => self.core.ops.push_back(KernelOp::Message {
+                            to: requester,
+                            from: into,
+                            tag: crate::task::MSG_INJECT_REFUSED,
+                            payload: into.0 as u64,
+                        }),
+                        None => {
+                            let name = self.core.blocks[into.0].name.clone();
+                            self.core.errors.push(format!(
+                                "{name}: não aceitou o item criado pelo fluxo (cheio ou parado)"
+                            ));
+                        }
+                    }
                 }
             }
         }

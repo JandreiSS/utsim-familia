@@ -116,5 +116,6 @@ o ferramentas de ajuste, mas o desenho é nosso.
 
 ## Fase 7+: avançado
 - [x] Otimização de parâmetros: grade, recozimento simulado, genético, refinamento, comparação pareada (`utsim otimizar`)
-- [ ] Fluidos, AGVs, emulação via OPC UA, interface para aprendizado por reforço
+- [x] Aprendizado por reforço: decisão por agente no fluxo, ambiente estilo Gym (`utsim-env`), Q-learning tabular, ligações Python (`crates/utsim-py`)
+- [ ] Fluidos, AGVs, emulação via OPC UA
 - [x] Build WASM: rodar modelos no navegador (`utsim-web`, página `web/`, `scripts/web.sh`)

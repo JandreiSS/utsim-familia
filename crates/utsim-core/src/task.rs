@@ -56,6 +56,8 @@ pub const MSG_ITEM_ENTERED: u32 = 5;
 pub const MSG_ITEM_EXITED: u32 = 6;
 /// The external agent answered a decision this block requested (payload: option index).
 pub const MSG_DECISION: u32 = 7;
+/// A `try_inject_item` was refused (target full or stopped); payload: the target block index.
+pub const MSG_INJECT_REFUSED: u32 = 8;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path

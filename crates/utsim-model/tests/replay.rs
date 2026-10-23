@@ -53,10 +53,9 @@ fn example_models() -> Vec<(String, Model)> {
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|e| e == "ron"))
         .filter(|p| {
-            !p.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("experimento")
+            let name = p.file_name().unwrap().to_string_lossy();
+            // `roteamento_rl` precisa de um agente externo: não roda com `replay`/`run`.
+            !name.starts_with("experimento") && name != "roteamento_rl.ron"
         })
         .collect();
     paths.sort();

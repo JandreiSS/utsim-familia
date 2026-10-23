@@ -1,11 +1,14 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# The Python bindings need a Python toolchain: built on their own (crates/utsim-py).
+exclude = ["crates/utsim-py"]
 # The 3D viewer pulls in Bevy (slow to build): it is opt-in (`-p utsim-viewer`).
 default-members = [
     "crates/utsim-cli",
     "crates/utsim-core",
     "crates/utsim-edit",
+    "crates/utsim-env",
     "crates/utsim-fit",
     "crates/utsim-flow",
     "crates/utsim-fluid",
@@ -33,6 +36,8 @@ utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
+utsim-env = { path = "crates/utsim-env" }
+utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }

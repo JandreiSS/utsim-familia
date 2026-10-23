@@ -103,6 +103,12 @@ Fase 7  ── utsim-opt ─────┬─ Sonnet A: recozimento, genético,
            (Opus)         ├─ Sonnet B: `utsim otimizar` e relatório ───────┤
                           ├─ Haiku C: ótimos conhecidos (Erlang C, M/M/1/K) ┤
                           └─ Sonnet D: navegador (WebAssembly) ────────────┴─ merge + verificar
+Fase 7b ── passo a passo, ┬─ Sonnet E: 3D no navegador ────────────────┐
+           decisões,      ├─ Sonnet F: rede de fluidos ─────────────────┤
+           fluidos, AGV   ├─ Sonnet G: tráfego de AGVs ─────────────────┤
+           (Opus)         ├─ Sonnet H: emulação OPC UA ─────────────────┤
+                          ├─ Sonnet I: aprendizado por reforço ─────────┤
+                          └─ (depois) fluidos/AGV no 3D + validação ────┴─ merge + verificar
 QA da UI  ── Sonnet: modo roteirizado (entrada sintética + capturas) ───── o coordenador roda
              os roteiros, olha as capturas e delega as correções
 ```
