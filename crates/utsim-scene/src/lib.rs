@@ -20,10 +20,28 @@
 //! # Stream (`utsim cena`, and later a live socket)
 //! JSON lines: the first line is a [`Header`] (protocol, conventions, static scene), every
 //! following line is a [`Frame`]. A client needs nothing else to animate a run.
+//!
+//! # Building a scene
+//! [`Scene::build`] indexes a replay; [`Scene::header`] and [`Scene::frame`] give the
+//! stream. The derivation rules (roles, yaw, motion, lift, load windows) are in
+//! [`compose`]. The pure modules below work in the Y-up *layout space* of the Bevy
+//! viewer ([`layout::to_bevy`]); the stream is in model coordinates.
 
 use serde::{Deserialize, Serialize};
 
 pub use utsim_model::replay::Replay;
+
+pub mod compose;
+pub mod fluids;
+pub mod geometry;
+pub mod handling;
+pub mod layout;
+pub mod network;
+pub mod style;
+pub mod timeline;
+pub mod tokens;
+
+pub use compose::{ItemPlacement, MobilePose, Scene, SceneOptions};
 
 /// Stream/protocol identifier. Bump on any incompatible change to the types below.
 pub const PROTOCOL: &str = "utsim-scene/1";

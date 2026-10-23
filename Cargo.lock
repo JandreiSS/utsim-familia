@@ -6759,6 +6759,7 @@ dependencies = [
  "utsim-fit",
  "utsim-model",
  "utsim-opt",
+ "utsim-scene",
 ]
 
 [[package]]
@@ -6909,6 +6910,7 @@ dependencies = [
  "utsim-flow",
  "utsim-fluid",
  "utsim-model",
+ "utsim-scene",
  "utsim-script",
  "wasm-bindgen",
  "web-sys",

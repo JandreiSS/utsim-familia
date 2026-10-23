@@ -20,6 +20,12 @@ pub fn to_bevy(p: [f64; 3]) -> [f32; 3] {
     [p[0] as f32, p[2] as f32, -p[1] as f32]
 }
 
+/// Layout-space (Bevy, Y up) point back to model coordinates `(x, y, z)`, Z up: the
+/// inverse of [`to_bevy`] (exact, it only swaps and negates).
+pub fn to_model(p: [f32; 3]) -> [f32; 3] {
+    [p[0], -p[2], p[1]]
+}
+
 pub fn all_at_origin(positions: &[[f64; 3]]) -> bool {
     positions.iter().all(|p| p.iter().all(|c| *c == 0.0))
 }
@@ -139,6 +145,7 @@ mod tests {
     #[test]
     fn convention_maps_model_z_to_height() {
         assert_eq!(to_bevy([1.0, 2.0, 3.0]), [1.0, 3.0, -2.0]);
+        assert_eq!(to_model(to_bevy([1.0, 2.0, 3.0])), [1.0, 2.0, 3.0]);
     }
 
     #[test]

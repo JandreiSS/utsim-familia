@@ -91,6 +91,18 @@ cargo run --release -p utsim-viewer -- examples/mm1.ron --headless-check
 
 - Verificação do visualizador: `UTSIM_VIEWER=1 bash scripts/verificar.sh` (clippy e testes de `utsim-viewer`; no Linux, o Bevy pede `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev`).
 
+### Cena 3D para outros motores
+
+`utsim cena` grava onde cada bloco, item e recurso móvel está, e o que está fazendo, ao longo de uma rodada.
+O formato é JSON em linhas (protocolo `utsim-scene/1`): um cabeçalho com o layout e depois um quadro por linha, em metros, com o eixo Z para cima.
+É a mesma cena que o `utsim-view` desenha, então um cliente Unreal, Unity ou de realidade virtual mostra exatamente o mesmo.
+
+```bash
+cargo run --release -p utsim-cli -- cena examples/agvs.ron --fps 10 --ate 600 --saida agvs.jsonl
+```
+
+- `--rep N` escolhe a replicação, `--fps` dá os quadros por unidade de tempo simulado e `--ate T` o último instante; sem `--saida`, escreve na saída padrão.
+
 ## No navegador
 
 A simulação, o ajuste de distribuições e o 3D também rodam no navegador (WebAssembly),
@@ -204,6 +216,7 @@ crates/
   utsim-env/      ambiente de aprendizado por reforço (estilo Gym) e Q-learning tabular
   utsim-py/       ligações Python do ambiente (PyO3), fora do workspace principal
   utsim-emu/      emulação em tempo real e servidor OPC UA (só nativo, fora do build wasm)
+  utsim-scene/    cena 3D independente de motor: poses e movimentos de tudo em cada instante (`utsim cena`)
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes

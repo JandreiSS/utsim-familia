@@ -161,7 +161,7 @@ Os roteiros de exemplo estão em `crates/utsim-viewer/roteiros/`: `editor_basico
 `propriedades.ron` (com `examples/mm1.ron`), `simular_paletes.ron` (com `examples/montagem_paletes.ron`) e
 `esteiras_e_armazem.ron` (com `examples/linha_com_esteiras.ron --stop 700` e com `examples/armazem.ron --stop 400`:
 itens sobre a correia, acúmulo no fim e porta-paletes enchendo). As posições na correia são reconstruídas do
-rastro (`handling.rs`) e testadas em `crates/utsim-viewer/tests/handling.rs`.
+rastro (`crates/utsim-scene/src/handling.rs`) e testadas em `crates/utsim-scene/tests/handling.rs`.
 Fluxos de tokens e scripts (fase 6): `fluxos.ron` (com `roteiros/fluxos_modelo.ron`: painel Fluxos, diagrama,
 atividade selecionada, expressão com erro em linha, novo fluxo, desfazer, `on_entry` e regra de saída por
 script) e `fluxos_simular.ron` (com `examples/fluxo_docas.ron`: contagem de tokens ao vivo no diagrama em

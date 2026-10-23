@@ -8,8 +8,8 @@ use std::path::Path;
 use utsim_core::{State, TraceEvent};
 use utsim_model::Model;
 use utsim_model::replay::Replay;
-use utsim_viewer::handling::{BeltParams, Handling};
-use utsim_viewer::timeline::{ItemPos, Timeline, TransitSetting};
+use utsim_scene::handling::{BeltParams, Handling};
+use utsim_scene::timeline::{ItemPos, Timeline, TransitSetting};
 
 const EPS: f64 = 1e-6;
 

@@ -82,12 +82,22 @@ struct ItemTrack {
 
 /// One `Travel` event of a mobile resource.
 #[derive(Clone, Debug)]
-struct TravelLeg {
-    t0: f64,
-    duration: f64,
+pub(crate) struct TravelLeg {
+    pub(crate) t0: f64,
+    pub(crate) duration: f64,
     path: Vec<[f64; 3]>,
     /// Arc length from the start of the path to each point.
     cum: Vec<f64>,
+}
+
+/// An item handed to (`pickup`) or taken from a mobile resource: the `Moved` event
+/// between the carrier and `other`, at `t`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Handoff {
+    pub(crate) t: f64,
+    pub(crate) item: usize,
+    pub(crate) other: usize,
+    pub(crate) pickup: bool,
 }
 
 impl TravelLeg {
@@ -110,7 +120,47 @@ impl TravelLeg {
         })
     }
 
-    fn at(&self, t: f64) -> [f64; 3] {
+    /// Total path length.
+    pub(crate) fn length(&self) -> f64 {
+        self.cum.last().copied().unwrap_or(0.0)
+    }
+
+    /// Whether the carrier is driving along this leg at `t`.
+    pub(crate) fn is_moving(&self, t: f64) -> bool {
+        self.duration > 0.0 && self.length() > 0.0 && t >= self.t0 && t < self.t0 + self.duration
+    }
+
+    /// Heading (model plan, radians from `+x`, counter-clockwise) of the path piece the
+    /// carrier is on at `t`; `None` for a leg without length.
+    pub(crate) fn heading_at(&self, t: f64) -> Option<f64> {
+        let total = self.length();
+        if total <= 0.0 {
+            return None;
+        }
+        let f = if self.duration > 0.0 {
+            ((t - self.t0) / self.duration).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let target = f * total;
+        // The piece that contains `target`, skipping zero-length pieces.
+        let last = self.path.len() - 1;
+        let k = self.cum.partition_point(|&c| c < target).clamp(1, last);
+        let pieces = (1..=last).filter(|&j| self.cum[j] > self.cum[j - 1]);
+        let j = pieces
+            .clone()
+            .find(|&j| j >= k)
+            .or_else(|| pieces.clone().next_back())?;
+        let (a, b) = (self.path[j - 1], self.path[j]);
+        Some((b[1] - a[1]).atan2(b[0] - a[0]))
+    }
+
+    /// Heading at the end of the leg (`None` without length).
+    pub(crate) fn final_heading(&self) -> Option<f64> {
+        self.heading_at(self.t0 + self.duration)
+    }
+
+    pub(crate) fn at(&self, t: f64) -> [f64; 3] {
         let last = self.path.len() - 1;
         let total = self.cum[last];
         let elapsed = t - self.t0;
@@ -240,9 +290,13 @@ pub struct Timeline {
     /// Highest slot seen per rack block.
     max_slot: HashMap<usize, usize>,
     /// Token counts per (flow block, activity), from the flow engine's trace events.
-    tokens: crate::flows::TokenTrack,
+    tokens: crate::tokens::TokenTrack,
     /// Fluid samples per (network block, node): `(t, level, rate)` in time order.
     fluid: FluidSeries,
+    /// Trace id of each item (by dense index).
+    ids: Vec<u64>,
+    /// Items handed to or taken from each mobile block, in time order.
+    handoffs: HashMap<usize, Vec<Handoff>>,
 }
 
 /// Samples `(t, level, rate)` of each fluid node, by (network block, node).
@@ -296,10 +350,11 @@ impl Timeline {
         let mut belt_halted: HashMap<usize, bool> = HashMap::new();
         let mut slots: HashMap<(usize, usize), Vec<(f64, usize)>> = HashMap::new();
         let mut max_slot: HashMap<usize, usize> = HashMap::new();
-        let mut tokens = crate::flows::TokenTrack::default();
+        let mut tokens = crate::tokens::TokenTrack::default();
         let mut fluid = FluidSeries::new();
         let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
         let mut n_travels = 0usize;
+        let mut handoffs: HashMap<usize, Vec<Handoff>> = HashMap::new();
 
         let item_index = |key: u64,
                           index: &mut HashMap<u64, usize>,
@@ -364,6 +419,16 @@ impl Timeline {
                     bump(&mut blocks, &mut counts, *to, t, true);
                     if let Some(track) = blocks.get_mut(*to) {
                         track.arrivals.push(t);
+                    }
+                    for (carrier, other, pickup) in [(*to, *from, true), (*from, *to, false)] {
+                        if is_mobile(carrier) {
+                            handoffs.entry(carrier).or_default().push(Handoff {
+                                t,
+                                item: i,
+                                other,
+                                pickup,
+                            });
+                        }
                     }
                     if is_belt(*from) {
                         belt_events
@@ -518,6 +583,10 @@ impl Timeline {
         }
 
         let live = LiveIndex::build(&items);
+        let mut ids = vec![0u64; items.len()];
+        for (&key, &i) in &index {
+            ids[i] = key;
+        }
         let transit_default = match setting {
             TransitSetting::Fixed(v) => v,
             TransitSetting::Auto => global_default,
@@ -549,7 +618,38 @@ impl Timeline {
             max_slot,
             tokens,
             fluid,
+            ids,
+            handoffs,
         }
+    }
+
+    /// Trace id of item `item` (dense index).
+    pub fn item_id(&self, item: usize) -> Option<u64> {
+        self.ids.get(item).copied()
+    }
+
+    /// Travel legs of mobile block `b`, in time order.
+    pub(crate) fn legs(&self, b: usize) -> &[TravelLeg] {
+        self.legs.get(&b).map_or(&[], Vec::as_slice)
+    }
+
+    /// Items handed to or taken from mobile block `b`, in time order.
+    pub(crate) fn handoffs(&self, b: usize) -> &[Handoff] {
+        self.handoffs.get(&b).map_or(&[], Vec::as_slice)
+    }
+
+    /// State of block `b` at `t` with the time it started and the time of the next
+    /// state change (`f64::INFINITY` when it is the last one).
+    pub fn state_span(&self, b: usize, t: f64) -> Option<(State, f64, f64)> {
+        let states = &self.blocks.get(b)?.states;
+        let k = states.partition_point(|s| s.0 <= t).checked_sub(1)?;
+        let end = states.get(k + 1).map_or(f64::INFINITY, |s| s.0);
+        // A state set again without a change does not restart it.
+        let mut first = k;
+        while first > 0 && states[first - 1].1 == states[k].1 {
+            first -= 1;
+        }
+        Some((states[k].1, states[first].0, end))
     }
 
     /// Rebuilds the motion on conveyor block `b` with its real parameters (a replay
