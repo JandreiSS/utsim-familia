@@ -91,6 +91,21 @@ cargo run --release -p utsim-viewer -- examples/mm1.ron --headless-check
 
 - Verificação do visualizador: `UTSIM_VIEWER=1 bash scripts/verificar.sh` (clippy e testes de `utsim-viewer`; no Linux, o Bevy pede `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev`).
 
+## No navegador
+
+A simulação, o ajuste de distribuições e o 3D também rodam no navegador (WebAssembly),
+sem instalar nada. Para gerar a página:
+
+```bash
+bash scripts/web.sh          # ou scripts/web.ps1; --sem-3d pula o visualizador 3D
+python3 -m http.server -d web
+```
+
+Abra `http://localhost:8000/`, escolha um exemplo ou cole um modelo, e use as abas
+Simular, Ajustar distribuição e 3D. O arquivo `web/dist/utsim.html` é autocontido e abre sem servidor,
+mas sem a aba 3D. O 3D precisa de um navegador com WebGL2. A primeira compilação do
+visualizador leva uns 10 minutos.
+
 ## Ajuste de distribuições
 
 A partir de dados reais (tempos de atendimento, intervalos entre chegadas...), o UTSim
