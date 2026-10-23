@@ -94,7 +94,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-106 | controlar o tráfego de AGVs na rede (capacidade por trecho, espera, impasse) | 7 | ✅ | `tests/agv.rs` (10 casos à mão, impasse detectado) |
 | RF-107 | conectar a simulação a um CLP real ou simulado por OPC UA, em tempo real | 7 | ✅ | `utsim-emu/tests` (servidor OPC UA, ritmo em tempo real, registro de comandos); `utsim emular` |
 | RF-108 | treinar agentes de aprendizado por reforço sobre o modelo (ambiente estilo Gym) | 7 | ✅ | `utsim-env` (`Env`, Q-learning tabular): `tests/env.rs` (recompensa conferida à mão, determinismo), `tests/learning.rs` (Q-learning vence a política aleatória e fica a ~4% da heurística), ligações Python em `crates/utsim-py` |
-| RF-109 | ver o modelo em 3D no navegador | 7 | ⏳ |
+| RF-109 | ver o modelo em 3D no navegador | 7 | ✅ | aba 3D de `web/` (visualizador Bevy em WebGL2, `web/viewer.html`), testada à mão com `mm1` e `armazem`; build no job `web` da CI |
 
 ## Requisitos não funcionais (RNF)
 
