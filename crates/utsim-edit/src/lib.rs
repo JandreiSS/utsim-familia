@@ -87,7 +87,9 @@ impl Document {
         ))
     }
 
-    fn from_model(model: Model, path: Option<PathBuf>, header: String) -> Self {
+    fn from_model(mut model: Model, path: Option<PathBuf>, header: String) -> Self {
+        // Saving always writes the current format version.
+        model.format = Some(utsim_model::FORMAT_VERSION);
         Document {
             model,
             path,
@@ -544,6 +546,7 @@ mod tests {
     #[test]
     fn saving_is_stable_and_round_trips() {
         let mut doc = line();
+        assert!(doc.to_text().contains("format: 1"));
         doc.apply(Command::Set {
             key: "fila.capacity".into(),
             value: "5".into(),
