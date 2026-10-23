@@ -6896,6 +6896,7 @@ dependencies = [
  "utsim-core",
  "utsim-edit",
  "utsim-flow",
+ "utsim-fluid",
  "utsim-model",
  "utsim-script",
  "wasm-bindgen",
