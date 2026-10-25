@@ -210,6 +210,30 @@ impl FlowDef {
                     errors.push(format!("{at}: os horários devem ser >= 0"));
                 }
                 Activity::Batch { size: 0 } => errors.push(format!("{at}: size deve ser >= 1")),
+                Activity::Delay { time } => {
+                    if let Err(e) = time.validate() {
+                        errors.push(format!("{at}.time: {e}"));
+                    }
+                }
+                Activity::Source {
+                    interarrival,
+                    limit,
+                    ..
+                } => match interarrival.validate() {
+                    Err(e) => errors.push(format!("{at}.interarrival: {e}")),
+                    // A zero (or vanishing) interval with no limit creates tokens forever
+                    // at one instant, filling memory.
+                    Ok(())
+                        if limit.is_none()
+                            && (interarrival.mean().is_nan() || interarrival.mean() <= 1e-9) =>
+                    {
+                        errors.push(format!(
+                            "{at}: interarrival com média ({}) menor que 1e-9 exige `limit`",
+                            interarrival.mean()
+                        ));
+                    }
+                    Ok(()) => {}
+                },
                 _ => {}
             }
             errors.extend(expression_errors(a, &at));

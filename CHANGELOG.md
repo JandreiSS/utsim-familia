@@ -11,6 +11,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - Biblioteca de modelos 3D articulados gerados por código (`utsim-assets`, binário `utsim-assets`): empilhadeira, paleteira, AGV, palete, caixa, porta-paletes, esteira de rolos, tanque, máquina, bancada, operador e área de piso, versionados em `assets/modelos/*.glb`.
 - Visualizador com "Visual: simples / realista": modelos glTF por papel e tipo ou por `visual.asset`, garfos subindo até a célula, rodas girando, luz de estado do AGV, operadores andando sem deslizar os pés e cargas nos garfos e nas mãos.
 - Passos de roteiro `IrPara(t)` e `Focar(...)`.
+- Fase 11: `utsim gerar-modelo` (modelos sintéticos de qualquer tamanho), benchmark `cargo bench -p utsim-scene`, metas de desempenho em testes `#[ignore]` e `docs/desempenho.md`.
+- Testes de robustez (proptest) do leitor de modelos e do leitor de dados do ajuste.
+- Página web: o motor roda em um Web Worker, com botão "Cancelar".
+
+### Corrigido
+- Modelos que travavam ou esgotavam a memória agora são recusados na validação (fontes com intervalo quase nulo, porta-paletes ou `Split` gigantes, fluxos com intervalo zero) ou terminam com erro (muitos eventos no mesmo instante).
+
+### Alterado
+- Núcleo e índice da cena mais rápidos (10 % a 45 % no núcleo), sem mudar resultados.
 
 ## [0.1.0]
 

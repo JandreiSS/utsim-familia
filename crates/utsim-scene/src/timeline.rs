@@ -25,6 +25,7 @@
 //! its `Slot` event ([`Timeline::rack_slot`]).
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 
 use utsim_core::{State, TraceEvent};
 use utsim_model::replay::Replay;
@@ -286,7 +287,7 @@ pub struct Timeline {
     /// End of the recording, used to finish the open belt visits.
     end: f64,
     /// Storage slots per (rack block, item), in time order.
-    slots: HashMap<(usize, usize), Vec<(f64, usize)>>,
+    slots: FxMap<(usize, usize), Vec<(f64, usize)>>,
     /// Highest slot seen per rack block.
     max_slot: HashMap<usize, usize>,
     /// Token counts per (flow block, activity), from the flow engine's trace events.
@@ -298,6 +299,44 @@ pub struct Timeline {
     /// Items handed to or taken from each mobile block, in time order.
     handoffs: HashMap<usize, Vec<Handoff>>,
 }
+
+/// Cheap multiplicative hasher (the FxHash scheme) for the integer keys of the index: the
+/// default SipHash showed up as the top cost of `Timeline::build` (one lookup per record).
+/// The keys are trace ids and block/item indices, never attacker-controlled.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct FxHasher(u64);
+
+impl FxHasher {
+    fn mix(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl Hasher for FxHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.mix(u64::from(b));
+        }
+    }
+
+    fn write_u32(&mut self, i: u32) {
+        self.mix(u64::from(i));
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.mix(i);
+    }
+
+    fn write_usize(&mut self, i: usize) {
+        self.mix(i as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+pub(crate) type FxMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 /// Samples `(t, level, rate)` of each fluid node, by (network block, node).
 type FluidSeries = HashMap<(usize, usize), Vec<(f64, f64, f64)>>;
@@ -319,8 +358,9 @@ fn median(values: &mut [f64]) -> Option<f64> {
     if values.is_empty() {
         return None;
     }
-    values.sort_by(f64::total_cmp);
-    Some(values[values.len() / 2])
+    // Selection instead of a full sort: the same element, in linear time.
+    let mid = values.len() / 2;
+    Some(*values.select_nth_unstable_by(mid, f64::total_cmp).1)
 }
 
 impl Timeline {
@@ -328,7 +368,7 @@ impl Timeline {
         let n_blocks = replay.blocks.len();
         let mut blocks = vec![BlockTrack::default(); n_blocks];
         let mut items: Vec<ItemTrack> = Vec::new();
-        let mut index: HashMap<u64, usize> = HashMap::new();
+        let mut index: FxMap<u64, usize> = FxMap::default();
         // Current block of each item (None while packed or gone), for the counters.
         let mut at: Vec<Option<usize>> = Vec::new();
         let mut counts = vec![0usize; n_blocks];
@@ -348,7 +388,7 @@ impl Timeline {
         let is_belt = |b: usize| replay.blocks.get(b).is_some_and(|x| x.kind == "Conveyor");
         let mut belt_events: HashMap<usize, Vec<BeltEv>> = HashMap::new();
         let mut belt_halted: HashMap<usize, bool> = HashMap::new();
-        let mut slots: HashMap<(usize, usize), Vec<(f64, usize)>> = HashMap::new();
+        let mut slots: FxMap<(usize, usize), Vec<(f64, usize)>> = FxMap::default();
         let mut max_slot: HashMap<usize, usize> = HashMap::new();
         let mut tokens = crate::tokens::TokenTrack::default();
         let mut fluid = FluidSeries::new();
@@ -357,7 +397,7 @@ impl Timeline {
         let mut handoffs: HashMap<usize, Vec<Handoff>> = HashMap::new();
 
         let item_index = |key: u64,
-                          index: &mut HashMap<u64, usize>,
+                          index: &mut FxMap<u64, usize>,
                           items: &mut Vec<ItemTrack>,
                           at: &mut Vec<Option<usize>>| {
             *index.entry(key).or_insert_with(|| {
@@ -548,23 +588,37 @@ impl Timeline {
         let (lo, hi) = ((span * 1e-4).max(1e-9), (span / 50.0).max(1e-9));
 
         // Global fallback: median positive gap over all items.
-        let mut all_gaps: Vec<f64> = Vec::new();
-        for it in &items {
-            all_gaps.extend(positive_gaps(&it.steps));
-        }
-        let global_default = (0.4 * median(&mut all_gaps).unwrap_or(hi)).clamp(lo, hi);
+        let global_default = match setting {
+            TransitSetting::Auto => {
+                let mut all_gaps: Vec<f64> = Vec::new();
+                for it in &items {
+                    all_gaps.extend(positive_gaps(&it.steps));
+                }
+                (0.4 * median(&mut all_gaps).unwrap_or(hi)).clamp(lo, hi)
+            }
+            // Not used with a fixed transit time.
+            TransitSetting::Fixed(_) => hi,
+        };
+        let mut gaps: Vec<f64> = Vec::new();
 
         for it in &mut items {
             let base = match setting {
                 TransitSetting::Fixed(v) => v.max(0.0),
                 TransitSetting::Auto => {
-                    let mut gaps = positive_gaps(&it.steps);
+                    gaps.clear();
+                    gaps.extend(
+                        it.steps
+                            .windows(2)
+                            .map(|w| w[1].0 - w[0].0)
+                            .filter(|g| *g > 0.0),
+                    );
                     median(&mut gaps).map_or(global_default, |m| (0.4 * m).clamp(lo, hi))
                 }
             };
-            let times: Vec<f64> = it.steps.iter().map(|s| s.0).collect();
-            for (k, step) in it.steps.iter_mut().enumerate() {
-                if let ItemStep::Moved { from, to, transit } = &mut step.1 {
+            for k in 0..it.steps.len() {
+                let next = it.steps.get(k + 1).map(|s| s.0);
+                let here = it.steps[k].0;
+                if let ItemStep::Moved { from, to, transit } = &mut it.steps[k].1 {
                     // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
                     if is_mobile(*from)
                         || is_mobile(*to)
@@ -574,9 +628,7 @@ impl Timeline {
                         *transit = 0.0;
                         continue;
                     }
-                    let gap = times
-                        .get(k + 1)
-                        .map_or(f64::INFINITY, |next| next - times[k]);
+                    let gap = next.map_or(f64::INFINITY, |next| next - here);
                     *transit = base.min(gap);
                 }
             }

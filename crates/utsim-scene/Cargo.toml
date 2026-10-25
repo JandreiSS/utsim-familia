@@ -12,3 +12,7 @@ utsim-model.workspace = true
 utsim-fluid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[[bench]]
+name = "desempenho"
+harness = false
