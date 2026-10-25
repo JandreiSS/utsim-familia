@@ -24,3 +24,4 @@ parallel = ["dep:rayon"]
 
 [dev-dependencies]
 serde_json.workspace = true
+proptest = { version = "1", default-features = false, features = ["std"] }

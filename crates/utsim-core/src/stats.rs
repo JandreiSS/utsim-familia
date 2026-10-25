@@ -130,13 +130,22 @@ pub struct StateTracker {
     current: Option<State>,
     since: Time,
     start: Time,
-    totals: BTreeMap<State, Time>,
+    /// Time per visited state, kept sorted by state: a block visits a handful of states,
+    /// so a short vector beats a map on the hot path (one update per state change).
+    totals: Vec<(State, Time)>,
 }
 
 impl StateTracker {
+    fn add(&mut self, state: State, dt: Time) {
+        match self.totals.binary_search_by_key(&state, |e| e.0) {
+            Ok(k) => self.totals[k].1 += dt,
+            Err(k) => self.totals.insert(k, (state, dt)),
+        }
+    }
+
     pub fn set(&mut self, t: Time, state: State) {
         if let Some(c) = self.current {
-            *self.totals.entry(c).or_default() += t - self.since;
+            self.add(c, t - self.since);
         }
         self.current = Some(state);
         self.since = t;
@@ -153,7 +162,7 @@ impl StateTracker {
     }
 
     pub fn fractions(&self, t: Time) -> BTreeMap<State, f64> {
-        let mut totals = self.totals.clone();
+        let mut totals: BTreeMap<State, Time> = self.totals.iter().copied().collect();
         if let Some(c) = self.current {
             *totals.entry(c).or_default() += t - self.since;
         }

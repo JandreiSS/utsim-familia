@@ -2,6 +2,7 @@
 
 pub mod experiment;
 pub mod replay;
+pub mod synthetic;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -65,6 +66,12 @@ pub enum ModelError {
     #[error(transparent)]
     Sim(#[from] SimError),
 }
+
+/// Most arrivals a single source may be expected to create in one replication.
+const MAX_ARRIVALS: f64 = 1.0e9;
+
+/// Largest count that allocates or loops per use (rack positions, split copies, operators).
+const MAX_COUNT: usize = 1_000_000;
 
 /// Current version of the model file format (see `docs/versionamento.md`).
 /// Files without a `format` field are version 1.
@@ -426,6 +433,12 @@ impl Model {
                     if *mode == SeparateMode::Split(0) {
                         errors.push(format!("{}: Split(n) exige n >= 1", obj.name));
                     }
+                    if matches!(mode, SeparateMode::Split(n) if *n > MAX_COUNT) {
+                        errors.push(format!(
+                            "{}: Split(n) aceita no máximo n = {MAX_COUNT}",
+                            obj.name
+                        ));
+                    }
                     dists.push(("process".into(), process));
                 }
                 ObjectKind::Processor {
@@ -444,6 +457,12 @@ impl Model {
                     if let Some(op) = operators {
                         if op.count == 0 {
                             errors.push(format!("{}: operators.count deve ser >= 1", obj.name));
+                        }
+                        if op.count > MAX_COUNT {
+                            errors.push(format!(
+                                "{}: operators.count deve ser no máximo {MAX_COUNT}",
+                                obj.name
+                            ));
                         }
                     }
                 }
@@ -504,6 +523,12 @@ impl Model {
                     if *bays == 0 || *levels == 0 {
                         errors.push(format!("{}: bays e levels devem ser >= 1", obj.name));
                     }
+                    if bays.checked_mul(*levels).is_none_or(|n| n > MAX_COUNT) {
+                        errors.push(format!(
+                            "{}: bays x levels deve ser no máximo {MAX_COUNT} posições",
+                            obj.name
+                        ));
+                    }
                     if !(bay_width.is_finite() && *bay_width > 0.0)
                         || !(level_height.is_finite() && *level_height > 0.0)
                     {
@@ -529,9 +554,35 @@ impl Model {
             if let Some(Err(e)) = obj.shifts.as_ref().map(ShiftTable::validate) {
                 errors.push(format!("{}: {e}", obj.name));
             }
+            let mut dists_ok = true;
             for (what, d) in dists {
                 if let Err(e) = d.validate() {
+                    dists_ok = false;
                     errors.push(format!("{}.{what}: {e}", obj.name));
+                }
+            }
+            // A source that would create billions of items (or loops at one instant when
+            // the interval is zero) never finishes: refuse it up front.
+            if let (
+                true,
+                ObjectKind::Source {
+                    interarrival,
+                    max_arrivals,
+                    ..
+                },
+            ) = (dists_ok, &obj.kind)
+            {
+                let mean = interarrival.mean();
+                let limit = max_arrivals.map_or(f64::INFINITY, |n| n as f64);
+                if mean.is_finite() && run.stop_time.is_finite() {
+                    let expected = (run.stop_time / mean).min(limit);
+                    if expected > MAX_ARRIVALS {
+                        errors.push(format!(
+                            "{}: interarrival médio ({mean}) é pequeno demais para o tempo de simulação \
+                             ({}): seriam mais de 1e9 chegadas",
+                            obj.name, run.stop_time
+                        ));
+                    }
                 }
             }
             if let OutputRule::ByLabel(label) = &obj.output {

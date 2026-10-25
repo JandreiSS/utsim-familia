@@ -203,6 +203,8 @@ pub struct Core {
     doomed: Vec<ItemId>,
     errors: Vec<String>,
     events_processed: u64,
+    /// Consecutive events at the same simulated instant (stall detection).
+    same_instant: u64,
     /// Sequence numbers of cancelled events still sitting in the heap.
     cancelled: HashSet<u64>,
     /// Whether tallies keep raw observations (histograms on).
@@ -462,6 +464,11 @@ impl Ctx<'_> {
     pub fn record(&mut self, name: &str, value: f64) {
         let keep_raw = self.core.keep_raw;
         let extra = &mut self.core.blocks[self.me.0].stats.extra;
+        // Hot path (a sink records once per item): look up first, allocate the key once.
+        if let Some(tally) = extra.get_mut(name) {
+            tally.record(value);
+            return;
+        }
         extra
             .entry(name.to_string())
             .or_insert_with(|| {
@@ -746,6 +753,9 @@ impl Ctx<'_> {
     }
 }
 
+/// Events at one instant after which the run is declared stuck.
+const STALL_LIMIT: u64 = 2_000_000;
+
 /// Offset of the breakdown random streams, far above any block index.
 const DOWNTIME_STREAMS: u64 = 1 << 40;
 
@@ -799,6 +809,7 @@ impl Simulation {
                 doomed: Vec::new(),
                 errors: Vec::new(),
                 events_processed: 0,
+                same_instant: 0,
                 cancelled: HashSet::new(),
                 keep_raw: config.histogram_bins.is_some_and(|b| b > 0),
                 samples_taken: 0,
@@ -967,8 +978,21 @@ impl Simulation {
         let limit = t.min(self.config.stop_time);
         while self.core.events.peek().is_some_and(|ev| ev.time <= limit) {
             let ev = self.core.events.pop().expect("peeked");
-            if self.core.cancelled.remove(&ev.seq) {
+            if !self.core.cancelled.is_empty() && self.core.cancelled.remove(&ev.seq) {
                 continue;
+            }
+            if ev.time == self.core.now {
+                self.core.same_instant += 1;
+                if self.core.same_instant > STALL_LIMIT {
+                    return Err(SimError::Model {
+                        time: ev.time,
+                        messages: vec![format!(
+                            "mais de {STALL_LIMIT} eventos no mesmo instante: o tempo não avança (laço no modelo, por exemplo tempos de processo ou intervalos de chegada iguais a zero)"
+                        )],
+                    });
+                }
+            } else {
+                self.core.same_instant = 0;
             }
             self.core.now = ev.time;
             if !matches!(ev.kind, EventKind::Sample) {
