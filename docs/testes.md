@@ -135,6 +135,8 @@ Passos (`Passo`, em `crates/utsim-viewer/src/roteiro.rs`):
 | `ClicarBotao("▶ Simular")` | clica no centro do widget com esse rótulo |
 | `Captura("nome")` | grava `<pasta>/nome.png` e espera o arquivo existir |
 | `Afirmar(condição)` | falha a execução se a condição não valer |
+| `IrPara(1806.0)` | pausa e pula para esse tempo simulado (em Simular) |
+| `Focar(objeto: "empilhadeira_1", distancia: 9.0, giro: Some(0.6), inclinacao: Some(0.35))` | aponta a câmera para onde o bloco está agora; `giro` e `inclinacao` (radianos) são opcionais |
 
 Alvos: `Objeto("fila")` (centro do bloco), `Mundo(x, y)` (chão, coordenadas do modelo),
 `Tela(px, py)` (pixels lógicos da janela), `Botao("rótulo")` (texto egui visível) e
@@ -170,6 +172,12 @@ Simular). O botão "Fluxos" da barra tem o mesmo rótulo do título do painel, e
 Fluidos e AGVs (fase 7): `fluidos_tanques.ron` (com `examples/tanques.ron`: tanques enchendo e esvaziando,
 seleção pela lista e por clique, painel com nível e taxa) e `agvs.ron` (com `examples/agvs.ron`: aresta com
 capacidade em vermelho, AGVs andando e um AGV bloqueado esperando a pista única).
+Modelos 3D realistas (A3D-2): `visual_realista_armazem.ron` (com `examples/centro_de_distribuicao.ron`:
+empilhadeira levando o palete nos garfos, garfos subindo até a célula do porta-paletes em t = 1806 e o
+botão "Visual: simples / realista"), `visual_realista_agvs.ron` (com `examples/agvs.ron`: AGVs virados
+para onde andam e a luz de estado verde, laranja e azul) e `visual_realista_operadores.ron` (com
+`examples/celula_com_operadores.ron`: pernas alternando na caminhada e o operador trabalhando na frente
+da máquina). Grave as capturas fora do repositório, por exemplo em `%TEMP%\utsim_visual\<nome>`.
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a

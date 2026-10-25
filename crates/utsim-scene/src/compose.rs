@@ -358,6 +358,11 @@ impl Scene {
         self.blocks.get(b).and_then(|x| x.role)
     }
 
+    /// The model's `visual` of replay block `b`, when set.
+    pub fn visual(&self, b: usize) -> Option<&VisualDef> {
+        self.blocks.get(b).and_then(|x| x.visual.as_ref())
+    }
+
     /// Level and rate of fluid node `node` at `t`; before the first sample a tank is at
     /// its initial level and idle.
     pub fn fluid_sample(&self, node: usize, t: f64) -> FluidSample {
@@ -501,6 +506,25 @@ impl Scene {
             0.0
         };
         (progress, next)
+    }
+
+    /// Rack cell that mobile block `b` is loading from or unloading into at `t`:
+    /// `(rack block, slot)` of the hand-off that closes its current window, when the
+    /// other block is a rack. Engines use it to turn a forklift towards the cell.
+    pub fn rack_target(&self, b: usize, t: f64) -> Option<(usize, usize)> {
+        let (state, start, end) = self.timeline.state_span(b, t)?;
+        let pickup = match state {
+            State::Loading => true,
+            State::Unloading => false,
+            _ => return None,
+        };
+        let (_, handoff) = self.window(b, t, start, end, pickup);
+        let h = handoff?;
+        if self.blocks.get(h.other)?.kind != "Rack" {
+            return None;
+        }
+        let at = if pickup { t } else { h.t };
+        Some((h.other, self.timeline.rack_slot(h.other, h.item, at)?))
     }
 
     /// Height of the bottom of the rack cell involved in hand-off `h`, when the other
