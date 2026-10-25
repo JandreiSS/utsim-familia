@@ -97,7 +97,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-109 | ver o modelo em 3D no navegador | 7 | ✅ | aba 3D de `web/` (visualizador Bevy em WebGL2, `web/viewer.html`), testada à mão com `mm1` e `armazem`; build no job `web` da CI |
 | RF-110 | entregar a cena 3D de uma rodada a qualquer motor gráfico: pose, papel (pessoa, empilhadeira, AGV) e movimento (andando, carregando, garfos subindo) de cada entidade, em metros e com Z para cima | 8 | ✅ | `utsim-scene/tests/scene.rs` (11 casos conferidos à mão); `utsim cena` grava o fluxo `utsim-scene/1` |
 | RF-111 | abrir modelos de versões anteriores do formato e recusar com clareza os de versões mais novas | 8 | ✅ | `utsim-model/tests/formato.rs` e testes de migração em `utsim-model` |
-| RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | ⏳ | plano em `docs/plano_3d_realista.md` |
+| RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | 🔄 | modelos articulados gerados por código (`utsim-assets`, `tests/modelos.rs`), garfos até o nível, operadores andando; roteiros `visual_realista_*.ron`. Falta: personagens com esqueleto, giro suave, sombras |
 | RF-113 | visitar o modelo em realidade virtual | A3D | ⏳ | cena já preparada (escala real, protocolo versionado); cliente Unreal/OpenXR planejado |
 
 ## Requisitos não funcionais (RNF)
