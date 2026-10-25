@@ -129,3 +129,7 @@ a situação atual e onde está a prova de que funciona.
 | RNF-23 | otimizar rápido: um problema de 15 pontos × 5 replicações + refinamento em ~0,3 s | ✅ | `utsim otimizar examples/otimizacao_servidores.ron` |
 | RNF-24 | manter o cálculo da cena 3D puro e independente de motor gráfico (sem Bevy), compilando também para o navegador | ✅ | `cargo build -p utsim-scene --target wasm32-unknown-unknown` |
 | RNF-25 | publicar versões com binários para Windows, Linux e a página web a cada tag | 🔄 | `.github/workflows/release.yml` (ainda não rodou no GitHub) |
+| RNF-26 | simular rápido: pelo menos 1 milhão de eventos/s com 10 a 100 objetos; 100 mil itens por uma linha de 100 objetos em menos de 10 s | ✅ | `utsim-scene/tests/desempenho.rs` (medido: 3,2 a 4,6 M eventos/s; 1,3 s), `docs/desempenho.md` |
+| RNF-27 | gravar e mostrar rápido: o replay custa no máximo 3× a rodada simples; um quadro de cena com 500 objetos em menos de 16 ms | ✅ | `utsim-scene/tests/desempenho.rs` (medido: ~1,4×; 2,6 ms) |
+| RNF-28 | nunca travar nem fechar com um modelo errado: qualquer texto vira modelo válido ou erro em português, sem pânico, laço infinito ou estouro de memória | ✅ | `utsim-model/tests/robustez.rs` e `utsim-fit/tests/robustez.rs` (proptest) |
+| RNF-29 | a página web não congela durante simulações longas e permite cancelar | ✅ | `web/worker.js`, `web/smoke.mjs` |
