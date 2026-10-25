@@ -8,6 +8,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ### Adicionado
 - Campo opcional `format` nos modelos `.ron` (ausente vale 1), com erro claro para formatos mais novos e gancho de migração.
+- Fase 11: `utsim gerar-modelo` (modelos sintéticos de qualquer tamanho), benchmark `cargo bench -p utsim-scene`, metas de desempenho em testes `#[ignore]` e `docs/desempenho.md`.
+- Testes de robustez (proptest) do leitor de modelos e do leitor de dados do ajuste.
+- Página web: o motor roda em um Web Worker, com botão "Cancelar".
+
+### Corrigido
+- Modelos que travavam ou esgotavam a memória agora são recusados na validação (fontes com intervalo quase nulo, porta-paletes ou `Split` gigantes, fluxos com intervalo zero) ou terminam com erro (muitos eventos no mesmo instante).
+
+### Alterado
+- Núcleo e índice da cena mais rápidos (10 % a 45 % no núcleo), sem mudar resultados.
 
 ## [0.1.0]
 

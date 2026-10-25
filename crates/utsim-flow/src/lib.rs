@@ -223,7 +223,10 @@ impl FlowDef {
                     Err(e) => errors.push(format!("{at}.interarrival: {e}")),
                     // A zero (or vanishing) interval with no limit creates tokens forever
                     // at one instant, filling memory.
-                    Ok(()) if limit.is_none() && !(interarrival.mean() > 1e-9) => {
+                    Ok(())
+                        if limit.is_none()
+                            && (interarrival.mean().is_nan() || interarrival.mean() <= 1e-9) =>
+                    {
                         errors.push(format!(
                             "{at}: interarrival com média ({}) menor que 1e-9 exige `limit`",
                             interarrival.mean()
