@@ -11,28 +11,29 @@ use utsim_core::summarize;
 use crate::{Model, ModelError, ObjectKind};
 
 /// An experiment file: a base model plus named scenarios that patch it.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename = "Experiment")]
 pub struct Experiment {
     pub name: String,
     /// Model path, relative to the experiment file.
     pub model: String,
     /// Overrides `run.replications` of the base model.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replications: Option<u32>,
     pub scenarios: Vec<Scenario>,
     /// Metric keys to keep (e.g. `fila.content.mean`); empty keeps all.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub measures: Vec<String>,
     /// Directory of the experiment file, used to resolve `model`.
     #[serde(skip)]
     base_dir: PathBuf,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scenario {
     pub name: String,
     /// `<object>.<field>` or `run.<field>` to RON source text of the new value.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub set: BTreeMap<String, String>,
 }
 
@@ -40,6 +41,10 @@ pub struct Scenario {
 pub struct ScenarioResult {
     pub name: String,
     pub summary: BTreeMap<String, Summary>,
+    /// Value of every kept metric in each replication (paired across scenarios by
+    /// replication, since every scenario uses the same seeds).
+    #[serde(skip)]
+    pub per_replication: BTreeMap<String, Vec<f64>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -58,6 +63,24 @@ fn invalid(msg: String) -> ModelError {
 }
 
 impl Experiment {
+    /// An experiment over the model file `model` (relative to where it will be saved).
+    pub fn new(
+        name: impl Into<String>,
+        model: impl Into<String>,
+        replications: Option<u32>,
+        scenarios: Vec<Scenario>,
+        measures: Vec<String>,
+    ) -> Experiment {
+        Experiment {
+            name: name.into(),
+            model: model.into(),
+            replications,
+            scenarios,
+            measures,
+            base_dir: PathBuf::new(),
+        }
+    }
+
     pub fn parse(text: &str, base_dir: impl Into<PathBuf>) -> Result<Experiment, ModelError> {
         let mut exp: Experiment = options().from_str(text)?;
         exp.base_dir = base_dir.into();
@@ -70,31 +93,88 @@ impl Experiment {
         Experiment::parse(&std::fs::read_to_string(path)?, dir)
     }
 
+    /// Path of the base model (`model` resolved against the experiment file).
+    pub fn model_path(&self) -> PathBuf {
+        self.base_dir.join(&self.model)
+    }
+
+    /// The experiment as RON text, ready to be saved and read back by [`Experiment::parse`].
+    pub fn to_ron(&self) -> String {
+        let config = ron::ser::PrettyConfig::new().struct_names(true);
+        let body = ron::ser::to_string_pretty(self, config).expect("experiment serializes");
+        format!("// Experimento do UTSim. Uso: utsim experiment <arquivo>\n{body}\n")
+    }
+
     /// Runs every scenario. All scenarios keep the base seed, so replication `r`
     /// uses the same random streams in each one (common random numbers).
     pub fn run(&self) -> Result<ExperimentResult, ModelError> {
-        let mut base = Model::load(self.base_dir.join(&self.model))?;
+        let mut base = Model::load(self.model_path())?;
         if let Some(r) = self.replications {
             base.run.replications = r;
         }
-        let mut scenarios = Vec::new();
-        for sc in &self.scenarios {
-            let model = apply_patches(&base, &sc.set)
-                .map_err(|e| invalid(format!("cenário '{}': {e}", sc.name)))?;
-            let mut summary = summarize(&model.run_replications()?);
-            if !self.measures.is_empty() {
-                summary.retain(|k, _| self.measures.contains(k));
-            }
-            scenarios.push(ScenarioResult {
-                name: sc.name.clone(),
-                summary,
-            });
-        }
+        let scenarios = run_scenarios(&base, &self.scenarios, &self.measures, &|_, _| true)?;
         Ok(ExperimentResult {
             name: self.name.clone(),
             measures: self.measures.clone(),
             scenarios,
         })
+    }
+}
+
+/// Runs `scenarios` over `base` (its `run.replications`, same seeds in every scenario).
+/// `progress(scenario, done)` is called after each finished replication of a scenario;
+/// returning `false` stops with [`ModelError::Cancelled`].
+pub fn run_scenarios(
+    base: &Model,
+    scenarios: &[Scenario],
+    measures: &[String],
+    progress: &(dyn Fn(usize, u32) -> bool + Sync),
+) -> Result<Vec<ScenarioResult>, ModelError> {
+    let mut out = Vec::new();
+    for (i, sc) in scenarios.iter().enumerate() {
+        let model = apply_patches(base, &sc.set)
+            .map_err(|e| invalid(format!("cenário '{}': {e}", sc.name)))?;
+        let reports = model.run_replications_with(&|done| progress(i, done))?;
+        let mut summary = summarize(&reports);
+        let mut per_replication = crate::analysis::per_replication(&reports);
+        if !measures.is_empty() {
+            summary.retain(|k, _| measures.contains(k));
+            per_replication.retain(|k, _| measures.contains(k));
+        }
+        out.push(ScenarioResult {
+            name: sc.name.clone(),
+            summary,
+            per_replication,
+        });
+    }
+    Ok(out)
+}
+
+impl ExperimentResult {
+    /// Every metric of the result: `measures` when given, else all, sorted.
+    pub fn metric_names(&self) -> Vec<String> {
+        if !self.measures.is_empty() {
+            return self.measures.clone();
+        }
+        let mut all: Vec<String> = self
+            .scenarios
+            .iter()
+            .flat_map(|s| s.summary.keys().cloned())
+            .collect();
+        all.sort();
+        all.dedup();
+        all
+    }
+
+    /// Paired difference of `metric` between scenario `i` and the first one
+    /// (`None` for the first scenario itself or when the metric is missing).
+    pub fn difference_to_first(&self, i: usize, metric: &str) -> Option<Summary> {
+        if i == 0 {
+            return None;
+        }
+        let a = self.scenarios.get(i)?.per_replication.get(metric)?;
+        let b = self.scenarios.first()?.per_replication.get(metric)?;
+        Some(crate::analysis::paired_difference(a, b))
     }
 }
 
@@ -537,5 +617,64 @@ mod tests {
         .unwrap();
         assert_eq!(exp.replications, Some(3));
         assert_eq!(exp.scenarios[1].set["m.capacity"], "2");
+    }
+
+    fn scenario(name: &str, set: &[(&str, &str)]) -> Scenario {
+        Scenario {
+            name: name.into(),
+            set: set
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn experiment_round_trips_through_ron() {
+        let exp = Experiment::new(
+            "e",
+            "m.ron",
+            Some(4),
+            vec![
+                scenario("base", &[]),
+                scenario("dois", &[("m.capacity", "2")]),
+            ],
+            vec!["q.content.mean".into()],
+        );
+        let text = exp.to_ron();
+        assert!(text.contains("Experiment("), "{text}");
+        let back = Experiment::parse(&text, "dir").unwrap();
+        assert_eq!(back.scenarios, exp.scenarios);
+        assert_eq!(back.replications, Some(4));
+        assert_eq!(back.measures, exp.measures);
+        assert_eq!(back.model_path(), PathBuf::from("dir").join("m.ron"));
+    }
+
+    #[test]
+    fn scenarios_are_paired_by_replication() {
+        let mut base = model();
+        base.run.replications = 4;
+        base.run.stop_time = 5000.0;
+        let scenarios = vec![
+            scenario("base", &[]),
+            scenario("rapida", &[("m.process", "Exp(mean: 0.4)")]),
+        ];
+        let measures = vec!["q.content.mean".to_string()];
+        let scenarios = run_scenarios(&base, &scenarios, &measures, &|_, _| true).unwrap();
+        let result = ExperimentResult {
+            name: "e".into(),
+            measures: measures.clone(),
+            scenarios,
+        };
+        assert_eq!(
+            result.scenarios[1].per_replication["q.content.mean"].len(),
+            4
+        );
+        assert!(result.difference_to_first(0, "q.content.mean").is_none());
+        let d = result.difference_to_first(1, "q.content.mean").unwrap();
+        assert!(d.mean < 0.0 && crate::analysis::is_significant(&d), "{d:?}");
+        assert_eq!(result.metric_names(), measures);
+        let stopped = run_scenarios(&base, &[scenario("a", &[])], &[], &|_, _| false);
+        assert!(matches!(stopped, Err(ModelError::Cancelled)));
     }
 }

@@ -1,6 +1,9 @@
 //! Model description: what is written in a `.ron` file and how it becomes a [`Simulation`].
 
+pub mod analysis;
+pub mod csv;
 pub mod experiment;
+pub mod html;
 pub mod replay;
 pub mod synthetic;
 mod warnings;
@@ -66,6 +69,9 @@ pub enum ModelError {
     Invalid(Vec<String>),
     #[error(transparent)]
     Sim(#[from] SimError),
+    /// The run was stopped from outside (the progress callback asked to stop).
+    #[error("execução cancelada")]
+    Cancelled,
 }
 
 /// Most arrivals a single source may be expected to create in one replication.
@@ -986,12 +992,43 @@ impl Model {
     /// Without the `parallel` feature (WebAssembly) they run one after another,
     /// with identical results and order.
     pub fn run_replications(&self) -> Result<Vec<RunReport>, ModelError> {
+        self.run_replications_with(&|_| true)
+    }
+
+    /// Like [`Model::run_replications`], calling `progress(done)` after each finished
+    /// replication (`done` counts the finished ones, in any order). When it returns
+    /// `false`, no new replication starts and the run ends with
+    /// [`ModelError::Cancelled`]. Results are identical to `run_replications`.
+    pub fn run_replications_with(
+        &self,
+        progress: &(dyn Fn(u32) -> bool + Sync),
+    ) -> Result<Vec<RunReport>, ModelError> {
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         self.validate()?;
+        let done = AtomicU32::new(0);
+        let stop = AtomicBool::new(false);
+        let one = |r: u32| -> Result<RunReport, ModelError> {
+            if stop.load(Ordering::Relaxed) {
+                return Err(ModelError::Cancelled);
+            }
+            let report = self.drive(&mut self.build(r))?;
+            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+            if !progress(n) {
+                stop.store(true, Ordering::Relaxed);
+            }
+            Ok(report)
+        };
         #[cfg(feature = "parallel")]
         let iter = (0..self.run.replications).into_par_iter();
         #[cfg(not(feature = "parallel"))]
         let iter = 0..self.run.replications;
-        iter.map(|r| self.drive(&mut self.build(r))).collect()
+        let reports: Vec<RunReport> = iter.map(one).collect::<Result<_, _>>()?;
+        // A stop asked for while the last replications were already running still
+        // counts: the caller asked not to wait for this result.
+        if stop.load(Ordering::Relaxed) {
+            return Err(ModelError::Cancelled);
+        }
+        Ok(reports)
     }
 
     /// Runs a built simulation to the end, answering agent decisions with

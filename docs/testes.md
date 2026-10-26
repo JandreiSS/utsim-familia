@@ -200,6 +200,15 @@ Condições dessas camadas: `Camada("Rede")`, `NosIgual(n)`, `ArestasIgual(n)`, 
 `NoEm("a", (x, y))`, `SelecaoCamada(Some("no:a" | "aresta:a->b" | "fluido:tanque"))`,
 `NosFluidoIgual(n)`, `LigacoesFluidoIgual(n)`, `AvisosIgual(n)` e `NivelEntre("tanque", min, max)`;
 as ferramentas aparecem como `Rede:No`, `Rede:Aresta[:nó]`, `Fluido:Tank` e `Fluido:Ligar[:nó]`.
+Janela Resultados (fase 10): `resultados.ron` (com `examples/tutorial_02_linha.ron`: 5 replicações, gargalo na
+`furacao`, tabela ordenada pela ocupação, os quatro gráficos e exportação de CSV e HTML para a pasta ao lado da
+cópia do modelo) e `cenarios.ron` (com `examples/servidores.ron`: coluna `maquina.capacity`, cenário com 3
+servidores, comparação com a diferença pareada, gráfico de uma métrica e o experimento salvo em `.ron`).
+Condições: `PainelResultados(true)`, `AbaResultados("Resumo" | "Gráficos" | "Cenários" | "Otimização")`,
+`AnaliseRodando(false)`, `ReplicacoesNoResultado(n)`, `Gargalo(Some("furacao"))`, `CenariosComparados(n)`,
+`Exportado("resumo.csv")` (algum arquivo gravado pelas exportações termina com o texto) e
+`MelhorPontoContem("maquina.capacity = 3")`. Para editar um número (`DragValue`), clique nele, use
+`Atalho(["Ctrl", "A"])`, `Digitar` e `Tecla("Enter")`.
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a

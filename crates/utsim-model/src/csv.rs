@@ -1,4 +1,4 @@
-//! Hand-written CSV export of run results.
+//! Hand-written CSV export of run results (used by `utsim run --csv` and the 3D editor).
 
 use std::io;
 use std::path::Path;
@@ -14,14 +14,14 @@ pub fn field(s: &str) -> String {
     }
 }
 
-fn row(out: &mut String, fields: &[String]) {
+pub fn row(out: &mut String, fields: &[String]) {
     let line: Vec<String> = fields.iter().map(|f| field(f)).collect();
     out.push_str(&line.join(","));
     out.push('\n');
 }
 
 /// Numbers are written with Rust's shortest round-trip format; NaN becomes an empty cell.
-fn num(x: f64) -> String {
+pub fn num(x: f64) -> String {
     if x.is_nan() {
         String::new()
     } else {
@@ -29,7 +29,7 @@ fn num(x: f64) -> String {
     }
 }
 
-fn summary_csv(reports: &[RunReport]) -> String {
+pub fn summary_csv(reports: &[RunReport]) -> String {
     let mut out = String::from("metrica,n,media,desvio_padrao,meia_largura_95\n");
     for (metric, s) in summarize(reports) {
         row(
@@ -46,7 +46,7 @@ fn summary_csv(reports: &[RunReport]) -> String {
     out
 }
 
-fn replications_csv(reports: &[RunReport]) -> String {
+pub fn replications_csv(reports: &[RunReport]) -> String {
     let mut out = String::from("replicacao,metrica,valor\n");
     for r in reports {
         for (metric, v) in r.metrics() {
@@ -56,7 +56,7 @@ fn replications_csv(reports: &[RunReport]) -> String {
     out
 }
 
-fn series_csv(reports: &[RunReport]) -> String {
+pub fn series_csv(reports: &[RunReport]) -> String {
     let mut out = String::from("replicacao,objeto,t,conteudo,estado\n");
     for r in reports {
         for b in &r.blocks {
@@ -77,7 +77,7 @@ fn series_csv(reports: &[RunReport]) -> String {
     out
 }
 
-fn histograms_csv(reports: &[RunReport]) -> String {
+pub fn histograms_csv(reports: &[RunReport]) -> String {
     let mut out = String::from("replicacao,objeto,metrica,inicio_bin,fim_bin,contagem\n");
     for r in reports {
         for b in &r.blocks {
@@ -101,6 +101,31 @@ fn histograms_csv(reports: &[RunReport]) -> String {
                 }
             }
         }
+    }
+    out
+}
+
+/// The per-object table of a results screen ([`crate::analysis::object_stats`]): one
+/// row per object, mean and 95% half-width of each column.
+pub fn objects_csv(stats: &[crate::analysis::ObjectStats]) -> String {
+    let mut out = String::from(
+        "objeto,tipo,entradas,entradas_mw,saidas,saidas_mw,conteudo_medio,conteudo_medio_mw,\
+         permanencia_media,permanencia_media_mw,ocupacao,ocupacao_mw\n",
+    );
+    for s in stats {
+        let mut fields = vec![s.name.clone(), s.kind.clone()];
+        for v in [s.input, s.output, s.content, s.staytime] {
+            fields.push(num(v.mean));
+            fields.push(num(v.half_width));
+        }
+        match s.utilization {
+            Some(u) => {
+                fields.push(num(u.mean));
+                fields.push(num(u.half_width));
+            }
+            None => fields.extend([String::new(), String::new()]),
+        }
+        row(&mut out, &fields);
     }
     out
 }
