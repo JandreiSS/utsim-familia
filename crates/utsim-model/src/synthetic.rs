@@ -49,6 +49,7 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         downtime: None,
         shifts: None,
         transport: None,
+        transfer: None,
         on_entry: None,
         visual: None,
     }
@@ -212,6 +213,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             sample_interval: None,
             histogram_bins: None,
             default_decision: None,
+            transfer: None,
         },
         objects: objs,
         connections,

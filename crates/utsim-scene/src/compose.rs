@@ -580,6 +580,41 @@ impl Scene {
                         drawn: true,
                     });
                 }
+                ItemPos::Flight {
+                    from,
+                    to,
+                    progress,
+                    flight,
+                } if from < n && to < n => {
+                    // Constant speed along the connection: straight between the two
+                    // objects as drawn, or along the network route the kernel took.
+                    let s = progress as f32;
+                    let routed = tl
+                        .flight_is_routed(flight)
+                        .then(|| tl.flight_point(flight, progress))
+                        .flatten();
+                    let mut center = match routed {
+                        Some(point) => layout::to_bevy(point),
+                        None => {
+                            let (a, b) = (self.base_at(from, t), self.base_at(to, t));
+                            [
+                                a[0] + (b[0] - a[0]) * s,
+                                a[1] + (b[1] - a[1]) * s,
+                                a[2] + (b[2] - a[2]) * s,
+                            ]
+                        }
+                    };
+                    center[1] += TRANSIT_HEIGHT;
+                    placed.push(ItemPlacement {
+                        item: i,
+                        id: id(i),
+                        center,
+                        scale: 1.0,
+                        yaw: 0.0,
+                        parent: None,
+                        drawn: true,
+                    });
+                }
                 ItemPos::Inside(c) => {
                     *fill.entry(c).or_default() += 1;
                     packed.push((i, c));

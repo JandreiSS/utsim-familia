@@ -39,6 +39,15 @@ pub enum ItemPos {
     NotYet,
     /// Resting inside block `b`.
     At(usize),
+    /// On a timed direct connection (`TransferDef`): left `from`, arriving at `to`;
+    /// `progress` in `0..1` along the connection (0 while it waits out the fixed delay).
+    /// `flight` indexes [`Timeline::flight_point`].
+    Flight {
+        from: usize,
+        to: usize,
+        progress: f64,
+        flight: usize,
+    },
     /// Moving from block `from` to block `to`; `progress` in `0..1`.
     Transit {
         from: usize,
@@ -67,6 +76,14 @@ enum ItemStep {
         from: usize,
         to: usize,
         transit: f64,
+    },
+    /// Left `from` on a timed direct connection; the `Moved` that follows is the arrival.
+    /// `flight` indexes `Timeline::flights`; `delay` is the wait before moving.
+    Flight {
+        from: usize,
+        to: usize,
+        delay: f64,
+        flight: usize,
     },
     Packed(usize),
     Unpacked(usize),
@@ -294,6 +311,8 @@ pub struct Timeline {
     tokens: crate::tokens::TokenTrack,
     /// Fluid samples per (network block, node): `(t, level, rate)` in time order.
     fluid: FluidSeries,
+    /// Paths of the timed direct connections, in trace order (`t0` = start of the motion).
+    flights: Vec<TravelLeg>,
     /// Trace id of each item (by dense index).
     ids: Vec<u64>,
     /// Items handed to or taken from each mobile block, in time order.
@@ -394,6 +413,7 @@ impl Timeline {
         let mut fluid = FluidSeries::new();
         let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
         let mut n_travels = 0usize;
+        let mut flights: Vec<TravelLeg> = Vec::new();
         let mut handoffs: HashMap<usize, Vec<Handoff>> = HashMap::new();
 
         let item_index = |key: u64,
@@ -447,6 +467,9 @@ impl Timeline {
                     if items[i].created.is_infinite() {
                         items[i].created = t;
                     }
+                    // The arrival of a timed transfer: the departure was already counted.
+                    let arriving =
+                        matches!(items[i].steps.last(), Some((_, ItemStep::Flight { .. })));
                     items[i].steps.push((
                         t,
                         ItemStep::Moved {
@@ -455,13 +478,15 @@ impl Timeline {
                             transit: 0.0,
                         },
                     ));
-                    bump(&mut blocks, &mut counts, *from, t, false);
+                    if !arriving {
+                        bump(&mut blocks, &mut counts, *from, t, false);
+                    }
                     bump(&mut blocks, &mut counts, *to, t, true);
                     if let Some(track) = blocks.get_mut(*to) {
                         track.arrivals.push(t);
                     }
                     for (carrier, other, pickup) in [(*to, *from, true), (*from, *to, false)] {
-                        if is_mobile(carrier) {
+                        if is_mobile(carrier) && !(arriving && !pickup) {
                             handoffs.entry(carrier).or_default().push(Handoff {
                                 t,
                                 item: i,
@@ -470,7 +495,7 @@ impl Timeline {
                             });
                         }
                     }
-                    if is_belt(*from) {
+                    if is_belt(*from) && !arriving {
                         belt_events
                             .entry(*from)
                             .or_default()
@@ -483,6 +508,38 @@ impl Timeline {
                             .push(BeltEv::In { t, item: i });
                     }
                     at[i] = Some(*to);
+                }
+                TraceEvent::Transit {
+                    item,
+                    from,
+                    to,
+                    delay,
+                    duration,
+                    path,
+                } => {
+                    let i = item_index(*item, &mut index, &mut items, &mut at);
+                    let k = flights.len();
+                    flights.push(
+                        TravelLeg::new(t + delay, *duration, path)
+                            .unwrap_or_else(|| TravelLeg::new(t, 0.0, &[[0.0; 3]]).expect("point")),
+                    );
+                    items[i].steps.push((
+                        t,
+                        ItemStep::Flight {
+                            from: *from,
+                            to: *to,
+                            delay: *delay,
+                            flight: k,
+                        },
+                    ));
+                    bump(&mut blocks, &mut counts, *from, t, false);
+                    if is_belt(*from) {
+                        belt_events
+                            .entry(*from)
+                            .or_default()
+                            .push(BeltEv::Out { t, item: i });
+                    }
+                    at[i] = None;
                 }
                 TraceEvent::Packed { item, container } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
@@ -618,7 +675,12 @@ impl Timeline {
             for k in 0..it.steps.len() {
                 let next = it.steps.get(k + 1).map(|s| s.0);
                 let here = it.steps[k].0;
+                let after_flight = k > 0 && matches!(it.steps[k - 1].1, ItemStep::Flight { .. });
                 if let ItemStep::Moved { from, to, transit } = &mut it.steps[k].1 {
+                    if after_flight {
+                        *transit = 0.0;
+                        continue;
+                    }
                     // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
                     if is_mobile(*from)
                         || is_mobile(*to)
@@ -670,6 +732,7 @@ impl Timeline {
             max_slot,
             tokens,
             fluid,
+            flights,
             ids,
             handoffs,
         }
@@ -859,6 +922,17 @@ impl Timeline {
         }
     }
 
+    /// Model-space point of a timed direct connection after `progress` (0..1) of its path.
+    pub fn flight_point(&self, flight: usize, progress: f64) -> Option<[f64; 3]> {
+        let leg = self.flights.get(flight)?;
+        Some(leg.at(leg.t0 + progress.clamp(0.0, 1.0) * leg.duration))
+    }
+
+    /// Whether the connection's path has more than two points (a network route).
+    pub fn flight_is_routed(&self, flight: usize) -> bool {
+        self.flights.get(flight).is_some_and(|l| l.path.len() > 2)
+    }
+
     pub fn item_pos(&self, item: usize, t: f64) -> ItemPos {
         self.item_pos_since(item, t).0
     }
@@ -885,6 +959,25 @@ impl Timeline {
                     }
                 } else {
                     ItemPos::At(to)
+                }
+            }
+            ItemStep::Flight {
+                from,
+                to,
+                delay,
+                flight,
+            } => {
+                let leg = &self.flights[flight];
+                let progress = if leg.duration > 0.0 {
+                    ((t - te - delay) / leg.duration).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                ItemPos::Flight {
+                    from,
+                    to,
+                    progress,
+                    flight,
                 }
             }
             ItemStep::Packed(c) => ItemPos::Inside(c),

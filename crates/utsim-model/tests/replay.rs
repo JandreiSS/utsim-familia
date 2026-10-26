@@ -83,6 +83,7 @@ fn item_of(event: &TraceEvent) -> Option<u64> {
         | TraceEvent::Moved { item, .. }
         | TraceEvent::Packed { item, .. }
         | TraceEvent::Unpacked { item, .. }
+        | TraceEvent::Transit { item, .. }
         | TraceEvent::Destroyed { item } => Some(item),
         TraceEvent::Slot { item, .. } => Some(item),
         TraceEvent::State { .. }
@@ -99,6 +100,8 @@ enum Loc {
     In(usize),
     /// Dentro do contêiner, fora de qualquer bloco.
     Packed(u64),
+    /// A caminho (ligação com tempo de viagem), saiu do bloco dado.
+    Flying(usize),
 }
 
 /// Conteúdo, estado e itens do modelo, reconstruídos aplicando os registros em ordem.
@@ -145,6 +148,11 @@ impl Ledger {
                 check_block(from)?;
                 check_block(to)?;
                 let loc = self.loc_of(item)?;
+                if loc == Loc::Flying(from) {
+                    self.items.insert(item, Loc::In(to));
+                    self.content[to] += 1;
+                    return Ok(());
+                }
                 if loc != Loc::In(from) {
                     return Err(format!("item {item} movido de {from}, mas está em {loc:?}"));
                 }
@@ -163,6 +171,15 @@ impl Ledger {
                 }
                 self.items.insert(item, Loc::Packed(container));
                 self.content[b] -= 1;
+            }
+            TraceEvent::Transit { item, from, to, .. } => {
+                check_block(from)?;
+                check_block(to)?;
+                if self.loc_of(item)? != Loc::In(from) {
+                    return Err(format!("item {item} saiu de {from}, mas não estava lá"));
+                }
+                self.items.insert(item, Loc::Flying(from));
+                self.content[from] -= 1;
             }
             TraceEvent::Travel { carrier, .. } => check_block(carrier)?,
             TraceEvent::Slot { block, .. } => check_block(block)?,
