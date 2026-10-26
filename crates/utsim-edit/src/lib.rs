@@ -8,15 +8,22 @@
 //! clipboard (copy, cut, paste, duplicate), moving and deleting a selection, align and
 //! distribute, and fanning a property edit out to every selected object. Each one
 //! returns a single [`Command::Batch`], so it is one undo step.
+//!
+//! [`network`] and [`fluids`] execute the commands on the path network and on the
+//! fluid network, and hold the helpers the editor draws them with.
 
 pub mod arrange;
+pub mod fluids;
+pub mod network;
 
 use std::path::{Path, PathBuf};
 
 use utsim_core::Dist;
+pub use utsim_fluid::{FluidDef, FluidKind, FluidNode};
 use utsim_model::experiment::patch;
 use utsim_model::replay::Replay;
 use utsim_model::{Model, ModelError, ObjectDef, ObjectKind, VisualDef};
+pub use utsim_objects::network::{EdgeDef, NetworkDef, NodeDef};
 use utsim_objects::{CombineMode, SeparateMode};
 
 /// One user action. Commands are data, so the GUI, tests and scripts drive the
@@ -57,6 +64,61 @@ pub enum Command {
     SetVisual {
         name: String,
         visual: Option<VisualDef>,
+    },
+    /// Adds a node to the path network (created on first use).
+    AddNode(NodeDef),
+    MoveNode {
+        name: String,
+        position: [f64; 3],
+    },
+    /// Renames a node, updating its edges.
+    RenameNode {
+        from: String,
+        to: String,
+    },
+    /// Removes a node and every edge touching it (the network goes when it is empty).
+    RemoveNode {
+        name: String,
+    },
+    /// Adds an edge between two existing, different nodes.
+    AddEdge(EdgeDef),
+    /// Replaces the edge stored as `from -> to` (direction, ends or capacity).
+    SetEdge {
+        from: String,
+        to: String,
+        edge: EdgeDef,
+    },
+    RemoveEdge {
+        from: String,
+        to: String,
+    },
+    /// Adds a node to the fluid network (created on first use).
+    AddFluidNode(FluidNode),
+    MoveFluidNode {
+        name: String,
+        position: [f64; 3],
+    },
+    /// Renames a fluid node, updating its links.
+    RenameFluidNode {
+        from: String,
+        to: String,
+    },
+    /// Replaces the kind and parameters of a fluid node.
+    SetFluidKind {
+        name: String,
+        kind: FluidKind,
+    },
+    /// Removes a fluid node and its links (the network goes when it is empty).
+    RemoveFluidNode {
+        name: String,
+    },
+    AddFluidLink {
+        from: String,
+        to: String,
+    },
+    RemoveFluidLink {
+        from: String,
+        to: String,
     },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
@@ -212,16 +274,43 @@ impl Document {
             .map(str::to_string)
     }
 
+    /// Warnings about a model that runs but is probably not what the author meant
+    /// ([`Model::warnings`], plus mobile resources that serve nobody). Only computed
+    /// when there are no [`Document::issues`], as `Model::warnings` expects.
+    pub fn warnings(&self) -> Vec<Issue> {
+        if self.model.validate().is_err() {
+            return Vec::new();
+        }
+        self.model
+            .warnings()
+            .into_iter()
+            .chain(network::idle_resources(&self.model))
+            .map(|message| Issue {
+                object: self.object_of(&message),
+                message,
+            })
+            .collect()
+    }
+
     /// `base`, or `base_2`, `base_3`... whichever is free.
     pub fn unique_name(&self, base: &str) -> String {
-        let taken = |n: &str| self.model.objects.iter().any(|o| o.name == n);
-        if !taken(base) {
-            return base.to_string();
-        }
-        (2..)
-            .map(|i| format!("{base}_{i}"))
-            .find(|n| !taken(n))
-            .expect("some suffix is free")
+        free_name(base, |n| self.model.objects.iter().any(|o| o.name == n))
+    }
+
+    /// A free name for a new node of the path network.
+    pub fn unique_node_name(&self, base: &str) -> String {
+        let net = self.model.network.as_ref();
+        free_name(base, |n| {
+            net.is_some_and(|x| x.nodes.iter().any(|o| o.name == n))
+        })
+    }
+
+    /// A free name for a new node of the fluid network.
+    pub fn unique_fluid_name(&self, base: &str) -> String {
+        let def = self.model.fluids.as_ref();
+        free_name(base, |n| {
+            def.is_some_and(|x| x.nodes.iter().any(|o| o.name == n))
+        })
     }
 
     /// Stable RON text: same model, same bytes. Comments inside the model are not
@@ -255,6 +344,16 @@ impl Document {
     pub fn replay(&self, replication: u32) -> Result<Replay, ModelError> {
         self.model.replay(replication)
     }
+}
+
+fn free_name(base: &str, taken: impl Fn(&str) -> bool) -> String {
+    if !taken(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|i| format!("{base}_{i}"))
+        .find(|n| !taken(n))
+        .expect("some suffix is free")
 }
 
 fn not_found(name: &str) -> String {
@@ -301,6 +400,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                     }
                 }
             }
+            fluids::rename_object(model, from, to);
         }
         Command::Move { name, position } => {
             let object = model
@@ -340,6 +440,20 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 .ok_or_else(|| not_found(name))?;
             object.visual = visual.clone().filter(|v| *v != VisualDef::default());
         }
+        Command::AddNode(node) => network::add_node(model, node)?,
+        Command::MoveNode { name, position } => network::move_node(model, name, *position)?,
+        Command::RenameNode { from, to } => network::rename_node(model, from, to)?,
+        Command::RemoveNode { name } => network::remove_node(model, name)?,
+        Command::AddEdge(edge) => network::add_edge(model, edge)?,
+        Command::SetEdge { from, to, edge } => network::set_edge(model, from, to, edge)?,
+        Command::RemoveEdge { from, to } => network::remove_edge(model, from, to)?,
+        Command::AddFluidNode(node) => fluids::add_node(model, node)?,
+        Command::MoveFluidNode { name, position } => fluids::move_node(model, name, *position)?,
+        Command::RenameFluidNode { from, to } => fluids::rename_node(model, from, to)?,
+        Command::SetFluidKind { name, kind } => fluids::set_kind(model, name, kind)?,
+        Command::RemoveFluidNode { name } => fluids::remove_node(model, name)?,
+        Command::AddFluidLink { from, to } => fluids::add_link(model, from, to)?,
+        Command::RemoveFluidLink { from, to } => fluids::remove_link(model, from, to)?,
         Command::Batch(commands) => {
             for c in commands {
                 execute(model, c)?;
@@ -507,7 +621,9 @@ pub fn palette_entry(id: &str) -> Option<&'static PaletteEntry> {
 }
 
 /// A new object from palette entry `id` with sensible defaults (a preset sets its
-/// `visual` and the speeds of its role: 1.2 m/s walking, 2 m/s forklift, 1.5 m/s AGV).
+/// `visual` and the speeds of its role: 1.2 m/s walking, 2 m/s forklift, 1.5 m/s AGV;
+/// the AGV also accelerates at 0.5 m/s², docks in 0.5 s, follows the traffic rules of
+/// the network and returns to its base when idle).
 pub fn from_palette(id: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef> {
     let e = palette_entry(id)?;
     let mut object = template(e.kind, name, position)?;
@@ -519,7 +635,10 @@ pub fn from_palette(id: &str, name: &str, position: [f64; 3]) -> Option<ObjectDe
     }
     if let ObjectKind::Transporter {
         speed,
+        acceleration,
+        deceleration,
         agv,
+        home,
         load_time,
         unload_time,
         ..
@@ -533,7 +652,14 @@ pub fn from_palette(id: &str, name: &str, position: [f64; 3]) -> Option<ObjectDe
                 *unload_time = Dist::Const(0.5);
             }
             "Agv" => {
+                // Gentle starts and stops, a short docking at each end, and back to its
+                // base (a node of the network) when idle.
                 *speed = 1.5;
+                *acceleration = Some(0.5);
+                *deceleration = Some(0.5);
+                *load_time = Dist::Const(0.5);
+                *unload_time = Dist::Const(0.5);
+                *home = true;
                 *agv = true;
             }
             _ => {}
@@ -675,6 +801,37 @@ mod tests {
     }
 
     #[test]
+    fn warnings_are_kept_apart_from_issues() {
+        let mut doc = line();
+        assert!(doc.warnings().is_empty());
+        let emp = from_palette("Forklift", "emp", [0.0, 5.0, 0.0]).unwrap();
+        doc.apply(Command::Add(Box::new(emp))).unwrap();
+        assert!(doc.issues().is_empty());
+        let warnings = doc.warnings();
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(warnings[0].object.as_deref(), Some("emp"));
+        // A long instantaneous connection is a model warning.
+        doc.apply(Command::Move {
+            name: "saida".into(),
+            position: [60.0, 0.0, 0.0],
+        })
+        .unwrap();
+        assert!(
+            doc.warnings()
+                .iter()
+                .any(|w| w.message.contains("instantânea"))
+        );
+        // No warnings while the model has issues.
+        doc.apply(Command::Disconnect {
+            from: "maquina".into(),
+            to: "saida".into(),
+        })
+        .unwrap();
+        assert!(!doc.issues().is_empty());
+        assert!(doc.warnings().is_empty());
+    }
+
+    #[test]
     fn empty_model_is_not_ready_to_run() {
         let issues = Document::new("vazio").issues();
         assert_eq!(issues.len(), 1);
@@ -803,7 +960,13 @@ mod tests {
         let agv = from_palette("Agv", "a", [0.0; 3]).unwrap();
         assert!(matches!(
             agv.kind,
-            ObjectKind::Transporter { agv: true, .. }
+            ObjectKind::Transporter {
+                agv: true,
+                home: true,
+                acceleration: Some(_),
+                deceleration: Some(_),
+                ..
+            }
         ));
         assert!(from_palette("Nada", "x", [0.0; 3]).is_none());
     }

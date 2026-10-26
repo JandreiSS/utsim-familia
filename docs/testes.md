@@ -191,6 +191,15 @@ pessoa e empilhadeira CC-BY, no modo realista e no simples; "Restaurar padrão" 
 "Aparência" fica no fim do painel de propriedades: o roteiro rola o painel com `Rolar(-30.0)` sobre ele.
 Quando um rótulo da biblioteca também aparece no painel da direita (por exemplo "Processo"), coloque
 vários com Shift em vez de clicar de novo no item.
+Camadas Rede e Fluidos (fase 9), ambos com `--novo`: `editor_rede.ron` (linha com duas máquinas e
+uma empilhadeira, anel desenhado com a ferramenta Aresta, arrastar, renomear, excluir e desfazer um
+nó, capacidade de uma aresta, base da empilhadeira num nó e a empilhadeira seguindo o anel em
+Simular) e `editor_fluidos.ron` (fonte, tanque, tubulação e sumidouro ligados, ciclo apontado como
+problema, vazão e capacidade pelo painel, excluir e desfazer, e o tanque enchendo em Simular).
+Condições dessas camadas: `Camada("Rede")`, `NosIgual(n)`, `ArestasIgual(n)`, `Aresta("a", "b")`,
+`NoEm("a", (x, y))`, `SelecaoCamada(Some("no:a" | "aresta:a->b" | "fluido:tanque"))`,
+`NosFluidoIgual(n)`, `LigacoesFluidoIgual(n)`, `AvisosIgual(n)` e `NivelEntre("tanque", min, max)`;
+as ferramentas aparecem como `Rede:No`, `Rede:Aresta[:nó]`, `Fluido:Tank` e `Fluido:Ligar[:nó]`.
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a

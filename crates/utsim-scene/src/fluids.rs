@@ -2,7 +2,8 @@
 //!
 //! Pure data in Bevy space (Y up), no Bevy types. The layout comes from the replay's
 //! [`FluidDef`]; the levels over time come from [`crate::timeline::Timeline::fluid_at`].
-//! Fluid nodes are not editable and are drawn in `Simular` only.
+//! The viewer draws them in `Simular` (levels from the trace) and in `Editar` (initial
+//! levels, editable in the `Fluidos` layer).
 
 use utsim_fluid::{FluidDef, FluidKind};
 use utsim_model::replay::ReplayBlock;
