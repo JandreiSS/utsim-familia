@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Adicionado
+- Fase 10 (resultados no editor): janela "Resultados" com replicações em segundo plano (progresso e "Cancelar"), tabela por objeto com intervalos de 95%, ordenação, filtro por tipo e o gargalo destacado, gráficos de ocupação, estados, série temporal e histograma, aba "Cenários" (montar, abrir, salvar e comparar com a diferença pareada) e aba "Otimização" (grade, recozimento ou genético, convergência e "Aplicar ao modelo"), exportação de CSV e relatório HTML. `utsim experiment` passou a imprimir a diferença pareada para o primeiro cenário. Condições de roteiro `PainelResultados`, `AbaResultados`, `AnaliseRodando`, `ReplicacoesNoResultado`, `Gargalo`, `CenariosComparados`, `Exportado` e `MelhorPontoContem`.
 - Fase 12 (pacotes): ícone do aplicativo (`assets/icone`, gerado por `tools/icone`) na janela e nos `.exe`; instalador do Windows por usuário (NSIS), `.deb` e `.tar.gz` com `instalar.sh` para o Linux; fluxo `release.yml` com simulação (`workflow_dispatch`) e notas tiradas deste arquivo.
 - Campo opcional `format` nos modelos `.ron` (ausente vale 1), com erro claro para formatos mais novos e gancho de migração.
 - Biblioteca de modelos 3D articulados gerados por código (`utsim-assets`, binário `utsim-assets`): empilhadeira, paleteira, AGV, palete, caixa, porta-paletes, esteira de rolos, tanque, máquina, bancada, operador e área de piso, versionados em `assets/modelos/*.glb`.
