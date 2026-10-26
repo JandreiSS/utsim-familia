@@ -120,6 +120,16 @@ cargo run --release -p utsim-cli -- cena examples/agvs.ron --fps 10 --ate 600 --
 
 - `--rep N` escolhe a replicação, `--fps` dá os quadros por unidade de tempo simulado e `--ate T` o último instante; sem `--saida`, escreve na saída padrão.
 
+Ao vivo, durante uma emulação OPC UA (ou sozinha, para desenvolver clientes):
+
+```bash
+cargo run --release -p utsim-cli -- emular examples/tutorial_02_linha.ron --cena-porta 7878
+cargo run --release -p utsim-cli -- cena examples/agvs.ron --servir 7878 --velocidade 5
+cargo run -p utsim-scene --features server --example cliente_cena -- 127.0.0.1:7878 --parar furacao
+```
+
+A mesma porta atende TCP (um JSON por linha) e WebSocket; abra `web/cena_ao_vivo.html` no navegador para ver a vista de topo. O cliente pode mandar comandos (`{"tipo":"comando","variavel":"bloco.Parar","valor":true}`). Não há autenticação: por padrão só escuta em `127.0.0.1`.
+
 ## No navegador
 
 A simulação, o ajuste de distribuições e o 3D também rodam no navegador (WebAssembly),
