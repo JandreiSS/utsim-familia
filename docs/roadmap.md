@@ -29,8 +29,7 @@ validação da anterior passa.
 ## Fase 1b: modelagem de dados de entrada (ajuste de distribuições)
 A partir de dados reais (intervalos entre chegadas, tempos de processo, tempos de reparo...),
 o UTSim testa **todas** as distribuições candidatas, mostra o resultado de cada uma e
-justifica a escolha com métricas estatísticas. A ideia vem de ferramentas como o ferramentas acadêmicas e
-o ferramentas de ajuste, mas o desenho é nosso.
+justifica a escolha com métricas estatísticas.
 
 **Entrada e diagnóstico dos dados**
 - [x] Leitura de CSV/TXT (uma coluna, ou coluna escolhida), com timestamps opcionais para gerar intervalos

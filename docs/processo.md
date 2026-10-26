@@ -67,7 +67,7 @@ commit precisa explicar o porquê e mostrar o diff dos `.json`.
 - Bloco novo → teste determinístico exato em `objects.rs` + exemplo em `examples/` (que ganha snapshot golden).
 - Campo novo em `ObjectKind` → braço correspondente no patcher de cenários (`experiment.rs`).
   O compilador obriga a tratar variantes novas, mas **não** campos novos.
-- Semântica nova → seção em `arquitetura.md`, marcando "Nosso jeito" quando diferir do simuladores comerciais.
+- Semântica nova → seção em `arquitetura.md`, marcando "Nosso jeito" nas decisões de projeto que merecem destaque.
 - Funcionalidade com resultado conhecido na teoria → teste contra a teoria, com tolerância justificada.
 
 ## 4. Mapa de paralelismo

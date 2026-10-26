@@ -342,7 +342,7 @@ fn forklift_carries_items_with_exact_travel_times() {
     // done 10n+11, so 11 time units in the system. By t=100 items 0..=8 are done.
     // The machine has capacity 2 on purpose: room is reserved when the transport is
     // requested, so with capacity 1 an item arriving while the previous one is still
-    // on the forklift could not be dispatched yet (simuladores comerciais does the same).
+    // on the forklift could not be dispatched yet.
     let m = model(
         r#"Model(
             name: "empilhadeira",

@@ -1,5 +1,4 @@
-//! Token flows (phase 6): logic drawn as a graph of activities, in the spirit of
-//! the commercial tools' fluxo de processo. Tokens are not items: they are lightweight "threads of
+//! Token flows (phase 6): logic drawn as a graph of activities. Tokens are not items: they are lightweight "threads of
 //! logic" that wait, decide, hold resources and can carry an item reference. A flow
 //! runs as one block of the simulation, listening to the physical objects through the
 //! kernel (subscriptions) and acting on them (creating items, setting labels).

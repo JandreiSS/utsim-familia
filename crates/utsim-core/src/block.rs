@@ -63,7 +63,7 @@ impl State {
 }
 
 /// Which output port a released item may leave through. Decided once, when the
-/// item is released (the simuladores comerciais "send to port" moment).
+/// item is released.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum OutputRule {
     /// Any port; the first open downstream block in port order takes it.

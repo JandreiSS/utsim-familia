@@ -1,9 +1,8 @@
 # UTSim
 
 Simulador de processos produtivos por **eventos discretos**, escrito em Rust, livre e
-com visualização 3D planejada. A inspiração conceitual é a família de simuladores
-industriais como ferramentas comerciais. A implementação é própria (clean room) e
-o comportamento é especificado por nós, em [docs/arquitetura.md](docs/arquitetura.md).
+com visualização 3D. A implementação é própria e o comportamento é especificado por
+nós, em [docs/arquitetura.md](docs/arquitetura.md).
 
 > **Status: fase 0.** O motor de eventos, os blocos Source, Queue, Processor e Sink,
 > o formato de modelo e a CLI estão prontos e validados contra a teoria das filas.
