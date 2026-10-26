@@ -3,6 +3,7 @@
 pub mod experiment;
 pub mod replay;
 pub mod synthetic;
+mod warnings;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -13,7 +14,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{
     Behavior, BlockId, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError,
-    Simulation,
+    Simulation, TransferDef, TransferPath,
 };
 use utsim_flow::{Flow, FlowDef};
 use utsim_fluid::{FluidDef, FluidNet};
@@ -121,6 +122,10 @@ pub struct RunSettings {
     /// such models only run through the step-by-step API (e.g. `utsim-env`).
     #[serde(default)]
     pub default_decision: Option<usize>,
+    /// Default travel time for direct connections (an object's own `transfer` wins).
+    /// Objects with `transport` and conveyors (and objects feeding them) are not affected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer: Option<TransferDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -142,6 +147,11 @@ pub struct ObjectDef {
     /// (instead of handing them over instantly).
     #[serde(default)]
     pub transport: Option<String>,
+    /// Travel time of items leaving this object through direct connections:
+    /// `delay + distance / speed`, with room reserved at the destination meanwhile.
+    /// Absent means instantaneous (unless `run.transfer` is set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer: Option<TransferDef>,
     /// Script run on every item entering this object (e.g. to set labels).
     #[serde(default)]
     pub on_entry: Option<String>,
@@ -324,9 +334,42 @@ impl Model {
         Model::parse(&std::fs::read_to_string(path)?)
     }
 
+    /// Travel time that applies to the items leaving `obj` through direct connections.
+    /// The object's own `transfer` wins over `run.transfer`; mobile resources and objects
+    /// carried by a transporter never have one. The run default skips conveyors and the
+    /// objects that feed them: a belt carries items by itself and its position is its middle.
+    pub fn effective_transfer(&self, obj: &ObjectDef) -> Option<TransferDef> {
+        if obj.transport.is_some() || is_mobile(&obj.kind) {
+            return None;
+        }
+        if obj.transfer.is_some() {
+            return obj.transfer;
+        }
+        let default = self.run.transfer?;
+        let is_belt = |name: &str| {
+            self.objects
+                .iter()
+                .any(|o| o.name == name && matches!(o.kind, ObjectKind::Conveyor { .. }))
+        };
+        let touches_belt = matches!(obj.kind, ObjectKind::Conveyor { .. })
+            || self
+                .connections
+                .iter()
+                .any(|(from, to)| *from == obj.name && is_belt(to));
+        (!touches_belt).then_some(default)
+    }
+
     pub fn validate(&self) -> Result<(), ModelError> {
         let mut errors = Vec::new();
         let run = &self.run;
+        if let Some(t) = &run.transfer {
+            if let Err(e) = t.validate() {
+                errors.push(format!("run: {e}"));
+            }
+            if t.path == TransferPath::Network && self.network.is_none() {
+                errors.push("run.transfer.path = Network exige `network` no modelo".to_string());
+            }
+        }
         if !(run.stop_time.is_finite() && run.stop_time > 0.0) {
             errors.push("run.stop_time deve ser finito e > 0".to_string());
         }
@@ -545,6 +588,26 @@ impl Model {
                     if team.is_empty() {
                         errors.push(format!("{}: team não pode ser vazio", obj.name));
                     }
+                }
+            }
+            if let Some(t) = &obj.transfer {
+                if let Err(e) = t.validate() {
+                    errors.push(format!("{}: {e}", obj.name));
+                }
+                if t.path == TransferPath::Network && self.network.is_none() {
+                    errors.push(format!(
+                        "{}: transfer.path = Network exige `network` no modelo",
+                        obj.name
+                    ));
+                }
+                if obj.transport.is_some() {
+                    errors.push(format!(
+                        "{}: use `transport` ou `transfer`, não os dois (o transporte já leva o tempo da viagem)",
+                        obj.name
+                    ));
+                }
+                if is_mobile(&obj.kind) {
+                    errors.push(format!("{}: recursos móveis não usam transfer", obj.name));
                 }
             }
             if let Some(dt) = &obj.downtime {
@@ -892,6 +955,9 @@ impl Model {
             }
             if let Some(table) = &obj.shifts {
                 sim.set_shifts(id, table.clone());
+            }
+            if let Some(transfer) = self.effective_transfer(obj) {
+                sim.set_transfer(id, transfer);
             }
         }
         for (from, to) in &self.connections {

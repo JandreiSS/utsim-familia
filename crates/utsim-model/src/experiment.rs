@@ -154,9 +154,13 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             "seed" => set!(run.seed),
             "replications" => set!(run.replications),
             "default_decision" => set!(run.default_decision),
+            "transfer" => set!(run.transfer),
+            "transfer.speed" | "transfer.delay" => {
+                patch_transfer(&mut run.transfer, key, field, text)?;
+            }
             _ => {
                 return Err(invalid(format!(
-                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications, default_decision"
+                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications, default_decision, transfer, transfer.speed, transfer.delay"
                 )));
             }
         }
@@ -199,6 +203,13 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         "on_entry" => {
             set!(obj.on_entry);
             return Ok(());
+        }
+        "transfer" => {
+            set!(obj.transfer);
+            return Ok(());
+        }
+        "transfer.speed" | "transfer.delay" => {
+            return patch_transfer(&mut obj.transfer, key, field, text);
         }
         _ => {}
     }
@@ -300,6 +311,9 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                     "shifts",
                     "transport",
                     "on_entry",
+                    "transfer",
+                    "transfer.speed",
+                    "transfer.delay",
                 ])
                 .collect();
             return Err(invalid(format!(
@@ -307,6 +321,27 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 valid.join(", ")
             )));
         }
+    }
+    Ok(())
+}
+
+/// Sets `transfer.speed` or `transfer.delay` of an existing transfer definition.
+fn patch_transfer(
+    transfer: &mut Option<utsim_core::TransferDef>,
+    key: &str,
+    field: &str,
+    text: &str,
+) -> Result<(), ModelError> {
+    let value: f64 = parse_value(key, text)?;
+    let Some(def) = transfer.as_mut() else {
+        return Err(invalid(format!(
+            "'{key}': defina `transfer` primeiro (por exemplo (speed: 1.0)); só então dá para variar {field}"
+        )));
+    };
+    if field.ends_with("speed") {
+        def.speed = value;
+    } else {
+        def.delay = value;
     }
     Ok(())
 }

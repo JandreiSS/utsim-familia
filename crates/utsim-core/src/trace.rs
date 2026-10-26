@@ -47,6 +47,18 @@ pub enum TraceEvent {
         block: usize,
         slot: usize,
     },
+    /// The item left `from` and is on its way to `to` (a timed direct connection, see
+    /// `TransferDef`). It stays at the position of `from` for `delay`, then moves along
+    /// `path` for `duration`; the matching `Moved` event comes when it arrives. Until
+    /// then the item is in neither block's content.
+    Transit {
+        item: u64,
+        from: usize,
+        to: usize,
+        delay: f64,
+        duration: f64,
+        path: Vec<[f64; 3]>,
+    },
     /// A mobile resource starts moving along `path`, arriving after `duration`.
     Travel {
         carrier: usize,

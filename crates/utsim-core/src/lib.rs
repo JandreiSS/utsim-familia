@@ -20,7 +20,10 @@ pub mod trace;
 /// Simulation time. Units are whatever the model author chooses (usually seconds).
 pub type Time = f64;
 
-pub use block::{Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftTable, State};
+pub use block::{
+    Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftTable, State, TransferDef,
+    TransferPath,
+};
 pub use dist::Dist;
 pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
 pub use item::{Item, ItemId, Value};
