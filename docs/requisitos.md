@@ -101,6 +101,11 @@ a situação atual e onde está a prova de que funciona.
 | RF-113 | visitar o modelo em realidade virtual | A3D | ⏳ | cena já preparada (escala real, protocolo versionado); cliente Unreal/OpenXR planejado |
 | RF-114 | dar tempo de transferência pela distância às ligações diretas (`delay + distância/velocidade`, em linha reta ou pela rede), por objeto ou para o modelo todo, reservando espaço no destino durante o trajeto | 9 | ✅ | `utsim-model/tests/transfer.rs` (18 casos, inclusive lei de Little), `utsim-scene/tests/transfer.rs`, `examples/transferencia_por_distancia.ron` |
 | RF-115 | avisar, sem impedir a rodada, sobre distâncias zeradas, objetos longe da rede e ligações longas instantâneas | 9 | ✅ | testes de avisos em `utsim-model/tests/transfer.rs`; `utsim check` e `utsim run` mostram `aviso:` |
+| RF-116 | montar o modelo por uma biblioteca de objetos agrupada (com predefinições de operador, empilhadeira e AGV), clicando ou arrastando ao piso, com encaixe em grade configurável | 9 | ✅ | testes de `utsim-edit` (paleta), roteiro `editor_biblioteca.ron` |
+| RF-117 | selecionar vários objetos (Shift+clique ou caixa) e mover, excluir, alinhar, distribuir e editar uma propriedade de todos, cada operação desfeita de uma vez | 9 | ✅ | `utsim-edit/src/arrange.rs` (testes), roteiro `editor_biblioteca.ron` |
+| RF-118 | copiar, recortar, colar e duplicar objetos com nomes únicos, mantendo só as ligações entre os copiados | 9 | ✅ | testes de `utsim-edit` (nomes, ligações, referências remapeadas) |
+| RF-119 | escolher a aparência de cada objeto (biblioteca própria ou catálogo de terceiros com autor e licença), cor, escala e giro, vista em tamanho real | 9 | ✅ | roteiro `editor_aparencia.ron`; testes do catálogo |
+| RF-120 | consultar os atalhos de teclado e mouse numa janela (F1) | 9 | ✅ | tabela `SHORTCUTS` testada |
 
 ## Requisitos não funcionais (RNF)
 
