@@ -4,7 +4,6 @@ description = "Engine-independent 3D scene of a UTSim run: where every entity is
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 
 [dependencies]
 utsim-core.workspace = true

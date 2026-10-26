@@ -18,7 +18,7 @@ O [Manual do usuário](docs/manual/src/SUMMARY.md) explica cada objeto, os recur
 
 Os pacotes prontos ficam na página de [Releases](https://github.com/JandreiSS/utsim/releases).
 
-**Windows**: baixe `utsim-v<versão>-windows-x64-instalador.exe` e abra. A instalação é por usuário, sem administrador, em `%LOCALAPPDATA%\Programs\UTSim`. Ela traz `utsim.exe` e `utsim-view.exe` (em `bin\`), `examples\`, `assets\` (modelos 3D e ativos de terceiros, com as licenças), `manual\` (HTML) e `LICENSE`. Cria a pasta "UTSim" no Menu Iniciar ("UTSim" e "UTSim (exemplos)") e, se você marcar a opção, põe `utsim` no `PATH`. Desinstale em Configurações > Aplicativos. O instalador ainda não é assinado, então o SmartScreen pode avisar. Não há associação de extensão: `.ron` é genérica demais. Abra um modelo com `utsim-view modelo.ron` ou arrastando o arquivo sobre o `utsim-view.exe`. Também há um `.zip` portátil.
+**Windows**: baixe `utsim-v<versão>-windows-x64-instalador.exe` e abra. A instalação é por usuário, sem administrador, em `%LOCALAPPDATA%\Programs\UTSim`. Ela traz `utsim.exe` e `utsim-view.exe` (em `bin\`), `examples\`, `assets\` (modelos 3D e ativos de terceiros, com as licenças), `manual\` (HTML), `README.md` e `CHANGELOG.md`. Cria a pasta "UTSim" no Menu Iniciar ("UTSim" e "UTSim (exemplos)") e, se você marcar a opção, põe `utsim` no `PATH`. Desinstale em Configurações > Aplicativos. O instalador ainda não é assinado, então o SmartScreen pode avisar. Não há associação de extensão: `.ron` é genérica demais. Abra um modelo com `utsim-view modelo.ron` ou arrastando o arquivo sobre o `utsim-view.exe`. Também há um `.zip` portátil.
 
 **Debian e Ubuntu**: `sudo apt install ./utsim_<versão>_amd64.deb` instala em `/opt/utsim`, com os comandos `utsim` e `utsim-view` em `/usr/bin` e atalhos no menu.
 
@@ -286,13 +286,7 @@ while obs.options > 0 {
 
 ## Licença
 
-UTSim é software livre, distribuído sob a **GNU General Public License, versão 3 ou
-posterior** (`GPL-3.0-or-later`). Veja o arquivo [LICENSE](LICENSE).
-
-Você pode usar, estudar, modificar e redistribuir o UTSim, inclusive comercialmente.
-Quem distribuir uma versão modificada precisa mantê-la sob a mesma licença e entregar
-o código-fonte. Modelos `.ron` e resultados de simulação feitos com o UTSim pertencem
-a quem os criou e não são afetados pela licença.
+Ainda não definida.
 
 ## Otimização
 
