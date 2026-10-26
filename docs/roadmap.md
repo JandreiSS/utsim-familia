@@ -116,6 +116,10 @@ o ferramentas de ajuste, mas o desenho é nosso.
 - [ ] Scripts: evitar a conversão de rótulos quando o script não usa `item` (custo por chamada)
 - [ ] Página web: o visualizador 3D tem 36 MB (testar `wasm-opt`, compressão); rodar a simulação num Web Worker; as métricas próprias (níveis de tanques) viram colunas largas na tabela
 - [ ] Emulação OPC UA: segurança (certificados, usuário) e publicação mais barata a cada tick
+- [ ] `utsim emular --ate T`: o cabeçalho do relatório ainda mostra o `stop_time` do modelo
+- [ ] `utsim fit --timestamps`: escolher a coluna de tempos automaticamente (hoje usa a primeira coluna numérica sem `--coluna`)
+- [ ] Mostrar os avisos de validação (distâncias) também no visualizador e na página web
+- [ ] Página web: incluir os modelos dos tutoriais na lista de exemplos
 - [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
 
 ## Fase 6: lógica do usuário
