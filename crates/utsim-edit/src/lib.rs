@@ -3,13 +3,20 @@
 //! Every change goes through a [`Command`]; the [`Document`] keeps the undo/redo
 //! history, reports validation issues per object while the model is still
 //! incomplete, and saves it as stable, diff-friendly RON text.
+//!
+//! [`arrange`] holds the pure helpers of the editor for several objects at once:
+//! clipboard (copy, cut, paste, duplicate), moving and deleting a selection, align and
+//! distribute, and fanning a property edit out to every selected object. Each one
+//! returns a single [`Command::Batch`], so it is one undo step.
+
+pub mod arrange;
 
 use std::path::{Path, PathBuf};
 
 use utsim_core::Dist;
 use utsim_model::experiment::patch;
 use utsim_model::replay::Replay;
-use utsim_model::{Model, ModelError, ObjectDef, ObjectKind};
+use utsim_model::{Model, ModelError, ObjectDef, ObjectKind, VisualDef};
 use utsim_objects::{CombineMode, SeparateMode};
 
 /// One user action. Commands are data, so the GUI, tests and scripts drive the
@@ -44,6 +51,12 @@ pub enum Command {
     Disconnect {
         from: String,
         to: String,
+    },
+    /// Replaces the look of an object (`visual`, presentation only). `None`, or a
+    /// `VisualDef` with every field empty, restores the default look of its kind.
+    SetVisual {
+        name: String,
+        visual: Option<VisualDef>,
     },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
@@ -319,6 +332,14 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 return Err(format!("{from} não está ligado a {to}"));
             }
         }
+        Command::SetVisual { name, visual } => {
+            let object = model
+                .objects
+                .iter_mut()
+                .find(|o| &o.name == name)
+                .ok_or_else(|| not_found(name))?;
+            object.visual = visual.clone().filter(|v| *v != VisualDef::default());
+        }
         Command::Batch(commands) => {
             for c in commands {
                 execute(model, c)?;
@@ -341,6 +362,185 @@ pub const LIBRARY: [(&str, &str); 10] = [
     ("Transporter", "Transportador"),
     ("Dispatcher", "Despachante"),
 ];
+
+/// One entry of the editor's object library: a kind, possibly preset (an operator is a
+/// `Transporter` drawn as a person).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PaletteEntry {
+    /// Identifier of the entry (the kind itself for the plain kinds).
+    pub id: &'static str,
+    /// Object kind created.
+    pub kind: &'static str,
+    /// Portuguese label.
+    pub label: &'static str,
+    /// Portuguese category the palette groups it under.
+    pub category: &'static str,
+    /// Base of the names of new objects (`Document::unique_name` adds `_2`, `_3`...).
+    pub name_base: &'static str,
+    /// Asset of `visual` (presets only).
+    pub asset: Option<&'static str>,
+}
+
+const fn entry(
+    id: &'static str,
+    kind: &'static str,
+    label: &'static str,
+    category: &'static str,
+    name_base: &'static str,
+    asset: Option<&'static str>,
+) -> PaletteEntry {
+    PaletteEntry {
+        id,
+        kind,
+        label,
+        category,
+        name_base,
+        asset,
+    }
+}
+
+/// Palette categories, in display order.
+pub const CATEGORIES: [&str; 4] = [
+    "Fluxo de itens",
+    "Montagem",
+    "Manuseio de materiais",
+    "Recursos móveis",
+];
+
+/// Every object of the editor's library, grouped by [`CATEGORIES`].
+pub const PALETTE: [PaletteEntry; 13] = [
+    entry(
+        "Source",
+        "Source",
+        "Chegada",
+        CATEGORIES[0],
+        "chegada",
+        None,
+    ),
+    entry("Queue", "Queue", "Fila", CATEGORIES[0], "fila", None),
+    entry(
+        "Processor",
+        "Processor",
+        "Processo",
+        CATEGORIES[0],
+        "processo",
+        None,
+    ),
+    entry("Sink", "Sink", "Saída", CATEGORIES[0], "saida", None),
+    entry(
+        "Combiner",
+        "Combiner",
+        "Montagem",
+        CATEGORIES[1],
+        "montagem",
+        None,
+    ),
+    entry(
+        "Separator",
+        "Separator",
+        "Desmontagem",
+        CATEGORIES[1],
+        "desmontagem",
+        None,
+    ),
+    entry(
+        "Conveyor",
+        "Conveyor",
+        "Esteira",
+        CATEGORIES[2],
+        "esteira",
+        None,
+    ),
+    entry(
+        "Rack",
+        "Rack",
+        "Porta-paletes",
+        CATEGORIES[2],
+        "porta_paletes",
+        None,
+    ),
+    entry(
+        "Transporter",
+        "Transporter",
+        "Transportador",
+        CATEGORIES[3],
+        "transportador",
+        None,
+    ),
+    entry(
+        "Operator",
+        "Transporter",
+        "Operador",
+        CATEGORIES[3],
+        "operador",
+        Some("operador"),
+    ),
+    entry(
+        "Forklift",
+        "Transporter",
+        "Empilhadeira",
+        CATEGORIES[3],
+        "empilhadeira",
+        Some("empilhadeira"),
+    ),
+    entry(
+        "Agv",
+        "Transporter",
+        "AGV",
+        CATEGORIES[3],
+        "agv",
+        Some("agv"),
+    ),
+    entry(
+        "Dispatcher",
+        "Dispatcher",
+        "Despachante",
+        CATEGORIES[3],
+        "despachante",
+        None,
+    ),
+];
+
+/// The palette entry with this id.
+pub fn palette_entry(id: &str) -> Option<&'static PaletteEntry> {
+    PALETTE.iter().find(|e| e.id == id)
+}
+
+/// A new object from palette entry `id` with sensible defaults (a preset sets its
+/// `visual` and the speeds of its role: 1.2 m/s walking, 2 m/s forklift, 1.5 m/s AGV).
+pub fn from_palette(id: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef> {
+    let e = palette_entry(id)?;
+    let mut object = template(e.kind, name, position)?;
+    if let Some(asset) = e.asset {
+        object.visual = Some(VisualDef {
+            asset: Some(asset.to_string()),
+            ..VisualDef::default()
+        });
+    }
+    if let ObjectKind::Transporter {
+        speed,
+        agv,
+        load_time,
+        unload_time,
+        ..
+    } = &mut object.kind
+    {
+        match id {
+            "Operator" => *speed = 1.2,
+            "Forklift" => {
+                *speed = 2.0;
+                *load_time = Dist::Const(0.5);
+                *unload_time = Dist::Const(0.5);
+            }
+            "Agv" => {
+                *speed = 1.5;
+                *agv = true;
+            }
+            _ => {}
+        }
+    }
+    Some(object)
+}
 
 /// A new object of `kind` (one of [`LIBRARY`]) with sensible defaults.
 pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef> {
@@ -585,5 +785,55 @@ mod tests {
         for (kind, _) in LIBRARY {
             assert!(template(kind, "x", [0.0; 3]).is_some(), "{kind}");
         }
+    }
+
+    #[test]
+    fn palette_covers_every_kind_and_presets_set_their_look() {
+        for (kind, _) in LIBRARY {
+            assert!(PALETTE.iter().any(|e| e.id == kind), "{kind}");
+        }
+        for e in PALETTE {
+            let o = from_palette(e.id, "x", [1.0, 2.0, 0.0]).unwrap();
+            assert_eq!(utsim_model::replay::kind_name(&o.kind), e.kind);
+            assert!(CATEGORIES.contains(&e.category), "{}", e.id);
+            assert_eq!(o.visual.as_ref().and_then(|v| v.asset.as_deref()), e.asset);
+            assert_eq!(o.position, [1.0, 2.0, 0.0]);
+        }
+        let agv = from_palette("Agv", "a", [0.0; 3]).unwrap();
+        assert!(matches!(
+            agv.kind,
+            ObjectKind::Transporter { agv: true, .. }
+        ));
+        assert!(from_palette("Nada", "x", [0.0; 3]).is_none());
+    }
+
+    #[test]
+    fn set_visual_replaces_and_restores_the_default_look() {
+        let mut doc = line();
+        let look = VisualDef {
+            asset: Some("maquina_kenney".into()),
+            scale: Some(1.5),
+            ..VisualDef::default()
+        };
+        doc.apply(Command::SetVisual {
+            name: "maquina".into(),
+            visual: Some(look.clone()),
+        })
+        .unwrap();
+        assert_eq!(doc.model().objects[2].visual.as_ref(), Some(&look));
+        assert!(doc.to_text().contains("maquina_kenney"));
+        doc.apply(Command::SetVisual {
+            name: "maquina".into(),
+            visual: Some(VisualDef::default()),
+        })
+        .unwrap();
+        assert_eq!(doc.model().objects[2].visual, None);
+        doc.undo();
+        assert_eq!(doc.model().objects[2].visual.as_ref(), Some(&look));
+        let missing = Command::SetVisual {
+            name: "nada".into(),
+            visual: None,
+        };
+        assert!(doc.apply(missing).is_err());
     }
 }
