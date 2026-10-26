@@ -1,5 +1,7 @@
 # UTSim
 
+[![CI](https://github.com/JandreiSS/utsim/actions/workflows/ci.yml/badge.svg)](https://github.com/JandreiSS/utsim/actions/workflows/ci.yml)
+
 Simulador de processos produtivos por **eventos discretos**, escrito em Rust, livre e
 com visualização 3D. A implementação é própria e o comportamento é especificado por
 nós, em [docs/arquitetura.md](docs/arquitetura.md).
@@ -16,7 +18,7 @@ O [Manual do usuário](docs/manual/src/SUMMARY.md) explica cada objeto, os recur
 
 Os pacotes prontos ficam na página de [Releases](https://github.com/JandreiSS/utsim/releases).
 
-**Windows**: baixe `utsim-v<versão>-windows-x64-instalador.exe` e abra. A instalação é por usuário, sem administrador, em `%LOCALAPPDATA%\Programs\UTSim`. Ela traz `utsim.exe` e `utsim-view.exe` (em `bin\`), `examples\`, `assets\` (modelos 3D e ativos de terceiros, com as licenças), `manual\` (HTML) e `LICENSE`. Cria a pasta "UTSim" no Menu Iniciar ("UTSim" e "UTSim (exemplos)") e, se você marcar a opção, põe `utsim` no `PATH`. Desinstale em Configurações > Aplicativos. O instalador ainda não é assinado, então o SmartScreen pode avisar. Não há associação de extensão: `.ron` é genérica demais. Abra um modelo com `utsim-view modelo.ron` ou arrastando o arquivo sobre o `utsim-view.exe`. Também há um `.zip` portátil.
+**Windows**: baixe `utsim-v<versão>-windows-x64-instalador.exe` e abra. A instalação é por usuário, sem administrador, em `%LOCALAPPDATA%\Programs\UTSim`. Ela traz `utsim.exe` e `utsim-view.exe` (em `bin\`), `examples\`, `assets\` (modelos 3D e ativos de terceiros, com as licenças), `manual\` (HTML), `README.md` e `CHANGELOG.md`. Cria a pasta "UTSim" no Menu Iniciar ("UTSim" e "UTSim (exemplos)") e, se você marcar a opção, põe `utsim` no `PATH`. Desinstale em Configurações > Aplicativos. O instalador ainda não é assinado, então o SmartScreen pode avisar. Não há associação de extensão: `.ron` é genérica demais. Abra um modelo com `utsim-view modelo.ron` ou arrastando o arquivo sobre o `utsim-view.exe`. Também há um `.zip` portátil.
 
 **Debian e Ubuntu**: `sudo apt install ./utsim_<versão>_amd64.deb` instala em `/opt/utsim`, com os comandos `utsim` e `utsim-view` em `/usr/bin` e atalhos no menu.
 
@@ -119,6 +121,16 @@ cargo run --release -p utsim-cli -- cena examples/agvs.ron --fps 10 --ate 600 --
 ```
 
 - `--rep N` escolhe a replicação, `--fps` dá os quadros por unidade de tempo simulado e `--ate T` o último instante; sem `--saida`, escreve na saída padrão.
+
+Ao vivo, durante uma emulação OPC UA (ou sozinha, para desenvolver clientes):
+
+```bash
+cargo run --release -p utsim-cli -- emular examples/tutorial_02_linha.ron --cena-porta 7878
+cargo run --release -p utsim-cli -- cena examples/agvs.ron --servir 7878 --velocidade 5
+cargo run -p utsim-scene --features server --example cliente_cena -- 127.0.0.1:7878 --parar furacao
+```
+
+A mesma porta atende TCP (um JSON por linha) e WebSocket; abra `web/cena_ao_vivo.html` no navegador para ver a vista de topo. O cliente pode mandar comandos (`{"tipo":"comando","variavel":"bloco.Parar","valor":true}`). Não há autenticação: por padrão só escuta em `127.0.0.1`.
 
 ## No navegador
 
@@ -284,13 +296,7 @@ while obs.options > 0 {
 
 ## Licença
 
-UTSim é software livre, distribuído sob a **GNU General Public License, versão 3 ou
-posterior** (`GPL-3.0-or-later`). Veja o arquivo [LICENSE](LICENSE).
-
-Você pode usar, estudar, modificar e redistribuir o UTSim, inclusive comercialmente.
-Quem distribuir uma versão modificada precisa mantê-la sob a mesma licença e entregar
-o código-fonte. Modelos `.ron` e resultados de simulação feitos com o UTSim pertencem
-a quem os criou e não são afetados pela licença.
+Ainda não definida.
 
 ## Otimização
 

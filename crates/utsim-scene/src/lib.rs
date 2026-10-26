@@ -17,9 +17,19 @@
 //! - **Human scale:** assets are authored at real size, so a person is ~1.75 m tall and a
 //!   VR camera at eye height (~1.6 m) sees the plant at the right scale.
 //!
-//! # Stream (`utsim cena`, and later a live socket)
+//! # Stream (`utsim cena`, and the live socket)
 //! JSON lines: the first line is a [`Header`] (protocol, conventions, static scene), every
 //! following line is a [`Frame`]. A client needs nothing else to animate a run.
+//!
+//! # Extension messages (`"tipo"`)
+//! A line that has a `"tipo"` field is an extension message, not a header or a frame:
+//! [`ServerMessage`] (server to client: `aviso`, `fim`) and [`ClientMessage`] (client to
+//! server: `comando`). Header and frames never carry `"tipo"`, so files written by
+//! `utsim cena` are unchanged, and **readers must ignore lines whose `"tipo"` they do not
+//! know**. Extension messages exist only on the live socket ([`server`], feature
+//! `server`), where the same stream is served over plain TCP (one JSON per line) and over
+//! WebSocket (one JSON per text message), see [`live`] for how frames of a running
+//! simulation are produced.
 //!
 //! # Building a scene
 //! [`Scene::build`] indexes a replay; [`Scene::header`] and [`Scene::frame`] give the
@@ -36,12 +46,16 @@ pub mod fluids;
 pub mod geometry;
 pub mod handling;
 pub mod layout;
+pub mod live;
 pub mod network;
+#[cfg(all(feature = "server", not(target_arch = "wasm32")))]
+pub mod server;
 pub mod style;
 pub mod timeline;
 pub mod tokens;
 
 pub use compose::{ItemPlacement, MobilePose, Scene, SceneOptions};
+pub use live::LiveScene;
 
 /// Stream/protocol identifier. Bump on any incompatible change to the types below.
 pub const PROTOCOL: &str = "utsim-scene/1";
@@ -196,4 +210,40 @@ impl<W: std::io::Write> SceneSink for JsonLines<W> {
         serde_json::to_writer(&mut self.0, frame)?;
         self.0.write_all(b"\n")
     }
+}
+
+/// A value written by a client command: the same two kinds the emulator accepts.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CommandValue {
+    Bool(bool),
+    Num(f64),
+}
+
+/// Client to server extension messages of `utsim-scene/1`.
+///
+/// `{"tipo":"comando","variavel":"M1.Parar","valor":true}` writes a variable of the
+/// emulation, with the names of the OPC UA address space: `<block>.Parar` (boolean:
+/// stop or resume a block) and `Velocidade` (number: simulation speed factor). The
+/// server applies it at the current simulated time and logs it like a command from an
+/// OPC UA client. A command the emulation rejects (unknown block, wrong value kind) is
+/// answered with a [`ServerMessage::Aviso`]; there is no acknowledgement of success: the
+/// effect shows in the next frames (`state` of the block becomes `stopped`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+pub enum ClientMessage {
+    Comando {
+        variavel: String,
+        valor: CommandValue,
+    },
+}
+
+/// Server to client extension messages of `utsim-scene/1` (socket only).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+pub enum ServerMessage {
+    /// Something the client should know: a rejected message, a rejected command.
+    Aviso { mensagem: String },
+    /// The run ended at simulated time `tempo`; no more frames follow.
+    Fim { tempo: f64 },
 }

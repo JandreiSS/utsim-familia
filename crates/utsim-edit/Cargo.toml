@@ -4,7 +4,6 @@ description = "Editable UTSim model: commands, undo/redo, live validation and st
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 
 [dependencies]
 utsim-core.workspace = true

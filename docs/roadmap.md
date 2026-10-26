@@ -102,7 +102,7 @@ justifica a escolha com métricas estatísticas.
 - [ ] A3D-3: pessoas animadas, itens presos às mãos e aos garfos, garfos até o nível, giro suave
 - [ ] A3D-4: câmeras de seguir e de primeira pessoa; instâncias e níveis de detalhe
 - [ ] A3D-5: cliente Unreal com realidade virtual (OpenXR), lendo `utsim-scene/1`
-- [ ] A3D-6: cena ao vivo por socket a partir da emulação
+- [x] A3D-6: cena ao vivo por socket a partir da emulação (`--cena-porta`, `utsim cena --servir`)
 
 ## Melhorias anotadas (dos relatórios das frentes)
 - [ ] Relatório com contagem de itens criados e destruídos por bloco (hoje só no rastro)

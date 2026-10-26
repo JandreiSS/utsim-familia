@@ -52,13 +52,23 @@ impl Model {
         let mut sim = self.build(replication);
         sim.enable_trace();
         let report = self.drive(&mut sim)?;
+        let mut replay = self.empty_replay(replication);
+        replay.records = sim.take_trace();
+        replay.report = report;
+        Ok(replay)
+    }
+
+    /// The blocks and connections of a validated model, with no trace yet: the static
+    /// part of a [`Replay`], for consumers that receive the records while the run goes
+    /// (the live 3D scene).
+    pub fn empty_replay(&self, replication: u32) -> Replay {
         let index = |name: &str| {
             self.objects
                 .iter()
                 .position(|o| o.name == name)
                 .expect("validated")
         };
-        Ok(Replay {
+        Replay {
             model: self.name.clone(),
             replication,
             stop_time: self.run.stop_time,
@@ -87,9 +97,16 @@ impl Model {
                 .iter()
                 .map(|(a, b)| (index(a), index(b)))
                 .collect(),
-            records: sim.take_trace(),
-            report,
+            records: Vec::new(),
+            report: RunReport {
+                replication,
+                seed: self.run.seed,
+                stats_from: 0.0,
+                end_time: 0.0,
+                events: 0,
+                blocks: Vec::new(),
+            },
             fluids: self.fluids.clone(),
-        })
+        }
     }
 }

@@ -110,12 +110,15 @@ a situação atual e onde está a prova de que funciona.
 | RF-122 | montar a rede de fluidos no editor (fontes, tanques, tubos, sumidouros e conversores), com validação ao vivo | 9 | ✅ | `utsim-edit/src/fluids.rs` (6 testes), roteiro `editor_fluidos.ron` |
 | RF-123 | escolher o nó de base de um transportador; o AGV da biblioteca já vem com controle de tráfego e retorno à base | 9 | ✅ | testes do painel e da predefinição |
 | RF-124 | ver os avisos que não impedem a rodada em amarelo, separados dos problemas | 9 | ✅ | `Document::warnings` (testes) |
+| RF-125 | transmitir ao vivo a cena 3D de uma emulação por socket (TCP e WebSocket), no mesmo relógio do OPC UA | A3D | ✅ | `utsim-scene/tests/live.rs` e `server.rs`, `utsim-emu/tests/cena.rs`; `--cena-porta`, `utsim cena --servir` |
+| RF-126 | parar ou retomar um bloco e mudar a velocidade a partir do cliente da cena (canal de volta), com registro no log de comandos | A3D | ✅ | `utsim-emu/tests/cena.rs` |
+| RF-127 | um cliente lento ou travado não atrasa a simulação nem os outros clientes | A3D | ✅ | `utsim-scene/tests/server.rs` |
 
 ## Requisitos não funcionais (RNF)
 
 | Código | O sistema precisa... | Situação | Como garantimos |
 |---|---|---|---|
-| RNF-01 | ser software livre (GPL-3.0-or-later) | ✅ | `LICENSE`, campo `license` nos crates |
+| RNF-01 | licença do software: a definir pelo autor | ⏳ | — |
 | RNF-02 | ser feito do zero (clean room), sem copiar código ou analisar binários proprietários | ✅ | comportamento especificado em `arquitetura.md` a partir de documentação pública |
 | RNF-03 | ser **reprodutível**: mesma semente → mesmo resultado, sempre | ✅ | `same_seed_same_result_and_replications_differ`, snapshots golden |
 | RNF-04 | ter números aleatórios independentes por objeto, para comparar cenários com justiça | ✅ | `rng.rs`; cenário base = rodada direta (`tests/experiment.rs`) |
@@ -144,3 +147,4 @@ a situação atual e onde está a prova de que funciona.
 | RNF-27 | gravar e mostrar rápido: o replay custa no máximo 3× a rodada simples; um quadro de cena com 500 objetos em menos de 16 ms | ✅ | `utsim-scene/tests/desempenho.rs` (medido: ~1,4×; 2,6 ms) |
 | RNF-28 | nunca travar nem fechar com um modelo errado: qualquer texto vira modelo válido ou erro em português, sem pânico, laço infinito ou estouro de memória | ✅ | `utsim-model/tests/robustez.rs` e `utsim-fit/tests/robustez.rs` (proptest) |
 | RNF-29 | a página web não congela durante simulações longas e permite cancelar | ✅ | `web/worker.js`, `web/smoke.mjs` |
+| RNF-30 | o servidor da cena escuta só em 127.0.0.1 por padrão; abrir para a rede exige opção explícita e mostra aviso (não há autenticação) | ✅ | `--cena-endereco`, documentado no manual |

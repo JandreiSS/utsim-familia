@@ -4,7 +4,6 @@ description = "Input modelling for UTSim: fit distributions to real data, test t
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 
 [dependencies]
 utsim-core.workspace = true

@@ -3,7 +3,6 @@ name = "utsim-icone"
 description = "Gera os PNG e o .ico do aplicativo a partir de assets/icone/utsim.svg"
 version = "0.1.0"
 edition = "2024"
-license = "GPL-3.0-or-later"
 publish = false
 
 [dependencies]
