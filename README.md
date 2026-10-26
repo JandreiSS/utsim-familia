@@ -9,6 +9,10 @@ o comportamento é especificado por nós, em [docs/arquitetura.md](docs/arquitet
 > o formato de modelo e a CLI estão prontos e validados contra a teoria das filas.
 > Ainda não há 3D nem editor. Veja o [roteiro](docs/roadmap.md) e os [requisitos](docs/requisitos.md).
 
+## Manual do usuário
+
+O [Manual do usuário](docs/manual/src/SUMMARY.md) explica cada objeto, os recursos móveis, os resultados e a estatística, e traz seis tutoriais passo a passo (`examples/tutorial_*.ron`). É um livro [mdBook](https://rust-lang.github.io/mdBook/) (`cd docs/manual && mdbook build`), mas todos os capítulos são arquivos Markdown legíveis direto.
+
 ## Rodando
 
 ```bash
