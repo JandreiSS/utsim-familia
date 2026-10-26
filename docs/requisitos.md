@@ -120,6 +120,8 @@ a situação atual e onde está a prova de que funciona.
 | RF-132 | montar e rodar uma otimização pelo editor e aplicar o melhor ponto ao modelo | 10 | ✅ | roteiro `otimizacao.ron` |
 | RF-133 | exportar o resumo em CSV e um relatório HTML com tabelas e gráficos | 10 | ✅ | `utsim-model/src/csv.rs` e `html.rs` |
 | RF-134 | `utsim experiment` mostra a diferença pareada de cada cenário para o primeiro | 10 | ✅ | testes de `experiment.rs` |
+| RF-135 | escolher o modo de câmera (órbita, seguir um recurso, primeira pessoa na altura dos olhos, ponto de vista do motorista), com transições suaves | A3D | ✅ | `utsim_viewer::cameras` (testes), roteiro `a3d4_cameras.ron` |
+| RF-136 | simplificar o que está longe em modelos grandes (nível de detalhe) e limitar os rótulos, com medição de quadros (F3) | A3D | ✅ | `lod_rules.rs` (testes), roteiro `a3d4_lod.ron`; 500 objetos: 24,8 → 2,7 ms por quadro |
 
 ## Requisitos não funcionais (RNF)
 
