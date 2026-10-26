@@ -137,6 +137,15 @@ pub fn downtime(d: &Downtime) -> String {
     format!("(mtbf: {}, mttr: {})", dist(&d.mtbf), dist(&d.mttr))
 }
 
+pub fn transfer(t: &utsim_core::TransferDef) -> String {
+    format!(
+        "(speed: {}, delay: {}, path: {:?})",
+        float(t.speed),
+        float(t.delay),
+        t.path
+    )
+}
+
 pub fn shifts(t: &ShiftTable) -> String {
     let windows = list(&t.off, |w| {
         format!(

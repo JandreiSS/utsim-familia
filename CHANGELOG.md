@@ -14,6 +14,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - Fase 11: `utsim gerar-modelo` (modelos sintéticos de qualquer tamanho), benchmark `cargo bench -p utsim-scene`, metas de desempenho em testes `#[ignore]` e `docs/desempenho.md`.
 - Testes de robustez (proptest) do leitor de modelos e do leitor de dados do ajuste.
 - Página web: o motor roda em um Web Worker, com botão "Cancelar".
+- Fase 9 (editor): biblioteca de objetos por categoria (com operador, empilhadeira e AGV prontos), colocar clicando ou arrastando até o chão com encaixe na grade configurável, seleção múltipla (Shift + clique e caixa com Shift + arrastar), mover, excluir, alinhar e distribuir a seleção, editar uma propriedade de vários objetos do mesmo tipo, copiar, recortar, colar e duplicar (Ctrl+C/X/V/D, nomes únicos e ligações internas preservadas), setas para mover e janela "Atalhos" (F1). Cada operação é um passo de desfazer.
+- Seção "Aparência" nas propriedades: ativo da biblioteca ou do catálogo de terceiros (autor e licença na dica), cor, escala, giro e "Restaurar padrão"; o modo realista desenha os `.glb` de terceiros no tamanho real virados para +x. Campo "Transferência pela distância" nas propriedades.
+- Passos de roteiro `Segurar` e `LargarTecla` e condições `SelecionadosIgual`, `SelecaoContem`, `AtivoDe`, `ObjetosComPrefixo` e `Ligado`.
 
 ### Corrigido
 - Modelos que travavam ou esgotavam a memória agora são recusados na validação (fontes com intervalo quase nulo, porta-paletes ou `Split` gigantes, fluxos com intervalo zero) ou terminam com erro (muitos eventos no mesmo instante).

@@ -131,6 +131,7 @@ Passos (`Passo`, em `crates/utsim-viewer/src/roteiro.rs`):
 | `Arrastar(de: alvo, para: alvo)` | pressiona, move em 8 quadros e solta |
 | `Rolar(3.0)` | roda do mouse, em linhas (positivo aproxima) |
 | `Tecla("Delete")`, `Atalho(["Ctrl", "Z"])` | teclas por nome: letras, dígitos, `Delete`, `Esc`, `Enter`, `Tab`, `Space`, `Backspace`, setas (`SetaCima`...), `F1`-`F5`, modificadores `Ctrl`/`Shift`/`Alt` |
+| `Segurar("Shift")`, `LargarTecla("Shift")` | aperta uma tecla e a mantém apertada até `LargarTecla` (Shift + clique, Shift + arrastar) |
 | `Digitar("texto")` | digita no campo egui focado |
 | `ClicarBotao("▶ Simular")` | clica no centro do widget com esse rótulo |
 | `Captura("nome")` | grava `<pasta>/nome.png` e espera o arquivo existir |
@@ -150,6 +151,9 @@ Condições: `ObjetosIgual(n)`, `LigacoesIgual(n)`, `ProblemasIgual(n)`, `Seleci
 Para o painel de fluxos: `FluxosIgual(n)`, `AtividadesIgual("fluxo", n)`,
 `AtividadeSelecionada(Some("decide"))` e `PainelFluxos(true)`. Os nomes das atividades são textos
 desenhados no diagrama, então `ClicarBotao("decide")` seleciona a caixa.
+Para a seleção, a área de transferência e a aparência (fase 9): `SelecionadosIgual(n)`,
+`SelecaoContem("fila")`, `AtivoDe("processo", Some("bancada_kenney"))` (`None`: aparência padrão),
+`ObjetosComPrefixo("fila", n)` e `Ligado("fila_2", "processo_2")`.
 
 **Como os botões são achados.** O egui 0.36 usado aqui não tem a árvore de acessibilidade
 (sem `accesskit`), então, depois de cada passe do egui, o executor guarda todos os textos
@@ -178,6 +182,15 @@ botão "Visual: simples / realista"), `visual_realista_agvs.ron` (com `examples/
 para onde andam e a luz de estado verde, laranja e azul) e `visual_realista_operadores.ron` (com
 `examples/celula_com_operadores.ron`: pernas alternando na caminhada e o operador trabalhando na frente
 da máquina). Grave as capturas fora do repositório, por exemplo em `%TEMP%\utsim_visual\<nome>`.
+Editor para montar modelos (fase 9), ambos com `--novo`: `editor_biblioteca.ron` (colocar pela
+biblioteca com clique e arrastando até o chão, encaixe na grade, seleção por caixa com Shift, mover
+dois juntos, copiar e colar com nomes únicos e só a ligação interna, desfazer, Shift + clique,
+alinhar pelo topo, duplicar, excluir e a janela de atalhos) e `editor_aparencia.ron` (ativos de
+terceiros escolhidos pela busca da seção "Aparência": bancada num processo, máquina da Kenney,
+pessoa e empilhadeira CC-BY, no modo realista e no simples; "Restaurar padrão" e desfazer). A seção
+"Aparência" fica no fim do painel de propriedades: o roteiro rola o painel com `Rolar(-30.0)` sobre ele.
+Quando um rótulo da biblioteca também aparece no painel da direita (por exemplo "Processo"), coloque
+vários com Shift em vez de clicar de novo no item.
 A análise do formato e das condições (sem janela) é testada em `cargo test -p utsim-viewer`.
 
 Na interface, os painéis (barra, paleta, propriedades, simulação) são acoplados e não cobrem a
