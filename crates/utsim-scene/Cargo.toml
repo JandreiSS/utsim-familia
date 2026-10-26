@@ -12,7 +12,18 @@ utsim-model.workspace = true
 utsim-fluid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# WebSocket framing for the live server (native only; see the `server` feature).
+tungstenite = { version = "0.30", default-features = true, optional = true }
 
 [[bench]]
 name = "desempenho"
 harness = false
+
+[features]
+# Live socket server (TCP and WebSocket). Native only: the crate still builds for wasm32
+# without it.
+server = ["dep:tungstenite"]
+
+[[example]]
+name = "cliente_cena"
+required-features = ["server"]
