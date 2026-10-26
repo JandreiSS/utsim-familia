@@ -35,6 +35,8 @@ cargo run --release -p utsim-cli -- run examples/linha_com_bloqueio.ron -n 20 --
 cargo run --release -p utsim-cli -- check examples/roteamento_por_tipo.ron
 ```
 
+`utsim check` e `utsim run` mostram `aviso: ...` para problemas que não impedem a execução, em especial distâncias (objetos todos na origem, ligações longas e instantâneas). Para que a distância entre objetos pese no resultado, use `transfer: (speed: 1.0)` em um objeto ou em `run` (tempo de viagem de `delay + distância / speed` nas ligações diretas, em linha reta ou pela rede com `path: Network`); veja `examples/transferencia_por_distancia.ron`.
+
 Séries temporais, histogramas e exportação CSV:
 
 ```bash

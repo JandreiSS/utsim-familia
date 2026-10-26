@@ -128,6 +128,43 @@ pub struct Downtime {
     pub mttr: Dist,
 }
 
+/// Travel time for items that leave a block through direct connections (no transporter):
+/// `delay + distance / speed`. Without it a direct connection is instantaneous.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TransferDef {
+    /// Travel speed (length units per time unit), must be > 0.
+    pub speed: f64,
+    /// Fixed time added to every transfer (time units), >= 0.
+    #[serde(default)]
+    pub delay: f64,
+    /// Which path gives the distance.
+    #[serde(default)]
+    pub path: TransferPath,
+}
+
+/// Path an item follows on a timed direct connection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransferPath {
+    /// Straight line between the two objects' positions.
+    #[default]
+    Straight,
+    /// Shortest route over the model's path network (straight when it has none).
+    Network,
+}
+
+impl TransferDef {
+    /// Checks the numbers; the error is user-facing text.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(self.speed.is_finite() && self.speed > 0.0) {
+            return Err("transfer.speed deve ser finita e > 0".into());
+        }
+        if !(self.delay.is_finite() && self.delay >= 0.0) {
+            return Err("transfer.delay deve ser finito e >= 0".into());
+        }
+        Ok(())
+    }
+}
+
 /// Logic of a block. The kernel calls these hooks; a block reacts by
 /// scheduling events, changing state and releasing items through [`Ctx`].
 pub trait Behavior: Send {

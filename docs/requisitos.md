@@ -99,6 +99,8 @@ a situação atual e onde está a prova de que funciona.
 | RF-111 | abrir modelos de versões anteriores do formato e recusar com clareza os de versões mais novas | 8 | ✅ | `utsim-model/tests/formato.rs` e testes de migração em `utsim-model` |
 | RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | 🔄 | modelos articulados gerados por código (`utsim-assets`, `tests/modelos.rs`), garfos até o nível, operadores andando; roteiros `visual_realista_*.ron`. Falta: personagens com esqueleto, giro suave, sombras |
 | RF-113 | visitar o modelo em realidade virtual | A3D | ⏳ | cena já preparada (escala real, protocolo versionado); cliente Unreal/OpenXR planejado |
+| RF-114 | dar tempo de transferência pela distância às ligações diretas (`delay + distância/velocidade`, em linha reta ou pela rede), por objeto ou para o modelo todo, reservando espaço no destino durante o trajeto | 9 | ✅ | `utsim-model/tests/transfer.rs` (18 casos, inclusive lei de Little), `utsim-scene/tests/transfer.rs`, `examples/transferencia_por_distancia.ron` |
+| RF-115 | avisar, sem impedir a rodada, sobre distâncias zeradas, objetos longe da rede e ligações longas instantâneas | 9 | ✅ | testes de avisos em `utsim-model/tests/transfer.rs`; `utsim check` e `utsim run` mostram `aviso:` |
 
 ## Requisitos não funcionais (RNF)
 

@@ -8,7 +8,9 @@ use rand::Rng;
 use slotmap::SlotMap;
 
 use crate::Time;
-use crate::block::{Behavior, BlockId, Downtime, OutputRule, ShiftTable, State};
+use crate::block::{
+    Behavior, BlockId, Downtime, OutputRule, ShiftTable, State, TransferDef, TransferPath,
+};
 use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
@@ -57,6 +59,13 @@ enum EventKind {
     ShiftOff(BlockId, usize),
     ShiftOn(BlockId),
     EndWarmup,
+    /// An item finishes a timed direct connection and enters `to` through `port`.
+    Arrive {
+        item: ItemId,
+        from: BlockId,
+        to: BlockId,
+        port: usize,
+    },
     /// Records the time series; internal, not counted in `events_processed`.
     Sample,
 }
@@ -150,8 +159,10 @@ struct BlockRuntime {
     position: [f64; 3],
     /// Mobile resource (or dispatcher) that carries this block's items out.
     transport: Option<BlockId>,
-    /// Items on their way here (room reserved by a transport request).
+    /// Items on their way here (room reserved by a transport request or a timed transfer).
     incoming: usize,
+    /// Travel time of items leaving through direct connections (None = instantaneous).
+    transfer: Option<TransferDef>,
     /// Blocks notified when items enter (`.0`) or leave (`.1`) this block.
     subscribers: Vec<(BlockId, bool, bool)>,
     entry_script: Option<Box<dyn ItemScript>>,
@@ -868,6 +879,7 @@ impl Simulation {
             position: [0.0; 3],
             transport: None,
             incoming: 0,
+            transfer: None,
             subscribers: Vec::new(),
             entry_script: None,
             port_script: None,
@@ -896,6 +908,12 @@ impl Simulation {
     /// Items leaving `block` are carried by `carrier` (a mobile resource or dispatcher).
     pub fn set_transport(&mut self, block: BlockId, carrier: BlockId) {
         self.core.blocks[block.0].transport = Some(carrier);
+    }
+
+    /// Items leaving `block` through direct connections take `delay + distance / speed`
+    /// to arrive; room is reserved at the destination while they travel.
+    pub fn set_transfer(&mut self, block: BlockId, transfer: TransferDef) {
+        self.core.blocks[block.0].transfer = Some(transfer);
     }
 
     /// Replaces the straight-line router (e.g. by a path network).
@@ -1280,6 +1298,20 @@ impl Simulation {
                 behaviors[block.0].on_event(&mut Ctx { core, me: block }, tag, item);
                 self.flush_doomed();
             }
+            EventKind::Arrive {
+                item,
+                from,
+                to,
+                port,
+            } => {
+                if !self.core.items.contains_key(item) {
+                    return;
+                }
+                let rt = &mut self.core.blocks[to.0];
+                rt.incoming = rt.incoming.saturating_sub(1);
+                self.core.pending_move_from = Some(from);
+                self.arrive(item, to, port);
+            }
             EventKind::Fail(b) => self.fail(b),
             EventKind::Repair(b) => self.repair(b),
             EventKind::ShiftOff(b, k) => self.shift_off(b, k),
@@ -1421,9 +1453,13 @@ impl Simulation {
             match self.find_destination(from, pending) {
                 Some(to) => {
                     self.core.blocks[from.0].outbox.remove(i);
-                    match self.core.blocks[from.0].transport {
-                        Some(carrier) => self.reserve_transport(pending.item, from, to, carrier),
-                        None => self.transfer(pending.item, from, to),
+                    let rt = &self.core.blocks[from.0];
+                    match (rt.transport, rt.transfer) {
+                        (Some(carrier), _) => {
+                            self.reserve_transport(pending.item, from, to, carrier);
+                        }
+                        (None, Some(spec)) => self.timed_transfer(pending.item, from, to, spec),
+                        (None, None) => self.transfer(pending.item, from, to),
                     }
                 }
                 None => i += 1,
@@ -1448,6 +1484,51 @@ impl Simulation {
     fn transfer(&mut self, item: ItemId, from: BlockId, (to, in_port): (BlockId, usize)) {
         self.leave(item, from);
         self.arrive(item, to, in_port);
+    }
+
+    /// Direct connection with a travel time: the item leaves `from` now and enters `to`
+    /// after `delay + distance / speed`. Room in `to` is reserved meanwhile, and the item
+    /// belongs to no block while it travels. A zero total time is a plain instant move.
+    fn timed_transfer(
+        &mut self,
+        item: ItemId,
+        from: BlockId,
+        (to, port): (BlockId, usize),
+        spec: TransferDef,
+    ) {
+        let a = self.core.blocks[from.0].position;
+        let b = self.core.blocks[to.0].position;
+        let path = match spec.path {
+            TransferPath::Straight => vec![a, b],
+            TransferPath::Network => self.core.router.route(a, b),
+        };
+        let duration = crate::task::path_length(&path) / spec.speed;
+        if spec.delay + duration <= 0.0 {
+            self.transfer(item, from, (to, port));
+            return;
+        }
+        self.core.blocks[to.0].incoming += 1;
+        self.leave(item, from);
+        self.core.pending_move_from = None;
+        self.core.items[item].location = None;
+        self.core.emit(TraceEvent::Transit {
+            item: item_key(item),
+            from: from.0,
+            to: to.0,
+            delay: spec.delay,
+            duration,
+            path,
+        });
+        let time = self.core.now + spec.delay + duration;
+        self.core.schedule_at(
+            time,
+            EventKind::Arrive {
+                item,
+                from,
+                to,
+                port,
+            },
+        );
     }
 
     /// Room in `to` is reserved; the item stays in `from` until the carrier picks it up.
