@@ -127,6 +127,15 @@ justifica a escolha com métricas estatísticas.
 - [x] Diagrama dos fluxos no editor, edição de atividades e contagem de tokens ao vivo
 - [x] **Validação:** M/M/1, M/M/3 e Jackson só com fluxos; lei de Little; roteamento por script reprodutível; docas de recebimento (`examples/fluxo_docas.ron`)
 
+## MVP
+- [x] Fase 8: consolidação (formato versionado, publicação, GitHub privado)
+- [x] Fase 9: editor completo (biblioteca, multisseleção, copiar e colar, aparência, rede de caminhos, fluidos, avisos)
+- [ ] Fase 10: resultados dentro do app
+- [x] Fase 11: robustez e desempenho (parte 1)
+- [x] Fase 12: instalador (Windows NSIS, .deb, .tar.gz) e publicação por tag
+- [x] Fase 13: manual e 6 tutoriais (parte 1)
+- [ ] Fase 14: piloto com casos reais
+
 ## Fase 7+: avançado
 - [x] Otimização de parâmetros: grade, recozimento simulado, genético, refinamento, comparação pareada (`utsim otimizar`)
 - [x] Aprendizado por reforço: decisão por agente no fluxo, ambiente estilo Gym (`utsim-env`), Q-learning tabular, ligações Python (`crates/utsim-py`)

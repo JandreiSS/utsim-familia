@@ -106,6 +106,10 @@ a situação atual e onde está a prova de que funciona.
 | RF-118 | copiar, recortar, colar e duplicar objetos com nomes únicos, mantendo só as ligações entre os copiados | 9 | ✅ | testes de `utsim-edit` (nomes, ligações, referências remapeadas) |
 | RF-119 | escolher a aparência de cada objeto (biblioteca própria ou catálogo de terceiros com autor e licença), cor, escala e giro, vista em tamanho real | 9 | ✅ | roteiro `editor_aparencia.ron`; testes do catálogo |
 | RF-120 | consultar os atalhos de teclado e mouse numa janela (F1) | 9 | ✅ | tabela `SHORTCUTS` testada |
+| RF-121 | desenhar a rede de caminhos no editor (nós na grade, trechos de mão única ou dupla com capacidade para AGVs), vendo comprimentos e a ligação de cada objeto ao nó mais próximo | 9 | ✅ | `utsim-edit/src/network.rs` (9 testes), roteiro `editor_rede.ron` |
+| RF-122 | montar a rede de fluidos no editor (fontes, tanques, tubos, sumidouros e conversores), com validação ao vivo | 9 | ✅ | `utsim-edit/src/fluids.rs` (6 testes), roteiro `editor_fluidos.ron` |
+| RF-123 | escolher o nó de base de um transportador; o AGV da biblioteca já vem com controle de tráfego e retorno à base | 9 | ✅ | testes do painel e da predefinição |
+| RF-124 | ver os avisos que não impedem a rodada em amarelo, separados dos problemas | 9 | ✅ | `Document::warnings` (testes) |
 
 ## Requisitos não funcionais (RNF)
 
