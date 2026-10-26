@@ -1,0 +1,13 @@
+[package]
+name = "utsim-icone"
+description = "Gera os PNG e o .ico do aplicativo a partir de assets/icone/utsim.svg"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+resvg = { version = "0.45", default-features = false }
+ico = "0.5"
+
+[workspace]

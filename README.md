@@ -12,6 +12,18 @@ nós, em [docs/arquitetura.md](docs/arquitetura.md).
 
 O [Manual do usuário](docs/manual/src/SUMMARY.md) explica cada objeto, os recursos móveis, os resultados e a estatística, e traz seis tutoriais passo a passo (`examples/tutorial_*.ron`). É um livro [mdBook](https://rust-lang.github.io/mdBook/) (`cd docs/manual && mdbook build`), mas todos os capítulos são arquivos Markdown legíveis direto.
 
+## Instalação
+
+Os pacotes prontos ficam na página de [Releases](https://github.com/JandreiSS/utsim/releases).
+
+**Windows**: baixe `utsim-v<versão>-windows-x64-instalador.exe` e abra. A instalação é por usuário, sem administrador, em `%LOCALAPPDATA%\Programs\UTSim`. Ela traz `utsim.exe` e `utsim-view.exe` (em `bin\`), `examples\`, `assets\` (modelos 3D e ativos de terceiros, com as licenças), `manual\` (HTML) e `LICENSE`. Cria a pasta "UTSim" no Menu Iniciar ("UTSim" e "UTSim (exemplos)") e, se você marcar a opção, põe `utsim` no `PATH`. Desinstale em Configurações > Aplicativos. O instalador ainda não é assinado, então o SmartScreen pode avisar. Não há associação de extensão: `.ron` é genérica demais. Abra um modelo com `utsim-view modelo.ron` ou arrastando o arquivo sobre o `utsim-view.exe`. Também há um `.zip` portátil.
+
+**Debian e Ubuntu**: `sudo apt install ./utsim_<versão>_amd64.deb` instala em `/opt/utsim`, com os comandos `utsim` e `utsim-view` em `/usr/bin` e atalhos no menu.
+
+**Outras distribuições**: descompacte `utsim-v<versão>-linux-x64.tar.gz` e rode `./instalar.sh` (sem `sudo`, instala em `~/.local`). `./instalar.sh --desinstalar` remove.
+
+Detalhes e a opção de compilar do código-fonte estão na seção "Instalação" do [manual](docs/manual/src/introducao.md).
+
 ## Rodando
 
 ```bash

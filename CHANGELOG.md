@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Adicionado
+- Fase 12 (pacotes): ícone do aplicativo (`assets/icone`, gerado por `tools/icone`) na janela e nos `.exe`; instalador do Windows por usuário (NSIS), `.deb` e `.tar.gz` com `instalar.sh` para o Linux; fluxo `release.yml` com simulação (`workflow_dispatch`) e notas tiradas deste arquivo.
 - Campo opcional `format` nos modelos `.ron` (ausente vale 1), com erro claro para formatos mais novos e gancho de migração.
 - Biblioteca de modelos 3D articulados gerados por código (`utsim-assets`, binário `utsim-assets`): empilhadeira, paleteira, AGV, palete, caixa, porta-paletes, esteira de rolos, tanque, máquina, bancada, operador e área de piso, versionados em `assets/modelos/*.glb`.
 - Visualizador com "Visual: simples / realista": modelos glTF por papel e tipo ou por `visual.asset`, garfos subindo até a célula, rodas girando, luz de estado do AGV, operadores andando sem deslizar os pés e cargas nos garfos e nas mãos.
