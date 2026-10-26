@@ -137,7 +137,7 @@ jobs:
           name=utsim-${{ needs.versao.outputs.rotulo }}-web
           mkdir "$name"
           cp -r web/dist/. "$name"/
-          cp LICENSE README.md "$name"/
+          cp README.md "$name"/
           cp -r examples "$name"/examples
           zip -r "$name.zip" "$name"
       - uses: actions/upload-artifact@v4

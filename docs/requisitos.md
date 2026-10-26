@@ -115,7 +115,7 @@ a situação atual e onde está a prova de que funciona.
 
 | Código | O sistema precisa... | Situação | Como garantimos |
 |---|---|---|---|
-| RNF-01 | ser software livre (GPL-3.0-or-later) | ✅ | `LICENSE`, campo `license` nos crates |
+| RNF-01 | licença do software: a definir pelo autor | ⏳ | — |
 | RNF-02 | ser feito do zero (clean room), sem copiar código ou analisar binários proprietários | ✅ | comportamento especificado em `arquitetura.md` a partir de documentação pública |
 | RNF-03 | ser **reprodutível**: mesma semente → mesmo resultado, sempre | ✅ | `same_seed_same_result_and_replications_differ`, snapshots golden |
 | RNF-04 | ter números aleatórios independentes por objeto, para comparar cenários com justiça | ✅ | `rng.rs`; cenário base = rodada direta (`tests/experiment.rs`) |
