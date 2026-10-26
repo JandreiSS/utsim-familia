@@ -6782,6 +6782,8 @@ name = "utsim-assets"
 version = "0.1.0"
 dependencies = [
  "gltf",
+ "ron 0.8.1",
+ "serde",
 ]
 
 [[package]]
