@@ -184,6 +184,12 @@ impl Document {
         self.path.as_deref()
     }
 
+    /// Counts every change of the model (apply, undo, redo): equal revisions of the same
+    /// document mean the same model, so derived views can be cached on it.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Whether there are changes since the last save (or open).
     pub fn is_dirty(&self) -> bool {
         self.revision != self.saved_revision
@@ -260,15 +266,32 @@ impl Document {
     }
 
     fn object_of(&self, message: &str) -> Option<String> {
+        // `name:` or `name.` at the start, `'name'` or `(name ->` anywhere. Models have
+        // hundreds of objects and messages, so no allocation per pair.
+        let quoted = |name: &str| {
+            message.match_indices('\'').any(|(i, _)| {
+                message[i + 1..]
+                    .strip_prefix(name)
+                    .is_some_and(|r| r.starts_with('\''))
+            })
+        };
+        let arrow = |name: &str| {
+            message.match_indices('(').any(|(i, _)| {
+                message[i + 1..]
+                    .strip_prefix(name)
+                    .is_some_and(|r| r.starts_with(" ->"))
+            })
+        };
         self.model
             .objects
             .iter()
             .map(|o| o.name.as_str())
             .filter(|name| {
-                message.starts_with(&format!("{name}:"))
-                    || message.starts_with(&format!("{name}."))
-                    || message.contains(&format!("'{name}'"))
-                    || message.contains(&format!("({name} ->"))
+                message
+                    .strip_prefix(name)
+                    .is_some_and(|r| r.starts_with(':') || r.starts_with('.'))
+                    || quoted(name)
+                    || arrow(name)
             })
             .max_by_key(|name| name.len())
             .map(str::to_string)
