@@ -137,7 +137,10 @@ Passos (`Passo`, em `crates/utsim-viewer/src/roteiro.rs`):
 | `Captura("nome")` | grava `<pasta>/nome.png` e espera o arquivo existir |
 | `Afirmar(condição)` | falha a execução se a condição não valer |
 | `IrPara(1806.0)` | pausa e pula para esse tempo simulado (em Simular) |
-| `Focar(objeto: "empilhadeira_1", distancia: 9.0, giro: Some(0.6), inclinacao: Some(0.35))` | aponta a câmera para onde o bloco está agora; `giro` e `inclinacao` (radianos) são opcionais |
+| `Focar(objeto: "empilhadeira_1", distancia: 9.0, giro: Some(0.6), inclinacao: Some(0.35))` | aponta a câmera para onde o bloco está agora (e volta à órbita); `giro` e `inclinacao` (radianos) são opcionais |
+| `Camera(modo: "Seguir", objeto: Some("empilhadeira_1"))` | troca o modo da câmera: `Orbita`, `Seguir`, `PrimeiraPessoa` ou `DoRecurso` (com ou sem acento). `objeto` vale para `Seguir` e `DoRecurso` (sem ele, vale o recurso selecionado ou o primeiro). Só em Simular para esses dois. Espera a câmera deslizar (1,2 s) |
+| `Lod(false)`, `Tempos(true)` | liga ou desliga os níveis de detalhe (F4) e o quadro de tempos (F3) |
+| `Medir(segundos: 4.0, nome: "visao_geral")` | mede os tempos de quadro por esse tempo (descontado 0,5 s de aquecimento) e grava no `log.txt` e na saída: quadros, média, mediana, p95 e pior quadro. Defina `UTSIM_SEM_VSYNC=1` para não limitar ao monitor |
 
 Alvos: `Objeto("fila")` (centro do bloco), `Mundo(x, y)` (chão, coordenadas do modelo),
 `Tela(px, py)` (pixels lógicos da janela), `Botao("rótulo")` (texto egui visível) e
@@ -154,6 +157,11 @@ desenhados no diagrama, então `ClicarBotao("decide")` seleciona a caixa.
 Para a seleção, a área de transferência e a aparência (fase 9): `SelecionadosIgual(n)`,
 `SelecaoContem("fila")`, `AtivoDe("processo", Some("bancada_kenney"))` (`None`: aparência padrão),
 `ObjetosComPrefixo("fila", n)` e `Ligado("fila_2", "processo_2")`.
+Para as câmeras e o LOD (A3D-4): `CameraModo("Primeira pessoa")`, `CameraAlvo(Some("empilhadeira_1"))`
+(recurso que Seguir ou Do recurso acompanham), `CameraAlturaEntre(1.55, 1.65)` (altura da câmera, em
+metros), `CameraPertoDe("empilhadeira_1", 14.0)` (a câmera está a até essa distância do bloco, em Simular)
+e `LodAtivo(true)`. A primeira pessoa anda com `Segurar("W")`, `EsperarSegundos(2.0)` e `LargarTecla("W")`,
+e olha com `Pressionar(Direito)`, `MoverPara(...)` e `Soltar(Direito)`.
 
 **Como os botões são achados.** O egui 0.36 usado aqui não tem a árvore de acessibilidade
 (sem `accesskit`), então, depois de cada passe do egui, o executor guarda todos os textos
@@ -182,6 +190,13 @@ botão "Visual: simples / realista"), `visual_realista_agvs.ron` (com `examples/
 para onde andam e a luz de estado verde, laranja e azul) e `visual_realista_operadores.ron` (com
 `examples/celula_com_operadores.ron`: pernas alternando na caminhada e o operador trabalhando na frente
 da máquina). Grave as capturas fora do repositório, por exemplo em `%TEMP%\utsim_visual\<nome>`.
+Câmeras e modelos grandes (A3D-4): `a3d4_cameras.ron` (com `examples/centro_de_distribuicao.ron`: a empilhadeira
+selecionada na lista e o botão "Seguir este recurso", a câmera por trás e por cima enquanto ela anda, a roda
+aproximando, `Esc` voltando à órbita, a primeira pessoa pelo menu "Câmera" da barra andando com `W` e
+`Shift` e olhando com o botão direito sempre a 1,6 m, o assento do motorista com a tecla `4` e `F`
+enquadrando de volta) e `a3d4_lod.ron` (com um modelo de `utsim gerar-modelo --objetos 500 --tipo armazem`:
+visão geral e de perto com o LOD ligado e desligado, com os tempos de quadro no `log.txt`; os números
+estão em `docs/desempenho.md`). Grave as capturas fora do repositório, por exemplo em `%TEMP%\utsim_a3d4\<nome>`.
 Editor para montar modelos (fase 9), ambos com `--novo`: `editor_biblioteca.ron` (colocar pela
 biblioteca com clique e arrastando até o chão, encaixe na grade, seleção por caixa com Shift, mover
 dois juntos, copiar e colar com nomes únicos e só a ligação interna, desfazer, Shift + clique,

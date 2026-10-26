@@ -21,7 +21,10 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - Seção "Aparência" nas propriedades: ativo da biblioteca ou do catálogo de terceiros (autor e licença na dica), cor, escala, giro e "Restaurar padrão"; o modo realista desenha os `.glb` de terceiros no tamanho real virados para +x. Campo "Transferência pela distância" nas propriedades.
 - Passos de roteiro `Segurar` e `LargarTecla` e condições `SelecionadosIgual`, `SelecaoContem`, `AtivoDe`, `ObjetosComPrefixo` e `Ligado`.
 
+- A3D-4 (câmeras e modelos grandes): menu "Câmera" na barra e teclas 1 a 4 com os modos Órbita, Seguir (um recurso móvel por trás e por cima, com "Seguir este recurso" no painel), Primeira pessoa (a 1,6 m do chão com `W`, `A`, `S`, `D`, `Shift`, botão direito ou mouse travado com `L`, colisão simples com os blocos) e Do recurso (no assento do motorista), com transição suave e estado guardado por modo. Níveis de detalhe: modelo realista vira caixa, item vira cubo e some, e só os 150 rótulos mais próximos são escritos (só em modelos com 100 blocos ou 400 itens); `F3` mostra tempos de quadro e contagens, `F4` liga e desliga. Passos de roteiro `Camera`, `Lod`, `Tempos` e `Medir` e condições `CameraModo`, `CameraAlvo`, `CameraAlturaEntre`, `CameraPertoDe` e `LodAtivo`. Medições em `docs/desempenho.md`.
+
 ### Corrigido
+- Visualizador: o editor revalidava o modelo inteiro a cada quadro, mesmo em Simular (cerca de 165 ms com 500 objetos); agora só refaz quando o documento muda (`Document::revision`).
 - Modelos que travavam ou esgotavam a memória agora são recusados na validação (fontes com intervalo quase nulo, porta-paletes ou `Split` gigantes, fluxos com intervalo zero) ou terminam com erro (muitos eventos no mesmo instante).
 
 ### Alterado
