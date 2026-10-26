@@ -13,6 +13,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - Biblioteca de modelos 3D articulados gerados por código (`utsim-assets`, binário `utsim-assets`): empilhadeira, paleteira, AGV, palete, caixa, porta-paletes, esteira de rolos, tanque, máquina, bancada, operador e área de piso, versionados em `assets/modelos/*.glb`.
 - Visualizador com "Visual: simples / realista": modelos glTF por papel e tipo ou por `visual.asset`, garfos subindo até a célula, rodas girando, luz de estado do AGV, operadores andando sem deslizar os pés e cargas nos garfos e nas mãos.
 - Passos de roteiro `IrPara(t)` e `Focar(...)`.
+- A3D-3 (movimento realista): pessoas animadas por esqueleto (boneco CC0, clipes de parar, andar, correr, andar carregando, pegar e trabalhar, passada ligada à distância andada, roupa de trabalho, capacete e colete, item entre as mãos); a carga troca de mãos no meio da janela de carga ou descarga, subindo nos garfos até a célula; curvas suaves nas quinas do caminho (`utsim-scene`, também no fluxo `utsim-scene/1`); sombras do sol com a caixa "Sombras"; exemplo `pessoas_carregando.ron`; passo de roteiro `MedirQuadros(segundos)`.
 - Fase 11: `utsim gerar-modelo` (modelos sintéticos de qualquer tamanho), benchmark `cargo bench -p utsim-scene`, metas de desempenho em testes `#[ignore]` e `docs/desempenho.md`.
 - Testes de robustez (proptest) do leitor de modelos e do leitor de dados do ajuste.
 - Página web: o motor roda em um Web Worker, com botão "Cancelar".

@@ -16,7 +16,11 @@
 //!   until the move is recorded;
 //! - the **progress of a load/unload window** of a carrier is measured against the end
 //!   of its state, which is unknown while the state lasts (the progress stays 0 until a
-//!   hand-off or the next state change closes the window).
+//!   hand-off or the next state change closes the window), and with it the instant at
+//!   which the item changes hands visually (the middle of the window);
+//! - the **corner between two legs** driven without a stop is rounded only once the
+//!   second leg is recorded, so the last half metre of a leg can turn a little later
+//!   than in the batch frame.
 //!
 //! Both vanish once the records past `t` are in: after the whole run is pushed (or when
 //! `t` is a little behind the newest record) the frame equals the batch one. Clients that

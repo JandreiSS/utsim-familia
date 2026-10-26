@@ -53,6 +53,7 @@ pub mod server;
 pub mod style;
 pub mod timeline;
 pub mod tokens;
+pub mod turning;
 
 pub use compose::{ItemPlacement, MobilePose, Scene, SceneOptions};
 pub use live::LiveScene;

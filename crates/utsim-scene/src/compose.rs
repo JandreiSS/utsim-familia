@@ -22,9 +22,15 @@
 //!   5. otherwise `Vehicle` (also every transporter of a replay read without its model).
 //! - **Position**: the end of the latest `Travel` leg, interpolated linearly in time
 //!   along the path by arc length (the trace carries path and duration, not the speed
-//!   profile); the layout position before the first leg.
-//! - **Yaw**: the direction of the path piece being driven; between legs and while
-//!   stopped, the heading at the end of the last leg with length; 0 before any travel.
+//!   profile), with every corner rounded over [`turning::TURN_HALF`] of path on each side
+//!   ([`turning`]; also the corner between two legs driven without a stop); the layout
+//!   position before the first leg. A forklift loading or unloading at a rack cell
+//!   moves to the aisle in front of the cell, facing it ([`rack_approach`]).
+//! - **Yaw**: the direction of the path piece being driven, turning at a constant rate
+//!   through the rounded corners; between legs and while stopped, the heading at the
+//!   end of the last leg with length; 0 before any travel.
+//! - **Distance** ([`Scene::distance_at`]): the path length driven so far, from the
+//!   legs alone, so wheels and walk cycles depend on `t` only.
 //! - **Motion**, first match wins: `Stopped` in state `down`, `off_shift` or `stopped`;
 //!   `Moving` while a leg with length is being driven; `Loading`/`Unloading` in those
 //!   states; `Working` in state `utilize` (an operator at a station); `Blocked` in state
@@ -44,9 +50,16 @@
 //!   cell, reach it in the middle of the window and return to the travel height. At any
 //!   other block they move between the two rest heights. People hold carried items at
 //!   [`HAND_HEIGHT`]; other vehicles report 0.
+//! - **Hand-off**: the item of a load or unload window changes hands at
+//!   [`HANDOFF_AT`] (the middle) of the window, when the forks are at the rack cell,
+//!   not at the trace's `Moved` event at the end of it: from then on it is drawn where
+//!   it goes (the rack cell, the belt spot or the queue stack it will have, or the
+//!   carrier). Unloading at a rack, the load rides the forks up, enters the cell at the
+//!   top and the forks come down empty; picking is the mirror image.
 //! - **Parent**: an item resting in a block (queue, rack cell, belt, carrier) has that
 //!   block as parent; an item packed in a container has the container; an item in
-//!   transit between two blocks has none.
+//!   transit between two blocks has none. Loads of a forklift ride on its forks:
+//!   [`FORK_REACH`] ahead, the bottom at the lift height, at the size of a rack load.
 //! - **Fill**: a tank's level over its capacity, linear between the trace samples.
 
 use std::collections::HashMap;
@@ -62,7 +75,8 @@ use crate::handling::{BeltParams, Handling, RackParams};
 use crate::layout;
 use crate::network::NetworkView;
 use crate::style::{self, Shape};
-use crate::timeline::{FluidSample, ItemPos, Timeline, TransitSetting};
+use crate::timeline::{FluidSample, ItemPos, Timeline, TransitSetting, TravelLeg};
+use crate::turning::{self, Neighbour};
 use crate::{
     EntityId, EntityKind, Frame, Header, MobileRole, Motion, PROTOCOL, Pose, Segment, StaticEntity,
     StaticScene,
@@ -76,6 +90,13 @@ pub const FORK_LOWERED: f32 = 0.1;
 pub const CARRY_HEIGHT: f32 = 0.3;
 /// Hand height of a person carrying an item, metres.
 pub const HAND_HEIGHT: f32 = 1.0;
+/// Distance from a forklift's origin (between the front wheels) to the centre of its
+/// forks, metres. The same number as the library model's
+/// (`utsim_assets::dims::FORK_CENTER`).
+pub const FORK_REACH: f32 = 1.555;
+/// Fraction of a load or unload window at which the item changes hands: the forks are
+/// at the rack cell then (see the module docs).
+pub const HANDOFF_AT: f32 = 0.5;
 /// Height of the arc an item follows when it moves between two fixed blocks.
 const TRANSIT_HEIGHT: f32 = 1.2;
 const TRANSIT_ARC: f32 = 0.7;
@@ -163,6 +184,11 @@ struct BlockInfo {
     profile: Option<Profile>,
     /// Heading held after each travel leg (latest leg with length).
     headings: Vec<Option<f32>>,
+    /// Per travel leg: the pieces of the legs that continue it without a stop, before
+    /// and after (their shared corners are rounded, see [`turning`]).
+    corners: Vec<(Option<Neighbour>, Option<Neighbour>)>,
+    /// Distance driven before each travel leg, metres.
+    odometer: Vec<f64>,
 }
 
 /// Where an item is drawn at one instant, in layout space.
@@ -209,6 +235,9 @@ pub struct Scene {
     pub network: NetworkView,
     /// End of the animation, in simulation time.
     pub end: f64,
+    /// Scale of the [`ITEM_SIZE`] cube of a load on forks (the largest rack load; 1
+    /// without racks).
+    pub fork_scale: f32,
     model: String,
     blocks: Vec<BlockInfo>,
 }
@@ -309,13 +338,41 @@ impl Scene {
                     }),
                     _ => None,
                 });
+                let legs = timeline.legs(b);
                 let mut held = None;
-                let headings = timeline
-                    .legs(b)
+                let headings = legs
                     .iter()
                     .map(|leg| {
                         held = leg.final_heading().map(|h| h as f32).or(held);
                         held
+                    })
+                    .collect();
+                let corners = (0..legs.len())
+                    .map(|k| {
+                        let before = k
+                            .checked_sub(1)
+                            .filter(|&p| continues(&legs[p], &legs[k]))
+                            .and_then(|p| {
+                                let (path, cum) = legs[p].path();
+                                turning::last_piece(path, cum)
+                            });
+                        let after = legs
+                            .get(k + 1)
+                            .filter(|next| continues(&legs[k], next))
+                            .and_then(|next| {
+                                let (path, cum) = next.path();
+                                turning::first_piece(path, cum)
+                            });
+                        (before, after)
+                    })
+                    .collect();
+                let mut driven = 0.0;
+                let odometer = legs
+                    .iter()
+                    .map(|leg| {
+                        let start = driven;
+                        driven += leg.length();
+                        start
                     })
                     .collect();
                 BlockInfo {
@@ -325,14 +382,24 @@ impl Scene {
                     role: mobile.then(|| role_of(&block.name, opts.model)),
                     profile,
                     headings,
+                    corners,
+                    odometer,
                 }
             })
             .collect();
 
+        // Loads on forks keep the size they have in a rack cell.
+        let fork_scale = geoms
+            .iter()
+            .filter_map(|g| g.rack_params())
+            .map(|p| p.item_size())
+            .fold(None, |a: Option<f32>, s| Some(a.map_or(s, |a| a.max(s))))
+            .map_or(1.0, |s| s / ITEM_SIZE);
         Scene {
             timeline,
             positions,
             geoms,
+            fork_scale,
             fluid,
             network: opts.model.map(NetworkView::of).unwrap_or_default(),
             end,
@@ -378,11 +445,45 @@ impl Scene {
     }
 
     /// Layout-space base of block `b` at `t`: its layout position or, for a mobile
-    /// resource that has started travelling, where the trace says it is.
+    /// resource, where [`Scene::mobile_at`] puts it (along its travels, with the corners
+    /// rounded, in front of a rack cell while it serves one).
     pub fn base_at(&self, b: usize, t: f64) -> [f32; 3] {
-        self.timeline
-            .carrier_pos(b, t)
-            .map_or_else(|| self.positions[b], layout::to_bevy)
+        match self.mobile_at(b, t) {
+            Some(m) => m.position,
+            None => self.travel_base(b, t),
+        }
+    }
+
+    /// Where the trace puts block `b` at `t` (layout space), with rounded corners, and
+    /// its heading while it is driving a leg with length.
+    fn travel_at(&self, b: usize, t: f64) -> Option<([f32; 3], Option<f32>)> {
+        let legs = self.timeline.legs(b);
+        let k = legs.partition_point(|l| l.t0 <= t).checked_sub(1)?;
+        let leg = &legs[k];
+        if !leg.is_moving(t) {
+            return Some((layout::to_bevy(leg.at(t)), None));
+        }
+        let (before, after) = self.blocks[b].corners.get(k).copied().unwrap_or_default();
+        let (path, cum) = leg.path();
+        let (point, heading) = turning::sample(path, cum, leg.driven(t), before, after);
+        Some((layout::to_bevy(point), heading.map(|h| h as f32)))
+    }
+
+    /// Layout position of block `b` from its travels alone (no rack approach).
+    fn travel_base(&self, b: usize, t: f64) -> [f32; 3] {
+        self.travel_at(b, t).map_or(self.positions[b], |(p, _)| p)
+    }
+
+    /// Distance mobile block `b` has driven or walked by `t`, metres (0 for a fixed
+    /// block). Engines drive wheels and walk cycles from it, so a frame at `t` looks the
+    /// same however the clock got there.
+    pub fn distance_at(&self, b: usize, t: f64) -> f64 {
+        let legs = self.timeline.legs(b);
+        let Some(k) = legs.partition_point(|l| l.t0 <= t).checked_sub(1) else {
+            return 0.0;
+        };
+        let start = self.blocks[b].odometer.get(k).copied().unwrap_or(0.0);
+        start + legs[k].driven(t)
     }
 
     /// Heading of block `b` at `t` (see the module docs).
@@ -391,11 +492,8 @@ impl Scene {
         let Some(k) = legs.partition_point(|l| l.t0 <= t).checked_sub(1) else {
             return self.geoms[b].yaw;
         };
-        let leg = &legs[k];
-        if leg.is_moving(t)
-            && let Some(h) = leg.heading_at(t)
-        {
-            return h as f32;
+        if let Some((_, Some(h))) = self.travel_at(b, t) {
+            return h;
         }
         self.blocks[b]
             .headings
@@ -427,6 +525,8 @@ impl Scene {
             _ => 0.0,
         };
         let mut lift = rest;
+        let mut position = self.travel_base(b, t);
+        let mut yaw = self.yaw_at(b, t);
         let motion = match (state, leg) {
             (Some(State::Down | State::OffShift | State::Stopped), _) => Motion::Stopped,
             (_, Some(leg)) => {
@@ -458,11 +558,17 @@ impl Scene {
                     lift = match handoff.and_then(|h| self.cell_height(h, pickup, t)) {
                         Some(cell) => {
                             let u = ((progress.min(1.0 - progress)) / 0.4).clamp(0.0, 1.0);
-                            let base = if progress < 0.5 { from } else { to };
+                            let base = if progress < HANDOFF_AT { from } else { to };
                             base + (cell - base) * u
                         }
                         None => from + (to - from) * progress,
                     };
+                    if let Some((rack, slot)) = self.rack_target(b, t)
+                        && let Some((offset, _)) = self.geoms[rack].rack_item(slot)
+                    {
+                        (position, yaw) =
+                            rack_approach(position, yaw, progress, self.positions[rack], offset[0]);
+                    }
                 }
                 if pickup {
                     Motion::Loading { progress }
@@ -475,8 +581,8 @@ impl Scene {
             _ => Motion::Idle,
         };
         Some(MobilePose {
-            position: self.base_at(b, t),
-            yaw: self.yaw_at(b, t),
+            position,
+            yaw,
             motion,
             lift,
         })
@@ -506,6 +612,24 @@ impl Scene {
             0.0
         };
         (progress, next)
+    }
+
+    /// The hand-off of mobile block `b` whose item has already changed hands visually at
+    /// `t`: the block is loading or unloading, past [`HANDOFF_AT`] of the window, and the
+    /// item is still where the trace has it until the hand-off.
+    fn handing(&self, b: usize, t: f64) -> Option<crate::timeline::Handoff> {
+        self.blocks.get(b)?.role?;
+        let (state, start, end) = self.timeline.state_span(b, t)?;
+        let pickup = match state {
+            State::Loading => true,
+            State::Unloading => false,
+            _ => return None,
+        };
+        let (progress, handoff) = self.window(b, t, start, end, pickup);
+        let h = handoff?;
+        let holder = if pickup { h.other } else { b };
+        (progress >= HANDOFF_AT && self.timeline.item_pos(h.item, t) == ItemPos::At(holder))
+            .then_some(h)
     }
 
     /// Rack cell that mobile block `b` is loading from or unloading into at `t`:
@@ -550,16 +674,29 @@ impl Scene {
         tl.live_items(t, &mut live);
         let id = |i: usize| tl.item_id(i).unwrap_or(i as u64);
 
-        // Resting items per block (ordered by arrival), transiting items, container fill.
-        let mut resting: HashMap<usize, Vec<(f64, usize)>> = HashMap::new();
+        // An item changing hands in the second half of a load or unload window is
+        // already where it goes: `(block, time of the hand-off)`.
+        let early: HashMap<usize, (usize, f64)> = (0..n)
+            .filter_map(|b| {
+                let h = self.handing(b, t)?;
+                Some((h.item, (if h.pickup { b } else { h.other }, h.t)))
+            })
+            .collect();
+        // Resting items per block (ordered by arrival, with the time at which to look up
+        // their belt distance or rack cell), transiting items, container fill.
+        let mut resting: HashMap<usize, Vec<(f64, usize, f64)>> = HashMap::new();
         let mut placed: Vec<ItemPlacement> = Vec::new();
         let mut fill: HashMap<usize, usize> = HashMap::new();
         let mut packed: Vec<(usize, usize)> = Vec::new();
         for &i in &live {
-            let (pos, since) = tl.item_pos_since(i, t);
+            let (mut pos, mut since) = tl.item_pos_since(i, t);
+            let mut at = t;
+            if let Some(&(b, when)) = early.get(&i) {
+                (pos, since, at) = (ItemPos::At(b), when, when);
+            }
             match pos {
                 ItemPos::At(b) if b < n => {
-                    resting.entry(b).or_default().push((since, i));
+                    resting.entry(b).or_default().push((since, i, at));
                 }
                 ItemPos::Transit { from, to, progress } if from < n && to < n => {
                     let s = progress as f32;
@@ -625,11 +762,12 @@ impl Scene {
         for (&b, list) in &mut resting {
             list.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
             let geom = &self.geoms[b];
-            // Items inside a transporter ride on it (stacked on its body).
+            // Items inside a transporter ride on it (stacked on its body, or on the forks).
             let base = self.base_at(b, t);
             let parent = Some(EntityId::Block(b as u32));
-            let yaw = if self.blocks[b].role.is_some() {
-                self.yaw_at(b, t)
+            let carrier = self.mobile_at(b, t);
+            let yaw = if let Some(m) = carrier {
+                m.yaw
             } else if geom.shape == Shape::Belt {
                 geom.yaw
             } else {
@@ -644,15 +782,33 @@ impl Scene {
                 parent,
                 drawn: false,
             };
-            match geom.shape {
+            let forks = carrier.filter(|_| self.blocks[b].role == Some(MobileRole::Forklift));
+            match (geom.shape, forks) {
+                // A forklift carries its loads on the forks, stacked from the lift height.
+                (_, Some(m)) => {
+                    let size = self.fork_scale * ITEM_SIZE;
+                    let (s, c) = m.yaw.sin_cos();
+                    for (k, &(_, i, _)) in list.iter().enumerate() {
+                        placed.push(ItemPlacement {
+                            center: [
+                                m.position[0] + FORK_REACH * c,
+                                m.position[1] + m.lift + size / 2.0 + k as f32 * size,
+                                m.position[2] - FORK_REACH * s,
+                            ],
+                            scale: self.fork_scale,
+                            drawn: true,
+                            ..hidden(i)
+                        });
+                    }
+                }
                 // Belts and racks put every item where the trace says it is.
-                Shape::Belt | Shape::Rack => {
-                    for &(_, i) in list.iter() {
+                (Shape::Belt | Shape::Rack, None) => {
+                    for &(_, i, at) in list.iter() {
                         let spot = if geom.shape == Shape::Belt {
-                            tl.belt_position(b, i, t)
+                            tl.belt_position(b, i, at)
                                 .and_then(|distance| geom.belt_item(distance))
                         } else {
-                            tl.rack_slot(b, i, t).and_then(|slot| geom.rack_item(slot))
+                            tl.rack_slot(b, i, at).and_then(|slot| geom.rack_item(slot))
                         };
                         placed.push(match spot {
                             Some((offset, size)) => ItemPlacement {
@@ -665,8 +821,8 @@ impl Scene {
                         });
                     }
                 }
-                shape => {
-                    for (slot, &(_, i)) in list.iter().enumerate() {
+                (shape, None) => {
+                    for (slot, &(_, i, _)) in list.iter().enumerate() {
                         // The stack is capped; the label shows how many are not drawn.
                         if slot >= style::visible_slots(shape) {
                             placed.push(hidden(i));
@@ -873,6 +1029,59 @@ impl Scene {
         }
         Frame { time: t, poses }
     }
+}
+
+/// Whether leg `next` goes on from where and when leg `prev` ends, without a stop: their
+/// shared corner is rounded across both.
+fn continues(prev: &TravelLeg, next: &TravelLeg) -> bool {
+    let (a, _) = prev.path();
+    let (b, _) = next.path();
+    let (Some(end), Some(start)) = (a.last(), b.first()) else {
+        return false;
+    };
+    prev.duration > 0.0
+        && next.duration > 0.0
+        && prev.length() > 0.0
+        && next.length() > 0.0
+        && (next.t0 - prev.end()).abs() <= 1e-9 * prev.end().abs().max(1.0)
+        && (0..3).all(|k| (end[k] - start[k]).abs() <= 1e-6)
+}
+
+/// Where a forklift stands while it loads or unloads at a rack cell: in the aisle in
+/// front of the cell (the rack's `+Z` side in layout space, the model's `-y`), facing
+/// the rack, so the fork centre ([`FORK_REACH`] ahead) is under the cell. The trace
+/// puts the vehicle at the rack's network node instead; the pose moves there over the
+/// first and last 15 % of the window (`progress`) and turns the short way round.
+/// `position` and `rack_base` are layout space, `cell_x` is the cell centre along the
+/// rack; returns the layout position and the heading.
+pub fn rack_approach(
+    position: [f32; 3],
+    yaw: f32,
+    progress: f32,
+    rack_base: [f32; 3],
+    cell_x: f32,
+) -> ([f32; 3], f32) {
+    let target = [
+        rack_base[0] + cell_x,
+        position[1],
+        rack_base[2] + FORK_REACH,
+    ];
+    // Facing -Z (towards the rack) is a heading of +pi/2.
+    let facing = PI / 2.0;
+    let u = (progress.min(1.0 - progress) / 0.15).clamp(0.0, 1.0);
+    let u = u * u * (3.0 - 2.0 * u);
+    let mut turn = (facing - yaw).rem_euclid(2.0 * PI);
+    if turn > PI {
+        turn -= 2.0 * PI;
+    }
+    (
+        [
+            position[0] + (target[0] - position[0]) * u,
+            position[1],
+            position[2] + (target[2] - position[2]) * u,
+        ],
+        yaw + turn * u,
+    )
 }
 
 fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {

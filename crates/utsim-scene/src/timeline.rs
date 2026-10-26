@@ -178,6 +178,25 @@ impl TravelLeg {
         self.heading_at(self.t0 + self.duration)
     }
 
+    /// Points of the path and the arc length at each one.
+    pub(crate) fn path(&self) -> (&[[f64; 3]], &[f64]) {
+        (&self.path, &self.cum)
+    }
+
+    /// Time the leg ends.
+    pub(crate) fn end(&self) -> f64 {
+        self.t0 + self.duration
+    }
+
+    /// Arc length driven along this leg by `t` (linear in time, like [`Self::at`]).
+    pub(crate) fn driven(&self, t: f64) -> f64 {
+        let total = self.length();
+        if self.duration <= 0.0 {
+            return if t >= self.t0 { total } else { 0.0 };
+        }
+        ((t - self.t0) / self.duration).clamp(0.0, 1.0) * total
+    }
+
     pub(crate) fn at(&self, t: f64) -> [f64; 3] {
         let last = self.path.len() - 1;
         let total = self.cum[last];

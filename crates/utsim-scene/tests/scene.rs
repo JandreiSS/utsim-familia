@@ -334,6 +334,7 @@ fn shipped_examples_build_finite_scenes() {
         "celula_com_operadores.ron",
         "linha_com_esteiras.ron",
         "montagem_paletes.ron",
+        "pessoas_carregando.ron",
     ] {
         let mut model = example(name);
         model.run.stop_time = model.run.stop_time.min(600.0);
@@ -373,4 +374,226 @@ fn roles_follow_the_model() {
             .filter_map(|b| bare.role(b))
             .all(|r| r == MobileRole::Vehicle)
     );
+}
+
+/// The pose of entity `id` in `frame`.
+fn pose_of(frame: &Frame, id: EntityId) -> Option<Pose> {
+    frame.poses.iter().find(|p| p.id == id).cloned()
+}
+
+/// Load (`pickup`) or unload windows of mobile block `b` before `until`, sampled every
+/// 10 ms, as the times at which their progress is exactly 0.25, 0.5 and 0.75 (progress is
+/// linear in time over a window).
+fn windows(scene: &Scene, b: usize, pickup: bool, until: f64) -> Vec<[f64; 3]> {
+    let progress = |t: f64| match scene.mobile_at(b, t).unwrap().motion {
+        Motion::Loading { progress } if pickup => Some(progress as f64),
+        Motion::Unloading { progress } if !pickup => Some(progress as f64),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    let mut start = None;
+    for k in 0..=(until / 0.01) as usize {
+        let t = k as f64 * 0.01;
+        match (progress(t), start) {
+            (Some(_), None) => start = Some(t),
+            (None, Some(s)) => {
+                let (a, b) = (s + 0.3 * (t - s), s + 0.7 * (t - s));
+                let (pa, pb) = (progress(a).unwrap(), progress(b).unwrap());
+                let at = |p: f64| a + (p - pa) * (b - a) / (pb - pa);
+                out.push([at(0.25), at(0.5), at(0.75)]);
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn block_id(scene: &Scene, name: &str) -> EntityId {
+    block(scene, &scene.frame(0.0), name).id
+}
+
+fn index(id: EntityId) -> usize {
+    match id {
+        EntityId::Block(b) => b as usize,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// A forklift stores loads in a random level of a three-level rack and takes each one
+/// out again 30 s later. Loading and unloading take 4 s.
+fn rack_round_trip() -> Model {
+    let text = r#"Model(
+        name: "rack",
+        run: (stop_time: 400.0, seed: 1, replications: 1),
+        objects: [
+            (name: "src", kind: Source(interarrival: Const(40.0), first_at_zero: true),
+             position: (0.0, 0.0, 0.0), transport: Some("f")),
+            (name: "rack", kind: Rack(bays: 1, levels: 3, dwell: Some(Const(30.0)),
+             placement: Random, level_height: 1.5), position: (10.0, 0.0, 0.0), transport: Some("f")),
+            (name: "sink", kind: Sink, position: (20.0, 0.0, 0.0)),
+            (name: "f", kind: Transporter(speed: 2.0, load_time: Const(4.0),
+             unload_time: Const(4.0)), position: (0.0, 0.0, 0.0)),
+        ],
+        connections: [("src", "rack"), ("rack", "sink")],
+    )"#;
+    Model::parse(text).unwrap()
+}
+
+/// The load whose parent is `holder` at `t`.
+fn held_by(scene: &Scene, t: f64, holder: EntityId) -> Option<Pose> {
+    items(&scene.frame(t))
+        .into_iter()
+        .find(|p| p.parent == Some(holder))
+        .cloned()
+}
+
+#[test]
+fn a_stored_load_rides_the_forks_up_and_enters_the_cell_at_the_top() {
+    let scene = scene_of(&rack_round_trip());
+    let (fid, rid) = (block_id(&scene, "f"), block_id(&scene, "rack"));
+    let mut checked = 0;
+    for [q1, mid, q3] in windows(&scene, index(fid), false, 400.0) {
+        let Some(load) = held_by(&scene, q1, fid) else {
+            continue;
+        };
+        let at = |t: f64| pose_of(&scene.frame(t), load.id).unwrap();
+        if at(q3).parent != Some(rid) {
+            continue; // a drop at the sink
+        }
+        // 25 %: still on the forks, its bottom at the fork height, which is rising.
+        let fork = block(&scene, &scene.frame(q1), "f");
+        assert!(
+            (load.position[2] - fork.lift).abs() < 1e-4,
+            "{load:?} {fork:?}"
+        );
+        let reach = utsim_scene::compose::FORK_REACH;
+        assert!((load.position[0] - fork.position[0] - reach * fork.yaw.cos()).abs() < 1e-4);
+        assert!((load.position[1] - fork.position[1] - reach * fork.yaw.sin()).abs() < 1e-4);
+        // 50 %: the forks reached the cell and the load moved in without a jump.
+        let (on_forks, stored) = (at(mid - 1e-3), at(mid));
+        if stored.position[2] < 1.0 {
+            continue; // level 0: the forks go down to it
+        }
+        assert!(fork.lift > utsim_scene::compose::CARRY_HEIGHT);
+        assert_eq!((on_forks.parent, stored.parent), (Some(fid), Some(rid)));
+        for k in 0..3 {
+            let gap = (stored.position[k] - on_forks.position[k]).abs();
+            assert!(gap < 0.01, "jump {on_forks:?} -> {stored:?}");
+        }
+        // 75 %: the load stays in the cell while the forks come down empty.
+        assert_eq!(at(q3).position, stored.position);
+        assert!(block(&scene, &scene.frame(q3), "f").lift < stored.position[2] - 0.1);
+        checked += 1;
+    }
+    assert!(checked >= 1, "{checked}");
+}
+
+#[test]
+fn a_picked_load_leaves_the_cell_at_the_top_and_rides_the_forks_down() {
+    let scene = scene_of(&rack_round_trip());
+    let (fid, rid) = (block_id(&scene, "f"), block_id(&scene, "rack"));
+    let mut checked = 0;
+    for [q1, mid, q3] in windows(&scene, index(fid), true, 400.0) {
+        let Some(load) = held_by(&scene, q1, rid) else {
+            continue; // a pick-up at the source
+        };
+        let at = |t: f64| pose_of(&scene.frame(t), load.id).unwrap();
+        if at(q3).parent != Some(fid) {
+            continue; // another load of the rack
+        }
+        if load.position[2] < 1.0 {
+            continue; // level 0: the forks go down to it
+        }
+        // 25 %: in its cell, the forks rising towards it.
+        assert!(block(&scene, &scene.frame(q1), "f").lift < load.position[2] - 0.1);
+        // 50 %: taken at the top, without a jump.
+        let (cell, taken) = (at(mid - 1e-3), at(mid));
+        assert_eq!((cell.parent, taken.parent), (Some(rid), Some(fid)));
+        for k in 0..3 {
+            let gap = (taken.position[k] - cell.position[k]).abs();
+            assert!(gap < 0.01, "jump {cell:?} -> {taken:?}");
+        }
+        // 75 %: on the forks, coming down.
+        let carried = at(q3);
+        let fork = block(&scene, &scene.frame(q3), "f");
+        assert!((carried.position[2] - fork.lift).abs() < 1e-4);
+        assert!(carried.position[2] < taken.position[2] - 0.1);
+        checked += 1;
+    }
+    assert!(checked >= 1, "{checked}");
+}
+
+#[test]
+fn loads_change_hands_mid_window_at_other_blocks() {
+    // Load 0..2 at the source, unload 7..9 at the sink.
+    let scene = scene_of(&carry((10.0, 0.0), ""));
+    let parent = |t: f64| items(&scene.frame(t))[0].parent;
+    let (src, t, sink) = (
+        block_id(&scene, "src"),
+        block_id(&scene, "t"),
+        block_id(&scene, "sink"),
+    );
+    // 25 %, just before 50 %, 50 %, 75 % of each window.
+    assert_eq!(parent(0.5), Some(src));
+    assert_eq!(parent(0.999), Some(src));
+    assert_eq!(parent(1.0), Some(t));
+    assert_eq!(parent(1.5), Some(t));
+    assert_eq!(parent(7.5), Some(t));
+    assert_eq!(parent(7.999), Some(t));
+    assert_eq!(parent(8.0), Some(sink));
+    assert_eq!(parent(8.5), Some(sink));
+    // The same instant always gives the same frame.
+    assert_eq!(scene.frame(8.0), scene.frame(8.0));
+}
+
+#[test]
+fn corners_are_rounded_and_the_odometer_counts_the_path() {
+    // Source at the origin, sink at (10, 10), through a network corner at (10, 0).
+    let text = r#"Model(
+        name: "corner",
+        run: (stop_time: 30.0, seed: 1, replications: 1),
+        objects: [
+            (name: "src", kind: Source(interarrival: Const(100.0), first_at_zero: true),
+             position: (0.0, 0.0, 0.0), transport: Some("t")),
+            (name: "sink", kind: Sink, position: (10.0, 10.0, 0.0)),
+            (name: "t", kind: Transporter(speed: 2.0, load_time: Const(2.0),
+             unload_time: Const(2.0)), position: (0.0, 0.0, 0.0)),
+        ],
+        connections: [("src", "sink")],
+        network: Some((
+            nodes: [
+                (name: "a", position: (0.0, 0.0, 0.0)),
+                (name: "c", position: (10.0, 0.0, 0.0)),
+                (name: "b", position: (10.0, 10.0, 0.0)),
+            ],
+            edges: [(from: "a", to: "c"), (from: "c", to: "b")],
+        )),
+    )"#;
+    let scene = scene_of(&Model::parse(text).unwrap());
+    let t = index(block_id(&scene, "t"));
+    // Leg 2..12: 20 m at 2 m/s, the corner at t = 7.
+    let pose = |time: f64| block(&scene, &scene.frame(time), "t");
+    let mut prev = pose(2.0);
+    for k in 1..=1000 {
+        let time = 2.0 + k as f64 * 0.01;
+        let cur = pose(time);
+        let turn = (cur.yaw - prev.yaw).abs();
+        assert!(turn < 0.04, "the heading jumps {turn} at {time}");
+        let moved = ((cur.position[0] - prev.position[0]).powi(2)
+            + (cur.position[1] - prev.position[1]).powi(2))
+        .sqrt();
+        assert!(moved < 0.021, "it jumps {moved} at {time}");
+        prev = cur;
+    }
+    // Straight away from the corner; at the vertex, halfway through the turn.
+    let p = pose(4.0);
+    assert!(p.yaw.abs() < 1e-6 && (p.position[0] - 4.0).abs() < 1e-4);
+    assert!((pose(7.0).yaw - std::f32::consts::FRAC_PI_4).abs() < 1e-4);
+    let p = pose(10.0);
+    assert!((p.yaw - FRAC_PI_2).abs() < 1e-6 && (p.position[1] - 6.0).abs() < 1e-4);
+    // Distance driven: half the path at the corner, all of it afterwards.
+    assert!((scene.distance_at(t, 7.0) - 10.0).abs() < 1e-9);
+    assert!((scene.distance_at(t, 20.0) - 20.0).abs() < 1e-9);
+    assert_eq!(scene.distance_at(t, 1.0), 0.0);
 }
