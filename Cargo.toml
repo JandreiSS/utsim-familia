@@ -77,3 +77,11 @@ debug = false
 panic = "abort"
 # Drops the wasm `name` section (29 MB of the 65 MB 3D viewer module).
 strip = "symbols"
+
+# The 3D viewer for the browser. Full LTO with one codegen unit over Bevy needs more
+# memory and time than CI runners have (the job was killed after 25 min), so it uses
+# thin LTO (about 5 min here, 44 MB); the small engine module keeps the `web` profile.
+[profile.web-3d]
+inherits = "web"
+lto = "thin"
+codegen-units = 1
