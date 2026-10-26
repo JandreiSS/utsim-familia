@@ -117,6 +117,8 @@ justifica a escolha com métricas estatísticas.
 - [ ] Emulação OPC UA: segurança (certificados, usuário) e publicação mais barata a cada tick
 - [ ] `utsim emular --ate T`: o cabeçalho do relatório ainda mostra o `stop_time` do modelo
 - [ ] `utsim fit --timestamps`: escolher a coluna de tempos automaticamente (hoje usa a primeira coluna numérica sem `--coluna`)
+- [ ] Resultados: legenda do gráfico de estados cobre o fim das barras; estados de filas e chegadas com o mesmo cinza; relatório HTML sem séries, histogramas e otimização; seletor de arquivos
+- [ ] CI: os envios (push) não disparam a CI automaticamente no repositório recriado; hoje é disparada à mão
 - [ ] Mostrar os avisos de validação (distâncias) também no visualizador e na página web
 - [ ] Página web: incluir os modelos dos tutoriais na lista de exemplos
 - [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
@@ -130,7 +132,7 @@ justifica a escolha com métricas estatísticas.
 ## MVP
 - [x] Fase 8: consolidação (formato versionado, publicação, GitHub privado)
 - [x] Fase 9: editor completo (biblioteca, multisseleção, copiar e colar, aparência, rede de caminhos, fluidos, avisos)
-- [ ] Fase 10: resultados dentro do app
+- [x] Fase 10: resultados dentro do app (tabela com IC, gráficos, cenários, otimização, exportação)
 - [x] Fase 11: robustez e desempenho (parte 1)
 - [x] Fase 12: instalador (Windows NSIS, .deb, .tar.gz) e publicação por tag
 - [x] Fase 13: manual e 6 tutoriais (parte 1)

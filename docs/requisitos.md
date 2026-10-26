@@ -113,6 +113,13 @@ a situação atual e onde está a prova de que funciona.
 | RF-125 | transmitir ao vivo a cena 3D de uma emulação por socket (TCP e WebSocket), no mesmo relógio do OPC UA | A3D | ✅ | `utsim-scene/tests/live.rs` e `server.rs`, `utsim-emu/tests/cena.rs`; `--cena-porta`, `utsim cena --servir` |
 | RF-126 | parar ou retomar um bloco e mudar a velocidade a partir do cliente da cena (canal de volta), com registro no log de comandos | A3D | ✅ | `utsim-emu/tests/cena.rs` |
 | RF-127 | um cliente lento ou travado não atrasa a simulação nem os outros clientes | A3D | ✅ | `utsim-scene/tests/server.rs` |
+| RF-128 | rodar replicações pelo editor, com parâmetros editáveis, em segundo plano, com progresso e cancelamento | 10 | ✅ | `utsim-viewer/src/results.rs` (testes), roteiro `resultados.ron` |
+| RF-129 | ver o resumo por objeto com IC de 95%, ordenável e filtrável, com o gargalo destacado | 10 | ✅ | `utsim-model/src/analysis.rs` (testes), roteiro `resultados.ron` |
+| RF-130 | ver gráficos de ocupação, estados, série temporal e histograma de permanência | 10 | ✅ | roteiro `resultados.ron` (capturas conferidas) |
+| RF-131 | montar, abrir, salvar e comparar cenários pelo editor, com diferença pareada para o primeiro | 10 | ✅ | roteiro `cenarios.ron`; `experiment.rs` (testes) |
+| RF-132 | montar e rodar uma otimização pelo editor e aplicar o melhor ponto ao modelo | 10 | ✅ | roteiro `otimizacao.ron` |
+| RF-133 | exportar o resumo em CSV e um relatório HTML com tabelas e gráficos | 10 | ✅ | `utsim-model/src/csv.rs` e `html.rs` |
+| RF-134 | `utsim experiment` mostra a diferença pareada de cada cenário para o primeiro | 10 | ✅ | testes de `experiment.rs` |
 
 ## Requisitos não funcionais (RNF)
 
