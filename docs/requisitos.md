@@ -97,7 +97,7 @@ a situação atual e onde está a prova de que funciona.
 | RF-109 | ver o modelo em 3D no navegador | 7 | ✅ | aba 3D de `web/` (visualizador Bevy em WebGL2, `web/viewer.html`), testada à mão com `mm1` e `armazem`; build no job `web` da CI |
 | RF-110 | entregar a cena 3D de uma rodada a qualquer motor gráfico: pose, papel (pessoa, empilhadeira, AGV) e movimento (andando, carregando, garfos subindo) de cada entidade, em metros e com Z para cima | 8 | ✅ | `utsim-scene/tests/scene.rs` (11 casos conferidos à mão); `utsim cena` grava o fluxo `utsim-scene/1` |
 | RF-111 | abrir modelos de versões anteriores do formato e recusar com clareza os de versões mais novas | 8 | ✅ | `utsim-model/tests/formato.rs` e testes de migração em `utsim-model` |
-| RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | 🔄 | modelos articulados gerados por código (`utsim-assets`, `tests/modelos.rs`), garfos até o nível, operadores andando; roteiros `visual_realista_*.ron`. Falta: personagens com esqueleto, giro suave, sombras |
+| RF-112 | ver pessoas, empilhadeiras e AGVs animados de forma realista no 3D | A3D | ✅ | modelos articulados gerados por código (`utsim-assets`, `tests/modelos.rs`), garfos até o nível, operadores andando; roteiros `visual_realista_*.ron`. Falta: personagens com esqueleto, giro suave, sombras |
 | RF-113 | visitar o modelo em realidade virtual | A3D | ⏳ | cena já preparada (escala real, protocolo versionado); cliente Unreal/OpenXR planejado |
 | RF-114 | dar tempo de transferência pela distância às ligações diretas (`delay + distância/velocidade`, em linha reta ou pela rede), por objeto ou para o modelo todo, reservando espaço no destino durante o trajeto | 9 | ✅ | `utsim-model/tests/transfer.rs` (18 casos, inclusive lei de Little), `utsim-scene/tests/transfer.rs`, `examples/transferencia_por_distancia.ron` |
 | RF-115 | avisar, sem impedir a rodada, sobre distâncias zeradas, objetos longe da rede e ligações longas instantâneas | 9 | ✅ | testes de avisos em `utsim-model/tests/transfer.rs`; `utsim check` e `utsim run` mostram `aviso:` |
@@ -122,6 +122,10 @@ a situação atual e onde está a prova de que funciona.
 | RF-134 | `utsim experiment` mostra a diferença pareada de cada cenário para o primeiro | 10 | ✅ | testes de `experiment.rs` |
 | RF-135 | escolher o modo de câmera (órbita, seguir um recurso, primeira pessoa na altura dos olhos, ponto de vista do motorista), com transições suaves | A3D | ✅ | `utsim_viewer::cameras` (testes), roteiro `a3d4_cameras.ron` |
 | RF-136 | simplificar o que está longe em modelos grandes (nível de detalhe) e limitar os rótulos, com medição de quadros (F3) | A3D | ✅ | `lod_rules.rs` (testes), roteiro `a3d4_lod.ron`; 500 objetos: 24,8 → 2,7 ms por quadro |
+| RF-137 | ver pessoas animadas por esqueleto (parada, andando, correndo, carregando, pegando, trabalhando), com a passada ligada à distância e a pose dependente só do instante simulado | A3D | ✅ | testes do visualizador (escolha de clipe, passada), roteiros `a3d3_pessoas*.ron` |
+| RF-138 | a carga troca de lugar no meio da janela de carga ou descarga; no porta-paletes ela sobe nos garfos e entra na célula no nível | A3D | ✅ | `utsim-scene/tests/scene.rs` (25/50/75% da janela), roteiro `a3d3_empilhadeira.ron` |
+| RF-139 | veículos e pessoas fazem curvas suaves nas quinas, sem mudar os instantes de chegada | A3D | ✅ | `utsim-scene/src/turning.rs` (testes) |
+| RF-140 | ver sombras no visual realista, com opção de desligar | A3D | ✅ | roteiros (capturas com e sem sombras); 448 vs 548 quadros/s |
 
 ## Requisitos não funcionais (RNF)
 
