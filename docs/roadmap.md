@@ -119,6 +119,7 @@ justifica a escolha com métricas estatísticas.
 - [ ] `utsim fit --timestamps`: escolher a coluna de tempos automaticamente (hoje usa a primeira coluna numérica sem `--coluna`)
 - [ ] Resultados: legenda do gráfico de estados cobre o fim das barras; estados de filas e chegadas com o mesmo cinza; relatório HTML sem séries, histogramas e otimização; seletor de arquivos
 - [ ] CI: os envios (push) não disparam a CI automaticamente no repositório recriado; hoje é disparada à mão
+- [ ] Fonte "sempre pronta" (saturada) sem precisar de intervalo mínimo artificial (achado da validação do piloto)
 - [ ] Mostrar os avisos de validação (distâncias) também no visualizador e na página web
 - [ ] Página web: incluir os modelos dos tutoriais na lista de exemplos
 - [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
