@@ -12,7 +12,10 @@ O UTSim tem quatro camadas de teste. Cada uma pega um tipo diferente de erro.
    `crates/utsim-model/tests/queueing_theory.rs` rodam modelos cujo resultado é conhecido
    em forma fechada: M/M/1, M/M/c (Erlang C), redes de Jackson, LIFO, bloqueio e quebras.
    Comparam com tolerância estatística. Pegam erros de lógica de simulação, como uma
-   fila que atende na ordem errada.
+   fila que atende na ordem errada. O piloto de validação
+   (`crates/utsim-model/tests/validacao_piloto.rs`, resultados em `docs/validacao.md`) amplia
+   isso com cadeias de Markov, M/G/1, retrabalho, quebras, turnos, transporte, esteira,
+   transferência, combinador e fluidos, com intervalos de confiança.
 
 3. **Snapshots golden.** `crates/utsim-model/tests/golden.rs` roda cada modelo de
    `examples/` com duas replicações (tempo de parada limitado a 5000) e compara todas as
