@@ -161,9 +161,24 @@ pub fn model_stats(reports: &[RunReport]) -> Vec<(String, Summary)> {
 /// Index of the bottleneck: the resource with the highest mean utilisation (the first
 /// one on ties). `None` when no resource was ever busy.
 pub fn bottleneck(stats: &[ObjectStats]) -> Option<usize> {
+    bottleneck_by(stats, |s| s.utilization)
+}
+
+/// Index of the bottleneck judged within shift: the resource with the highest
+/// utilisation over its on-shift time. It differs from [`bottleneck`] when resources
+/// work different shifts (a station off half the day looks idle overall but may be
+/// saturated while it works).
+pub fn bottleneck_in_shift(stats: &[ObjectStats]) -> Option<usize> {
+    bottleneck_by(stats, |s| s.utilization_in_shift.or(s.utilization))
+}
+
+fn bottleneck_by(
+    stats: &[ObjectStats],
+    measure: impl Fn(&ObjectStats) -> Option<Summary>,
+) -> Option<usize> {
     let mut best: Option<(usize, f64)> = None;
     for (i, s) in stats.iter().enumerate() {
-        let Some(u) = s.utilization.map(|u| u.mean).filter(|u| *u > 0.0) else {
+        let Some(u) = measure(s).map(|u| u.mean).filter(|u| *u > 0.0) else {
             continue;
         };
         if best.is_none_or(|(_, b)| u > b) {
@@ -413,6 +428,32 @@ mod tests {
             row("m2", "processor", Some(0.9)),
         ];
         assert_eq!(bottleneck(&rows), Some(1));
+    }
+
+    #[test]
+    fn bottleneck_in_shift_uses_the_on_shift_utilisation() {
+        let row = |name: &str, u: f64, in_shift: Option<f64>| ObjectStats {
+            name: name.into(),
+            kind: "processor".into(),
+            input: Summary::from_samples(&[]),
+            output: Summary::from_samples(&[]),
+            content: Summary::from_samples(&[]),
+            staytime: Summary::from_samples(&[]),
+            utilization: Some(Summary::from_samples(&[u, u])),
+            utilization_incl_blocked: None,
+            utilization_in_shift: in_shift.map(|v| Summary::from_samples(&[v, v])),
+            utilization_excl_blocked: None,
+            states: vec![],
+            extra: vec![],
+            custom: vec![],
+        };
+        // "noite" works half the day but is saturated while on shift.
+        let rows = [row("dia", 0.6, Some(0.6)), row("noite", 0.45, Some(0.9))];
+        assert_eq!(bottleneck(&rows), Some(0));
+        assert_eq!(bottleneck_in_shift(&rows), Some(1));
+        // Without shift data it falls back to the plain utilisation.
+        let rows = [row("a", 0.3, None), row("b", 0.7, None)];
+        assert_eq!(bottleneck_in_shift(&rows), Some(1));
     }
 
     #[test]

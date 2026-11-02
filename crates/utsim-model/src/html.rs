@@ -91,6 +91,18 @@ pub fn report(input: &ReportInput) -> String {
             esc(&pct(&s.utilization.unwrap_or(s.content)))
         );
     }
+    if let Some(i) = analysis::bottleneck_in_shift(input.stats) {
+        let s = &input.stats[i];
+        let _ = write!(
+            h,
+            "<p>Gargalo dentro do turno: <b class=\"hot\">{}</b> (ocupação {} no tempo em turno).</p>",
+            esc(&s.name),
+            esc(&pct(&s
+                .utilization_in_shift
+                .or(s.utilization)
+                .unwrap_or(s.content)))
+        );
+    }
     h.push_str("<h2>Resumo por objeto</h2>");
     h.push_str(&objects_table(input.stats, hot));
     h.push_str("<h2>Ocupação dos recursos</h2>");
