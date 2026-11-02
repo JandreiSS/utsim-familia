@@ -7112,6 +7112,7 @@ dependencies = [
  "serde",
  "utsim-assets",
  "utsim-core",
+ "utsim-edit",
  "utsim-model",
  "utsim-scene",
 ]
