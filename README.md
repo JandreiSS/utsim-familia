@@ -175,7 +175,8 @@ cargo run --release -p utsim-cli -- fit examples/dados/tempos_atendimento.csv --
 ```
 
 Aceita CSV/TXT com separador `,`, `;` ou tab, cabeçalho e vírgula decimal detectados
-automaticamente. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz instantes e o
+automaticamente. Sem `--coluna`, o programa pula as colunas de numeração (1, 2, 3...), diz
+qual coluna usou e por quê, e pede `--coluna` se restar mais de uma plausível. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz instantes e o
 ajuste é feito sobre os intervalos), `--alpha 0.05`, `--bootstrap 300`, `--seed 1`,
 `--html relatorio.html` (histograma, Q-Q, P-P e ECDF) e `--json saida.json`.
 
@@ -238,7 +239,7 @@ Model(
 
 | Objeto | Campos |
 |---|---|
-| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }`, `on_blocked: Wait \| Drop` (`Drop` descarta e conta em `lost` o item que não consegue sair) |
+| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }`, `on_blocked: Wait \| Drop` (`Drop` descarta o item que não consegue sair e publica `lost.count`, `entered.count` e `loss_fraction`) |
 | `Queue` | `capacity` (vazio = ilimitada), `discipline: Fifo \| Lifo` |
 | `Processor` | `capacity` (padrão 1), `setup` (opcional), `process` |
 | `Sink` | registra `time_in_system` e destrói o item |
@@ -335,5 +336,7 @@ e dos 10 melhores pontos.
 
 Observações: com `refine`, os melhores pontos são re-simulados com mais replicações e a
 comparação final (melhor e equivalentes) usa essa lista; o relatório mostra as duas
-tabelas. As métricas `<bloco>.lost.*` ainda não servem de objetivo (só `.mean` é exposto e
-vale sempre 1); use, por exemplo, as entradas da Sink com peso negativo.
+tabelas. Perdas servem de objetivo e restrição por `<fonte>.lost.count`, `<fonte>.loss_fraction`
+e os totais `model.lost.count` e `model.loss_fraction`. A ocupação (`<objeto>.utilization`,
+`.utilization_in_shift`, `.utilization_excl_blocked`, `.utilization_incl_blocked`) e o tempo
+entre dois pontos do fluxo (`spans`, métrica `<medicao>.value.mean`) também têm nome estável.

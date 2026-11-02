@@ -122,7 +122,7 @@ justifica a escolha com métricas estatísticas.
 - [ ] Fonte "sempre pronta" (saturada) sem precisar de intervalo mínimo artificial (achado da validação do piloto)
 - [ ] Mostrar os avisos de validação (distâncias) também no visualizador e na página web
 - [ ] Página web: incluir os modelos dos tutoriais na lista de exemplos
-- [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
+- [x] Métricas: contagem dos registros extras (`<bloco>.<medida>.count`, incluindo `<fonte>.lost.count`) e utilização por servidor de processadores com capacidade > 1 (`servers.busy`, `utilization`)
 
 ## Fase 6: lógica do usuário
 - [x] Fluxo de tokens (gerar, agenda, ao evento, esperar, decidir, atribuir, adquirir/liberar recurso, aguardar evento, criar item, lote, fim)

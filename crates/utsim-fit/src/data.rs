@@ -8,7 +8,9 @@ use std::path::Path;
 /// How to pick the sample out of the file.
 #[derive(Clone, Debug, Default)]
 pub struct DataOptions {
-    /// Column name (header) or 1-based index. `None` = first numeric column.
+    /// Column name (header) or 1-based index. `None` = pick one automatically: numeric
+    /// columns that look like a row counter are skipped, and when several plausible
+    /// columns remain the choice is refused (the error lists them).
     pub column: Option<String>,
     /// The column holds increasing instants; use the differences as the sample.
     pub timestamps: bool,
@@ -23,6 +25,184 @@ pub struct Loaded {
     /// Number of empty cells that were skipped.
     pub skipped_empty: usize,
     pub warnings: Vec<String>,
+    /// Which column was used and why, when it was picked automatically (empty when
+    /// the user named it).
+    pub notes: Vec<String>,
+}
+
+/// Headers (lower case, no accents) that name a row counter or identifier.
+const INDEX_NAMES: &[&str] = &[
+    "n",
+    "no",
+    "num",
+    "numero",
+    "id",
+    "#",
+    "i",
+    "idx",
+    "indice",
+    "item",
+    "linha",
+    "seq",
+    "sequencia",
+    "ordem",
+    "contador",
+    "obs",
+    "observacao",
+    "amostra",
+    "registro",
+];
+
+/// Header fragments of a column of instants.
+const TIME_HINTS: &[&str] = &[
+    "timestamp",
+    "instante",
+    "hora",
+    "horario",
+    "chegada",
+    "time",
+    "data",
+    "momento",
+];
+
+fn plain(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' => 'a',
+            'é' | 'ê' => 'e',
+            'í' => 'i',
+            'ó' | 'ô' | 'õ' => 'o',
+            'ú' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
+
+/// What the automatic choice needs to know about one column.
+struct ColumnInfo {
+    index: usize,
+    name: Option<String>,
+    /// The first cell is a number (the column is a candidate at all).
+    numeric: bool,
+    /// Parsed cells of the column (unparsable ones are left out).
+    values: Vec<f64>,
+}
+
+impl ColumnInfo {
+    fn label(&self) -> String {
+        self.name
+            .clone()
+            .unwrap_or_else(|| format!("coluna {}", self.index + 1))
+    }
+
+    /// Header names a counter or identifier, or the values are the integers 0 or 1,
+    /// then 1 more each row (at least three of them).
+    fn index_like(&self) -> bool {
+        if self
+            .name
+            .as_deref()
+            .is_some_and(|n| INDEX_NAMES.contains(&plain(n.trim()).as_str()))
+        {
+            return true;
+        }
+        let v = &self.values;
+        v.len() >= 3 && (v[0] == 0.0 || v[0] == 1.0) && v.windows(2).all(|w| w[1] - w[0] == 1.0)
+    }
+
+    /// Values never decrease and do increase overall (instants).
+    fn increasing(&self) -> bool {
+        let v = &self.values;
+        v.len() >= 2 && v.windows(2).all(|w| w[1] >= w[0]) && v[v.len() - 1] > v[0]
+    }
+
+    fn time_named(&self) -> bool {
+        self.name.as_deref().is_some_and(|n| {
+            let n = plain(n);
+            TIME_HINTS.iter().any(|h| n.contains(h))
+        })
+    }
+}
+
+/// Picks the column to fit when the user did not name one. Skips row counters; with
+/// `timestamps` keeps the columns of increasing instants. Refuses to guess among
+/// several plausible columns. Returns the column index and notes saying why.
+fn choose_column(cols: &[ColumnInfo], timestamps: bool) -> Result<(usize, Vec<String>), String> {
+    let numeric: Vec<&ColumnInfo> = cols.iter().filter(|c| c.numeric).collect();
+    if numeric.is_empty() {
+        return Err("nenhuma coluna numérica encontrada".into());
+    }
+    let (counters, rest): (Vec<&ColumnInfo>, Vec<&ColumnInfo>) =
+        numeric.iter().partition(|c| c.index_like());
+    let mut notes = Vec::new();
+    let ignored: Vec<String> = counters
+        .iter()
+        .map(|c| format!("'{}'", c.label()))
+        .collect();
+    if rest.is_empty() {
+        // Only counters: nothing else to offer. A lone column is used, with a warning.
+        if counters.len() == 1 && !timestamps {
+            notes.push(format!(
+                "a coluna '{}' parece numeração (1, 2, 3...), mas é a única numérica;                  confira se são os dados que você quer ajustar",
+                counters[0].label()
+            ));
+            return Ok((counters[0].index, notes));
+        }
+        return Err(format!(
+            "só há colunas que parecem numeração ({}); informe a coluna dos dados com --coluna",
+            ignored.join(", ")
+        ));
+    }
+    let pool = rest;
+    let candidates: Vec<&ColumnInfo> = if timestamps {
+        let up: Vec<&ColumnInfo> = pool.iter().copied().filter(|c| c.increasing()).collect();
+        if up.is_empty() {
+            let names: Vec<String> = pool.iter().map(|c| format!("'{}'", c.label())).collect();
+            return Err(format!(
+                "com --timestamps é preciso uma coluna de instantes crescentes e nenhuma das                  colunas numéricas ({}) cresce; informe a coluna com --coluna",
+                names.join(", ")
+            ));
+        }
+        let named: Vec<&ColumnInfo> = up.iter().copied().filter(|c| c.time_named()).collect();
+        if named.len() == 1 { named } else { up }
+    } else {
+        pool
+    };
+    match candidates.as_slice() {
+        [only] => {
+            let why = if timestamps {
+                "é a coluna de instantes crescentes"
+            } else {
+                "é a única coluna numérica que não parece numeração"
+            };
+            notes.push(format!("usando '{}' ({why})", only.label()));
+            if !counters.is_empty() {
+                notes.push(format!(
+                    "ignorada por parecer numeração: {}",
+                    ignored.join(", ")
+                ));
+            }
+            Ok((only.index, notes))
+        }
+        many => {
+            let names: Vec<String> = many
+                .iter()
+                .map(|c| format!("{} ('{}')", c.index + 1, c.label()))
+                .collect();
+            let hint = if timestamps {
+                ""
+            } else {
+                " Para ajustar os intervalos entre instantes de uma coluna crescente, use \
+                 --timestamps."
+            };
+            Err(format!(
+                "há mais de uma coluna plausível: {}. Escolha uma com --coluna (nome ou posição \
+                 a partir de 1).{hint}",
+                names.join(", ")
+            ))
+        }
+    }
 }
 
 /// Reads and parses a file.
@@ -67,7 +247,10 @@ pub fn parse(text: &str, options: &DataOptions) -> Result<Loaded, String> {
         .lines()
         .enumerate()
         .map(|(i, l)| (i + 1, l.trim_start_matches('\u{feff}').trim()))
-        .filter(|(_, l)| !l.is_empty() && !l.starts_with('#'))
+        // `# text` is a comment, but `#;value` is a header whose first column is `#`.
+        .filter(|(_, l)| {
+            !l.is_empty() && (!l.starts_with('#') || l[1..].starts_with([';', ',', '\t']))
+        })
         .collect();
     if lines.is_empty() {
         return Err("o arquivo não tem dados".into());
@@ -106,6 +289,7 @@ pub fn parse(text: &str, options: &DataOptions) -> Result<Loaded, String> {
             .filter(|&i| i >= 1 && i <= n_cols)
             .map(|i| i - 1)
     };
+    let mut notes: Vec<String> = Vec::new();
     let col = match options.column.as_deref() {
         Some(c) => {
             let named = header
@@ -119,13 +303,26 @@ pub fn parse(text: &str, options: &DataOptions) -> Result<Loaded, String> {
                 format!("coluna '{c}' não encontrada ({avail})")
             })?
         }
-        None => (0..n_cols)
-            .find(|&j| {
-                first_row
-                    .get(j)
-                    .is_some_and(|c| parse_number(c, sep).is_some())
-            })
-            .ok_or_else(|| format!("linha {}: nenhuma coluna numérica encontrada", rows[0].0))?,
+        None => {
+            let cols: Vec<ColumnInfo> = (0..n_cols)
+                .map(|j| ColumnInfo {
+                    index: j,
+                    name: header.as_ref().and_then(|h| h.get(j).cloned()),
+                    numeric: first_row
+                        .get(j)
+                        .is_some_and(|c| parse_number(c, sep).is_some()),
+                    values: rows
+                        .iter()
+                        .filter_map(|(_, line)| {
+                            split(line, sep).get(j).and_then(|c| parse_number(c, sep))
+                        })
+                        .collect(),
+                })
+                .collect();
+            let (j, why) = choose_column(&cols, options.timestamps)?;
+            notes = why;
+            j
+        }
     };
     let label = header
         .as_ref()
@@ -181,6 +378,7 @@ pub fn parse(text: &str, options: &DataOptions) -> Result<Loaded, String> {
         column: label,
         skipped_empty: skipped,
         warnings,
+        notes,
     })
 }
 
@@ -251,7 +449,14 @@ mod tests {
         };
         let l = parse("t\n0\n1,5\n4\n", &o).unwrap();
         assert_eq!(l.values, vec![1.5, 2.5]);
-        let e = parse("t\n0\n5\n3\n", &o).unwrap_err();
+        let e = parse(
+            "t\n0\n5\n3\n",
+            &DataOptions {
+                column: Some("t".into()),
+                ..o.clone()
+            },
+        )
+        .unwrap_err();
         assert!(e.starts_with("linha 4"), "{e}");
     }
 
@@ -263,7 +468,7 @@ mod tests {
 
     #[test]
     fn empty_cells_are_skipped_with_warning() {
-        let l = parse("a;b\n1;2\n;3\n4;5\n", &opts()).unwrap();
+        let l = parse("a;b\n1;2\n;3\n4;5\n", &col("a")).unwrap();
         assert_eq!(l.values, vec![1.0, 4.0]);
         assert_eq!(l.skipped_empty, 1);
         assert_eq!(l.warnings.len(), 1);
@@ -274,5 +479,79 @@ mod tests {
         let l = parse("# dados\n\n1\n\n2\n", &opts()).unwrap();
         assert_eq!(l.values, vec![1.0, 2.0]);
         assert!(parse("  \n# nada\n", &opts()).is_err());
+    }
+
+    #[test]
+    fn counter_column_is_skipped_and_the_note_says_which() {
+        let l = parse("medida;tempo\n1;4,2\n2;3,8\n3;5,1\n4;4,4\n", &opts()).unwrap();
+        assert_eq!(l.values, vec![4.2, 3.8, 5.1, 4.4]);
+        assert_eq!(l.column, "tempo");
+        assert!(l.notes.iter().any(|n| n.contains("usando 'tempo'")));
+        assert!(
+            l.notes
+                .iter()
+                .any(|n| n.contains("'medida'") && n.contains("numeração"))
+        );
+    }
+
+    #[test]
+    fn counter_starting_at_zero_or_named_like_one_is_skipped() {
+        let l = parse("0;7,5\n1;2,5\n2;9,1\n", &opts()).unwrap();
+        assert_eq!(l.values, vec![7.5, 2.5, 9.1]);
+        // The header alone is enough, even with values that are not 1, 2, 3...
+        let l = parse("Índice,valor\n10,3.5\n30,1.5\n20,2.5\n", &opts()).unwrap();
+        assert_eq!(l.values, vec![3.5, 1.5, 2.5]);
+        for name in ["n", "id", "#", "item", "linha", "indice"] {
+            let t = format!("{name};valor\n7;1,5\n3;2,5\n9;3,5\n");
+            assert_eq!(parse(&t, &opts()).unwrap().column, "valor", "{name}");
+        }
+    }
+
+    #[test]
+    fn a_lone_counter_like_column_is_used_with_a_warning_note() {
+        let l = parse("1\n2\n3\n4\n", &opts()).unwrap();
+        assert_eq!(l.values, vec![1.0, 2.0, 3.0, 4.0]);
+        assert!(l.notes.iter().any(|n| n.contains("parece numeração")));
+    }
+
+    #[test]
+    fn several_plausible_columns_are_listed_instead_of_guessed() {
+        let e = parse("espera;servico\n1,5;3,1\n2,5;2,2\n0,5;4,4\n", &opts()).unwrap_err();
+        assert!(e.contains("mais de uma coluna plausível"), "{e}");
+        assert!(
+            e.contains("1 ('espera')") && e.contains("2 ('servico')"),
+            "{e}"
+        );
+        assert!(e.contains("--coluna"), "{e}");
+        // Naming one fixes it.
+        let l = parse("espera;servico\n1,5;3,1\n2,5;2,2\n", &col("servico")).unwrap();
+        assert_eq!(l.values, vec![3.1, 2.2]);
+        assert!(l.notes.is_empty());
+    }
+
+    #[test]
+    fn timestamps_pick_the_increasing_column_and_skip_the_counter() {
+        let o = DataOptions {
+            timestamps: true,
+            ..opts()
+        };
+        // Counter, instants and a duration: only the instants grow and are not a counter.
+        let t = "n;chegada;duracao\n1;0;5,1\n2;4;3,2\n3;9;4,4\n4;11;2,0\n";
+        let l = parse(t, &o).unwrap();
+        assert_eq!(l.values, vec![4.0, 5.0, 2.0]);
+        assert_eq!(l.column, "chegada");
+        assert!(l.notes.iter().any(|n| n.contains("instantes crescentes")));
+        // Two increasing columns: the header that names instants wins.
+        let t = "pedido;hora\n10;1,5\n25;3\n40;7\n";
+        assert_eq!(parse(t, &o).unwrap().column, "hora");
+        // Two increasing columns and no hint: ask.
+        let e = parse("a;b\n10;1,5\n25;3\n40;7\n", &o).unwrap_err();
+        assert!(e.contains("mais de uma coluna plausível"), "{e}");
+        // Nothing grows: say so.
+        let e = parse("a;b\n5;1,5\n2;3\n9;1\n", &o).unwrap_err();
+        assert!(e.contains("instantes crescentes"), "{e}");
+        // Only a counter: refuse.
+        let e = parse("n\n1\n2\n3\n", &o).unwrap_err();
+        assert!(e.contains("numeração"), "{e}");
     }
 }
