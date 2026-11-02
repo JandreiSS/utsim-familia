@@ -79,6 +79,7 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         max_arrivals: Some(items),
         labels: BTreeMap::new(),
         on_blocked: OnBlocked::default(),
+        schedule: None,
     }
 }
 
@@ -215,6 +216,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             default_decision: None,
             transfer: None,
         },
+        calendars: BTreeMap::new(),
         objects: objs,
         connections,
         network: None,

@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use utsim_core::{Dist, Downtime, OutputRule, ShiftTable};
+use utsim_model::{ArrivalSchedule, PeriodArrivals, ShiftSpec};
 
 pub fn float(v: f64) -> String {
     format!("{v:?}")
@@ -154,7 +155,49 @@ pub fn shifts(t: &ShiftTable) -> String {
             float(w.duration)
         )
     });
-    format!("(period: {}, off: {windows})", float(t.period))
+    let end = if t.on_end.is_pause() {
+        String::new()
+    } else {
+        format!(", on_end: {:?}", t.on_end)
+    };
+    format!("(period: {}, off: {windows}{end})", float(t.period))
+}
+
+/// An object's `shifts`: inline table or `Calendar("name")` (with its own `on_end`).
+pub fn shift_spec(s: &ShiftSpec) -> String {
+    match s {
+        ShiftSpec::Inline(t) => shifts(t),
+        ShiftSpec::Calendar { name, on_end: None } => format!("Calendar({})", string(name)),
+        ShiftSpec::Calendar {
+            name,
+            on_end: Some(end),
+        } => format!("Calendar({}, {end:?})", string(name)),
+    }
+}
+
+pub fn period_arrivals(a: &PeriodArrivals) -> String {
+    match a {
+        PeriodArrivals::Default => "Default".into(),
+        PeriodArrivals::Interarrival(d) => format!("Interarrival({})", dist(d)),
+        PeriodArrivals::Rate(r) => format!("Rate({})", float(*r)),
+        PeriodArrivals::Closed => "Closed".into(),
+    }
+}
+
+/// A source's `schedule` (defaults left out, as the model writes them).
+pub fn schedule(s: &ArrivalSchedule) -> String {
+    let periods = list(&s.periods, |p| {
+        let mut text = format!("(start: {}, end: {}", float(p.start), float(p.end));
+        if !p.arrivals.is_default() {
+            text.push_str(&format!(", arrivals: {}", period_arrivals(&p.arrivals)));
+        }
+        if !p.labels.is_empty() {
+            text.push_str(&format!(", labels: {}", labels(&p.labels)));
+        }
+        text.push(')');
+        text
+    });
+    format!("(cycle: {}, periods: {periods})", float(s.cycle))
 }
 
 pub fn batch(size: usize, max_wait: f64, flush: bool) -> String {

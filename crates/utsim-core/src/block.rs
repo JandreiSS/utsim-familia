@@ -84,10 +84,37 @@ pub enum OutputRule {
 
 /// Repeating schedule of off-shift windows (breaks, nights, weekends).
 /// Window times are offsets inside a cycle of length `period`, starting at t=0.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ShiftTable {
     pub period: f64,
     pub off: Vec<OffWindow>,
+    /// What happens to work in progress when an off-shift window starts.
+    #[serde(
+        default,
+        alias = "ao_fim_do_turno",
+        skip_serializing_if = "ShiftEnd::is_pause"
+    )]
+    pub on_end: ShiftEnd,
+}
+
+/// Behaviour at the start of an off-shift window.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShiftEnd {
+    /// Stop at once: running timers freeze and resume when the shift comes back.
+    #[default]
+    #[serde(alias = "Pausar")]
+    Pause,
+    /// Close the inputs at once, finish the work in progress (overtime) and only then
+    /// go off shift; an idle block goes off shift at once. The end of the window does
+    /// not move: overtime never delays the next shift.
+    #[serde(alias = "Terminar")]
+    Finish,
+}
+
+impl ShiftEnd {
+    pub fn is_pause(&self) -> bool {
+        *self == ShiftEnd::Pause
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -211,6 +238,14 @@ pub trait Behavior: Send {
     fn on_task(&mut self, cx: &mut Ctx, request: TaskRequest) {
         let _ = request;
         cx.error("este objeto não executa tarefas de transporte ou operação");
+    }
+
+    /// Whether the block still has work it must finish before going off shift when its
+    /// shift table says [`ShiftEnd::Finish`]. While this is true after the window started,
+    /// the inputs stay closed and the block keeps running. The default: an item is held
+    /// that was not released yet (and is not waiting for a transporter).
+    fn work_in_progress(&self, cx: &Ctx) -> bool {
+        cx.unreleased_count() > 0
     }
 
     /// The warm-up period ended: blocks with their own statistics restart them.

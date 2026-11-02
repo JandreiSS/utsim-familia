@@ -5,6 +5,7 @@ pub mod csv;
 pub mod experiment;
 pub mod html;
 pub mod replay;
+mod shifts;
 pub mod synthetic;
 mod warnings;
 
@@ -28,6 +29,10 @@ use utsim_objects::{
     OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
     Transporter,
 };
+
+pub use shifts::ShiftSpec;
+pub use utsim_core::ShiftEnd;
+pub use utsim_objects::{ArrivalPeriod, ArrivalSchedule, PeriodArrivals};
 
 /// Reads only the `format` field; every other field is ignored.
 #[derive(Deserialize)]
@@ -93,6 +98,9 @@ pub struct Model {
     #[serde(default)]
     pub description: String,
     pub run: RunSettings,
+    /// Named shift tables that objects reference with `shifts: Calendar("name")`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub calendars: BTreeMap<String, ShiftTable>,
     pub objects: Vec<ObjectDef>,
     /// `(from, to)` pairs. Order defines port numbers and pull priority.
     #[serde(default)]
@@ -146,9 +154,10 @@ pub struct ObjectDef {
     /// Random breakdowns (MTBF/MTTR on the clock).
     #[serde(default)]
     pub downtime: Option<Downtime>,
-    /// Scheduled off-shift windows, repeating every `period`.
+    /// Scheduled off-shift windows, repeating every `period`: inline or one of the
+    /// model's `calendars`.
     #[serde(default)]
-    pub shifts: Option<ShiftTable>,
+    pub shifts: Option<ShiftSpec>,
     /// Transporter or dispatcher that carries items out of this object
     /// (instead of handing them over instantly).
     #[serde(default)]
@@ -199,6 +208,9 @@ pub enum ObjectKind {
         /// What to do with an item that cannot leave when created.
         #[serde(default)]
         on_blocked: OnBlocked,
+        /// Arrivals by period of a repeating cycle (absent: `interarrival` all the time).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        schedule: Option<ArrivalSchedule>,
     },
     Queue {
         #[serde(default)]
@@ -365,6 +377,22 @@ impl Model {
         (!touches_belt).then_some(default)
     }
 
+    /// The shift table in force for `obj`: its own, or the calendar it references (with
+    /// the object's `on_end` when it sets one). `None` without shifts or when the calendar
+    /// does not exist (a validation error).
+    pub fn shift_table(&self, obj: &ObjectDef) -> Option<ShiftTable> {
+        match obj.shifts.as_ref()? {
+            ShiftSpec::Inline(table) => Some(table.clone()),
+            ShiftSpec::Calendar { name, on_end } => {
+                let mut table = self.calendars.get(name)?.clone();
+                if let Some(end) = on_end {
+                    table.on_end = *end;
+                }
+                Some(table)
+            }
+        }
+    }
+
     pub fn validate(&self) -> Result<(), ModelError> {
         let mut errors = Vec::new();
         let run = &self.run;
@@ -399,6 +427,14 @@ impl Model {
         if self.objects.is_empty() && self.flows.is_empty() && self.fluids.is_none() {
             errors.push("o modelo está vazio: adicione objetos ou fluxos".to_string());
         }
+        for (name, table) in &self.calendars {
+            if name.trim().is_empty() {
+                errors.push("há um calendário sem nome".to_string());
+            }
+            if let Err(e) = table.validate() {
+                errors.push(format!("calendário '{name}': {e}"));
+            }
+        }
         let mut names = HashSet::new();
         for obj in &self.objects {
             if obj.name.trim().is_empty() {
@@ -411,10 +447,18 @@ impl Model {
                 ObjectKind::Source {
                     interarrival,
                     labels,
+                    schedule,
                     ..
                 } => {
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
+                    if let Some(s) = schedule {
+                        errors.extend(
+                            s.validate()
+                                .into_iter()
+                                .map(|e| format!("{}: {e}", obj.name)),
+                        );
+                    }
                 }
                 ObjectKind::Queue {
                     capacity, batch, ..
@@ -620,8 +664,25 @@ impl Model {
                 dists.push(("downtime.mtbf".into(), &dt.mtbf));
                 dists.push(("downtime.mttr".into(), &dt.mttr));
             }
-            if let Some(Err(e)) = obj.shifts.as_ref().map(ShiftTable::validate) {
-                errors.push(format!("{}: {e}", obj.name));
+            match &obj.shifts {
+                Some(ShiftSpec::Inline(table)) => {
+                    if let Err(e) = table.validate() {
+                        errors.push(format!("{}: {e}", obj.name));
+                    }
+                }
+                Some(ShiftSpec::Calendar { name, .. }) if !self.calendars.contains_key(name) => {
+                    let known: Vec<&str> = self.calendars.keys().map(String::as_str).collect();
+                    errors.push(format!(
+                        "{}: o calendário '{name}' não existe ({})",
+                        obj.name,
+                        if known.is_empty() {
+                            "o modelo não tem calendários".to_string()
+                        } else {
+                            format!("calendários: {}", known.join(", "))
+                        }
+                    ));
+                }
+                _ => {}
             }
             let mut dists_ok = true;
             for (what, d) in dists {
@@ -637,11 +698,19 @@ impl Model {
                 ObjectKind::Source {
                     interarrival,
                     max_arrivals,
+                    schedule,
                     ..
                 },
             ) = (dists_ok, &obj.kind)
             {
-                let mean = interarrival.mean();
+                let mean = match schedule {
+                    // Mean time between arrivals over a whole cycle.
+                    Some(s) if s.validate().is_empty() => {
+                        s.cycle / s.expected_per_cycle(interarrival)
+                    }
+                    Some(_) => f64::NAN,
+                    None => interarrival.mean(),
+                };
                 let limit = max_arrivals.map_or(f64::INFINITY, |n| n as f64);
                 if mean.is_finite() && run.stop_time.is_finite() {
                     let expected = (run.stop_time / mean).min(limit);
@@ -860,11 +929,13 @@ impl Model {
                     max_arrivals,
                     labels,
                     on_blocked,
+                    schedule,
                 } => {
                     let source = Source::new(interarrival.clone())
                         .on_blocked(*on_blocked)
                         .first_at_zero(*first_at_zero)
-                        .max_arrivals(*max_arrivals);
+                        .max_arrivals(*max_arrivals)
+                        .schedule(schedule.clone());
                     Box::new(
                         labels
                             .iter()
@@ -959,8 +1030,8 @@ impl Model {
             if let Some(dt) = &obj.downtime {
                 sim.set_downtime(id, dt.clone());
             }
-            if let Some(table) = &obj.shifts {
-                sim.set_shifts(id, table.clone());
+            if let Some(table) = self.shift_table(obj) {
+                sim.set_shifts(id, table);
             }
             if let Some(transfer) = self.effective_transfer(obj) {
                 sim.set_transfer(id, transfer);

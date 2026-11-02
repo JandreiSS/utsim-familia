@@ -9,7 +9,7 @@ use slotmap::SlotMap;
 
 use crate::Time;
 use crate::block::{
-    Behavior, BlockId, Downtime, OutputRule, ShiftTable, State, TransferDef, TransferPath,
+    Behavior, BlockId, Downtime, OutputRule, ShiftEnd, ShiftTable, State, TransferDef, TransferPath,
 };
 use crate::dist::Dist;
 use crate::item::{Item, ItemId, Value};
@@ -146,6 +146,9 @@ struct BlockRuntime {
     open_windows: u32,
     /// Active stop reasons (bit set of `BREAKDOWN`, `OFF_SHIFT`); 0 = running.
     stops: u8,
+    /// An off-shift window with `ShiftEnd::Finish` started while work was in progress:
+    /// the inputs are closed and the block runs until the work is done (overtime).
+    closing: bool,
     /// State the block asked for while stopped; restored when it runs again.
     state_when_up: Option<State>,
     contents: Vec<ItemId>,
@@ -233,6 +236,8 @@ pub struct Core {
     /// Decisions waiting for an external answer, oldest first.
     decisions: VecDeque<Decision>,
     next_decision: u64,
+    /// Blocks finishing their work before going off shift (`ShiftEnd::Finish`).
+    closing: Vec<BlockId>,
 }
 
 impl Core {
@@ -335,6 +340,37 @@ impl Ctx<'_> {
     /// Whether this block is currently stopped (breakdown or off shift).
     pub fn is_down(&self) -> bool {
         self.core.blocks[self.me.0].stops != 0
+    }
+
+    /// Whether this block is finishing its work before going off shift
+    /// (`ShiftEnd::Finish`): it runs, but must not start new work.
+    pub fn is_closing(&self) -> bool {
+        self.core.blocks[self.me.0].closing
+    }
+
+    /// Whether `block` is finishing its shift or off shift under `ShiftEnd::Finish`:
+    /// it takes no new work (dispatchers skip such team members). Always false under
+    /// `ShiftEnd::Pause`, where a stopped member may still be given work that waits.
+    pub fn away_on_finish(&self, block: BlockId) -> bool {
+        let rt = &self.core.blocks[block.0];
+        rt.closing
+            || (rt.stops & OFF_SHIFT != 0
+                && rt
+                    .shifts
+                    .as_ref()
+                    .is_some_and(|t| t.on_end == ShiftEnd::Finish))
+    }
+
+    /// Items held by this block that were not released yet and do not wait for a
+    /// transporter (work in progress, for [`Behavior::work_in_progress`]).
+    pub fn unreleased_count(&self) -> usize {
+        let rt = &self.core.blocks[self.me.0];
+        rt.contents
+            .iter()
+            .filter(|&&id| {
+                !self.core.items[id].awaiting_transport && !rt.outbox.iter().any(|p| p.item == id)
+            })
+            .count()
     }
 
     pub fn input_count(&self) -> usize {
@@ -832,6 +868,7 @@ impl Simulation {
                 pending_move_from: None,
                 decisions: VecDeque::new(),
                 next_decision: 0,
+                closing: Vec::new(),
             },
             behaviors: Vec::new(),
             config,
@@ -861,6 +898,7 @@ impl Simulation {
             shifts: None,
             open_windows: 0,
             stops: 0,
+            closing: false,
             state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
@@ -1018,6 +1056,9 @@ impl Simulation {
             }
             self.dispatch(ev.kind);
             self.resolve();
+            if !self.core.closing.is_empty() {
+                self.check_closing();
+            }
             self.check()?;
             if let Some(d) = self.core.decisions.front() {
                 return Ok(Step::Decision(d.clone()));
@@ -1202,19 +1243,75 @@ impl Simulation {
         let Some(table) = &self.core.blocks[b.0].shifts else {
             return;
         };
-        let (period, duration) = (table.period, table.off[k].duration);
+        let (period, duration, on_end) = (table.period, table.off[k].duration, table.on_end);
         self.core.schedule_at(now + duration, EventKind::ShiftOn(b));
         self.core
             .schedule_at(now + period, EventKind::ShiftOff(b, k));
-        self.core.blocks[b.0].open_windows += 1;
-        self.stop(b, OFF_SHIFT);
+        let rt = &mut self.core.blocks[b.0];
+        rt.open_windows += 1;
+        // `Finish` only matters for a running block: a stopped one has no progress to make.
+        if on_end == ShiftEnd::Finish && rt.stops == 0 {
+            if !rt.closing {
+                rt.closing = true;
+                self.core.closing.push(b);
+            }
+            self.finish_closing(b);
+        } else {
+            self.stop(b, OFF_SHIFT);
+        }
     }
 
     fn shift_on(&mut self, b: BlockId) {
         let rt = &mut self.core.blocks[b.0];
         rt.open_windows = rt.open_windows.saturating_sub(1);
-        if rt.open_windows == 0 {
+        if rt.open_windows > 0 {
+            return;
+        }
+        if rt.closing {
+            // The overtime outlasted the window: the block simply keeps working and
+            // opens its inputs again.
+            rt.closing = false;
+            self.core.closing.retain(|&c| c != b);
+            self.reopen(b);
+        } else if rt.stops & OFF_SHIFT != 0 {
             self.resume(b, OFF_SHIFT);
+        }
+    }
+
+    /// A closing block whose work is done goes off shift (it stays closing while
+    /// stopped, e.g. by a breakdown during the overtime).
+    fn finish_closing(&mut self, b: BlockId) {
+        if self.core.blocks[b.0].stops != 0 {
+            return;
+        }
+        let busy = {
+            let Simulation {
+                core, behaviors, ..
+            } = self;
+            behaviors[b.0].work_in_progress(&Ctx { core, me: b })
+        };
+        if !busy {
+            self.core.blocks[b.0].closing = false;
+            self.core.closing.retain(|&c| c != b);
+            self.stop(b, OFF_SHIFT);
+            self.resolve();
+        }
+    }
+
+    /// Checks every closing block after an event.
+    fn check_closing(&mut self) {
+        let closing = self.core.closing.clone();
+        for b in closing {
+            self.finish_closing(b);
+        }
+    }
+
+    /// Inputs of `b` open again: its upstream blocks may send.
+    fn reopen(&mut self, b: BlockId) {
+        self.core.mark_dirty(b);
+        for k in 0..self.core.blocks[b.0].inputs.len() {
+            let up = self.core.blocks[b.0].inputs[k];
+            self.core.mark_dirty(up);
         }
     }
 
@@ -1413,6 +1510,7 @@ impl Simulation {
                     let rt = &self.core.blocks[into.0];
                     let content = rt.contents.len() + rt.incoming;
                     rt.stops == 0
+                        && !rt.closing
                         && self.behaviors[into.0].accepts(&self.core.items[item], content, port)
                 };
                 if accepted {
@@ -1473,7 +1571,7 @@ impl Simulation {
         let open = |&(to, in_port): &(BlockId, usize)| {
             let rt = &self.core.blocks[to.0];
             let content = rt.contents.len() + rt.incoming;
-            rt.stops == 0 && self.behaviors[to.0].accepts(item, content, in_port)
+            rt.stops == 0 && !rt.closing && self.behaviors[to.0].accepts(item, content, in_port)
         };
         match pending.port {
             Some(port) => outputs.get(port).copied().filter(open),

@@ -121,6 +121,11 @@ impl Behavior for Rack {
         cx.set_state(State::Empty);
     }
 
+    /// Stored items are not work: a rack goes off shift at once, as with `Pause`.
+    fn work_in_progress(&self, _cx: &Ctx) -> bool {
+        false
+    }
+
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
         content < self.bays * self.levels
     }

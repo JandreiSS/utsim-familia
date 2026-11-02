@@ -21,7 +21,7 @@ pub mod trace;
 pub type Time = f64;
 
 pub use block::{
-    Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftTable, State, TransferDef,
+    Behavior, BlockId, Downtime, OffWindow, OutputRule, ShiftEnd, ShiftTable, State, TransferDef,
     TransferPath,
 };
 pub use dist::Dist;
