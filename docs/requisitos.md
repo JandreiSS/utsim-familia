@@ -126,6 +126,13 @@ a situação atual e onde está a prova de que funciona.
 | RF-138 | a carga troca de lugar no meio da janela de carga ou descarga; no porta-paletes ela sobe nos garfos e entra na célula no nível | A3D | ✅ | `utsim-scene/tests/scene.rs` (25/50/75% da janela), roteiro `a3d3_empilhadeira.ron` |
 | RF-139 | veículos e pessoas fazem curvas suaves nas quinas, sem mudar os instantes de chegada | A3D | ✅ | `utsim-scene/src/turning.rs` (testes) |
 | RF-140 | ver sombras no visual realista, com opção de desligar | A3D | ✅ | roteiros (capturas com e sem sombras); 448 vs 548 quadros/s |
+| RF-141 | definir chegadas por período num ciclo (dia, semana): cada período igual ao padrão, com distribuição própria, com taxa (Poisson exato nas fronteiras) ou sem chegadas, com rótulos por período, vendo as chegadas esperadas no editor | v0.1 | ✅ | `utsim-model/tests/chegadas_e_turnos.rs` (72 contagens por hora dentro do IC), roteiro `chegadas_por_periodo.ron` |
+| RF-142 | escolher, no fim do turno, pausar ou terminar o trabalho em andamento (sem aceitar itens novos e sem atrasar o turno seguinte), também para transportadores e equipes | v0.1 | ✅ | `chegadas_e_turnos.rs` (linhas do tempo conferidas à mão) |
+| RF-143 | definir calendários de turno com nome e usá-los em vários objetos, com resultados idênticos aos turnos escritos no objeto | v0.1 | ✅ | `chegadas_e_turnos.rs`; seção Calendários do editor |
+| RF-144 | medir a ocupação como fração do tempo trabalhando, nunca acima de 100% por servidor, com variantes incluindo bloqueio, dentro do turno e sem bloqueio; mostrar o gargalo geral e o de dentro do turno | v0.1 | ✅ | `utsim-model/tests/metricas_piloto.rs`, teste `bottleneck_in_shift_uses_the_on_shift_utilisation` |
+| RF-145 | medir perdas (quantidade, entradas, fração perdida) por chegada e no modelo, e a contagem de observações de cada medida | v0.1 | ✅ | `metricas_piloto.rs` |
+| RF-146 | medir o tempo de cada item entre dois pontos do fluxo (`spans`), com média, IC e histograma | v0.1 | ✅ | `metricas_piloto.rs` (média 5, mín. 3, máx. 7 conferidos à mão) |
+| RF-147 | `utsim fit` ignora colunas de numeração, diz qual coluna usou e por quê, e não adivinha entre várias colunas possíveis | v0.1 | ✅ | `utsim-fit/tests/coluna_de_numeracao.rs` |
 
 ## Requisitos não funcionais (RNF)
 
