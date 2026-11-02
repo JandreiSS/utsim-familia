@@ -84,10 +84,13 @@ Verificação completa, no Windows (PowerShell 5.1 ou superior):
 Os dois scripts rodam, nesta ordem, e param no primeiro passo que falhar:
 
 1. `cargo fmt --all -- --check`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cargo test --workspace --exclude utsim-viewer`
+2. `cargo clippy --workspace --exclude utsim-viewer --exclude utsim-godot --all-targets -- -D warnings`
+3. `cargo test --workspace --exclude utsim-viewer --exclude utsim-godot`
 4. `cargo build --release -p utsim-cli`
 5. `utsim check` em cada `examples/*.ron` (arquivos `experimento*` são ignorados)
+6. com `UTSIM_VIEWER=1`: clippy e testes do `utsim-viewer`
+7. com `UTSIM_GODOT=1`: clippy e testes da ponte `utsim-godot` e o teste sem janela no Godot
+   (`scripts/godot_teste.sh`, precisa do Godot 4.7; ver `docs/arquitetura.md`, seção 4r)
 
 ## CI
 
@@ -98,6 +101,9 @@ O workflow `.github/workflows/ci.yml` roda em push e pull request:
   checar portabilidade sem comparar snapshots.
 - **viewer (ubuntu-latest):** instala as bibliotecas do Bevy e roda clippy e `cargo test -p utsim-viewer`
   (índice da linha do tempo contra `RunReport.series`, layout, carregamento). Localmente: `UTSIM_VIEWER=1 bash scripts/verificar.sh`.
+- **godot (ubuntu-latest):** clippy e `cargo test -p utsim-godot` (conversão de coordenadas, escolha
+  dos modelos, empacotamento dos quadros), sem o Godot. O teste no Godot roda localmente:
+  `UTSIM_GODOT=1 bash scripts/verificar.sh` ou `bash scripts/godot_teste.sh`.
 
 ## Testes roteirizados da interface
 

@@ -132,6 +132,22 @@ cargo run -p utsim-scene --features server --example cliente_cena -- 127.0.0.1:7
 
 A mesma porta atende TCP (um JSON por linha) e WebSocket; abra `web/cena_ao_vivo.html` no navegador para ver a vista de topo. O cliente pode mandar comandos (`{"tipo":"comando","variavel":"bloco.Parar","valor":true}`). Não há autenticação: por padrão só escuta em `127.0.0.1`.
 
+## Interface Godot (em desenvolvimento)
+
+A interface 3D da versão 0.2 (e depois a realidade virtual e aumentada pelo OpenXR) é feita no
+Godot 4.7, na pasta `godot/`. A simulação e a cena continuam no Rust: a ponte
+`crates/utsim-godot` (GDExtension) carrega e valida o modelo, roda as replicações e entrega os
+quadros já nas coordenadas do Godot. Nesta fase (G1) a interface abre um modelo, simula e
+reproduz a replicação 0 com os modelos da biblioteca e as pessoas animadas.
+
+```bash
+bash scripts/godot.sh --abrir    # compila a ponte, importa os modelos e abre o projeto (F5 roda)
+bash scripts/godot_teste.sh      # teste sem janela com três exemplos
+```
+
+Precisa do Godot 4.7 (variável `GODOT`, `godot` no `PATH` ou `~/Documents/Godot_v4.7*`).
+Arquitetura em `docs/arquitetura.md` (seção 4r) e próximas fases em `docs/plano_godot.md`.
+
 ## No navegador
 
 A simulação, o ajuste de distribuições e o 3D também rodam no navegador (WebAssembly),
@@ -247,6 +263,8 @@ crates/
   utsim-emu/      emulação em tempo real e servidor OPC UA (só nativo, fora do build wasm)
   utsim-scene/    cena 3D independente de motor: poses e movimentos de tudo em cada instante (`utsim cena`)
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
+  utsim-godot/    ponte GDExtension da interface Godot (`godot/`): modelo, replicações e quadros da cena
+godot/            projeto Godot da interface 3D (versão 0.2, em desenvolvimento)
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
