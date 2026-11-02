@@ -483,6 +483,7 @@ mod tests {
             container: None,
             contents: Vec::new(),
             awaiting_transport: false,
+            marks: Vec::new(),
         }
     }
 

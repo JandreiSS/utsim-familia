@@ -9,19 +9,12 @@
 
 use std::collections::BTreeMap;
 
-use utsim_core::RunReport;
 use utsim_core::stats::{Histogram, Summary};
+use utsim_core::{RunReport, Utilization};
 
-use crate::{Model, ObjectKind};
+pub use utsim_core::report::BUSY_TRAVEL_STATES;
 
-/// States in which a mobile resource counts as busy.
-pub const BUSY_TRAVEL_STATES: &[&str] = &[
-    "travel_empty",
-    "travel_loaded",
-    "loading",
-    "unloading",
-    "utilize",
-];
+use crate::Model;
 
 /// Across-replication statistics of one object (block) of the report.
 #[derive(Clone, Debug)]
@@ -33,9 +26,16 @@ pub struct ObjectStats {
     pub output: Summary,
     pub content: Summary,
     pub staytime: Summary,
-    /// Fraction of capacity in use (see [`utilization_of`]); `None` for objects that
-    /// are not resources (queues, sources, sinks...).
+    /// Fraction of the time the resource works, never above 100% per server (see
+    /// [`utilization_of`]); `None` for objects that are not resources (queues, sources,
+    /// sinks...).
     pub utilization: Option<Summary>,
+    /// Working plus holding a finished item that cannot leave (blocked).
+    pub utilization_incl_blocked: Option<Summary>,
+    /// Working time over the time on shift (off-shift time left out).
+    pub utilization_in_shift: Option<Summary>,
+    /// Working time over the time not blocked.
+    pub utilization_excl_blocked: Option<Summary>,
     /// Fraction of time in each state, by state name, only the states ever entered.
     pub states: Vec<(String, Summary)>,
     /// Means of the object's own tallies (e.g. `time_in_system`), by tally name.
@@ -56,35 +56,14 @@ pub fn is_resource_kind(kind: &str) -> bool {
     matches!(kind, "processor" | "combiner" | "separator" | "transporter")
 }
 
-/// Capacity of a station in the model (`1` when it has no capacity field).
-fn capacity_of(model: &Model, name: &str) -> f64 {
-    model
-        .objects
-        .iter()
-        .find(|o| o.name == name)
-        .map_or(1.0, |o| match &o.kind {
-            ObjectKind::Processor { capacity, .. } => (*capacity).max(1) as f64,
-            _ => 1.0,
-        })
-}
-
-/// Utilisation of one block in one replication: for stations, mean content divided by
-/// the capacity (items finished but blocked still occupy the station); for mobile
-/// resources, the fraction of time travelling, loading, unloading or working at a
-/// station ([`BUSY_TRAVEL_STATES`]). `None` for blocks that are not resources.
-pub fn utilization_of(model: &Model, block: &utsim_core::BlockReport) -> Option<f64> {
-    match block.kind.as_str() {
-        "processor" | "combiner" | "separator" => {
-            Some(block.content_mean / capacity_of(model, &block.name))
-        }
-        "transporter" => Some(
-            BUSY_TRAVEL_STATES
-                .iter()
-                .filter_map(|s| block.states.get(*s))
-                .sum(),
-        ),
-        _ => None,
-    }
+/// Utilisation of one block in one replication, `None` for blocks that are not
+/// resources. Processors, combiners and separators count the time in the working
+/// states (processing, setup), not the content: a combiner holds the components that
+/// wait for the rest of the set, which is not work. A processor with capacity above 1
+/// uses the mean number of busy servers over its capacity. Mobile resources count the
+/// states in [`BUSY_TRAVEL_STATES`]. Every figure stays within `[0, 1]`.
+pub fn utilization_of(block: &utsim_core::BlockReport) -> Option<Utilization> {
+    block.utilization()
 }
 
 fn summary_of(values: impl Iterator<Item = f64>) -> Summary {
@@ -93,7 +72,7 @@ fn summary_of(values: impl Iterator<Item = f64>) -> Summary {
 }
 
 /// One row per block of the first report, in report order.
-pub fn object_stats(model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
+pub fn object_stats(_model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
     let Some(first) = reports.first() else {
         return Vec::new();
     };
@@ -141,13 +120,15 @@ pub fn object_stats(model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
                     (k.clone(), sum)
                 })
                 .collect();
-            let utilization = is_resource_kind(&b.kind).then(|| {
-                summary_of(
-                    blocks
-                        .iter()
-                        .map(|x| utilization_of(model, x).unwrap_or(0.0)),
-                )
-            });
+            let util = |f: fn(&Utilization) -> f64| {
+                is_resource_kind(&b.kind).then(|| {
+                    summary_of(
+                        blocks
+                            .iter()
+                            .map(|x| utilization_of(x).map_or(0.0, |u| f(&u))),
+                    )
+                })
+            };
             ObjectStats {
                 name: b.name.clone(),
                 kind: b.kind.clone(),
@@ -155,12 +136,25 @@ pub fn object_stats(model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
                 output: field(&|x| x.output as f64),
                 content: field(&|x| x.content_mean),
                 staytime: field(&|x| x.staytime.mean),
-                utilization,
+                utilization: util(|u| u.work),
+                utilization_incl_blocked: util(|u| u.incl_blocked),
+                utilization_in_shift: util(|u| u.in_shift),
+                utilization_excl_blocked: util(|u| u.excl_blocked),
                 states,
                 extra,
                 custom,
             }
         })
+        .collect()
+}
+
+/// Model-wide metrics (`model.*`: items lost by `Drop` sources and the loss fraction),
+/// each with its 95% interval; empty when the model has no source that can lose items.
+pub fn model_stats(reports: &[RunReport]) -> Vec<(String, Summary)> {
+    per_replication(reports)
+        .into_iter()
+        .filter(|(k, _)| k.starts_with("model."))
+        .map(|(k, xs)| (k, Summary::from_samples(&xs)))
         .collect()
 }
 
@@ -404,6 +398,9 @@ mod tests {
             content: Summary::from_samples(&[]),
             staytime: Summary::from_samples(&[]),
             utilization: u.map(|v| Summary::from_samples(&[v, v])),
+            utilization_incl_blocked: None,
+            utilization_in_shift: None,
+            utilization_excl_blocked: None,
             states: vec![],
             extra: vec![],
             custom: vec![],
@@ -420,7 +417,6 @@ mod tests {
 
     #[test]
     fn transporter_utilisation_sums_busy_states() {
-        let m = Model::parse(LINE).unwrap();
         let block = utsim_core::BlockReport {
             name: "agv".into(),
             kind: "transporter".into(),
@@ -447,7 +443,7 @@ mod tests {
             custom: BTreeMap::new(),
             series: vec![],
         };
-        assert!((utilization_of(&m, &block).unwrap() - 0.6).abs() < 1e-12);
+        assert!((utilization_of(&block).unwrap().work - 0.6).abs() < 1e-12);
     }
 
     #[test]

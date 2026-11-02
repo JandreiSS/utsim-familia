@@ -233,9 +233,41 @@ pub struct Core {
     /// Decisions waiting for an external answer, oldest first.
     decisions: VecDeque<Decision>,
     next_decision: u64,
+    /// Time-between-two-points meters, in registration order.
+    meters: Vec<Meter>,
+}
+
+/// Measures, per item, the time from leaving `from` to entering `to`; each measurement
+/// is recorded in the tally `value` of block `into`.
+#[derive(Clone, Copy, Debug)]
+struct Meter {
+    from: BlockId,
+    to: BlockId,
+    into: BlockId,
 }
 
 impl Core {
+    /// Adds an observation to the named tally of `block`.
+    fn record_extra(&mut self, block: BlockId, name: &str, value: f64) {
+        let keep_raw = self.keep_raw;
+        let extra = &mut self.blocks[block.0].stats.extra;
+        // Hot path (a sink records once per item): look up first, allocate the key once.
+        if let Some(tally) = extra.get_mut(name) {
+            tally.record(value);
+            return;
+        }
+        extra
+            .entry(name.to_string())
+            .or_insert_with(|| {
+                if keep_raw {
+                    Tally::with_raw()
+                } else {
+                    Tally::default()
+                }
+            })
+            .record(value);
+    }
+
     fn schedule_at(&mut self, time: Time, kind: EventKind) -> EventId {
         self.seq += 1;
         self.events.push(Scheduled {
@@ -396,6 +428,7 @@ impl Ctx<'_> {
             container: None,
             contents: Vec::new(),
             awaiting_transport: false,
+            marks: Vec::new(),
         });
         self.core.blocks[self.me.0].contents.push(id);
         self.core.update_content(self.me);
@@ -473,23 +506,8 @@ impl Ctx<'_> {
 
     /// Adds an observation to a named per-block tally (shown in the report).
     pub fn record(&mut self, name: &str, value: f64) {
-        let keep_raw = self.core.keep_raw;
-        let extra = &mut self.core.blocks[self.me.0].stats.extra;
-        // Hot path (a sink records once per item): look up first, allocate the key once.
-        if let Some(tally) = extra.get_mut(name) {
-            tally.record(value);
-            return;
-        }
-        extra
-            .entry(name.to_string())
-            .or_insert_with(|| {
-                if keep_raw {
-                    Tally::with_raw()
-                } else {
-                    Tally::default()
-                }
-            })
-            .record(value);
+        let me = self.me;
+        self.core.record_extra(me, name, value);
     }
 
     /// Reports a modelling error; the run stops after the current event.
@@ -627,6 +645,7 @@ impl Ctx<'_> {
             container: None,
             contents: Vec::new(),
             awaiting_transport: false,
+            marks: Vec::new(),
         });
         self.core.emit(TraceEvent::Created {
             item: item_key(id),
@@ -832,6 +851,7 @@ impl Simulation {
                 pending_move_from: None,
                 decisions: VecDeque::new(),
                 next_decision: 0,
+                meters: Vec::new(),
             },
             behaviors: Vec::new(),
             config,
@@ -934,6 +954,14 @@ impl Simulation {
     /// Enables a repeating shift table (scheduled off-shift windows) on a block.
     pub fn set_shifts(&mut self, block: BlockId, shifts: ShiftTable) {
         self.core.blocks[block.0].shifts = Some(shifts);
+    }
+
+    /// Measures the time each item takes from leaving block `from` to entering block
+    /// `to`, recording it in the tally `value` of block `into` (a block that holds no
+    /// items, made only to carry the measurement). An item that never reaches `to`
+    /// is not counted, and one that passes `from` again restarts the clock.
+    pub fn add_meter(&mut self, from: BlockId, to: BlockId, into: BlockId) {
+        self.core.meters.push(Meter { from, to, into });
     }
 
     pub fn block_id(&self, name: &str) -> Option<BlockId> {
@@ -1563,6 +1591,13 @@ impl Simulation {
         let now = self.core.now;
         let entered = self.core.items[item].entered_at;
         self.core.take_item_from(from, item);
+        for k in 0..self.core.meters.len() {
+            if self.core.meters[k].from == from {
+                let marks = &mut self.core.items[item].marks;
+                marks.retain(|(m, _)| *m != k);
+                marks.push((k, now));
+            }
+        }
         let stats = &mut self.core.blocks[from.0].stats;
         stats.output += 1;
         stats.staytime.record(now - entered);
@@ -1586,6 +1621,20 @@ impl Simulation {
         let from = self.core.pending_move_from.take().map_or(to.0, |b| b.0);
         self.core.put_item_into(to, item);
         self.core.blocks[to.0].stats.input += 1;
+        if !self.core.meters.is_empty() {
+            let now = self.core.now;
+            for k in 0..self.core.meters.len() {
+                let meter = self.core.meters[k];
+                if meter.to != to {
+                    continue;
+                }
+                let marks = &mut self.core.items[item].marks;
+                if let Some(at) = marks.iter().position(|(m, _)| *m == k) {
+                    let t0 = marks.remove(at).1;
+                    self.core.record_extra(meter.into, "value", now - t0);
+                }
+            }
+        }
         if from != to.0 {
             self.core.emit(TraceEvent::Moved {
                 item: item_key(item),
