@@ -101,7 +101,7 @@ justifica a escolha com métricas estatísticas.
 - [x] A3D-2: modelos articulados gerados por código (empilhadeira, AGV, porta-paletes...) e carga de glTF
 - [ ] A3D-3: pessoas animadas, itens presos às mãos e aos garfos, garfos até o nível, giro suave
 - [x] A3D-4: câmeras de seguir, de primeira pessoa e do recurso; níveis de detalhe e limite de rótulos para modelos grandes
-- [ ] A3D-5: cliente Unreal com realidade virtual (OpenXR), lendo `utsim-scene/1`
+- [ ] A3D-5: cliente Godot (3D, realidade virtual e aumentada pelo OpenXR), lendo `utsim-scene/1`
 - [x] A3D-6: cena ao vivo por socket a partir da emulação (`--cena-porta`, `utsim cena --servir`)
 
 ## Melhorias anotadas (dos relatórios das frentes)

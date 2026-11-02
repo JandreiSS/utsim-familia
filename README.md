@@ -114,7 +114,7 @@ cargo run --release -p utsim-viewer -- examples/mm1.ron --headless-check
 
 `utsim cena` grava onde cada bloco, item e recurso móvel está, e o que está fazendo, ao longo de uma rodada.
 O formato é JSON em linhas (protocolo `utsim-scene/1`): um cabeçalho com o layout e depois um quadro por linha, em metros, com o eixo Z para cima.
-É a mesma cena que o `utsim-view` desenha, então um cliente Unreal, Unity ou de realidade virtual mostra exatamente o mesmo.
+É a mesma cena que o `utsim-view` desenha, então o cliente Godot (3D e realidade virtual/aumentada) mostra exatamente o mesmo.
 
 ```bash
 cargo run --release -p utsim-cli -- cena examples/agvs.ron --fps 10 --ate 600 --saida agvs.jsonl
