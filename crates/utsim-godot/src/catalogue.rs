@@ -24,6 +24,15 @@ pub struct Entry {
     pub centro_m: (f32, f32),
     pub giro_y_graus: f32,
     pub escala_real: f32,
+    /// Credits and use, shown as the tooltip of the asset in the properties panel.
+    #[serde(default)]
+    pub autor: String,
+    #[serde(default)]
+    pub licenca: String,
+    #[serde(default)]
+    pub uso: String,
+    #[serde(default)]
+    pub tamanho_real_m: (f32, f32, f32),
 }
 
 /// Where the glTF scene of an entry goes under the entity's root (Godot space).
