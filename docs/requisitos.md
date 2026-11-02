@@ -133,6 +133,10 @@ a situação atual e onde está a prova de que funciona.
 | RF-145 | medir perdas (quantidade, entradas, fração perdida) por chegada e no modelo, e a contagem de observações de cada medida | v0.1 | ✅ | `metricas_piloto.rs` |
 | RF-146 | medir o tempo de cada item entre dois pontos do fluxo (`spans`), com média, IC e histograma | v0.1 | ✅ | `metricas_piloto.rs` (média 5, mín. 3, máx. 7 conferidos à mão) |
 | RF-147 | `utsim fit` ignora colunas de numeração, diz qual coluna usou e por quê, e não adivinha entre várias colunas possíveis | v0.1 | ✅ | `utsim-fit/tests/coluna_de_numeracao.rs` |
+| RF-148 | editar a posição e o giro de cada objeto por campos, achar objetos numa lista com busca e alternar entre objetos sobrepostos clicando no mesmo ponto | v0.1 | ✅ | `picking.rs` (testes), roteiro `acabamento_interface.ron` |
+| RF-149 | ver e mudar a ordem das ligações (portas de saída e prioridade das entradas) | v0.1 | ✅ | `Command::SwapConnections` (teste), roteiro `acabamento_interface.ron` |
+| RF-150 | salvar o modelo com outro nome (Salvar como, Ctrl+Shift+S) | v0.1 | ✅ | roteiro `acabamento_interface.ron` |
+| RNF-31 | toda a interface usa só símbolos que a fonte desenha (nada de caixas vazias); texto inválido nunca é descartado em silêncio | ✅ | `crates/utsim-viewer/tests/glyphs.rs` |
 
 ## Requisitos não funcionais (RNF)
 
