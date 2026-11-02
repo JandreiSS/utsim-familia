@@ -84,10 +84,14 @@ impl Dispatcher {
 
     fn choose(&mut self, cx: &Ctx, request: &TaskRequest) -> Option<usize> {
         let n = self.team.len();
+        // A member that ends its shift with `Finish` takes no new work until it is back.
+        let open: Vec<bool> = (0..n)
+            .map(|m| self.free[m] && !cx.away_on_finish(self.team[m]))
+            .collect();
         match self.rule {
-            DispatchRule::FirstAvailable => self.free.iter().position(|&f| f),
+            DispatchRule::FirstAvailable => open.iter().position(|&f| f),
             DispatchRule::RoundRobin => {
-                let member = (0..n).map(|k| (self.next + k) % n).find(|&m| self.free[m]);
+                let member = (0..n).map(|k| (self.next + k) % n).find(|&m| open[m]);
                 if let Some(m) = member {
                     self.next = (m + 1) % n;
                 }
@@ -96,7 +100,7 @@ impl Dispatcher {
             DispatchRule::Nearest => {
                 let start = Self::start_of(cx, request);
                 let mut best: Option<(usize, f64)> = None;
-                for m in (0..n).filter(|&m| self.free[m]) {
+                for m in (0..n).filter(|&m| open[m]) {
                     let d = distance(self.positions[m], start);
                     if best.is_none_or(|(_, bd)| d < bd) {
                         best = Some((m, d));

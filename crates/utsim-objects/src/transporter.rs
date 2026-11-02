@@ -166,6 +166,9 @@ pub struct Transporter {
     held: Option<usize>,
     /// An edge was granted while the block was down: start moving on resume.
     grant_pending: bool,
+    /// Finished its last task while closing (`ShiftEnd::Finish`) without telling the
+    /// dispatcher: it reports `MSG_IDLE` when the shift comes back.
+    announce_on_resume: bool,
 }
 
 impl Transporter {
@@ -188,6 +191,7 @@ impl Transporter {
             route: None,
             held: None,
             grant_pending: false,
+            announce_on_resume: false,
         }
     }
 
@@ -482,6 +486,14 @@ impl Transporter {
     fn finish(&mut self, cx: &mut Ctx) {
         self.trip.clear();
         self.k = 0;
+        if cx.is_closing() {
+            // End of shift with `Finish`: no new work and no idle report, so the
+            // dispatcher gives the next task to someone on shift. The kernel takes the
+            // transporter off shift right after this.
+            self.announce_on_resume = true;
+            cx.set_state(State::Idle);
+            return;
+        }
         if self.queue.is_empty() {
             self.go_idle(cx, true);
         } else if !cx.is_down() {
@@ -491,7 +503,12 @@ impl Transporter {
 
     /// A task arrived: if idle, start after the other same-instant tasks arrived.
     fn kick(&mut self, cx: &mut Ctx) {
-        if self.trip.is_empty() && self.timer.is_none() && !self.queue.is_empty() && !cx.is_down() {
+        if self.trip.is_empty()
+            && self.timer.is_none()
+            && !self.queue.is_empty()
+            && !cx.is_down()
+            && !cx.is_closing()
+        {
             self.arm(cx, 0.0, START, None);
         }
     }
@@ -570,7 +587,12 @@ impl Behavior for Transporter {
             self.release_held(cx);
         }
         if tag == START {
-            self.begin_trip(cx);
+            if cx.is_closing() {
+                // The shift ended (`Finish`) before the trip started: it waits.
+                cx.set_state(State::Idle);
+            } else {
+                self.begin_trip(cx);
+            }
             return;
         }
         if tag == ARRIVED_HOME {
@@ -621,6 +643,10 @@ impl Behavior for Transporter {
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {
+        if cx.away_on_finish(cx.me()) {
+            // The dispatcher skips it while away; report back when the shift returns.
+            self.announce_on_resume = true;
+        }
         let now = cx.now();
         let Some(timer) = &mut self.timer else { return };
         let Some(event) = timer.event.take() else {
@@ -639,6 +665,15 @@ impl Behavior for Transporter {
 
     fn on_resume(&mut self, cx: &mut Ctx) {
         let now = cx.now();
+        if std::mem::take(&mut self.announce_on_resume)
+            && self.trip.is_empty()
+            && self.queue.is_empty()
+            && let Some(d) = self.dispatcher
+        {
+            // Back from a shift that ended with `Finish`: free for the dispatcher again.
+            self.report_position(cx);
+            cx.send(d, MSG_IDLE, self.capacity as u64);
+        }
         if self.grant_pending {
             self.grant_pending = false;
             self.run_segment(cx);
@@ -668,6 +703,12 @@ impl Behavior for Transporter {
         } else {
             self.begin_trip(cx);
         }
+    }
+
+    /// The current trip (or station job) is work to finish; queued tasks and the drive
+    /// home are not.
+    fn work_in_progress(&self, _cx: &Ctx) -> bool {
+        !self.trip.is_empty()
     }
 
     fn on_message(&mut self, cx: &mut Ctx, _from: BlockId, tag: u32, payload: u64) {

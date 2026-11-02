@@ -98,6 +98,12 @@ impl Behavior for Queue {
         cx.set_state(State::Empty);
     }
 
+    /// Waiting items are not work: at the end of a shift with `Finish` a queue goes off
+    /// shift at once, as with `Pause`.
+    fn work_in_progress(&self, _cx: &Ctx) -> bool {
+        false
+    }
+
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
         if self.batch.is_some_and(|b| b.flush) && self.outstanding > 0 {
             return false;
