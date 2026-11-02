@@ -5,14 +5,14 @@
 //! [`Frame`] per instant, with the pose of every block, item and mobile resource and a
 //! semantic [`Motion`] (walking, lifting forks, loading...) that each engine maps to its
 //! own animation clips. The Bevy viewer, the browser page, a future VR mode and external
-//! engines (Unreal, Unity, Godot) all consume the same frames, so they never disagree on
+//! engines (the Godot front-end for 3D, VR and AR) all consume the same frames, so they never disagree on
 //! where things are.
 //!
 //! # Conventions (fixed by protocol version [`PROTOCOL`])
 //! - **Units:** metres, seconds of simulated time (1 model time unit = 1 s for speeds).
 //! - **Axes:** the model's own plan coordinates. Right-handed, `x` right, `y` along
 //!   the floor, **`z` up**; the floor is `z = 0`. Bevy (Y-up) maps `(x, y, z)` to
-//!   `(x, z, -y)`; Unreal (Z-up, left-handed, cm) maps it to `(100x, -100y, 100z)`.
+//!   `(x, z, -y)`, and so does Godot (also Y-up, right-handed, metres).
 //! - **Yaw:** radians, counter-clockwise seen from above, `0` = facing `+x`.
 //! - **Human scale:** assets are authored at real size, so a person is ~1.75 m tall and a
 //!   VR camera at eye height (~1.6 m) sees the plant at the right scale.

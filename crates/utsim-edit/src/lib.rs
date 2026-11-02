@@ -409,6 +409,8 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 return Err(not_found(name));
             }
             model.connections.retain(|(a, b)| a != name && b != name);
+            // A time measurement needs both of its ends.
+            model.spans.retain(|m| &m.from != name && &m.to != name);
         }
         Command::Rename { from, to } => {
             if to.trim().is_empty() {
@@ -431,6 +433,13 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 }
             }
             fluids::rename_object(model, from, to);
+            for span in &mut model.spans {
+                for end in [&mut span.from, &mut span.to] {
+                    if end == from {
+                        *end = to.clone();
+                    }
+                }
+            }
         }
         Command::Move { name, position } => {
             let object = model

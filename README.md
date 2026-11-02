@@ -114,7 +114,7 @@ cargo run --release -p utsim-viewer -- examples/mm1.ron --headless-check
 
 `utsim cena` grava onde cada bloco, item e recurso móvel está, e o que está fazendo, ao longo de uma rodada.
 O formato é JSON em linhas (protocolo `utsim-scene/1`): um cabeçalho com o layout e depois um quadro por linha, em metros, com o eixo Z para cima.
-É a mesma cena que o `utsim-view` desenha, então um cliente Unreal, Unity ou de realidade virtual mostra exatamente o mesmo.
+É a mesma cena que o `utsim-view` desenha, então o cliente Godot (3D e realidade virtual/aumentada) mostra exatamente o mesmo.
 
 ```bash
 cargo run --release -p utsim-cli -- cena examples/agvs.ron --fps 10 --ate 600 --saida agvs.jsonl
@@ -131,6 +131,22 @@ cargo run -p utsim-scene --features server --example cliente_cena -- 127.0.0.1:7
 ```
 
 A mesma porta atende TCP (um JSON por linha) e WebSocket; abra `web/cena_ao_vivo.html` no navegador para ver a vista de topo. O cliente pode mandar comandos (`{"tipo":"comando","variavel":"bloco.Parar","valor":true}`). Não há autenticação: por padrão só escuta em `127.0.0.1`.
+
+## Interface Godot (em desenvolvimento)
+
+A interface 3D da versão 0.2 (e depois a realidade virtual e aumentada pelo OpenXR) é feita no
+Godot 4.7, na pasta `godot/`. A simulação e a cena continuam no Rust: a ponte
+`crates/utsim-godot` (GDExtension) carrega e valida o modelo, roda as replicações e entrega os
+quadros já nas coordenadas do Godot. Nesta fase (G1) a interface abre um modelo, simula e
+reproduz a replicação 0 com os modelos da biblioteca e as pessoas animadas.
+
+```bash
+bash scripts/godot.sh --abrir    # compila a ponte, importa os modelos e abre o projeto (F5 roda)
+bash scripts/godot_teste.sh      # teste sem janela com três exemplos
+```
+
+Precisa do Godot 4.7 (variável `GODOT`, `godot` no `PATH` ou `~/Documents/Godot_v4.7*`).
+Arquitetura em `docs/arquitetura.md` (seção 4r) e próximas fases em `docs/plano_godot.md`.
 
 ## No navegador
 
@@ -159,7 +175,8 @@ cargo run --release -p utsim-cli -- fit examples/dados/tempos_atendimento.csv --
 ```
 
 Aceita CSV/TXT com separador `,`, `;` ou tab, cabeçalho e vírgula decimal detectados
-automaticamente. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz instantes e o
+automaticamente. Sem `--coluna`, o programa pula as colunas de numeração (1, 2, 3...), diz
+qual coluna usou e por quê, e pede `--coluna` se restar mais de uma plausível. Opções: `--coluna <nome|n>`, `--timestamps` (a coluna traz instantes e o
 ajuste é feito sobre os intervalos), `--alpha 0.05`, `--bootstrap 300`, `--seed 1`,
 `--html relatorio.html` (histograma, Q-Q, P-P e ECDF) e `--json saida.json`.
 
@@ -222,7 +239,7 @@ Model(
 
 | Objeto | Campos |
 |---|---|
-| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }`, `on_blocked: Wait \| Drop` (`Drop` descarta e conta em `lost` o item que não consegue sair) |
+| `Source` | `interarrival`, `first_at_zero`, `max_arrivals`, `labels: { "nome": Dist }`, `on_blocked: Wait \| Drop` (`Drop` descarta o item que não consegue sair e publica `lost.count`, `entered.count` e `loss_fraction`) |
 | `Queue` | `capacity` (vazio = ilimitada), `discipline: Fifo \| Lifo` |
 | `Processor` | `capacity` (padrão 1), `setup` (opcional), `process` |
 | `Sink` | registra `time_in_system` e destrói o item |
@@ -247,6 +264,8 @@ crates/
   utsim-emu/      emulação em tempo real e servidor OPC UA (só nativo, fora do build wasm)
   utsim-scene/    cena 3D independente de motor: poses e movimentos de tudo em cada instante (`utsim cena`)
   utsim-viewer/   binário `utsim-view`: editor e visualizador 3D (Bevy); a simulação roda no motor, a janela só lê o replay
+  utsim-godot/    ponte GDExtension da interface Godot (`godot/`): modelo, replicações e quadros da cena
+godot/            projeto Godot da interface 3D (versão 0.2, em desenvolvimento)
 examples/         modelos de exemplo
 docs/             requisitos (RF/RNF), arquitetura, roteiro, processo e testes
 ```
@@ -317,5 +336,7 @@ e dos 10 melhores pontos.
 
 Observações: com `refine`, os melhores pontos são re-simulados com mais replicações e a
 comparação final (melhor e equivalentes) usa essa lista; o relatório mostra as duas
-tabelas. As métricas `<bloco>.lost.*` ainda não servem de objetivo (só `.mean` é exposto e
-vale sempre 1); use, por exemplo, as entradas da Sink com peso negativo.
+tabelas. Perdas servem de objetivo e restrição por `<fonte>.lost.count`, `<fonte>.loss_fraction`
+e os totais `model.lost.count` e `model.loss_fraction`. A ocupação (`<objeto>.utilization`,
+`.utilization_in_shift`, `.utilization_excl_blocked`, `.utilization_incl_blocked`) e o tempo
+entre dois pontos do fluxo (`spans`, métrica `<medicao>.value.mean`) também têm nome estável.

@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use utsim_core::stats::Summary;
 
-use crate::analysis::{ObjectStats, bottleneck, delta_cell, is_significant, mean_hw};
+use crate::analysis::{self, ObjectStats, bottleneck, delta_cell, is_significant, mean_hw};
 use crate::experiment::ExperimentResult;
 
 /// What the report shows.
@@ -15,6 +15,8 @@ pub struct ReportInput<'a> {
     /// One line describing the run (replications, times, seed).
     pub settings: String,
     pub stats: &'a [ObjectStats],
+    /// The replications behind `stats` (for the model-wide totals).
+    pub reports: &'a [utsim_core::RunReport],
     /// sRGB colour (0..1) of a state, by state name (the 3D view's colours).
     pub state_color: &'a dyn Fn(&str) -> [f32; 3],
     /// Portuguese label of a state, by state name.
@@ -92,6 +94,11 @@ pub fn report(input: &ReportInput) -> String {
     h.push_str("<h2>Resumo por objeto</h2>");
     h.push_str(&objects_table(input.stats, hot));
     h.push_str("<h2>Ocupação dos recursos</h2>");
+    h.push_str(
+        "<p class=\"muted\">Ocupação: fração do tempo trabalhando (em processo ou preparação), \
+         no máximo 100% por servidor. Os componentes que esperam dentro de uma montagem não \
+         contam como trabalho.</p>",
+    );
     h.push_str(&utilization_chart(input.stats, hot));
     h.push_str("<h2>Distribuição dos estados</h2>");
     h.push_str(&states_chart(input));
@@ -105,6 +112,8 @@ pub fn report(input: &ReportInput) -> String {
                 .chain(
                     s.custom
                         .iter()
+                        // `servers.*` only feed the utilisation columns.
+                        .filter(|(k, _)| !k.starts_with("servers."))
                         .map(move |(k, v)| (format!("{}.{k}", s.name), *v)),
                 )
         })
@@ -116,6 +125,21 @@ pub fn report(input: &ReportInput) -> String {
             )
         })
         .collect();
+    let model_rows: String = analysis::model_stats(input.reports)
+        .iter()
+        .map(|(k, v)| {
+            format!(
+                "<tr><td><code>{}</code></td><td class=\"n\">{}</td></tr>",
+                esc(k),
+                cell(v)
+            )
+        })
+        .collect();
+    if !model_rows.is_empty() {
+        h.push_str("<h2>Perdas do modelo</h2><table><tr><th>Métrica</th><th>Valor</th></tr>");
+        h.push_str(&model_rows);
+        h.push_str("</table>");
+    }
     if !metrics.is_empty() {
         h.push_str("<h2>Métricas próprias</h2><table><tr><th>Métrica</th><th>Valor</th></tr>");
         h.push_str(&metrics.concat());
@@ -128,15 +152,23 @@ pub fn report(input: &ReportInput) -> String {
     h
 }
 
+fn pct_cell(s: Option<&Summary>) -> String {
+    s.map(pct).map_or(String::new(), |t| esc(&t))
+}
+
 fn objects_table(stats: &[ObjectStats], hot: Option<usize>) -> String {
     let mut h = String::from(
         "<table><tr><th>Objeto</th><th>Tipo</th><th>Entradas</th><th>Saídas</th>\
-         <th>Conteúdo médio</th><th>Permanência média</th><th>Ocupação</th></tr>",
+         <th>Conteúdo médio</th><th>Permanência média</th><th>Ocupação</th>\
+         <th title=\"trabalhando ou segurando item pronto que não pode sair\">Com bloqueio</th>\
+         <th title=\"só o tempo em turno\">No turno</th>\
+         <th title=\"só o tempo não bloqueado\">Sem bloqueio</th></tr>",
     );
     for (i, s) in stats.iter().enumerate() {
         let _ = write!(
             h,
             "<tr{}><td>{}</td><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>\
+             <td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>\
              <td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td></tr>",
             if hot == Some(i) { " class=\"hot\"" } else { "" },
             esc(&s.name),
@@ -145,10 +177,10 @@ fn objects_table(stats: &[ObjectStats], hot: Option<usize>) -> String {
             cell(&s.output),
             cell(&s.content),
             cell(&s.staytime),
-            s.utilization
-                .as_ref()
-                .map(pct)
-                .map_or(String::new(), |t| esc(&t)),
+            pct_cell(s.utilization.as_ref()),
+            pct_cell(s.utilization_incl_blocked.as_ref()),
+            pct_cell(s.utilization_in_shift.as_ref()),
+            pct_cell(s.utilization_excl_blocked.as_ref()),
         );
     }
     h.push_str("</table>");
@@ -338,6 +370,7 @@ mod tests {
             title: "m <teste>",
             settings: "3 replicações".into(),
             stats: &stats,
+            reports: &reports,
             state_color: &color,
             state_label: &label,
             experiment: None,

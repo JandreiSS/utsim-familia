@@ -81,6 +81,82 @@ pub struct RunReport {
     pub blocks: Vec<BlockReport>,
 }
 
+/// States in which a mobile resource counts as busy.
+pub const BUSY_TRAVEL_STATES: &[&str] = &[
+    "travel_empty",
+    "travel_loaded",
+    "loading",
+    "unloading",
+    "utilize",
+];
+
+/// Utilisation of one resource in one replication, every figure in `[0, 1]` and never
+/// above 1 per server. See [`BlockReport::utilization`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Utilization {
+    /// Mean busy servers over capacity: the fraction of the window spent working
+    /// (processing or setting up), ignoring items that finished but cannot leave.
+    pub work: f64,
+    /// `work` plus the servers held by finished items that cannot leave yet.
+    pub incl_blocked: f64,
+    /// `work` over the on-shift part of the window (off-shift time left out).
+    pub in_shift: f64,
+    /// `work` over the part of the window not spent blocked.
+    pub excl_blocked: f64,
+}
+
+fn ratio(num: f64, den: f64) -> f64 {
+    if den > 1e-12 {
+        (num / den).min(1.0)
+    } else {
+        0.0
+    }
+}
+
+impl BlockReport {
+    fn state(&self, name: &str) -> f64 {
+        self.states.get(name).copied().unwrap_or(0.0)
+    }
+
+    /// Utilisation by block kind, `None` for blocks that are not resources.
+    ///
+    /// Processors, combiners and separators count the time in the working states
+    /// (processing, setup); a processor with capacity above 1 uses the mean number of
+    /// busy servers (`servers.busy`) divided by its capacity, so it never exceeds 100%.
+    /// The content of the block is not used: a combiner holds the components waiting for
+    /// the rest of the set, which are not work. Mobile resources count the states in
+    /// [`BUSY_TRAVEL_STATES`].
+    pub fn utilization(&self) -> Option<Utilization> {
+        let (work, blocked) = match self.kind.as_str() {
+            "processor" => {
+                let cap = self.custom.get("servers.capacity").copied().unwrap_or(1.0);
+                let busy = self.custom.get("servers.busy").map_or_else(
+                    || self.state("processing") + self.state("setup"),
+                    |b| b / cap,
+                );
+                let held = self.custom.get("servers.blocked").map_or_else(
+                    || self.state("blocked") + self.state("waiting_transport"),
+                    |b| b / cap,
+                );
+                (busy, held)
+            }
+            "combiner" | "separator" => (
+                self.state("processing") + self.state("setup"),
+                self.state("blocked"),
+            ),
+            "transporter" => (BUSY_TRAVEL_STATES.iter().map(|s| self.state(s)).sum(), 0.0),
+            _ => return None,
+        };
+        let work = work.clamp(0.0, 1.0);
+        Some(Utilization {
+            work,
+            incl_blocked: (work + blocked).min(1.0),
+            in_shift: ratio(work, 1.0 - self.state("off_shift")),
+            excl_blocked: ratio(work, 1.0 - blocked),
+        })
+    }
+}
+
 impl RunReport {
     pub fn block(&self, name: &str) -> Option<&BlockReport> {
         self.blocks.iter().find(|b| b.name == name)
@@ -101,14 +177,46 @@ impl RunReport {
             }
             for (k, t) in &b.extra {
                 m.insert(format!("{n}.{k}.mean"), t.mean);
+                m.insert(format!("{n}.{k}.count"), t.count as f64);
             }
             for (k, v) in &b.custom {
                 m.insert(format!("{n}.{k}"), *v);
             }
+            if let Some(u) = b.utilization() {
+                m.insert(format!("{n}.utilization"), u.work);
+                m.insert(format!("{n}.utilization_incl_blocked"), u.incl_blocked);
+                m.insert(format!("{n}.utilization_in_shift"), u.in_shift);
+                m.insert(format!("{n}.utilization_excl_blocked"), u.excl_blocked);
+            }
+        }
+        // Totals over the sources that can lose items (`on_blocked: Drop`).
+        let (lost, entered) = self
+            .blocks
+            .iter()
+            .filter(|b| b.custom.contains_key("loss_fraction"))
+            .fold((0.0, 0.0), |(l, e), b| {
+                (
+                    l + b.custom.get("lost.count").copied().unwrap_or(0.0),
+                    e + b.custom.get("entered.count").copied().unwrap_or(0.0),
+                )
+            });
+        if self
+            .blocks
+            .iter()
+            .any(|b| b.custom.contains_key("loss_fraction"))
+        {
+            m.insert(MODEL_LOST.to_string(), lost);
+            m.insert(MODEL_ENTERED.to_string(), entered);
+            m.insert(MODEL_LOSS_FRACTION.to_string(), ratio(lost, lost + entered));
         }
         m
     }
 }
+
+/// Model-wide totals over every source with `on_blocked: Drop`.
+pub const MODEL_LOST: &str = "model.lost.count";
+pub const MODEL_ENTERED: &str = "model.entered.count";
+pub const MODEL_LOSS_FRACTION: &str = "model.loss_fraction";
 
 /// Mean and 95% confidence half-width of every metric across replications.
 /// A metric missing from a replication (e.g. a state never entered) counts as 0.

@@ -220,6 +220,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         network: None,
         flows: Vec::new(),
         fluids: None,
+        spans: Vec::new(),
     })
 }
 
