@@ -75,6 +75,12 @@ fn todo_modelo_de_referencia_e_valido() {
     Model::load(&variante)
         .and_then(|m| m.validate())
         .unwrap_or_else(|e| panic!("modelo_demanda_15: {e}"));
+    // The clinic with a single source (arrivals by period) and calendars; compared with
+    // modelo.ron in tests/chegadas_e_turnos.rs.
+    let por_periodo = pasta("03-clinica-com-turnos").join("modelo_por_periodo.ron");
+    Model::load(&por_periodo)
+        .and_then(|m| m.validate())
+        .unwrap_or_else(|e| panic!("modelo_por_periodo: {e}"));
 }
 
 #[test]

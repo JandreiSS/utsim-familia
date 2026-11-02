@@ -210,6 +210,26 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         };
     }
 
+    if target == "calendars" {
+        // `calendars.<name>`: replaces (or adds) a calendar; `None` removes it.
+        // `calendars.<name>.on_end` changes only the end-of-shift behaviour.
+        if let Some(name) = field.strip_suffix(".on_end") {
+            let table = model
+                .calendars
+                .get_mut(name)
+                .ok_or_else(|| invalid(format!("'{key}': o calendário '{name}' não existe")))?;
+            set!(table.on_end);
+            return Ok(());
+        }
+        if text.trim() == "None" {
+            model.calendars.remove(field);
+        } else {
+            let table: utsim_core::ShiftTable = parse_value(key, text)?;
+            model.calendars.insert(field.to_string(), table);
+        }
+        return Ok(());
+    }
+
     if target == "flow" {
         // `flow.<name>`: replaces (or adds) the whole flow; `None` removes it.
         let name = field;
@@ -276,6 +296,19 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             set!(obj.shifts);
             return Ok(());
         }
+        "shifts.on_end" => {
+            let end: utsim_core::ShiftEnd = parse_value(key, text)?;
+            match &mut obj.shifts {
+                Some(crate::ShiftSpec::Inline(table)) => table.on_end = end,
+                Some(crate::ShiftSpec::Calendar { on_end, .. }) => *on_end = Some(end),
+                None => {
+                    return Err(invalid(format!(
+                        "'{key}': '{target}' não tem turnos; defina `shifts` primeiro"
+                    )));
+                }
+            }
+            return Ok(());
+        }
         "transport" => {
             set!(obj.transport);
             return Ok(());
@@ -302,6 +335,15 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "max_arrivals",
                 "labels",
                 "on_blocked",
+                "schedule",
+                "schedule.cycle",
+                "schedule[n]",
+                "schedule[n].start",
+                "schedule[n].end",
+                "schedule[n].arrivals",
+                "schedule[n].rate",
+                "schedule[n].interarrival",
+                "schedule[n].labels",
             ],
         ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
@@ -347,6 +389,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Source { max_arrivals, .. }, "max_arrivals") => set!(*max_arrivals),
         (ObjectKind::Source { labels, .. }, "labels") => set!(*labels),
         (ObjectKind::Source { on_blocked, .. }, "on_blocked") => set!(*on_blocked),
+        (ObjectKind::Source { schedule, .. }, "schedule") => set!(*schedule),
+        (ObjectKind::Source { schedule, .. }, f) if f.starts_with("schedule") => {
+            return patch_schedule(schedule, key, &f["schedule".len()..], text);
+        }
         (ObjectKind::Queue { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Queue { discipline, .. }, "discipline") => set!(*discipline),
         (ObjectKind::Queue { batch, .. }, "batch") => set!(*batch),
@@ -389,6 +435,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                     "position",
                     "downtime",
                     "shifts",
+                    "shifts.on_end",
                     "transport",
                     "on_entry",
                     "transfer",
@@ -401,6 +448,57 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 valid.join(", ")
             )));
         }
+    }
+    Ok(())
+}
+
+/// Sets part of a source's `schedule`. `rest` is what follows `schedule` in the key:
+/// `.cycle`, `[n]` (a whole period, numbered from 1) or `[n].<field>` with `start`, `end`,
+/// `arrivals`, `labels`, and the shortcuts `rate` (`arrivals: Rate(v)`) and `interarrival`
+/// (`arrivals: Interarrival(d)`).
+fn patch_schedule(
+    schedule: &mut Option<utsim_objects::ArrivalSchedule>,
+    key: &str,
+    rest: &str,
+    text: &str,
+) -> Result<(), ModelError> {
+    use utsim_objects::PeriodArrivals;
+    let Some(s) = schedule.as_mut() else {
+        return Err(invalid(format!(
+            "'{key}': a fonte não tem `schedule`; defina a tabela de períodos primeiro"
+        )));
+    };
+    if rest == ".cycle" {
+        s.cycle = parse_value(key, text)?;
+        return Ok(());
+    }
+    let bad = || {
+        invalid(format!(
+            "'{key}': use schedule, schedule.cycle, schedule[n] ou schedule[n].<campo> \
+             (start, end, arrivals, rate, interarrival, labels), com n a partir de 1"
+        ))
+    };
+    let inner = rest.strip_prefix('[').ok_or_else(bad)?;
+    let (index, after) = inner.split_once(']').ok_or_else(bad)?;
+    let n: usize = index.trim().parse().map_err(|_| bad())?;
+    let count = s.periods.len();
+    if n == 0 || n > count {
+        return Err(invalid(format!(
+            "'{key}': período {n} não existe; a tabela tem {count} período(s), numerados de 1 a {count}"
+        )));
+    }
+    let period = &mut s.periods[n - 1];
+    match after {
+        "" => period.clone_from(&parse_value(key, text)?),
+        ".start" => period.start = parse_value(key, text)?,
+        ".end" => period.end = parse_value(key, text)?,
+        ".arrivals" => period.arrivals = parse_value(key, text)?,
+        ".rate" => period.arrivals = PeriodArrivals::Rate(parse_value(key, text)?),
+        ".interarrival" => {
+            period.arrivals = PeriodArrivals::Interarrival(parse_value(key, text)?);
+        }
+        ".labels" => period.labels = parse_value(key, text)?,
+        _ => return Err(bad()),
     }
     Ok(())
 }

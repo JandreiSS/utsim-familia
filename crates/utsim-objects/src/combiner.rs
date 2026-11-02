@@ -139,6 +139,11 @@ impl Behavior for Combiner {
         cx.set_state(State::Idle);
     }
 
+    /// Only a running setup or process is work: a partial set waits for the next shift.
+    fn work_in_progress(&self, _cx: &Ctx) -> bool {
+        matches!(self.phase, Phase::Setup | Phase::Processing)
+    }
+
     fn accepts(&self, _item: &Item, _content: usize, port: usize) -> bool {
         if port == 0 {
             self.container.is_none()
