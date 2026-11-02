@@ -27,7 +27,7 @@ pub use block::{
 pub use dist::Dist;
 pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
 pub use item::{Item, ItemId, Value};
-pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, summarize};
+pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, Utilization, summarize};
 pub use stats::Histogram;
 pub use task::{RequestId, Router, TaskKind, TaskRequest};
 pub use trace::{Observer, TraceEvent, TraceRecord};

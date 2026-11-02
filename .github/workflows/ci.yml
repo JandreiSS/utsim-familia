@@ -29,9 +29,9 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
-        run: cargo clippy --workspace --exclude utsim-viewer --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude utsim-viewer --exclude utsim-godot --all-targets -- -D warnings
       - name: Testes sem golden
-        run: cargo test --workspace --exclude utsim-viewer -- --skip golden
+        run: cargo test --workspace --exclude utsim-viewer --exclude utsim-godot -- --skip golden
 
   web:
     name: Navegador (WebAssembly e página autocontida)
@@ -74,3 +74,17 @@ jobs:
         run: cargo clippy -p utsim-viewer --all-targets -- -D warnings
       - name: Testes do utsim-viewer
         run: cargo test -p utsim-viewer
+
+  godot:
+    name: Ponte Godot (utsim-godot, clippy e testes sem o Godot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy do utsim-godot
+        run: cargo clippy -p utsim-godot --all-targets -- -D warnings
+      - name: Testes do utsim-godot
+        run: cargo test -p utsim-godot

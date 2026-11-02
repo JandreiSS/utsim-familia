@@ -110,7 +110,9 @@ pub fn histograms_csv(reports: &[RunReport]) -> String {
 pub fn objects_csv(stats: &[crate::analysis::ObjectStats]) -> String {
     let mut out = String::from(
         "objeto,tipo,entradas,entradas_mw,saidas,saidas_mw,conteudo_medio,conteudo_medio_mw,\
-         permanencia_media,permanencia_media_mw,ocupacao,ocupacao_mw\n",
+         permanencia_media,permanencia_media_mw,ocupacao,ocupacao_mw,\
+         ocupacao_com_bloqueio,ocupacao_com_bloqueio_mw,ocupacao_no_turno,ocupacao_no_turno_mw,\
+         ocupacao_sem_bloqueio,ocupacao_sem_bloqueio_mw\n",
     );
     for s in stats {
         let mut fields = vec![s.name.clone(), s.kind.clone()];
@@ -118,12 +120,19 @@ pub fn objects_csv(stats: &[crate::analysis::ObjectStats]) -> String {
             fields.push(num(v.mean));
             fields.push(num(v.half_width));
         }
-        match s.utilization {
-            Some(u) => {
-                fields.push(num(u.mean));
-                fields.push(num(u.half_width));
+        for u in [
+            s.utilization,
+            s.utilization_incl_blocked,
+            s.utilization_in_shift,
+            s.utilization_excl_blocked,
+        ] {
+            match u {
+                Some(u) => {
+                    fields.push(num(u.mean));
+                    fields.push(num(u.half_width));
+                }
+                None => fields.extend([String::new(), String::new()]),
             }
-            None => fields.extend([String::new(), String::new()]),
         }
         row(&mut out, &fields);
     }

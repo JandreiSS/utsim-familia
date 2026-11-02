@@ -6,8 +6,11 @@ pub mod experiment;
 pub mod html;
 pub mod replay;
 mod shifts;
+mod spans;
 pub mod synthetic;
 mod warnings;
+
+pub use spans::SpanDef;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -114,6 +117,9 @@ pub struct Model {
     /// Continuous (fluid) network (phase 7).
     #[serde(default)]
     pub fluids: Option<FluidDef>,
+    /// Time between two points of the flow, one block per measurement.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<SpanDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -740,6 +746,7 @@ impl Model {
             .collect();
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_logic(&mut errors);
+        self.validate_spans(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -1052,6 +1059,7 @@ impl Model {
             let behavior = Box::new(FluidNet::new(fluids.clone(), objects.clone()));
             sim.add_block(fluids.name.clone(), OutputRule::FirstAvailable, behavior);
         }
+        self.add_spans(&mut sim, &objects);
         match net_router {
             Some(r) => sim.set_router(r),
             None => sim.set_router(utsim_objects::network::router(None)),

@@ -239,6 +239,56 @@ fn caso_2_centro_de_distribuicao() {
     );
 }
 
+/// Investigação do piloto (docs/estudos_de_caso/README.md): a fila da embalagem cresce com
+/// mais pickers, com as mesas "ociosas" boa parte do tempo. Não é erro do motor: a fila só
+/// existe com as 5 mesas cheias, a mesa não fica presa na esteira de saída, e a fila vem de
+/// rajadas (a separação, com mais pickers, entrega mais caixas por segundo do que as mesas
+/// embalam enquanto há paletes esperando).
+#[test]
+fn caso_2_fila_da_embalagem_vem_de_rajadas_e_nao_do_motor() {
+    let team8 = "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \
+                 \"picker_6\", \"picker_7\", \"picker_8\"]";
+    let perto = [
+        ("pickers.team", team8),
+        ("fila_embalagem.position", "(60.0, -42.0, 0.0)"),
+        ("embalagem.position", "(60.0, -44.0, 0.0)"),
+    ];
+    let caminho = pasta("02-centro-de-distribuicao").join("modelo.ron");
+    let mut model = Model::load(&caminho).unwrap();
+    model.run.replications = 1;
+    model.run.stop_time = 72000.0;
+    model.run.warmup = 14400.0;
+    model.run.sample_interval = Some(5.0);
+    let set: BTreeMap<String, String> = perto
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    let model = apply_patches(&model, &set).unwrap();
+    let report = model.run_replications().unwrap().remove(0);
+    let fila = report.block("fila_embalagem").unwrap();
+    let mesas = report.block("embalagem").unwrap();
+    // A fila só tem caixas quando as 5 mesas estão cheias (o motor não deixa mesa parada).
+    let mut com_fila = 0;
+    for (f, m) in fila.series.iter().zip(&mesas.series) {
+        if f.content > 0 {
+            com_fila += 1;
+            assert_eq!(m.content, 5, "t={}: fila com caixas e mesa livre", f.t);
+        }
+    }
+    assert!(com_fila > 0, "o cenário deveria formar fila");
+    // A esteira de saída não segura a mesa: nada fica "pronto e preso" na embalagem.
+    let m = report.metrics();
+    assert_eq!(m["embalagem.servers.blocked"], 0.0);
+    assert!((m["embalagem.servers.busy"] - mesas.content_mean).abs() < 1e-9);
+    // Ocupação por mesa moderada, e bem diferente do estado "idle" da embalagem inteira.
+    let ocupacao = m["embalagem.utilization"];
+    assert!((0.3..0.7).contains(&ocupacao), "ocupação {ocupacao}");
+    assert!(
+        m["embalagem.state.idle"] > 0.2,
+        "sem mesa trabalhando é frequente"
+    );
+}
+
 #[test]
 fn caso_3_clinica_com_turnos() {
     // Janela de 10 dias (11 dias de rodada, 1 de aquecimento); escala atual.

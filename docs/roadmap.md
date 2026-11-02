@@ -101,7 +101,7 @@ justifica a escolha com métricas estatísticas.
 - [x] A3D-2: modelos articulados gerados por código (empilhadeira, AGV, porta-paletes...) e carga de glTF
 - [ ] A3D-3: pessoas animadas, itens presos às mãos e aos garfos, garfos até o nível, giro suave
 - [x] A3D-4: câmeras de seguir, de primeira pessoa e do recurso; níveis de detalhe e limite de rótulos para modelos grandes
-- [ ] A3D-5: cliente Godot (3D, realidade virtual e aumentada pelo OpenXR), lendo `utsim-scene/1`
+- [ ] A3D-5: cliente Godot (3D, realidade virtual e aumentada pelo OpenXR), plano em `docs/plano_godot.md`; G1 (ponte `utsim-godot` e reprodução) feita
 - [x] A3D-6: cena ao vivo por socket a partir da emulação (`--cena-porta`, `utsim cena --servir`)
 
 ## Melhorias anotadas (dos relatórios das frentes)
@@ -122,7 +122,7 @@ justifica a escolha com métricas estatísticas.
 - [ ] Fonte "sempre pronta" (saturada) sem precisar de intervalo mínimo artificial (achado da validação do piloto)
 - [ ] Mostrar os avisos de validação (distâncias) também no visualizador e na página web
 - [ ] Página web: incluir os modelos dos tutoriais na lista de exemplos
-- [ ] Métricas: expor a contagem dos registros extras (`<bloco>.lost.count`, hoje só a média) e a utilização por servidor de processadores com capacidade > 1 (achados da validação do otimizador)
+- [x] Métricas: contagem dos registros extras (`<bloco>.<medida>.count`, incluindo `<fonte>.lost.count`) e utilização por servidor de processadores com capacidade > 1 (`servers.busy`, `utilization`)
 
 ## Fase 6: lógica do usuário
 - [x] Fluxo de tokens (gerar, agenda, ao evento, esperar, decidir, atribuir, adquirir/liberar recurso, aguardar evento, criar item, lote, fim)

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED};
 use utsim_core::{
     Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind, Time,
@@ -78,6 +79,10 @@ pub struct Processor {
     operators: Option<(BlockId, OperatorUse)>,
     pending: Vec<Pending>,
     held: Vec<(ItemId, Crew)>,
+    /// Servers in setup or processing over time (zero while the block is stopped).
+    busy: TimeWeighted,
+    /// Servers holding a finished item that cannot leave yet.
+    blocked: TimeWeighted,
 }
 
 impl Processor {
@@ -91,6 +96,8 @@ impl Processor {
             operators: None,
             pending: Vec::new(),
             held: Vec::new(),
+            busy: TimeWeighted::default(),
+            blocked: TimeWeighted::default(),
         }
     }
 
@@ -196,7 +203,7 @@ impl Processor {
     /// With several items inside, the most "productive" phase wins:
     /// processing > setup > waiting for operators > blocked/waiting transport > idle.
     /// So `WaitingOperator` shows only while nothing is being worked on.
-    fn update_state(&self, cx: &mut Ctx) {
+    fn update_state(&mut self, cx: &mut Ctx) {
         let has = |p: Phase| self.phases.iter().any(|(_, q)| *q == p);
         let state = if has(Phase::Processing) {
             State::Processing
@@ -218,6 +225,24 @@ impl Processor {
             State::Idle
         };
         cx.set_state(state);
+        self.track_servers(cx);
+    }
+
+    /// Records how many servers are working and how many hold a blocked item, so the
+    /// utilisation of a processor with capacity above 1 is a mean over servers.
+    fn track_servers(&mut self, cx: &Ctx) {
+        let (busy, blocked) = if cx.is_down() {
+            (0, 0)
+        } else {
+            let count = |f: fn(Phase) -> bool| self.phases.iter().filter(|(_, p)| f(*p)).count();
+            (
+                count(|p| matches!(p, Phase::Setup | Phase::Processing)),
+                count(|p| p == Phase::Done),
+            )
+        };
+        let now = cx.now();
+        self.busy.set(now, busy as f64);
+        self.blocked.set(now, blocked as f64);
     }
 }
 
@@ -231,6 +256,8 @@ impl Behavior for Processor {
         self.timers.clear();
         self.pending.clear();
         self.held.clear();
+        self.busy = TimeWeighted::default();
+        self.blocked = TimeWeighted::default();
         cx.set_state(State::Idle);
     }
 
@@ -275,6 +302,7 @@ impl Behavior for Processor {
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {
+        self.track_servers(cx);
         let now = cx.now();
         for timer in &mut self.timers {
             if let Some(event) = timer.event.take() {
@@ -306,7 +334,22 @@ impl Behavior for Processor {
         }
     }
 
+    fn on_warmup(&mut self, cx: &mut Ctx) {
+        let now = cx.now();
+        self.busy.reset(now);
+        self.blocked.reset(now);
+    }
+
+    fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
+        vec![
+            ("servers.busy".to_string(), self.busy.mean(now)),
+            ("servers.blocked".to_string(), self.blocked.mean(now)),
+            ("servers.capacity".to_string(), self.capacity as f64),
+        ]
+    }
+
     fn on_resume(&mut self, cx: &mut Ctx) {
+        self.track_servers(cx);
         let now = cx.now();
         for timer in &mut self.timers {
             if timer.event.is_none() {

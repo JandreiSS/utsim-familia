@@ -219,6 +219,10 @@ pub struct Source {
     max_arrivals: Option<u64>,
     labels: Vec<(String, Dist)>,
     created: u64,
+    /// Items that left the source and items destroyed because they could not leave,
+    /// both since the warm-up ended (the loss fraction is `lost / (lost + entered)`).
+    entered: u64,
+    lost: u64,
     /// Pending arrival and its due time.
     next: Option<(EventId, Time)>,
     /// Time left on the arrival clock while down.
@@ -237,6 +241,8 @@ impl Source {
             max_arrivals: None,
             labels: Vec::new(),
             created: 0,
+            entered: 0,
+            lost: 0,
             next: None,
             paused: None,
             clock: None,
@@ -366,6 +372,8 @@ impl Behavior for Source {
 
     fn reset(&mut self, cx: &mut Ctx) {
         self.created = 0;
+        self.entered = 0;
+        self.lost = 0;
         self.next = None;
         self.paused = None;
         if let Some(clock) = &mut self.clock {
@@ -395,6 +403,7 @@ impl Behavior for Source {
             if let Some(id) = item.filter(|id| cx.contents().contains(id)) {
                 cx.destroy(id);
                 cx.record("lost", 1.0);
+                self.lost += 1;
                 if cx.is_down() {
                     // Stopped in this same instant: park the clock until resume.
                     self.paused = self.gap(cx);
@@ -441,7 +450,34 @@ impl Behavior for Source {
     }
 
     fn on_exit(&mut self, cx: &mut Ctx, _item: ItemId) {
+        self.entered += 1;
         self.schedule_next(cx);
+    }
+
+    fn on_warmup(&mut self, _cx: &mut Ctx) {
+        self.entered = 0;
+        self.lost = 0;
+    }
+
+    /// For `Drop` sources: `lost.count`, `entered.count` and `loss_fraction`, always
+    /// present (zero when nothing was lost) so they work as optimisation objectives.
+    fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
+        if self.on_blocked != OnBlocked::Drop {
+            return Vec::new();
+        }
+        let total = (self.lost + self.entered) as f64;
+        vec![
+            ("lost.count".to_string(), self.lost as f64),
+            ("entered.count".to_string(), self.entered as f64),
+            (
+                "loss_fraction".to_string(),
+                if total > 0.0 {
+                    self.lost as f64 / total
+                } else {
+                    0.0
+                },
+            ),
+        ]
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {

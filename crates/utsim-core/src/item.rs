@@ -55,6 +55,9 @@ pub struct Item {
     pub contents: Vec<ItemId>,
     /// Released and assigned to a transporter, waiting to be picked up.
     pub awaiting_transport: bool,
+    /// Instants the item left the origin of a meter (see `Simulation::add_meter`), by
+    /// meter index, until it reaches the meter's destination.
+    pub marks: Vec<(usize, Time)>,
 }
 
 impl Item {
