@@ -59,6 +59,13 @@ pub enum Command {
         from: String,
         to: String,
     },
+    /// Swaps the places of two existing connections in the connection list. The order of
+    /// the list gives the output ports of the source and the pull priority of the
+    /// destination, so two neighbours of one object trade ports.
+    SwapConnections {
+        first: (String, String),
+        second: (String, String),
+    },
     /// Replaces the look of an object (`visual`, presentation only). `None`, or a
     /// `VisualDef` with every field empty, restores the default look of its kind.
     SetVisual {
@@ -454,6 +461,17 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
             if model.connections.len() == before {
                 return Err(format!("{from} não está ligado a {to}"));
             }
+        }
+        Command::SwapConnections { first, second } => {
+            let find = |model: &Model, c: &(String, String)| {
+                model
+                    .connections
+                    .iter()
+                    .position(|(a, b)| *a == c.0 && *b == c.1)
+                    .ok_or_else(|| format!("{} não está ligado a {}", c.0, c.1))
+            };
+            let (i, j) = (find(model, first)?, find(model, second)?);
+            model.connections.swap(i, j);
         }
         Command::SetVisual { name, visual } => {
             let object = model
@@ -899,6 +917,33 @@ mod tests {
         })
         .unwrap();
         assert_eq!(doc.model().connections.len(), 1);
+    }
+
+    #[test]
+    fn swapping_connections_reorders_ports_and_undoes() {
+        let mut doc = line();
+        doc.apply(Command::Connect {
+            from: "chegada".into(),
+            to: "maquina".into(),
+        })
+        .unwrap();
+        let before = doc.model().connections.clone();
+        let first = before[0].clone();
+        let last = before[before.len() - 1].clone();
+        doc.apply(Command::SwapConnections {
+            first: first.clone(),
+            second: last.clone(),
+        })
+        .unwrap();
+        assert_eq!(doc.model().connections[0], last);
+        assert_eq!(doc.model().connections[before.len() - 1], first);
+        let missing = Command::SwapConnections {
+            first,
+            second: ("nada".into(), "maquina".into()),
+        };
+        assert!(doc.apply(missing).is_err());
+        doc.undo();
+        assert_eq!(doc.model().connections, before);
     }
 
     #[test]

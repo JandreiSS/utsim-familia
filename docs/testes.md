@@ -128,7 +128,7 @@ Passos (`Passo`, em `crates/utsim-viewer/src/roteiro.rs`):
 | `EsperarAte(Modo(Simular), 30.0)` | espera uma condição ficar verdadeira (falha no limite, em segundos) |
 | `MoverPara(alvo)` | move o ponteiro |
 | `Clicar(Esquerdo)`, `Pressionar(..)`, `Soltar(..)` | botões `Esquerdo` ou `Direito` |
-| `Arrastar(de: alvo, para: alvo)` | pressiona, move em 8 quadros e solta |
+| `Arrastar(de: alvo, para: alvo)` | pressiona, move em 8 quadros, espera um quadro no destino e solta. Um bloco (`Objeto`) vale como o ponto do chão sob o seu centro, então o arrasto cai exatamente em `Mundo(x, y)` |
 | `Rolar(3.0)` | roda do mouse, em linhas (positivo aproxima) |
 | `Tecla("Delete")`, `Atalho(["Ctrl", "Z"])` | teclas por nome: letras, dígitos, `Delete`, `Esc`, `Enter`, `Tab`, `Space`, `Backspace`, setas (`SetaCima`...), `F1`-`F5`, modificadores `Ctrl`/`Shift`/`Alt` |
 | `Segurar("Shift")`, `LargarTecla("Shift")` | aperta uma tecla e a mantém apertada até `LargarTecla` (Shift + clique, Shift + arrastar) |
@@ -180,7 +180,7 @@ Fluxos de tokens e scripts (fase 6): `fluxos.ron` (com `roteiros/fluxos_modelo.r
 atividade selecionada, expressão com erro em linha, novo fluxo, desfazer, `on_entry` e regra de saída por
 script) e `fluxos_simular.ron` (com `examples/fluxo_docas.ron`: contagem de tokens ao vivo no diagrama em
 Simular). O botão "Fluxos" da barra tem o mesmo rótulo do título do painel, então os roteiros o clicam por
-`Tela(611.0, 12.0)`. `Digitar` não digita espaços (use `2+x`, sem espaços).
+`Tela(707.0, 12.0)`. `Digitar` digita maiúsculas e espaços como estão.
 Fluidos e AGVs (fase 7): `fluidos_tanques.ron` (com `examples/tanques.ron`: tanques enchendo e esvaziando,
 seleção pela lista e por clique, painel com nível e taxa) e `agvs.ron` (com `examples/agvs.ron`: aresta com
 capacidade em vermelho, AGVs andando e um AGV bloqueado esperando a pista única).
@@ -197,6 +197,17 @@ aproximando, `Esc` voltando à órbita, a primeira pessoa pelo menu "Câmera" da
 enquadrando de volta) e `a3d4_lod.ron` (com um modelo de `utsim gerar-modelo --objetos 500 --tipo armazem`:
 visão geral e de perto com o LOD ligado e desligado, com os tempos de quadro no `log.txt`; os números
 estão em `docs/desempenho.md`). Grave as capturas fora do repositório, por exemplo em `%TEMP%\utsim_a3d4\<nome>`.
+Acabamento da interface (piloto): `acabamento_interface.ron`, com `roteiros/acabamento_modelo.ron` (três inspetores no mesmo ponto
+e uma fila com três saídas): aba Objetos da esquerda com filtro por nome e seleção pela lista (também com `Shift`), campos
+X, Y e Giro do painel digitados e desfeitos, clique repetido no mesmo ponto alternando entre os objetos sobrepostos (dica ao lado do
+cursor) e um arrasto que move o objeto destacado, ordem das ligações trocada com "Descer" e desfeita, "Salvar como" por
+`Ctrl+Shift+S` com um caminho de maiúsculas, `Focar` em Editar, zoom da roda em direção ao cursor, a lista de famílias de
+distribuição inteira e o texto inválido de "editar como texto" mantido em vermelho. Condições novas: `GiroDe(obj, graus)`,
+`PortaDe(obj, porta, destino)` e `EntradaDe(obj, ordem, origem)` (a partir de 1), `PilhaSobCursor(n)`, `ListaObjetos(n)`,
+`AbaEsquerda("Biblioteca" | "Objetos")` e `CaminhoTermina(texto)`. Os campos do painel são alcançados com
+`Deslocado(Botao("X"), 30.0, 0.0)`; "Subir" e "Descer" ficam à direita do rótulo da ligação
+(`Deslocado(Botao("porta 1: fila -> insp_a"), 135.0, 0.0)` é o "Descer" da porta 1).
+O teste `crates/utsim-viewer/tests/glyphs.rs` confere que todo símbolo escrito nos painéis existe na fonte padrão do egui.
 Editor para montar modelos (fase 9), ambos com `--novo`: `editor_biblioteca.ron` (colocar pela
 biblioteca com clique e arrastando até o chão, encaixe na grade, seleção por caixa com Shift, mover
 dois juntos, copiar e colar com nomes únicos e só a ligação interna, desfazer, Shift + clique,
