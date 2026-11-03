@@ -24,6 +24,8 @@ use crate::task::{
 };
 use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
+mod maint;
+
 #[derive(Clone, Debug)]
 pub struct RunConfig {
     pub stop_time: Time,
@@ -69,6 +71,8 @@ enum EventKind {
     },
     /// Records the time series; internal, not counted in `events_processed`.
     Sample,
+    /// Maintenance of a block ([`crate::maintenance`]).
+    Maint(BlockId, maint::MaintEvent),
 }
 
 struct Scheduled {
@@ -174,6 +178,10 @@ struct BlockRuntime {
     subscribers: Vec<(BlockId, bool, bool)>,
     entry_script: Option<Box<dyn ItemScript>>,
     port_script: Option<Box<dyn PortScript>>,
+    /// Maintenance (crew, wear, preventive plans); `None` = plain breakdowns.
+    maint: Option<Box<maint::MaintState>>,
+    /// A preventive is due: the inputs are closed and the block finishes its work.
+    draining: bool,
 }
 
 /// Work that involves another block's hooks, run by the kernel after the current
@@ -248,6 +256,8 @@ pub struct Core {
     meters: Vec<Meter>,
     /// Calendar instant at `t = 0` (see [`crate::init`]); 0 without an initial state.
     calendar: Time,
+    /// Blocks finishing their work before a preventive maintenance.
+    draining: Vec<BlockId>,
 }
 
 /// Measures, per item, the time from leaving `from` to entering `to`; each measurement
@@ -328,6 +338,9 @@ impl Core {
     fn set_block_state(&mut self, b: BlockId, state: State) {
         self.blocks[b.0].stats.states.set(self.now, state);
         self.emit(TraceEvent::State { block: b.0, state });
+        if self.blocks[b.0].maint.is_some() {
+            self.maint_refresh(b);
+        }
     }
 
     fn mark_dirty(&mut self, b: BlockId) {
@@ -391,7 +404,8 @@ impl Ctx<'_> {
     /// Whether this block is finishing its work before going off shift
     /// (`ShiftEnd::Finish`): it runs, but must not start new work.
     pub fn is_closing(&self) -> bool {
-        self.core.blocks[self.me.0].closing
+        let rt = &self.core.blocks[self.me.0];
+        rt.closing || rt.draining
     }
 
     /// Whether `block` is finishing its shift or off shift under `ShiftEnd::Finish`:
@@ -857,6 +871,11 @@ const BREAKDOWN: u8 = 1;
 const OFF_SHIFT: u8 = 2;
 /// Stopped from outside the model (emulation, an operator pressing "stop").
 const EXTERNAL: u8 = 4;
+/// In preventive maintenance (or waiting for its technician).
+const MAINTENANCE: u8 = 8;
+
+/// Offset of the maintenance random streams (preventive durations).
+const MAINTENANCE_STREAMS: u64 = 1 << 41;
 
 /// A question the simulation asks an external agent (reinforcement learning,
 /// a human): pick one of `options`. The run pauses until [`Simulation::decide`].
@@ -920,6 +939,7 @@ impl Simulation {
                 closing: Vec::new(),
                 meters: Vec::new(),
                 calendar: 0.0,
+                draining: Vec::new(),
             },
             behaviors: Vec::new(),
             config,
@@ -975,6 +995,8 @@ impl Simulation {
             subscribers: Vec::new(),
             entry_script: None,
             port_script: None,
+            maint: None,
+            draining: false,
         });
         self.behaviors.push(behavior);
         id
@@ -1127,7 +1149,7 @@ impl Simulation {
                         ..ItemState::default()
                     });
                 }
-                if rt.downtime.is_some() {
+                if rt.downtime.is_some() && rt.maint.is_none() {
                     if rt.stops & BREAKDOWN != 0 {
                         state.down = Some(now - rt.down_since);
                     } else {
@@ -1152,6 +1174,9 @@ impl Simulation {
                 behaviors[b].save_state(&cx, &mut state)
             };
             if let Some(note) = note {
+                notes.push(format!("{name}: {note}"));
+            }
+            if let Some(note) = self.maint_save(BlockId(b), &mut state) {
                 notes.push(format!("{name}: {note}"));
             }
             state.items.iter_mut().for_each(ItemState::tidy);
@@ -1233,6 +1258,9 @@ impl Simulation {
             self.resolve();
             if !self.core.closing.is_empty() {
                 self.check_closing();
+            }
+            if !self.core.draining.is_empty() {
+                self.maint_check_drains();
             }
             self.check()?;
             if let Some(d) = self.core.decisions.front() {
@@ -1368,10 +1396,14 @@ impl Simulation {
         }
         for (b, state) in states.iter().enumerate() {
             let b = BlockId(b);
-            match state.as_ref().map(|s| (s.down, s.up)) {
-                Some((Some(elapsed), _)) => self.start_down(b, elapsed),
-                Some((None, Some(elapsed))) => self.schedule_failure_after(b, elapsed),
-                _ => self.schedule_failure(b),
+            if self.core.blocks[b.0].maint.is_some() {
+                self.maint_start(b, state.as_ref());
+            } else {
+                match state.as_ref().map(|s| (s.down, s.up)) {
+                    Some((Some(elapsed), _)) => self.start_down(b, elapsed),
+                    Some((None, Some(elapsed))) => self.schedule_failure_after(b, elapsed),
+                    _ => self.schedule_failure(b),
+                }
             }
             self.schedule_shifts(b);
             if let Some(expected) = state.as_ref().and_then(|s| s.off_shift) {
@@ -1582,6 +1614,8 @@ impl Simulation {
     fn stopped_state(stops: u8) -> State {
         if stops & BREAKDOWN != 0 {
             State::Down
+        } else if stops & MAINTENANCE != 0 {
+            State::Maintenance
         } else if stops & EXTERNAL != 0 {
             State::Stopped
         } else {
@@ -1597,7 +1631,7 @@ impl Simulation {
             rt.state_when_up = rt.stats.states.current();
         }
         rt.stops |= reason;
-        let shown = Self::stopped_state(rt.stops);
+        let shown = self.shown_stopped(b);
         self.core.set_block_state(b, shown);
         if was_running {
             let Simulation {
@@ -1606,6 +1640,7 @@ impl Simulation {
             behaviors[b.0].on_stop(&mut Ctx { core, me: b });
             self.flush_doomed();
         }
+        self.core.maint_refresh(b);
     }
 
     /// Clears a stop reason; the block runs again once no reason is left.
@@ -1613,7 +1648,7 @@ impl Simulation {
         let rt = &mut self.core.blocks[b.0];
         rt.stops &= !reason;
         if rt.stops != 0 {
-            let shown = Self::stopped_state(rt.stops);
+            let shown = self.shown_stopped(b);
             self.core.set_block_state(b, shown);
             return;
         }
@@ -1633,6 +1668,17 @@ impl Simulation {
             let up = self.core.blocks[b.0].inputs[k];
             self.core.mark_dirty(up);
         }
+        if self.core.blocks[b.0].maint.is_some() {
+            self.core.maint_refresh(b);
+            self.maint_try_pm(b);
+        }
+    }
+
+    /// State shown while stopped, with the maintenance states when the block has them.
+    fn shown_stopped(&self, b: BlockId) -> State {
+        self.core
+            .maint_shown(b)
+            .unwrap_or_else(|| Self::stopped_state(self.core.blocks[b.0].stops))
     }
 
     /// Places the items of an initial state in block `b` and lets the block rebuild its
@@ -1648,6 +1694,10 @@ impl Simulation {
         if (state.down.is_some() || state.up.is_some()) && rt.downtime.is_none() {
             problems.push("'down' e 'up' exigem quebras (downtime) no objeto".to_string());
         }
+        if let Some(p) = self.maint_check_state(b, state) {
+            problems.push(p);
+        }
+        let rt = &self.core.blocks[b.0];
         if state.off_shift.is_some() && rt.shifts.is_none() {
             problems.push("'off_shift' exige turnos (shifts) no objeto".to_string());
         }
@@ -1741,12 +1791,15 @@ impl Simulation {
             EventKind::ShiftOff(b, k) => self.shift_off(b, k),
             EventKind::ShiftOn(b) => self.shift_on(b),
             EventKind::Sample => self.sample(),
+            EventKind::Maint(b, ev) => self.maint_event(b, ev),
             EventKind::EndWarmup => {
                 let now = self.core.now;
-                self.core
-                    .blocks
-                    .iter_mut()
-                    .for_each(|rt| rt.stats.reset(now));
+                self.core.blocks.iter_mut().for_each(|rt| {
+                    rt.stats.reset(now);
+                    if let Some(m) = rt.maint.as_deref_mut() {
+                        m.reset_stats(now);
+                    }
+                });
                 for b in 0..self.behaviors.len() {
                     let Simulation {
                         core, behaviors, ..
@@ -1788,10 +1841,19 @@ impl Simulation {
                 tag,
                 payload,
             } => {
-                let Simulation {
-                    core, behaviors, ..
-                } = self;
-                behaviors[to.0].on_message(&mut Ctx { core, me: to }, from, tag, payload);
+                let for_maintenance = tag == crate::task::MSG_ARRIVED
+                    && self.core.blocks[to.0]
+                        .maint
+                        .as_deref()
+                        .is_some_and(|m| m.owns(payload));
+                if for_maintenance {
+                    self.maint_arrived(to, from);
+                } else {
+                    let Simulation {
+                        core, behaviors, ..
+                    } = self;
+                    behaviors[to.0].on_message(&mut Ctx { core, me: to }, from, tag, payload);
+                }
             }
             KernelOp::PickUp { carrier, item } => {
                 let from = self.core.items.get(item).and_then(|it| it.location);
@@ -1838,6 +1900,7 @@ impl Simulation {
                     let content = rt.contents.len() + rt.incoming;
                     rt.stops == 0
                         && !rt.closing
+                        && !rt.draining
                         && self.behaviors[into.0].accepts(&self.core.items[item], content, port)
                 };
                 if accepted {
@@ -1878,6 +1941,9 @@ impl Simulation {
             match self.find_destination(from, pending) {
                 Some(to) => {
                     self.core.blocks[from.0].outbox.remove(i);
+                    if let Some(m) = self.core.blocks[from.0].maint.as_deref_mut() {
+                        m.count_output(to.0, &self.core.items[pending.item].labels);
+                    }
                     let rt = &self.core.blocks[from.0];
                     match (rt.transport, rt.transfer) {
                         (Some(carrier), _) => {
@@ -1898,7 +1964,10 @@ impl Simulation {
         let open = |&(to, in_port): &(BlockId, usize)| {
             let rt = &self.core.blocks[to.0];
             let content = rt.contents.len() + rt.incoming;
-            rt.stops == 0 && !rt.closing && self.behaviors[to.0].accepts(item, content, in_port)
+            rt.stops == 0
+                && !rt.closing
+                && !rt.draining
+                && self.behaviors[to.0].accepts(item, content, in_port)
         };
         match pending.port {
             Some(port) => outputs.get(port).copied().filter(open),
@@ -1994,6 +2063,9 @@ impl Simulation {
                 marks.retain(|(m, _)| *m != k);
                 marks.push((k, now));
             }
+        }
+        if self.core.blocks[from.0].maint.is_some() {
+            self.core.maint_cycle(from);
         }
         let stats = &mut self.core.blocks[from.0].stats;
         stats.output += 1;
@@ -2107,7 +2179,8 @@ impl Simulation {
             .blocks
             .iter()
             .zip(&self.behaviors)
-            .map(|(rt, behavior)| BlockReport {
+            .enumerate()
+            .map(|(i, (rt, behavior))| BlockReport {
                 name: rt.name.clone(),
                 kind: rt.kind.to_string(),
                 input: rt.stats.input,
@@ -2129,7 +2202,11 @@ impl Simulation {
                     .iter()
                     .map(|(k, t)| (k.clone(), TallySummary::with_histogram(t, bins)))
                     .collect(),
-                custom: behavior.custom_metrics(now).into_iter().collect(),
+                custom: behavior
+                    .custom_metrics(now)
+                    .into_iter()
+                    .chain(self.maint_metrics(BlockId(i), now))
+                    .collect(),
                 series: rt.series.clone(),
             })
             .collect();

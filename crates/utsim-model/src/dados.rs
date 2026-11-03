@@ -582,11 +582,15 @@ pub fn dist_fields(model: &Model) -> Vec<String> {
 /// Field names that may hold an optional distribution while empty.
 const OPTIONAL_DISTS: &[&str] = &["setup", "dwell"];
 
+/// Fields that look like a distribution but are not one (`downtime.wear` is a failure
+/// law by age, `Weibull(shape, scale)`, with no other family).
+const NOT_DISTS: &[&str] = &["wear"];
+
 fn walk(node: &Value, path: &str, out: &mut Vec<String>) {
     match node {
         Value::Object(map) => {
             for (k, v) in map {
-                if k == "name" {
+                if k == "name" || NOT_DISTS.contains(&k.as_str()) {
                     continue;
                 }
                 // Variants and `kind` are crossed without being named.
