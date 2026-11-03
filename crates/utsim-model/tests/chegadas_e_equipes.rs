@@ -575,3 +575,105 @@ fn check_lists_the_item_types() {
         ["tipos de item (rótulo 'type'): A = 1 (#3b82f6, caixa_pequena); B = 2 (#f59e0b)"]
     );
 }
+
+// ---------------------------------------------------------------- E3 member and task rules
+
+/// Two forklifts `a` and `b` at the origin. At t = 0 one item far away (to `a`) and one
+/// near (to `b`); at t = 100, with both free again, another near item.
+fn two_members(rule: &str) -> String {
+    format!(
+        r#"Model(
+            format: 2,
+            name: "regras",
+            run: (stop_time: 300.0),
+            objects: [
+                (name: "srcF", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1)),
+                (name: "srcN", kind: Source(interarrival: Const(100.0), first_at_zero: true, max_arrivals: 2)),
+                (name: "qF", kind: Queue(), transport: "eq", position: (20.0, 0.0, 0.0)),
+                (name: "qN", kind: Queue(), transport: "eq", position: (0.0, 2.0, 0.0)),
+                (name: "sF", kind: Sink, position: (30.0, 0.0, 0.0)),
+                (name: "sN", kind: Sink, position: (0.0, 4.0, 0.0)),
+                (name: "a", kind: Transporter(speed: 1.0)),
+                (name: "b", kind: Transporter(speed: 1.0)),
+                (name: "eq", kind: Dispatcher(team: ["a", "b"], rule: {rule})),
+            ],
+            connections: [("srcF", "qF"), ("srcN", "qN"), ("qF", "sF"), ("qN", "sN")],
+        )"#
+    )
+}
+
+/// Carrier of the first travel that starts at or after `t`.
+fn first_traveller(text: &str, t: f64) -> String {
+    let (trace, names) = traced(text);
+    trace
+        .iter()
+        .find_map(|r| match &r.event {
+            TraceEvent::Travel { carrier, .. } if r.t >= t => Some(names[*carrier].clone()),
+            _ => None,
+        })
+        .expect("a travel after t")
+}
+
+#[test]
+fn least_busy_and_longest_idle_spread_the_work() {
+    // `a` worked 30 (20 empty, 10 loaded), `b` 4; both are free at t = 100.
+    assert_eq!(first_traveller(&two_members("FirstAvailable"), 100.0), "a");
+    assert_eq!(first_traveller(&two_members("LeastBusy"), 100.0), "b");
+    // `b` has been free since t = 4, `a` since t = 30.
+    assert_eq!(first_traveller(&two_members("LongestIdle"), 100.0), "b");
+}
+
+#[test]
+fn random_rule_is_reproducible() {
+    let text = two_members("Random").replace(
+        "Const(100.0), first_at_zero: true, max_arrivals: 2",
+        "Exp(mean: 3.0), first_at_zero: true",
+    );
+    let runs: Vec<String> = (0..2)
+        .map(|_| serde_json::to_string(&run(&text).blocks).unwrap())
+        .collect();
+    assert_eq!(runs[0], runs[1]);
+    // Both members get work.
+    let r = run(&text);
+    for m in ["a", "b"] {
+        assert!(r.block(m).unwrap().states["travel_loaded"] > 0.0, "{m}");
+    }
+}
+
+/// One forklift busy until t = 2 while a far task (t = 1) and a near one (t = 1.5) wait.
+fn pick_model(pick: &str, far_priority: i32) -> String {
+    format!(
+        r#"Model(
+            format: 2,
+            name: "escolha",
+            run: (stop_time: 300.0),
+            objects: [
+                (name: "src0", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1)),
+                (name: "srcF", kind: Source(interarrival: Const(1.0), max_arrivals: 1)),
+                (name: "srcN", kind: Source(interarrival: Const(1.5), max_arrivals: 1)),
+                (name: "q0", kind: Queue(), transport: "eq", position: (1.0, 0.0, 0.0)),
+                (name: "qF", kind: Queue(), transport: "eq", transport_priority: {far_priority}, position: (50.0, 0.0, 0.0)),
+                (name: "qN", kind: Queue(), transport: "eq", position: (3.0, 0.0, 0.0)),
+                (name: "s0", kind: Sink, position: (2.0, 0.0, 0.0)),
+                (name: "sF", kind: Sink, position: (51.0, 0.0, 0.0)),
+                (name: "sN", kind: Sink, position: (4.0, 0.0, 0.0)),
+                (name: "m", kind: Transporter(speed: 1.0)),
+                (name: "eq", kind: Dispatcher(team: ["m"], pick: {pick})),
+            ],
+            connections: [("src0", "q0"), ("srcF", "qF"), ("srcN", "qN"), ("q0", "s0"), ("qF", "sF"), ("qN", "sN")],
+        )"#
+    )
+}
+
+#[test]
+fn pick_chooses_the_task_a_free_member_takes() {
+    let order = |pick: &str, prio: i32| {
+        let (trace, names) = traced(&pick_model(pick, prio));
+        deliveries(&trace, &names, &["s0", "sF", "sN"])
+    };
+    assert_eq!(order("Priority", 0), ["s0", "sF", "sN"]);
+    assert_eq!(order("Nearest", 0), ["s0", "sN", "sF"]);
+    // With the far task more urgent, Nearest stays in its priority; NearestAny does not.
+    assert_eq!(order("Nearest", 1), ["s0", "sF", "sN"]);
+    assert_eq!(order("NearestAny", 1), ["s0", "sN", "sF"]);
+}

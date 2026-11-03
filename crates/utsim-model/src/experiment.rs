@@ -375,7 +375,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "agv",
             ],
         ),
-        ObjectKind::Dispatcher { .. } => ("Dispatcher", &["team", "rule"]),
+        ObjectKind::Dispatcher { .. } => ("Dispatcher", &["team", "rule", "pick"]),
         ObjectKind::Conveyor { .. } => (
             "Conveyor",
             &["length", "speed", "item_length", "accumulating"],
@@ -430,6 +430,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Transporter { home, .. }, "home") => set!(*home),
         (ObjectKind::Dispatcher { team, .. }, "team") => set!(*team),
         (ObjectKind::Dispatcher { rule, .. }, "rule") => set!(*rule),
+        (ObjectKind::Dispatcher { pick, .. }, "pick") => set!(*pick),
         (ObjectKind::Conveyor { length, .. }, "length") => set!(*length),
         (ObjectKind::Conveyor { speed, .. }, "speed") => set!(*speed),
         (ObjectKind::Conveyor { item_length, .. }, "item_length") => set!(*item_length),

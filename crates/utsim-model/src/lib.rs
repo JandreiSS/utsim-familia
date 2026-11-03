@@ -44,7 +44,7 @@ use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
     OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
-    Transporter, TypedSink,
+    TaskPick, Transporter, TypedSink,
 };
 
 pub use arrivals::ItemTypeDef;
@@ -395,6 +395,9 @@ pub enum ObjectKind {
         team: Vec<String>,
         #[serde(default)]
         rule: DispatchRule,
+        /// Which waiting task a member that becomes free takes (absent: `Priority`).
+        #[serde(default, skip_serializing_if = "TaskPick::is_priority")]
+        pick: TaskPick,
     },
 }
 
@@ -1206,10 +1209,10 @@ impl Model {
                     placement,
                     ..
                 } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement)),
-                ObjectKind::Dispatcher { team, rule } => Box::new(Dispatcher::new(
-                    team.iter().map(|m| ids[m.as_str()]).collect(),
-                    *rule,
-                )),
+                ObjectKind::Dispatcher { team, rule, pick } => Box::new(
+                    Dispatcher::new(team.iter().map(|m| ids[m.as_str()]).collect(), *rule)
+                        .pick(*pick),
+                ),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
             sim.set_position(id, obj.position);

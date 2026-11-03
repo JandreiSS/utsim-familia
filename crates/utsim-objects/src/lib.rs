@@ -17,7 +17,7 @@ mod transporter;
 
 pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
-pub use dispatcher::{DispatchRule, Dispatcher};
+pub use dispatcher::{DispatchRule, Dispatcher, TaskPick};
 pub use processor::{OperatorUse, Processor};
 pub use queue::{Batch, Discipline, Queue};
 pub use rack::{Rack, RackPlacement};

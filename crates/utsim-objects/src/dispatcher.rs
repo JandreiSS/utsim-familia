@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 use utsim_core::task::{MSG_IDLE, distance};
-use utsim_core::{Behavior, BlockId, Ctx, Item, State, TaskKind, TaskRequest};
+use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, State, TaskKind, TaskRequest, Time};
 
 use crate::transporter::{MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z};
 
@@ -16,6 +16,33 @@ pub enum DispatchRule {
     RoundRobin,
     /// The free member closest to where the work starts.
     Nearest,
+    /// The free member with the least busy time so far (from assignment to its next
+    /// idle report).
+    LeastBusy,
+    /// The free member that has been free the longest.
+    LongestIdle,
+    /// A free member at random (the dispatcher's own random stream).
+    Random,
+}
+
+/// Which waiting task a member takes when it becomes free.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskPick {
+    /// The head of the queue: highest priority, then first come.
+    #[default]
+    Priority,
+    /// Among the tasks of the highest waiting priority, the one that starts closest to
+    /// the member (ties: first come).
+    Nearest,
+    /// The task that starts closest to the member, whatever its priority (ties: first
+    /// come). Far or low-priority tasks may wait a long time.
+    NearestAny,
+}
+
+impl TaskPick {
+    pub fn is_priority(&self) -> bool {
+        *self == TaskPick::Priority
+    }
 }
 
 /// Hands tasks to a team of transporters/operators. Tasks wait here while every
@@ -27,9 +54,16 @@ pub enum DispatchRule {
 /// - `Nearest`: the free member closest (straight-line distance, ignoring any path
 ///   network) to where the task starts: the `from` block of a transport, or the
 ///   station of an operation. Ties go to the earlier team member.
+/// - `LeastBusy`: the free member with the least accumulated busy time (assignment to
+///   idle report, as seen by the dispatcher). Ties go to the earlier team member.
+/// - `LongestIdle`: the free member whose last idle report is the oldest (at the start
+///   every member is free since 0, so ties go to the earlier team member).
+/// - `Random`: a uniformly random free member, from the dispatcher's own random stream
+///   (one draw per choice with two or more candidates; same seed, same choices).
 ///
-/// When a member reports `MSG_IDLE` and tasks are waiting, it receives the head of
-/// the queue whatever the rule (it is the only free member). If it can carry more
+/// When a member reports `MSG_IDLE` and tasks are waiting, it receives a task whatever
+/// the rule (it is the only free member): the head of the queue with `pick: Priority`,
+/// or the nearest one with [`TaskPick::Nearest`] / [`TaskPick::NearestAny`]. If it can carry more
 /// than one item (the idle payload is its capacity) it also receives, in queue
 /// order, further waiting `Transport` tasks that start at the same block, up to its
 /// capacity, so it can serve them in one trip.
@@ -46,7 +80,13 @@ pub enum DispatchRule {
 pub struct Dispatcher {
     team: Vec<BlockId>,
     rule: DispatchRule,
+    pick: TaskPick,
     free: Vec<bool>,
+    /// Busy time of each member so far, and when its current work was assigned.
+    busy: Vec<Time>,
+    assigned_at: Vec<Time>,
+    /// When each member last became free.
+    idle_since: Vec<Time>,
     /// Last known position of each member.
     positions: Vec<[f64; 3]>,
     /// Items each member can carry per trip, learned from its idle reports.
@@ -62,7 +102,11 @@ impl Dispatcher {
         Dispatcher {
             team,
             rule,
+            pick: TaskPick::Priority,
             free: vec![true; n],
+            busy: vec![0.0; n],
+            assigned_at: vec![0.0; n],
+            idle_since: vec![0.0; n],
             positions: vec![[0.0; 3]; n],
             capacity: vec![1; n],
             next: 0,
@@ -74,9 +118,53 @@ impl Dispatcher {
         self.rule
     }
 
+    /// Which waiting task a member that becomes free takes (see [`TaskPick`]).
+    pub fn pick(mut self, pick: TaskPick) -> Self {
+        self.pick = pick;
+        self
+    }
+
     fn assign(&mut self, cx: &mut Ctx, member: usize, request: TaskRequest) {
+        if self.free[member] {
+            self.assigned_at[member] = cx.now();
+        }
         self.free[member] = false;
         cx.forward_task(self.team[member], request);
+    }
+
+    /// Picks the first free member among `open` with the smallest `key` (ties: team order).
+    fn smallest(open: &[bool], key: impl Fn(usize) -> f64) -> Option<usize> {
+        let mut best: Option<(usize, f64)> = None;
+        for m in (0..open.len()).filter(|&m| open[m]) {
+            let k = key(m);
+            if best.is_none_or(|(_, bk)| k < bk) {
+                best = Some((m, k));
+            }
+        }
+        best.map(|(m, _)| m)
+    }
+
+    /// Index in the queue of the task member `member` takes now (see [`TaskPick`]).
+    fn pick_for(&self, cx: &Ctx, member: usize) -> Option<usize> {
+        let me = self.team[member];
+        let qualified = |i: usize| cx.qualified(me, &self.queue[i]);
+        let first = (0..self.queue.len()).find(|&i| qualified(i))?;
+        let top = self.queue[first].priority;
+        let at = self.positions[member];
+        let mut best: Option<(usize, f64)> = None;
+        for i in (first..self.queue.len()).filter(|&i| qualified(i)) {
+            let q = &self.queue[i];
+            match self.pick {
+                TaskPick::Priority => return Some(i),
+                TaskPick::Nearest if q.priority < top => break,
+                _ => {}
+            }
+            let d = distance(at, Self::start_of(cx, q));
+            if best.is_none_or(|(_, bd)| d < bd) {
+                best = Some((i, d));
+            }
+        }
+        best.map(|(i, _)| i)
     }
 
     /// Where the work of `request` starts.
@@ -87,7 +175,7 @@ impl Dispatcher {
         }
     }
 
-    fn choose(&mut self, cx: &Ctx, request: &TaskRequest) -> Option<usize> {
+    fn choose(&mut self, cx: &mut Ctx, request: &TaskRequest) -> Option<usize> {
         let n = self.team.len();
         // A member that ends its shift with `Finish` takes no new work until it is back.
         let open: Vec<bool> = (0..n)
@@ -108,14 +196,23 @@ impl Dispatcher {
             }
             DispatchRule::Nearest => {
                 let start = Self::start_of(cx, request);
-                let mut best: Option<(usize, f64)> = None;
-                for m in (0..n).filter(|&m| open[m]) {
-                    let d = distance(self.positions[m], start);
-                    if best.is_none_or(|(_, bd)| d < bd) {
-                        best = Some((m, d));
+                Self::smallest(&open, |m| distance(self.positions[m], start))
+            }
+            DispatchRule::LeastBusy => Self::smallest(&open, |m| self.busy[m]),
+            DispatchRule::LongestIdle => Self::smallest(&open, |m| self.idle_since[m]),
+            DispatchRule::Random => {
+                let candidates: Vec<usize> = (0..n).filter(|&m| open[m]).collect();
+                match candidates.len() {
+                    0 => None,
+                    1 => Some(candidates[0]),
+                    k => {
+                        let u = cx.sample(&Dist::Uniform {
+                            min: 0.0,
+                            max: k as f64,
+                        });
+                        Some(candidates[(u.floor() as usize).min(k - 1)])
                     }
                 }
-                best.map(|(m, _)| m)
             }
         }
     }
@@ -136,6 +233,9 @@ impl Behavior for Dispatcher {
 
     fn reset(&mut self, cx: &mut Ctx) {
         self.free = vec![true; self.team.len()];
+        self.busy = vec![0.0; self.team.len()];
+        self.assigned_at = vec![0.0; self.team.len()];
+        self.idle_since = vec![cx.now(); self.team.len()];
         self.positions = self.team.iter().map(|&m| cx.position(m)).collect();
         self.capacity = vec![1; self.team.len()];
         self.next = 0;
@@ -172,30 +272,32 @@ impl Behavior for Dispatcher {
             MSG_POSITION_Z => self.positions[member][2] = f64::from_bits(payload),
             MSG_IDLE => {
                 self.capacity[member] = (payload as usize).max(1);
+                if !self.free[member] {
+                    self.busy[member] += cx.now() - self.assigned_at[member];
+                }
+                self.free[member] = true;
+                self.idle_since[member] = cx.now();
                 let me = self.team[member];
-                let first = self.queue.iter().position(|q| cx.qualified(me, q));
-                match first.and_then(|i| self.queue.remove(i)) {
-                    Some(head) => {
-                        self.assign(cx, member, head);
-                        if let TaskKind::Transport { from: origin, .. } = head.kind {
-                            let mut taken = 1;
-                            let mut i = 0;
-                            while taken < self.capacity[member] && i < self.queue.len() {
-                                let same = matches!(
-                                    self.queue[i].kind,
-                                    TaskKind::Transport { from: f, .. } if f == origin
-                                ) && cx.qualified(me, &self.queue[i]);
-                                if same {
-                                    let extra = self.queue.remove(i).expect("index in range");
-                                    cx.forward_task(self.team[member], extra);
-                                    taken += 1;
-                                } else {
-                                    i += 1;
-                                }
+                let first = self.pick_for(cx, member);
+                if let Some(head) = first.and_then(|i| self.queue.remove(i)) {
+                    self.assign(cx, member, head);
+                    if let TaskKind::Transport { from: origin, .. } = head.kind {
+                        let mut taken = 1;
+                        let mut i = 0;
+                        while taken < self.capacity[member] && i < self.queue.len() {
+                            let same = matches!(
+                                self.queue[i].kind,
+                                TaskKind::Transport { from: f, .. } if f == origin
+                            ) && cx.qualified(me, &self.queue[i]);
+                            if same {
+                                let extra = self.queue.remove(i).expect("index in range");
+                                cx.forward_task(self.team[member], extra);
+                                taken += 1;
+                            } else {
+                                i += 1;
                             }
                         }
                     }
-                    None => self.free[member] = true,
                 }
             }
             _ => return,

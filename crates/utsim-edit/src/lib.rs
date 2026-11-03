@@ -903,6 +903,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         "Dispatcher" => ObjectKind::Dispatcher {
             team: Vec::new(),
             rule: Default::default(),
+            pick: Default::default(),
         },
         _ => return None,
     };
