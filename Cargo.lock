@@ -7554,6 +7554,7 @@ dependencies = [
  "utsim-cad",
  "utsim-core",
  "utsim-diagram",
+ "utsim-edit",
  "utsim-emu",
  "utsim-fit",
  "utsim-model",
