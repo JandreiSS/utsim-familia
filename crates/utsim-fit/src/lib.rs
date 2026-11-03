@@ -7,6 +7,7 @@
 //! 4. [`rank`] applies the published selection rule and explains the outcome;
 //! 5. [`report`] renders the result for people (text/HTML) and for models (a `Dist`).
 
+pub mod auto;
 pub mod data;
 pub mod diagnostics;
 pub mod families;

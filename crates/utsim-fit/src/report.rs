@@ -73,7 +73,7 @@ fn is_discrete(family: &str) -> bool {
         .any(|f| f.name() == family && f.is_discrete())
 }
 
-fn esc(s: &str) -> String {
+pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -341,6 +341,13 @@ impl FitReport {
 
     /// Single self-contained HTML page (inline CSS and SVG, no external resources).
     pub fn to_html(&self) -> String {
+        self.to_html_with("", "utsim fit")
+    }
+
+    /// The same page with `extra` (already escaped HTML) right after the title, and
+    /// `command` named in the footer. Used by the automatic fit of model fields
+    /// ([`crate::auto`]), which adds its choice and warnings on top.
+    pub fn to_html_with(&self, extra: &str, command: &str) -> String {
         let mut h = String::new();
         h.push_str(
             "<!doctype html>\n<html lang=\"pt-BR\"><head><meta charset=\"utf-8\">\
@@ -354,6 +361,7 @@ impl FitReport {
             "<h1>Ajuste de distribuições</h1><p class=\"sub\">{}</p>\n",
             esc(&self.dataset)
         ));
+        h.push_str(extra);
 
         h.push_str("<h2>Dados</h2><dl class=\"stats\">");
         for (k, v) in self.descriptive_lines() {
@@ -528,14 +536,15 @@ impl FitReport {
         } else {
             h.push_str("<p>Nenhuma candidata foi ajustada, não há o que desenhar.</p>");
         }
-        h.push_str(
-            "\n<footer>Gerado pelo UTSim (<code>utsim fit</code>).</footer></main></body></html>\n",
-        );
+        h.push_str(&format!(
+            "\n<footer>Gerado pelo UTSim (<code>{}</code>).</footer></main></body></html>\n",
+            esc(command)
+        ));
         h
     }
 }
 
-const HTML_CSS: &str = "\
+pub(crate) const HTML_CSS: &str = "\
 :root{--bg:#fff;--fg:#1d2330;--muted:#5d6779;--line:#d9dee7;--card:#f5f7fa;--ok:#1d7a4f;--warn:#a65b00;--best:#e4f3ea}\
 @media (prefers-color-scheme:dark){:root{--bg:#14171d;--fg:#e4e8ef;--muted:#98a1b3;--line:#2d3340;--card:#1c2029;--ok:#5fcf9a;--warn:#f0b35c;--best:#17352a}}\
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}\
