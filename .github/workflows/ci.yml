@@ -1,8 +1,9 @@
 name: CI
 
+# Só por disparo manual (Actions > CI > Run workflow, ou `gh workflow run CI --ref <branch>`):
+# repositório privado no plano gratuito, sem custo. A verificação do dia a dia é local
+# (`scripts/verificar.sh`).
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:

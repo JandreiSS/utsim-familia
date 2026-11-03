@@ -6,10 +6,9 @@ name: Release
 #
 # Simulação (dry run): Actions > Release > Run workflow. Constrói tudo e guarda os arquivos como
 # artefatos da execução, sem criar tag nem Release. Serve para testar antes de empacotar de verdade.
+# Só por disparo manual, para não gastar minutos sem necessidade. Para publicar uma versão,
+# dispare na tag: `gh workflow run Release --ref v0.2.0`.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       incluir_3d:
