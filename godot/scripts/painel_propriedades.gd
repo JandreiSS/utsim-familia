@@ -23,6 +23,8 @@ signal gesture_ended
 signal reorder(index: int, delta: int)
 signal disconnect_output(to: String)
 signal action(path: String)
+## A problem or warning of the list was clicked: the main scene outlines what it names.
+signal issue_clicked(message: String)
 ## Real data in a distribution field (`dados_reais.gd`): `path` is the field inside the
 ## selected object (`process`). `draft` holds the choices of the form.
 signal data_apply(path: String, draft: Dictionary)
@@ -159,8 +161,18 @@ func _issues(title: String, list: PackedStringArray, color: Color, node_name: St
 	head.add_theme_color_override("font_color", color)
 	head.add_theme_font_size_override("font_size", 15)
 	box.add_child(head)
-	for m in list:
-		box.add_child(_note("• " + m, color))
+	for k in list.size():
+		var m := list[k]
+		var note := _note("• " + m, color)
+		note.name = "%s_%d" % [node_name, k]
+		note.mouse_filter = Control.MOUSE_FILTER_STOP
+		note.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		note.tooltip_text = "Clique para destacar na cena o que este aviso cita"
+		note.gui_input.connect(func(ev: InputEvent):
+			var mb := ev as InputEventMouseButton
+			if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				issue_clicked.emit(String(m)))
+		box.add_child(note)
 	add_child(box)
 
 

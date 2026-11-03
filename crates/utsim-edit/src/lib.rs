@@ -12,6 +12,7 @@
 //! [`network`] and [`fluids`] execute the commands on the path network and on the
 //! fluid network, and hold the helpers the editor draws them with.
 
+pub mod aisles;
 pub mod arrange;
 pub mod fluids;
 pub mod network;
@@ -24,7 +25,9 @@ pub use utsim_fluid::{FluidDef, FluidKind, FluidNode};
 use utsim_model::dados::{self, DataInput};
 use utsim_model::experiment::patch;
 use utsim_model::replay::Replay;
-use utsim_model::{Model, ModelError, ObjectDef, ObjectKind, VisualDef};
+use utsim_model::{
+    Aisle, FloorMarking, Model, ModelError, Movement, ObjectDef, ObjectKind, VisualDef,
+};
 pub use utsim_objects::network::{EdgeDef, NetworkDef, NodeDef};
 use utsim_objects::{CombineMode, SeparateMode};
 
@@ -101,6 +104,35 @@ pub enum Command {
         from: String,
         to: String,
     },
+    /// Adds a circulation aisle (a new, unique name).
+    AddAisle(Box<Aisle>),
+    /// Replaces the aisle `name`: vertices, width, kind, direction, profile or its name.
+    SetAisle {
+        name: String,
+        aisle: Box<Aisle>,
+    },
+    RemoveAisle {
+        name: String,
+    },
+    /// Sets (`None`: removes) the access point of an object, in its own coordinates.
+    SetAccess {
+        name: String,
+        access: Option<[f64; 2]>,
+    },
+    /// Own movement mode of a mobile resource (`None`: the model's).
+    SetMovement {
+        name: String,
+        movement: Option<Movement>,
+    },
+    /// Own clearance of a mobile resource (`None`: the one of its role).
+    SetClearance {
+        name: String,
+        clearance: Option<f64>,
+    },
+    /// The movement mode of the model, `run.movement` (`None`: `Free`).
+    SetRunMovement(Option<Movement>),
+    /// The floor marking of the model (`None`: the default, Brasil).
+    SetFloorMarking(Option<Box<FloorMarking>>),
     /// Adds a node to the fluid network (created on first use).
     AddFluidNode(FluidNode),
     MoveFluidNode {
@@ -376,6 +408,14 @@ impl Document {
         })
     }
 
+    /// A free name for a new aisle (`corredor_1`, `corredor_2`...).
+    pub fn unique_aisle_name(&self) -> String {
+        (1..)
+            .map(|k| format!("{}_{k}", aisles::AISLE_BASE))
+            .find(|n| !self.model.aisles.iter().any(|a| &a.name == n))
+            .expect("an unbounded range has a free name")
+    }
+
     /// A free name for a new node of the fluid network.
     pub fn unique_fluid_name(&self, base: &str) -> String {
         let def = self.model.fluids.as_ref();
@@ -540,6 +580,16 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::AddEdge(edge) => network::add_edge(model, edge)?,
         Command::SetEdge { from, to, edge } => network::set_edge(model, from, to, edge)?,
         Command::RemoveEdge { from, to } => network::remove_edge(model, from, to)?,
+        Command::AddAisle(aisle) => aisles::add_aisle(model, aisle)?,
+        Command::SetAisle { name, aisle } => aisles::set_aisle(model, name, aisle)?,
+        Command::RemoveAisle { name } => aisles::remove_aisle(model, name)?,
+        Command::SetAccess { name, access } => aisles::set_access(model, name, *access)?,
+        Command::SetMovement { name, movement } => aisles::set_movement(model, name, *movement)?,
+        Command::SetClearance { name, clearance } => {
+            aisles::set_clearance(model, name, *clearance)?;
+        }
+        Command::SetRunMovement(movement) => aisles::set_run_movement(model, *movement),
+        Command::SetFloorMarking(marking) => aisles::set_floor_marking(model, marking)?,
         Command::AddFluidNode(node) => fluids::add_node(model, node)?,
         Command::MoveFluidNode { name, position } => fluids::move_node(model, name, *position)?,
         Command::RenameFluidNode { from, to } => fluids::rename_node(model, from, to)?,
