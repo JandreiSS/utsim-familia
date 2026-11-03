@@ -1,0 +1,138 @@
+//! The launcher's own state on the tester's machine, and time helpers.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Error, Result};
+
+/// Kept in `estado.json`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct LauncherState {
+    /// The tester's access code, as typed (normalized). Stored in the user's own profile
+    /// folder; see the security notes in `docs/plano_launcher.md`.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// Channel followed per product (default: stable).
+    #[serde(default)]
+    pub channels: BTreeMap<String, String>,
+    /// Highest manifest sequence accepted so far.
+    #[serde(default)]
+    pub last_sequence: u64,
+    /// Manifest address replacing the built-in one (advanced; empty = built-in).
+    #[serde(default)]
+    pub manifest_url: Option<String>,
+    /// Create a desktop shortcut when installing.
+    #[serde(default)]
+    pub desktop_shortcuts: bool,
+}
+
+impl LauncherState {
+    /// Reads the state; a missing or unreadable file gives the default state.
+    pub fn load(path: &Path) -> Self {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let json = serde_json::to_vec_pretty(self).map_err(|e| Error::Format(e.to_string()))?;
+        crate::install::write_atomic(path, &json)
+    }
+
+    /// Accepts a manifest sequence number, refusing one older than the last accepted
+    /// (someone replaying an old manifest to push an old version).
+    pub fn accept_sequence(&mut self, sequence: u64) -> Result<()> {
+        if sequence < self.last_sequence {
+            return Err(Error::Signature(format!(
+                "o manifesto recebido (sequência {sequence}) é mais antigo do que o último aceito ({}); recusado",
+                self.last_sequence
+            )));
+        }
+        self.last_sequence = sequence;
+        Ok(())
+    }
+
+    pub fn channel(&self, product: &str) -> &str {
+        self.channels
+            .get(product)
+            .map_or(crate::manifest::STABLE, String::as_str)
+    }
+}
+
+fn civil(secs: u64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // Howard Hinnant's days-to-civil.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    (
+        y,
+        m,
+        d,
+        (rem / 3600) as u32,
+        (rem % 3600 / 60) as u32,
+        (rem % 60) as u32,
+    )
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Current UTC time, `2026-11-02T14:05:09Z`.
+pub fn now_rfc3339() -> String {
+    rfc3339(now_secs())
+}
+
+pub fn rfc3339(secs: u64) -> String {
+    let (y, mo, d, h, mi, s) = civil(secs);
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
+}
+
+/// Current UTC time for file names, `20261102-140509`.
+pub fn now_compact() -> String {
+    let (y, mo, d, h, mi, s) = civil(now_secs());
+    format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dates() {
+        assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
+        assert_eq!(rfc3339(1_793_620_800), "2026-11-02T12:00:00Z");
+        assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
+    }
+
+    #[test]
+    fn rollback_is_refused_and_state_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("estado.json");
+        let mut s = LauncherState::load(&path);
+        assert_eq!(s, LauncherState::default());
+        s.accept_sequence(5).unwrap();
+        s.accept_sequence(5).unwrap();
+        assert!(s.accept_sequence(4).is_err());
+        s.channels.insert("utsim".into(), "testes".into());
+        s.save(&path).unwrap();
+        let back = LauncherState::load(&path);
+        assert_eq!(back.last_sequence, 5);
+        assert_eq!(back.channel("utsim"), "testes");
+        assert_eq!(back.channel("outro"), "estavel");
+    }
+}
