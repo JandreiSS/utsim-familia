@@ -21,6 +21,7 @@ mod raias;
 pub mod rastro;
 mod sipoc;
 pub mod svg;
+pub mod tempos;
 mod text;
 pub mod tipos;
 mod vsm;
