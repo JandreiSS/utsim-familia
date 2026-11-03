@@ -6409,6 +6409,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_xlsxwriter"
+version = "0.102.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ca3d0e879a578c1313c2800ab0c6c029d38eed18098675e50341a30d32372ed"
+dependencies = [
+ "zip 9.2.3",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7400,6 +7409,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7553,6 +7568,7 @@ dependencies = [
  "serde_json",
  "utsim-cad",
  "utsim-core",
+ "utsim-dash",
  "utsim-diagram",
  "utsim-emu",
  "utsim-fit",
@@ -7574,6 +7590,21 @@ dependencies = [
  "serde",
  "slotmap",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "utsim-dash"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "utsim-core",
+ "utsim-model",
+ "utsim-scene",
+ "utsim-stats",
+ "zip 2.6.1",
 ]
 
 [[package]]
@@ -7684,7 +7715,7 @@ dependencies = [
  "tempfile",
  "utsim-launcher-core",
  "winresource",
- "zip",
+ "zip 2.6.1",
 ]
 
 [[package]]
@@ -7704,7 +7735,7 @@ dependencies = [
  "thiserror 2.0.21",
  "ureq",
  "zeroize",
- "zip",
+ "zip 2.6.1",
 ]
 
 [[package]]
@@ -9078,6 +9109,24 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00fb4744e923442ecadfd3f85f51a5d24e03bf43d53813b81ebb4c91d02baa62"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap",
+ "libc",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
  "zopfli",
 ]
 
