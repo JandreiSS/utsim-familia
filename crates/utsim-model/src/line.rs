@@ -1,5 +1,5 @@
 //! Fields that tie a model to a specialised line (`docs/plano_linhas_especializadas.md`):
-//! `Model.line`, and per object `preset`, `area` and `symbol`. The simulation never reads
+//! `Model.line`, and per object `preset`, `department` and `symbol`. The simulation never reads
 //! them; they are checked here so a typo is caught when the model is loaded.
 
 use crate::Model;
@@ -49,8 +49,8 @@ impl Model {
                     ));
                 }
             }
-            if obj.area.as_ref().is_some_and(|a| a.trim().is_empty()) {
-                errors.push(format!("{}: area não pode ser vazia", obj.name));
+            if obj.department.as_ref().is_some_and(|a| a.trim().is_empty()) {
+                errors.push(format!("{}: department não pode ser vazio", obj.name));
             }
             if let Some(s) = &obj.symbol {
                 if !SYMBOL_IDS.contains(&s.as_str()) {
@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(plain.objects[0].preset, None);
         plain.validate().unwrap();
         let tagged = model(
-            r#", preset: "lean_office/entrada", area: "Compras", symbol: "inicio""#,
+            r#", preset: "lean_office/entrada", department: "Compras", symbol: "inicio""#,
             r#", line: "lean_office""#,
         );
         tagged.validate().unwrap();
@@ -106,7 +106,7 @@ mod tests {
         assert_eq!(Model::parse(&text).unwrap(), tagged);
         // Absent fields are not written.
         let text = ron::ser::to_string_pretty(&plain, config).unwrap();
-        for key in ["line:", "preset:", "area:", "symbol:"] {
+        for key in ["line:", "preset:", "department:", "symbol:"] {
             assert!(!text.contains(key), "{key}");
         }
     }
@@ -114,13 +114,13 @@ mod tests {
     #[test]
     fn bad_values_are_reported() {
         let m = model(
-            r#", preset: "aprovacao", area: " ", symbol: "losango""#,
+            r#", preset: "aprovacao", department: " ", symbol: "losango""#,
             r#", line: "Lean Office""#,
         );
         let err = m.validate().unwrap_err().to_string();
         assert!(err.contains("line 'Lean Office'"), "{err}");
         assert!(err.contains("preset 'aprovacao'"), "{err}");
-        assert!(err.contains("area não pode ser vazia"), "{err}");
+        assert!(err.contains("department não pode ser vazio"), "{err}");
         assert!(err.contains("symbol 'losango'"), "{err}");
     }
 }

@@ -61,7 +61,8 @@ Quatro campos opcionais, que a simulação não lê (veja [Formato `.ron`](../re
 - `line: "lean_office"` no modelo: o modelo é da linha;
 - `preset: "lean_office/aprovacao"` no objeto: a predefinição que o criou, que dá o **papel**
   do objeto nos indicadores;
-- `area: "Compras"` no objeto: o departamento, que vira a raia do fluxograma;
+- `department: "Compras"` no objeto: o departamento, que vira a raia do fluxograma (não
+  confundir com `areas` do modelo, que são áreas de piso, como sala de espera ou de pausa);
 - `symbol: "inspecao"` no objeto: o símbolo do fluxograma (`inicio`, `fim`, `operacao`,
   `transporte`, `inspecao`, `espera`, `armazenagem`).
 
@@ -96,10 +97,10 @@ ganha `line: "lean_office"`):
 
 ```bash
 utsim linha lean_office colocar escritorio.ron entrada --nome pedidos --campo 'intervalo=Exp(mean: 20.0)'
-utsim linha lean_office colocar escritorio.ron caixa_entrada --posicao 2 0 --area Compras \
+utsim linha lean_office colocar escritorio.ron caixa_entrada --posicao 2 0 --departamento Compras \
     --campo 'ordem=Desc("prioridade")'
-utsim linha lean_office colocar escritorio.ron posto --posicao 4 0 --area Compras --campo ca=0.9
-utsim linha lean_office colocar escritorio.ron equipe --posicao 4 2 --area Compras
+utsim linha lean_office colocar escritorio.ron posto --posicao 4 0 --departamento Compras --campo ca=0.9
+utsim linha lean_office colocar escritorio.ron equipe --posicao 4 2 --departamento Compras
 utsim linha lean_office colocar escritorio.ron conclusao --posicao 6 0
 ```
 
@@ -159,7 +160,7 @@ O `--html` grava uma página com:
   L/T da etapa, %C&A, pessoas e horário; as caixas de entrada com os casos parados e a espera;
   a escada do lead time (espera em vermelho, trabalho em verde) e o rodapé com lead time,
   touch time, razão de atividade e %C&A acumulado. Com `--comparar`, o mapa do estado futuro;
-- o **fluxograma de raias por departamento**, com as raias do campo `area` e as passagens
+- o **fluxograma de raias por departamento**, com as raias do campo `department` e as passagens
   entre departamentos contadas.
 
 O `--json` grava os indicadores de cada replicação, para planilhas e para o UTSim Seis Sigma.

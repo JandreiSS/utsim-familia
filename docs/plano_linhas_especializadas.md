@@ -319,14 +319,23 @@ infraestrutura do Lean Office, a multitarefa e a disciplina por rótulo), depois
 | 15 | Conferir termos e links do manual da linha | 1–2 | Haiku | 14 |
 | 16 | Lote de ativos com Tripo 3D e Blender (cadeira, computador, impressora, pessoas sentadas) | 6–10 mais créditos | Sonnet | **aprovação do gasto pelo dono** |
 
-**Situação em 2026-11-03:** passos 1 a 8 feitos (primeira entrega útil). Campos `line`,
-`preset`, `area` e `symbol` no modelo; crate `utsim-linhas` com o leitor e a validação dos
+**Situação em 2026-11-03:** passos 1 a 8 feitos e integrados em `feat/fase-1` e `main`
+(primeira entrega útil). Campos `line`, `preset`, `department` e `symbol` no modelo; crate `utsim-linhas` com o leitor e a validação dos
 pacotes e `utsim_edit::preset`; pacote `linhas/lean_office/` com as 12 predefinições e o
 vocabulário; `order: Desc/Asc("rótulo")` na `Queue`; métricas opcionais por item no núcleo
 (`Simulation::enable_item_log`); indicadores e relatório HTML da linha; VSM de escritório e
-raias por área; `utsim linha` e `utsim run --linha`; modelo pronto
+raias por departamento; `utsim linha` (módulo `crates/utsim-cli/src/linha.rs` com o seu
+próprio leitor de argumentos) e `utsim run --linha`; modelo pronto
 `examples/aprovacao_de_compras.ron`; capítulo `docs/manual/src/linhas/lean-office.md`.
 Próximos: passos 9 a 16 (a multitarefa, 10, na segunda entrega).
+
+**Nome do campo de departamento.** O plano chamava o campo do objeto de `area`. Na integração
+com a fase 1, o modelo ganhou a lista `areas` (áreas de piso com posição e tamanho: sala de
+espera, local de pausa, casa do transportador), e `home_at` e `break_at` procuram nomes entre
+objetos e essas áreas. Um `area: "Compras"` no objeto pareceria uma referência a uma delas,
+então o campo passou a se chamar `department` (opção `--departamento` em `utsim linha
+colocar`). Onde este plano diz "campo `area`" ou "área por objeto", leia `department`; as
+`areas` do modelo seguem sendo só lugares no piso.
 
 **Primeira entrega útil** (passos 1 a 8): o dono abre o modelo de aprovação de compras com o
 vocabulário, roda e recebe o relatório com lead time, touch time, razão de atividade, %C&A,

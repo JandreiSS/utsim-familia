@@ -247,7 +247,7 @@ pub fn gerar(tipo: TipoDiagrama, model: &Model, o: &Options) -> Result<Saida, St
                 }
                 t.push_str("</tbody></table>");
             }
-            t.push_str("<p class=\"muted\">Setas laranja atravessam raias. A raia vem da área escolhida com <code>--raia objeto=nome</code>, do campo <code>area</code> do objeto, da equipe de operadores ou do tipo de objeto; o transporte por frota tem raia própria.</p>");
+            t.push_str("<p class=\"muted\">Setas laranja atravessam raias. A raia vem da área escolhida com <code>--raia objeto=nome</code>, do campo <code>department</code> do objeto, da equipe de operadores ou do tipo de objeto; o transporte por frota tem raia própria.</p>");
             let m = raias::mermaid(&r);
             Ok(estatico(
                 Parte {

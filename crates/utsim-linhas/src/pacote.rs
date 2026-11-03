@@ -408,14 +408,14 @@ impl Preset {
 
     /// The objects of this preset called `name`, moved by `position` (the templates'
     /// positions are relative), tagged `preset: "<line>/<id>"` (unless the template sets
-    /// another) and, with `area`, in that area.
+    /// another) and, with `department`, in that department.
     pub fn instantiate(
         &self,
         line: &str,
         name: &str,
         values: &BTreeMap<String, String>,
         position: [f64; 3],
-        area: Option<&str>,
+        department: Option<&str>,
     ) -> Result<Fragment, String> {
         let v = self.values(name, values)?;
         let mut objects = Vec::new();
@@ -428,8 +428,8 @@ impl Preset {
             if o.preset.is_none() {
                 o.preset = Some(format!("{line}/{}", self.id));
             }
-            if let Some(a) = area {
-                o.area = Some(a.to_string());
+            if let Some(a) = department {
+                o.department = Some(a.to_string());
             }
             objects.push(o);
         }
@@ -445,14 +445,14 @@ impl Preset {
     }
 }
 
-/// What to place: preset, name, field values, position and area.
+/// What to place: preset, name, field values, position and department.
 pub struct Placement<'a> {
     pub preset: &'a str,
     /// Absent: a free name from the preset's `name_base`.
     pub name: Option<&'a str>,
     pub values: BTreeMap<String, String>,
     pub position: [f64; 3],
-    pub area: Option<&'a str>,
+    pub department: Option<&'a str>,
 }
 
 impl Pack {
@@ -469,7 +469,7 @@ impl Pack {
             Some(n) => n.to_string(),
             None => doc.unique_name(&p.name_base),
         };
-        let fragment = p.instantiate(self.id(), &name, &at.values, at.position, at.area)?;
+        let fragment = p.instantiate(self.id(), &name, &at.values, at.position, at.department)?;
         let names = fragment.objects.iter().map(|o| o.name.clone()).collect();
         let command = add_command(doc, &fragment)?;
         doc.apply(command)?;
@@ -549,7 +549,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             position: [x, 0.0, 0.0],
-            area: Some("Compras"),
+            department: Some("Compras"),
         };
         let a = pack.apply(&mut doc, &place("chegada", &[], 0.0)).unwrap();
         let b = pack
@@ -567,7 +567,7 @@ mod tests {
         let m = doc.model();
         assert_eq!(m.objects[2].position, [4.0, 0.0, 0.0]);
         assert_eq!(m.objects[1].preset.as_deref(), Some("teste/posto"));
-        assert_eq!(m.objects[1].area.as_deref(), Some("Compras"));
+        assert_eq!(m.objects[1].department.as_deref(), Some("Compras"));
         assert_eq!(pack.preset_of(&m.objects[1]).unwrap().role, Role::Work);
         m.validate().unwrap();
         assert!(m.run_replications().is_ok());

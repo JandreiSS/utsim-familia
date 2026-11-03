@@ -264,10 +264,11 @@ pub struct ObjectDef {
     /// Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
-    /// Area (department, sector) the object belongs to: lanes of the swimlane chart and
-    /// reports by department. Never read by the simulation.
+    /// Department (sector, area of the organisation) the object belongs to: lanes of the
+    /// swimlane chart and reports by department. Not a floor area of `Model::areas`.
+    /// Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub area: Option<String>,
+    pub department: Option<String>,
     /// Flowchart symbol chosen for the object (one of [`SYMBOL_IDS`]); absent: the one
     /// the flowchart infers from its kind. Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -39,7 +39,7 @@ fn place(doc: &mut Document, p: &Pack, preset: &str, name: &str, values: &[(&str
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect::<BTreeMap<_, _>>(),
         position: [x, 0.0, 0.0],
-        area: Some("Escritório"),
+        department: Some("Escritório"),
     };
     p.apply(doc, &at).unwrap();
 }
@@ -100,7 +100,7 @@ fn a_model_made_only_of_presets_runs() {
     assert_eq!(m.objects.len(), 15);
     for o in &m.objects {
         let preset = p.preset_of(o).unwrap_or_else(|| panic!("{}", o.name));
-        assert_eq!(o.area.as_deref(), Some("Escritório"));
+        assert_eq!(o.department.as_deref(), Some("Escritório"));
         if o.name == "equipe_1" {
             assert_eq!(preset.id, "pessoa");
         }
@@ -129,7 +129,7 @@ fn the_ready_model_belongs_to_the_line() {
         assert_eq!(m.name, r.name);
         for o in &m.objects {
             assert!(p.preset_of(o).is_some(), "{}: {}", r.file, o.name);
-            assert!(o.area.is_some(), "{}: {}", r.file, o.name);
+            assert!(o.department.is_some(), "{}: {}", r.file, o.name);
         }
     }
 }

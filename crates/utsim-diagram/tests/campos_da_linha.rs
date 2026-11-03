@@ -1,4 +1,4 @@
-//! The model fields `symbol` and `area` feed the flowchart: the symbol of a step (the
+//! The model fields `symbol` and `department` feed the flowchart: the symbol of a step (the
 //! command-line choice still wins) and the lane of the swimlane chart.
 
 use std::collections::BTreeMap;
@@ -8,9 +8,9 @@ use utsim_diagram::{TipoDiagrama, gerar};
 use utsim_model::Model;
 
 const MODEL: &str = r#"Model(name: "m", run: (stop_time: 100.0), objects: [
-    (name: "pedidos", kind: Source(interarrival: Const(1.0)), area: "Cliente"),
-    (name: "analise", kind: Processor(process: Const(0.5)), area: "Compras", symbol: "inspecao"),
-    (name: "fim", kind: Sink, area: "Compras"),
+    (name: "pedidos", kind: Source(interarrival: Const(1.0)), department: "Cliente"),
+    (name: "analise", kind: Processor(process: Const(0.5)), department: "Compras", symbol: "inspecao"),
+    (name: "fim", kind: Sink, department: "Compras"),
 ], connections: [("pedidos", "analise"), ("analise", "fim")])"#;
 
 #[test]

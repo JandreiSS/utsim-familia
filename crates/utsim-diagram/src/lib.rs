@@ -48,13 +48,13 @@ pub fn flowchart(model: &Model, options: &Options) -> FlowGraph {
     g
 }
 
-/// Lane of each object in the swimlane chart: the model's `area` fields, replaced by
+/// Lane of each object in the swimlane chart: the objects' `department` fields, replaced by
 /// `chosen` (the `--raia` options).
 pub fn areas(model: &Model, chosen: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     let mut out: BTreeMap<String, String> = model
         .objects
         .iter()
-        .filter_map(|o| o.area.clone().map(|a| (o.name.clone(), a)))
+        .filter_map(|o| o.department.clone().map(|a| (o.name.clone(), a)))
         .collect();
     out.extend(chosen.iter().map(|(k, v)| (k.clone(), v.clone())));
     out

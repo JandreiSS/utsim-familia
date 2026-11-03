@@ -1,6 +1,6 @@
 //! Diagrams of the Lean Office line: the office value stream map (steps of the main path
 //! with P/T, L/T, %C&A and people; inboxes with the cases waiting; lead time ladder with
-//! the touch time) and the swimlane chart by department (`area` of the objects), drawn
+//! the touch time) and the swimlane chart by department (`department` of the objects), drawn
 //! with `utsim_diagram::raias`.
 
 use std::fmt::Write as _;
@@ -35,7 +35,7 @@ pub enum Caixa {
         ca: Option<Summary>,
         pessoas: String,
         horario: String,
-        area: Option<String>,
+        department: Option<String>,
     },
     /// Cases waiting (inbox, batch, handover, outside information, meeting agenda).
     Espera {
@@ -126,7 +126,7 @@ pub fn montar(model: &Model, pack: Option<&Pack>, k: &Indicadores) -> VsmEscrito
                     ca: k.resumo_opt(|r| r.ca.get(name).copied()),
                     pessoas,
                     horario,
-                    area: obj.area.clone(),
+                    department: obj.department.clone(),
                 });
             }
             _ => {
@@ -202,7 +202,7 @@ impl VsmEscritorio {
                     ca,
                     pessoas,
                     horario,
-                    area,
+                    department,
                     ..
                 } => {
                     // Inventory triangle with the waits before this box.
@@ -280,8 +280,9 @@ impl VsmEscritorio {
                         ),
                         curto(pessoas, 26),
                         format!("horário: {}", curto(horario, 16)),
-                        area.as_ref()
-                            .map_or(String::new(), |a| format!("área: {}", curto(a, 20))),
+                        department
+                            .as_ref()
+                            .map_or(String::new(), |a| format!("depto.: {}", curto(a, 20))),
                     ];
                     for (j, l) in lines.iter().enumerate() {
                         b.push_str(&texto(x + 6.0, 90.0 + 15.0 * j as f64, "", l));
@@ -461,7 +462,7 @@ pub fn secoes(
     let (svg, passagens) = raias(model);
     let _ = write!(
         h,
-        "<h2>Fluxograma de raias por departamento</h2><p class=\"muted\">As raias vêm do campo <code>area</code> dos objetos; setas laranja são passagens entre departamentos, tracejadas são voltas de retrabalho.</p><div class=\"rolagem\">{svg}</div>"
+        "<h2>Fluxograma de raias por departamento</h2><p class=\"muted\">As raias vêm do campo <code>department</code> dos objetos; setas laranja são passagens entre departamentos, tracejadas são voltas de retrabalho.</p><div class=\"rolagem\">{svg}</div>"
     );
     if !passagens.is_empty() {
         h.push_str("<table><thead><tr><th>De</th><th>Para</th><th class=\"n\">Passagens</th></tr></thead><tbody>");
