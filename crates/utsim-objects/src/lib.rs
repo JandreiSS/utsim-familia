@@ -19,7 +19,7 @@ pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
 pub use dispatcher::{DispatchRule, Dispatcher};
 pub use processor::{OperatorUse, Processor};
-pub use queue::{Batch, Discipline, Queue};
+pub use queue::{Batch, Discipline, LabelOrder, Queue};
 pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
 pub use sink::Sink;

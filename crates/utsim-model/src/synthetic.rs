@@ -65,6 +65,7 @@ fn queue() -> ObjectKind {
         capacity: None,
         discipline: Discipline::Fifo,
         batch: None,
+        order: None,
     }
 }
 

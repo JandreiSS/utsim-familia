@@ -43,9 +43,9 @@ use utsim_fluid::{FluidDef, FluidNet};
 use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
-    OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
-    Transporter,
+    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, LabelOrder,
+    OnBlocked, OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink,
+    Source, Transporter,
 };
 
 pub use shifts::ShiftSpec;
@@ -295,6 +295,10 @@ pub enum ObjectKind {
         /// Holds items and releases them in groups.
         #[serde(default)]
         batch: Option<Batch>,
+        /// Order by a numeric label (`Desc("prioridade")`, `Asc("prazo")`); wins over
+        /// `discipline`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        order: Option<LabelOrder>,
     },
     Processor {
         #[serde(default = "one_usize")]
@@ -551,8 +555,23 @@ impl Model {
                     }
                 }
                 ObjectKind::Queue {
-                    capacity, batch, ..
+                    capacity,
+                    batch,
+                    order,
+                    discipline,
                 } => {
+                    if let Some(o) = order {
+                        if o.label().trim().is_empty() {
+                            errors
+                                .push(format!("{}: order precisa do nome de um rótulo", obj.name));
+                        }
+                        if *discipline == Discipline::Lifo {
+                            errors.push(format!(
+                                "{}: use discipline: Lifo ou order, não os dois",
+                                obj.name
+                            ));
+                        }
+                    }
                     if *capacity == Some(0) {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
@@ -1050,7 +1069,13 @@ impl Model {
                     capacity,
                     discipline,
                     batch,
-                } => Box::new(Queue::new(*capacity).discipline(*discipline).batch(*batch)),
+                    order,
+                } => Box::new(
+                    Queue::new(*capacity)
+                        .discipline(*discipline)
+                        .batch(*batch)
+                        .order(order.clone()),
+                ),
                 ObjectKind::Combiner {
                     components,
                     mode,

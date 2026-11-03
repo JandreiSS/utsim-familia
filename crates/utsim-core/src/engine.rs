@@ -589,6 +589,46 @@ impl Ctx<'_> {
         self.core.mark_dirty(self.me);
     }
 
+    /// Marks the item as ready to leave, ahead of the released items it outranks by the
+    /// numeric label `label`: smallest value first, or largest first with `descending`.
+    /// Ties keep the order of release; an item without the label (or with a text value)
+    /// ranks after every item that has it.
+    pub fn release_ordered(&mut self, id: ItemId, label: &str, descending: bool) {
+        let worst = if descending {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+        let items = &self.core.items;
+        let key = |it: ItemId| {
+            items
+                .get(it)
+                .and_then(|i| i.label(label))
+                .and_then(Value::as_num)
+                .filter(|v| !v.is_nan())
+                .unwrap_or(worst)
+        };
+        let mine = key(id);
+        let outranks = |other: f64| {
+            if descending {
+                mine > other
+            } else {
+                mine < other
+            }
+        };
+        let at = self.core.blocks[self.me.0]
+            .outbox
+            .iter()
+            .position(|p| outranks(key(p.item)));
+        let pending = self.route_output(id);
+        let outbox = &mut self.core.blocks[self.me.0].outbox;
+        match at {
+            Some(at) => outbox.insert(at, pending),
+            None => outbox.push_back(pending),
+        }
+        self.core.mark_dirty(self.me);
+    }
+
     /// Adds an observation to a named per-block tally (shown in the report).
     pub fn record(&mut self, name: &str, value: f64) {
         let me = self.me;
