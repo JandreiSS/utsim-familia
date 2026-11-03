@@ -12,7 +12,9 @@ utsim-flow.workspace = true
 utsim-fluid.workspace = true
 utsim-script.workspace = true
 utsim-stats.workspace = true
+utsim-fit.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 ron.workspace = true
 rayon = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -23,5 +25,4 @@ default = ["parallel"]
 parallel = ["dep:rayon"]
 
 [dev-dependencies]
-serde_json.workspace = true
 proptest = { version = "1", default-features = false, features = ["std"] }

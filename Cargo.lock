@@ -7731,6 +7731,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "utsim-core",
+ "utsim-fit",
  "utsim-flow",
  "utsim-fluid",
  "utsim-objects",
