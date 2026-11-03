@@ -7114,6 +7114,21 @@ dependencies = [
  "serde",
  "utsim-assets",
  "utsim-core",
+ "utsim-edit",
+ "utsim-look",
+ "utsim-model",
+ "utsim-scene",
+]
+
+[[package]]
+name = "utsim-look"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "serde_json",
+ "utsim-assets",
+ "utsim-core",
  "utsim-model",
  "utsim-scene",
 ]
@@ -7203,6 +7218,7 @@ dependencies = [
  "utsim-edit",
  "utsim-flow",
  "utsim-fluid",
+ "utsim-look",
  "utsim-model",
  "utsim-opt",
  "utsim-scene",

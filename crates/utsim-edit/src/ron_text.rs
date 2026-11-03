@@ -1,6 +1,8 @@
-//! Writes model values as RON text, the format `Command::Set` expects. The viewer
-//! has no `ron` dependency, so the (small, closed) set of types is formatted by
-//! hand; tests check that every output parses back to the same value.
+//! Writes model values as RON text, the format `Command::Set` expects, for the editors
+//! that build a `Set` from a typed value (the Bevy viewer's properties panel and the
+//! Godot bridge's schema). The (small, closed) set of types is formatted by hand, as
+//! the model files write them; the tests here and in both editors check that every
+//! output parses back to the same value.
 
 use std::collections::BTreeMap;
 
@@ -219,4 +221,58 @@ pub fn labels(map: &BTreeMap<String, Dist>) -> String {
 /// derived `Debug`, which is exactly their RON form.
 pub fn debug<T: std::fmt::Debug>(v: &T) -> String {
     format!("{v:?}")
+}
+
+/// Reads RON text the way model files are read (`Some` is implicit).
+pub fn parse<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, String> {
+    ::ron::Options::default()
+        .with_default_extension(::ron::extensions::Extensions::IMPLICIT_SOME)
+        .from_str(text)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use utsim_core::{OffWindow, ShiftEnd};
+
+    #[test]
+    fn values_read_back_unchanged() {
+        let dists = [
+            Dist::Const(2.5),
+            Dist::Exp { mean: 3.0 },
+            Dist::Uniform { min: 1.0, max: 2.0 },
+            Dist::Triangular {
+                min: 1.0,
+                mode: 2.0,
+                max: 4.0,
+            },
+        ];
+        for d in dists {
+            assert_eq!(parse::<Dist>(&dist(&d)).unwrap(), d);
+        }
+        let table = ShiftTable {
+            period: 1440.0,
+            off: vec![OffWindow {
+                start: 720.0,
+                duration: 60.0,
+            }],
+            on_end: ShiftEnd::Finish,
+        };
+        assert_eq!(parse::<ShiftTable>(&shifts(&table)).unwrap(), table);
+        let specs = [
+            ShiftSpec::Inline(table.clone()),
+            ShiftSpec::calendar("turno_a"),
+            ShiftSpec::Calendar {
+                name: "turno_a".into(),
+                on_end: Some(ShiftEnd::Finish),
+            },
+        ];
+        for s in specs {
+            assert_eq!(parse::<ShiftSpec>(&shift_spec(&s)).unwrap(), s);
+        }
+        assert_eq!(parse::<Vec<f64>>(&floats(&[1.0, 0.5])).unwrap(), [1.0, 0.5]);
+        assert_eq!(parse::<String>(&string("a \"b\"")).unwrap(), "a \"b\"");
+        assert!(parse::<Dist>("Exp(").is_err());
+    }
 }

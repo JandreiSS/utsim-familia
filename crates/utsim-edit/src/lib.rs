@@ -15,6 +15,7 @@
 pub mod arrange;
 pub mod fluids;
 pub mod network;
+pub mod ron_text;
 
 use std::path::{Path, PathBuf};
 
@@ -126,6 +127,11 @@ pub enum Command {
     RemoveFluidLink {
         from: String,
         to: String,
+    },
+    /// Replaces the model's name and description (the header of the file).
+    SetInfo {
+        name: String,
+        description: String,
     },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
@@ -504,6 +510,14 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::RemoveFluidNode { name } => fluids::remove_node(model, name)?,
         Command::AddFluidLink { from, to } => fluids::add_link(model, from, to)?,
         Command::RemoveFluidLink { from, to } => fluids::remove_link(model, from, to)?,
+        Command::SetInfo { name, description } => {
+            let name = name.trim();
+            if name.is_empty() {
+                return Err("o modelo precisa de um nome".into());
+            }
+            model.name = name.to_string();
+            model.description = description.clone();
+        }
         Command::Batch(commands) => {
             for c in commands {
                 execute(model, c)?;
@@ -901,6 +915,30 @@ mod tests {
                 .any(|i| i.object.as_deref() == Some("maquina")),
             "{issues:?}"
         );
+    }
+
+    #[test]
+    fn the_model_name_and_description_are_one_undoable_step() {
+        let mut doc = Document::new("a");
+        doc.apply(Command::SetInfo {
+            name: " Tutorial 01 ".into(),
+            description: "Uma fila".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            (doc.model().name.as_str(), doc.model().description.as_str()),
+            ("Tutorial 01", "Uma fila")
+        );
+        assert!(
+            doc.apply(Command::SetInfo {
+                name: "  ".into(),
+                description: String::new(),
+            })
+            .is_err()
+        );
+        assert!(doc.undo());
+        assert_eq!(doc.model().name, "a");
+        assert!(doc.model().description.is_empty());
     }
 
     #[test]
