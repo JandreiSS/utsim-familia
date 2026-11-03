@@ -345,7 +345,9 @@ pub fn default_comparison_metrics(result: &ExperimentResult) -> Vec<String> {
 // ---------------------------------------------------------------------------------------
 
 /// Metrics correlated when the user names none: the throughput of every sink (its
-/// arrivals) plus the default metrics of the precision analysis.
+/// arrivals) plus the default metrics of the precision analysis, leaving out the ones
+/// that do not vary and the copies (the utilisation of a one-place station is its mean
+/// content, replication by replication).
 pub fn default_correlation_metrics(reports: &[RunReport]) -> Vec<String> {
     let Some(first) = reports.first() else {
         return Vec::new();
@@ -357,12 +359,21 @@ pub fn default_correlation_metrics(reports: &[RunReport]) -> Vec<String> {
         .map(|b| format!("{}.input", b.name))
         .collect();
     out.extend(default_precision_metrics(reports));
-    out.retain(|k| {
-        let v = metric_values(reports, k);
-        v.iter().any(|x| (x - v[0]).abs() > 0.0)
-    });
     out.dedup();
-    out
+    let mut kept: Vec<(String, Vec<f64>)> = Vec::new();
+    for k in out {
+        let v = metric_values(reports, &k);
+        let varies = v.iter().any(|x| (x - v[0]).abs() > 0.0);
+        let copy = kept.iter().any(|(_, w)| {
+            w.iter()
+                .zip(&v)
+                .all(|(a, b)| (a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1e-300))
+        });
+        if varies && !copy {
+            kept.push((k, v));
+        }
+    }
+    kept.into_iter().map(|(k, _)| k).collect()
 }
 
 /// Pearson and Spearman correlations of `metrics` across the replications.
@@ -379,7 +390,8 @@ pub fn correlation(reports: &[RunReport], metrics: &[String]) -> CorrelationMatr
 // ---------------------------------------------------------------------------------------
 
 /// Runs the replications keeping the instant of every observation of every tally of
-/// every object (`staytime` and the object's own tallies, such as `time_in_system`).
+/// every object (`staytime`, except at sources and sinks, where it is always zero, and
+/// the object's own tallies, such as `time_in_system`).
 /// The tallies are discovered in a first run of replication 0 alone. The statistics
 /// are the same as [`Model::run_replications`].
 pub fn run_for_observations(model: &Model) -> Result<Vec<RunReport>, ModelError> {
@@ -389,7 +401,10 @@ pub fn run_for_observations(model: &Model) -> Result<Vec<RunReport>, ModelError>
     let mut measures = Vec::new();
     if let Some(r) = first.first() {
         for b in &r.blocks {
-            measures.push((b.name.clone(), "staytime".to_string()));
+            // Items pass through sources and sinks in no time.
+            if b.kind != "source" && b.kind != "sink" {
+                measures.push((b.name.clone(), "staytime".to_string()));
+            }
             for k in b.extra.keys() {
                 measures.push((b.name.clone(), k.clone()));
             }

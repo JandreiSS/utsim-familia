@@ -341,7 +341,9 @@ impl Heatmap {
             return String::new();
         };
         let (w_m, h_m) = (self.cols as f64 * self.cell, self.rows as f64 * self.cell);
-        let px = 900.0 / w_m.max(1e-9);
+        // Margin around the plan, for the names of the objects on its edges.
+        const M: f64 = 36.0;
+        let px = (900.0 - 2.0 * M) / w_m.max(1e-9);
         let (w, h) = (w_m * px, h_m * px);
         let sx = |x: f64| (x - self.x0) * px;
         // The plan's y grows away from the viewer: up on the page.
@@ -354,10 +356,12 @@ impl Heatmap {
         let max = cells.iter().map(value).fold(0.0, f64::max);
         let foot = 70.0;
         let mut s = format!(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w:.1} {:.1}\" \
-             width=\"{w:.0}\" height=\"{:.0}\" font-family=\"system-ui, sans-serif\" font-size=\"11\">\n",
-            h + foot,
-            h + foot
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.1} {:.1}\" \
+             width=\"{:.0}\" height=\"{:.0}\" font-family=\"system-ui, sans-serif\" font-size=\"11\">\n",
+            w + 2.0 * M,
+            h + 2.0 * M + foot,
+            w + 2.0 * M,
+            h + 2.0 * M + foot
         );
         let what = match measure {
             HeatMeasure::Time => "tempo de ocupação",
@@ -368,8 +372,9 @@ impl Heatmap {
             escape(&l.name)
         );
         s += &format!(
-            "<rect width=\"{w:.1}\" height=\"{:.1}\" fill=\"#ffffff\"/>\n",
-            h + foot
+            "<rect width=\"{:.1}\" height=\"{:.1}\" fill=\"#ffffff\"/>\n<g transform=\"translate({M} {M})\">\n",
+            w + 2.0 * M,
+            h + 2.0 * M + foot
         );
         // Light grid every metre (or coarser) for reading distances.
         let step = nice_step(w_m.max(h_m) / 20.0);
@@ -421,20 +426,27 @@ impl Heatmap {
         }
         for b in &replay.blocks {
             let (x, y) = (sx(b.position[0]), sy(b.position[1]));
+            // Names near the right edge end at the object instead of starting there.
+            let (tx, anchor) = if x > 0.75 * w {
+                (x - 6.0, "end")
+            } else {
+                (x + 6.0, "start")
+            };
             s += &format!(
                 "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"8\" height=\"8\" fill=\"#2563eb\" stroke=\"#1c1f24\"><title>{} ({})</title></rect>\n\
-                 <text x=\"{:.1}\" y=\"{:.1}\" fill=\"#1c1f24\">{}</text>\n",
+                 <text x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"{anchor}\" fill=\"#1c1f24\">{}</text>\n",
                 x - 4.0,
                 y - 4.0,
                 escape(&b.name),
                 escape(&b.kind),
-                x + 6.0,
+                tx,
                 y - 6.0,
                 escape(&b.name)
             );
         }
-        // Legend and scale.
-        let ly = h + 18.0;
+        // Legend and scale, below the plan.
+        s += "</g>\n";
+        let ly = h + 2.0 * M + 4.0;
         for i in 0..5 {
             s += &format!(
                 "<rect x=\"{}\" y=\"{ly:.1}\" width=\"28\" height=\"12\" fill=\"{}\"/>\n",
