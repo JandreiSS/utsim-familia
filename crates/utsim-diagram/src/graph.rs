@@ -582,10 +582,12 @@ pub fn build(model: &Model, options: &Options) -> FlowGraph {
         let Some(kind) = node_kind(&obj.kind) else {
             continue;
         };
+        // The option wins over the model's `symbol`, which wins over the inferred one.
         let symbol = options
             .overrides
             .get(&obj.name)
             .copied()
+            .or_else(|| obj.symbol.as_deref().and_then(Symbol::from_id))
             .unwrap_or_else(|| default_symbol(obj, options));
         let (time, mut details, notes) = describe(obj);
         if !options.show_times {

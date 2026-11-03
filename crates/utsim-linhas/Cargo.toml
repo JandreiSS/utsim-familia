@@ -9,5 +9,6 @@ rust-version.workspace = true
 utsim-core.workspace = true
 utsim-model.workspace = true
 utsim-edit.workspace = true
+utsim-diagram.workspace = true
 ron.workspace = true
 serde.workspace = true

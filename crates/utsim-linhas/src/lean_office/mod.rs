@@ -23,6 +23,7 @@
 //! | waiting by cause | mean time per case in each kind of wait (inbox, batch, meeting, handover, outside information, inside a step without work) |
 //! | rework loops | most visits to one object − 1, per case |
 
+pub mod diagramas;
 pub mod relatorio;
 
 use std::collections::BTreeMap;

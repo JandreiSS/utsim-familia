@@ -160,3 +160,51 @@ fn report_speaks_the_line_vocabulary() {
     let text = relatorio::texto(&k);
     assert!(text.contains("Lead time (L/T)"), "{text}");
 }
+
+#[test]
+fn office_map_and_lanes_of_the_ready_model() {
+    let pack = find(LEAN_OFFICE).unwrap();
+    let mut m = Model::load(format!(
+        "{}/../../examples/aprovacao_de_compras.ron",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    m.run.replications = 2;
+    let k = Indicadores::rodar(&m, Some(&pack)).unwrap();
+    let v = diagramas::montar(&m, Some(&pack), &k);
+    let names: Vec<&str> = v
+        .caixas
+        .iter()
+        .map(|c| match c {
+            diagramas::Caixa::Processo { nome, .. } | diagramas::Caixa::Espera { nome, .. } => {
+                nome.as_str()
+            }
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "caixa_compras",
+            "cotacao",
+            "conferencia",
+            "alcadas",
+            "caixa_gerente",
+            "aprov_gerente",
+            "caixa_emissao",
+            "emissao"
+        ]
+    );
+    let svg = v.svg("Estado atual");
+    assert!(svg.starts_with("<svg") && svg.contains("Escada do lead time"));
+    let (lanes, handovers) = diagramas::raias(&m);
+    for area in ["Solicitante", "Compras", "Gerência", "Diretoria", "Comitê"] {
+        assert!(lanes.contains(area), "{area}");
+    }
+    assert!(
+        handovers
+            .iter()
+            .any(|(a, b, _)| a == "Compras" && b == "Gerência")
+    );
+    let page = diagramas::secoes(&m, Some(&pack), &k, Some((&m, &k)));
+    assert!(page.contains("Estado futuro"));
+}

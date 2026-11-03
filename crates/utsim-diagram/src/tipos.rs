@@ -230,7 +230,7 @@ pub fn gerar(tipo: TipoDiagrama, model: &Model, o: &Options) -> Result<Saida, St
             ))
         }
         TipoDiagrama::Raias => {
-            let r = raias::montar(&g, &o.areas);
+            let r = raias::montar(&g, &crate::areas(model, &o.areas));
             let mut t = String::from("<h2>Passagens entre raias</h2>");
             let pas = r.passagens();
             if pas.is_empty() {
@@ -247,7 +247,7 @@ pub fn gerar(tipo: TipoDiagrama, model: &Model, o: &Options) -> Result<Saida, St
                 }
                 t.push_str("</tbody></table>");
             }
-            t.push_str("<p class=\"muted\">Setas laranja atravessam raias. A raia vem da equipe de operadores, do tipo de objeto ou da área escolhida com <code>--raia objeto=nome</code>; o transporte por frota tem raia própria.</p>");
+            t.push_str("<p class=\"muted\">Setas laranja atravessam raias. A raia vem da área escolhida com <code>--raia objeto=nome</code>, do campo <code>area</code> do objeto, da equipe de operadores ou do tipo de objeto; o transporte por frota tem raia própria.</p>");
             let m = raias::mermaid(&r);
             Ok(estatico(
                 Parte {
