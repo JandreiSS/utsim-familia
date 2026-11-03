@@ -6,6 +6,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Adicionado
+- PERT/CPM de uma parte do processo (crate `utsim-pert`, comando `utsim pert`): rede de atividades de uma seleção de objetos (`--objetos`) ou de um trecho (`--de A --ate B`), com divisão E no `Separator`, junção E no `Combiner`, saídas OU, ciclos de retrabalho (fator `1/(1-p)`), transportes e transferências como atividades e a lista de hipóteses e avisos; CPM com início e fim mais cedo e mais tarde, folgas total e livre e todos os caminhos críticos; três modos: caminho crítico observado na simulação (padrão, com filas, transportes, operadores, quebras e turnos), PERT clássico (`(a, m, b)` das distribuições, momentos exatos ou beta, probabilidade de prazo) e Monte Carlo determinístico (criticidade por atividade e por caminho, percentis e sensibilidade); relatório em texto, CSV e HTML com a rede, o Gantt, o histograma e o tornado, e as coordenadas do diagrama para a interface. Capítulo "PERT/CPM" no manual.
+
 ### Em desenvolvimento
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
 
