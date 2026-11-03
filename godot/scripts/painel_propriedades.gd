@@ -152,9 +152,13 @@ func _row(field: Dictionary) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	var label := Label.new()
 	label.text = field["label"]
+	# The label wraps instead of being cut (G2 visual check): long names like "Tempo entre
+	# chegadas" take two lines, and the tooltip has the whole text with the help.
 	label.custom_minimum_size = Vector2(LABEL_WIDTH - 14 * int(field["depth"]), 0)
-	label.clip_text = true
-	label.tooltip_text = field["help"]
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	label.tooltip_text = String(field["label"]) + ("
+" + String(field["help"]) if String(field["help"]) != "" else "")
 	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	if int(field["depth"]) > 0:
 		var pad := Control.new()
@@ -241,6 +245,12 @@ func _field(field: Dictionary) -> void:
 				o.add_item(c["label"])
 				values.append(c["value"])
 			o.selected = values.find(field["value"])
+			# Shrinks with the panel (the text is clipped, the label next to it is not); the
+			# tooltip has the whole choice.
+			o.custom_minimum_size = Vector2(60, 0)
+			if o.selected >= 0:
+				o.tooltip_text = o.get_item_text(o.selected) + ("
+" + String(field["help"]) if String(field["help"]) != "" else "")
 			o.item_selected.connect(func(k): edited.emit(path, values[k]))
 			row.add_child(o)
 		"ron":
@@ -401,6 +411,9 @@ func _dist(field: Dictionary) -> void:
 			var l := Label.new()
 			l.text = p["label"]
 			l.custom_minimum_size = Vector2(LABEL_WIDTH - indent, 0)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.tooltip_text = String(p["label"])
+			l.mouse_filter = Control.MOUSE_FILTER_PASS
 			h.add_child(l)
 			var fake := {"type": "int" if p["integer"] else "float", "value": p["value"], "min": null, "unit": "", "help": ""}
 			h.add_child(_spin(fake, path + "." + String(p["key"])))

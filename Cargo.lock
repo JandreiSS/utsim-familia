@@ -7133,12 +7133,17 @@ dependencies = [
  "godot",
  "ron 0.8.1",
  "serde",
+ "serde_json",
  "utsim-assets",
  "utsim-core",
  "utsim-edit",
+ "utsim-flow",
  "utsim-look",
  "utsim-model",
+ "utsim-opt",
+ "utsim-pert",
  "utsim-scene",
+ "utsim-stats",
 ]
 
 [[package]]
