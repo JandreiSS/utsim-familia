@@ -12,6 +12,8 @@ utsim-flow.workspace = true
 utsim-fluid.workspace = true
 utsim-script.workspace = true
 utsim-stats.workspace = true
+utsim-nav.workspace = true
+utsim-cad.workspace = true
 serde.workspace = true
 ron.workspace = true
 rayon = { workspace = true, optional = true }

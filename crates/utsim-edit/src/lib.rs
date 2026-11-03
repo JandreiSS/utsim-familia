@@ -158,7 +158,8 @@ pub struct Document {
 impl Document {
     pub fn new(name: &str) -> Self {
         let model = Model::parse(&format!(
-            "Model(name: {name:?}, run: (stop_time: 10000.0), objects: [], connections: [])"
+            "Model(format: {}, name: {name:?}, run: (stop_time: 10000.0), objects: [], connections: [])",
+            utsim_model::FORMAT_VERSION
         ))
         .expect("empty model parses");
         Document::from_model(model, None, String::new())
@@ -774,6 +775,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             unload_time: Dist::Const(0.0),
             home: false,
             agv: false,
+            movement: None,
+            clearance: None,
         },
         "Conveyor" => ObjectKind::Conveyor {
             length: 5.0,
@@ -806,6 +809,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         transfer: None,
         on_entry: None,
         visual: None,
+        access: None,
     })
 }
 
@@ -1018,9 +1022,42 @@ mod tests {
     }
 
     #[test]
+    fn new_models_move_freely_and_old_ones_keep_legacy() {
+        let mut doc = Document::new("novo");
+        assert_eq!(doc.model().run.movement, None);
+        doc.apply(Command::Add(Box::new(
+            template("Transporter", "pessoa", [0.0; 3]).unwrap(),
+        )))
+        .unwrap();
+        let m = doc.model();
+        assert_eq!(
+            m.movement_of(&m.objects[0]),
+            Some(utsim_model::Movement::Free)
+        );
+        let reopened = Model::parse(&doc.to_text()).unwrap();
+        assert_eq!(reopened.run.movement, None);
+        // A format-1 model opened and saved keeps the old behaviour explicitly.
+        let dir = std::env::temp_dir().join(format!("utsim-edit-v1-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("antigo.ron");
+        std::fs::write(
+            &path,
+            "Model(name: \"a\", run: (stop_time: 5.0), objects: [])",
+        )
+        .unwrap();
+        let old = Document::open(&path).unwrap();
+        let text = old.to_text();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(
+            text.contains("format: 2") && text.contains("movement: Legacy"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn saving_is_stable_and_round_trips() {
         let mut doc = line();
-        assert!(doc.to_text().contains("format: 1"));
+        assert!(doc.to_text().contains("format: 2"));
         doc.apply(Command::Set {
             key: "fila.capacity".into(),
             value: "5".into(),

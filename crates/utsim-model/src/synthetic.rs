@@ -52,6 +52,7 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         transfer: None,
         on_entry: None,
         visual: None,
+        access: None,
     }
 }
 
@@ -203,7 +204,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
     // Enough time for every arrival plus a long drain; the run ends earlier anyway.
     let stop_time = items as f64 * interarrival * 3.0 + 1000.0;
     Ok(Model {
-        format: None,
+        format: Some(crate::FORMAT_VERSION),
         name: format!("Sintético ({shape:?}, {objects} objetos, {items} itens)"),
         description: "Modelo gerado por `utsim gerar-modelo` para testes de desempenho.".into(),
         run: RunSettings {
@@ -215,6 +216,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             histogram_bins: None,
             default_decision: None,
             transfer: None,
+            movement: None,
         },
         calendars: BTreeMap::new(),
         objects: objs,
@@ -223,6 +225,8 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         flows: Vec::new(),
         fluids: None,
         spans: Vec::new(),
+        floor_plan: None,
+        obstacles: Vec::new(),
     })
 }
 
