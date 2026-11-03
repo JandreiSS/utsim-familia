@@ -47,7 +47,7 @@ use utsim_objects::{
     Source, TaskPick, Transporter, TypedSink,
 };
 
-pub use arrivals::ItemTypeDef;
+pub use arrivals::{AreaDef, ItemTypeDef};
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
@@ -126,6 +126,10 @@ pub struct Model {
     /// Named shift tables that objects reference with `shifts: Calendar("name")`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub calendars: BTreeMap<String, ShiftTable>,
+    /// Named floor areas (waiting areas, break rooms, office zones): markers outside the
+    /// flow that transporters use as home or break place.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaDef>,
     /// Item types (name, colour, 3D look, default labels). An item of type `k` (1-based,
     /// in this order) carries the reserved label `type = k`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -365,6 +369,18 @@ pub enum ObjectKind {
         /// half the width of its role (person 0.3, forklift 0.6, AGV or vehicle 0.5) + 0.3.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clearance: Option<f64>,
+        /// Home at this point instead of the object's own position (implies `home`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        home_at: Option<[f64; 3]>,
+        /// Home at this object or area (its position; implies `home`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        home_object: Option<String>,
+        /// Break place: point the member walks to when its shift pauses with nothing to do.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        break_at: Option<[f64; 3]>,
+        /// Break place at an object or area (its position).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        break_object: Option<String>,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -881,6 +897,7 @@ impl Model {
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
         self.validate_item_types(&mut errors);
+        self.validate_places(&mut errors);
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_movement(&mut errors);
         self.validate_aisles(&mut errors);
@@ -1187,15 +1204,21 @@ impl Model {
                     unload_time,
                     home,
                     agv,
+                    home_at,
+                    home_object,
+                    break_at,
+                    break_object,
                     ..
                 } => Box::new(
                     Transporter::new(*speed)
+                        .home_point(self.place_of(*home_at, home_object.as_deref()))
+                        .break_point(self.place_of(*break_at, break_object.as_deref()))
                         .agv(if *agv { traffic.clone() } else { None })
                         .router(nav.router(&obj.name))
                         .crossings(nav.crossings_for(&obj.name, &crossings))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
-                        .home(*home)
+                        .home(*home || home_at.is_some() || home_object.is_some())
                         .handling(load_time.clone(), unload_time.clone())
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),

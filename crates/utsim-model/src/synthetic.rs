@@ -227,6 +227,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             movement: None,
         },
         calendars: BTreeMap::new(),
+        areas: Vec::new(),
         item_types: Vec::new(),
         objects: objs,
         connections,

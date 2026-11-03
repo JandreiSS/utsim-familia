@@ -180,6 +180,12 @@ pub struct Transporter {
     unload_time: Dist,
     capacity: usize,
     home: bool,
+    /// Where home is (absent: the block's own position).
+    home_point: Option<[f64; 3]>,
+    /// Where the member walks when its shift pauses (absent: it stays where it is).
+    break_point: Option<[f64; 3]>,
+    /// On a break at `break_point`: where to walk back to when the shift resumes.
+    back_from_break: Option<[f64; 3]>,
     dispatcher: Option<BlockId>,
     queue: VecDeque<TaskRequest>,
     /// Tasks of the current trip (several only for batched transports).
@@ -215,6 +221,9 @@ impl Transporter {
             unload_time: Dist::Const(0.0),
             capacity: 1,
             home: false,
+            home_point: None,
+            break_point: None,
+            back_from_break: None,
             dispatcher: None,
             queue: VecDeque::new(),
             trip: Vec::new(),
@@ -276,6 +285,26 @@ impl Transporter {
     pub fn home(mut self, home: bool) -> Self {
         self.home = home;
         self
+    }
+
+    /// Home somewhere else than the block's own position (an own point, an object, an
+    /// area). The transporter returns there when idle if `home` is on.
+    pub fn home_point(mut self, point: Option<[f64; 3]>) -> Self {
+        self.home_point = point;
+        self
+    }
+
+    /// Break place: when the shift pauses with nothing to do, the member walks there
+    /// (inside the break, so it takes no work time) and walks back (home, or where it
+    /// was) when the shift resumes; a task that arrives meanwhile interrupts that walk.
+    pub fn break_point(mut self, point: Option<[f64; 3]>) -> Self {
+        self.break_point = point;
+        self
+    }
+
+    /// Where home is.
+    fn home_of(&self, cx: &Ctx) -> [f64; 3] {
+        self.home_point.unwrap_or_else(|| cx.position(cx.me()))
     }
 
     /// The dispatcher this transporter reports to when it becomes free.
@@ -638,7 +667,7 @@ impl Transporter {
             }
         }
         if self.home && !cx.is_down() {
-            let home = cx.position(cx.me());
+            let home = self.home_of(cx);
             if distance(self.position, home) > 0.0 {
                 self.travel(cx, home, ARRIVED_HOME, State::TravelEmpty);
             }
@@ -766,6 +795,32 @@ impl Transporter {
         self.go_idle(cx, true);
     }
 
+    /// Off shift with nothing to do: walk to the break place (the walk is drawn in the
+    /// 3D view; the member is stopped, so it takes no time of the run).
+    fn walk_to_break(&mut self, cx: &mut Ctx) {
+        let Some(spot) = self.break_point else { return };
+        let back = if self.home {
+            self.home_of(cx)
+        } else {
+            self.position
+        };
+        if distance(self.position, spot) > 0.0 {
+            let path = match &self.router {
+                Some(r) => r.route(self.position, spot),
+                None => cx.route(self.position, spot),
+            };
+            let t = travel_time(
+                path_length(&path),
+                self.speed,
+                self.acceleration,
+                self.deceleration,
+            );
+            cx.trace_travel(path, t);
+            self.position = spot;
+        }
+        self.back_from_break = Some(back);
+    }
+
     /// Weight (kg) of the items still carried (from `self.k` on), for a person.
     fn load_kg(&self, cx: &Ctx) -> f64 {
         if !cx.is_person() {
@@ -801,6 +856,7 @@ impl Behavior for Transporter {
     }
 
     fn reset(&mut self, cx: &mut Ctx) {
+        self.back_from_break = None;
         self.queue.clear();
         self.trip.clear();
         self.k = 0;
@@ -828,7 +884,7 @@ impl Behavior for Transporter {
         }
         self.position = p;
         self.report_position(cx);
-        let home = cx.position(cx.me());
+        let home = self.home_of(cx);
         if self.home && distance(p, home) > 0.0 {
             self.travel(cx, home, ARRIVED_HOME, State::TravelEmpty);
         }
@@ -954,6 +1010,23 @@ impl Behavior for Transporter {
             self.announce_on_resume = true;
         }
         let now = cx.now();
+        if self.timer.is_none() && self.trip.is_empty() && cx.is_off_shift() {
+            self.walk_to_break(cx);
+            return;
+        }
+        if self
+            .timer
+            .as_ref()
+            .is_some_and(|t| t.tag == ARRIVED_HOME && t.event.is_some())
+            && self.trip.is_empty()
+            && cx.is_off_shift()
+            && self.break_point.is_some()
+        {
+            // Driving home when the break starts: go to the break place instead.
+            self.abandon_homing(cx);
+            self.walk_to_break(cx);
+            return;
+        }
         let Some(timer) = &mut self.timer else { return };
         let Some(event) = timer.event.take() else {
             return;
@@ -981,6 +1054,19 @@ impl Behavior for Transporter {
             // Back from a shift that ended with `Finish`: free for the dispatcher again.
             self.report_position(cx);
             cx.send(d, MSG_IDLE, self.capacity as u64);
+        }
+        if let Some(back) = self.back_from_break.take() {
+            // Back from the break place: walk home (or to where it was) unless work waits,
+            // which then starts from here. A new task interrupts the walk.
+            if self.queue.is_empty()
+                && self.trip.is_empty()
+                && self.timer.is_none()
+                && distance(self.position, back) > 0.0
+            {
+                self.report_position(cx);
+                self.travel(cx, back, ARRIVED_HOME, State::TravelEmpty);
+                return;
+            }
         }
         if self.grant_pending {
             self.grant_pending = false;

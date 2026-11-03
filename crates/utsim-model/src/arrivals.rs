@@ -26,6 +26,24 @@ pub struct ItemTypeDef {
     pub labels: BTreeMap<String, f64>,
 }
 
+/// A named floor area (D8 of the plan): a waiting area, break room or office zone. It is
+/// not part of the flow; transporters use it as home or break place, and the 3D view
+/// draws it on the floor.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AreaDef {
+    pub name: String,
+    /// Centre of the area on the floor.
+    #[serde(default)]
+    pub position: [f64; 3],
+    /// Length along x and width along y, in metres.
+    #[serde(default = "default_area_size")]
+    pub size: [f64; 2],
+}
+
+fn default_area_size() -> [f64; 2] {
+    [2.0, 2.0]
+}
+
 /// Whether `s` is a "#rrggbb" colour.
 fn is_hex_color(s: &str) -> bool {
     s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
@@ -86,6 +104,83 @@ fn num(v: f64) -> String {
 }
 
 impl Model {
+    /// Position of a place given as a point or as an object or area name.
+    pub(crate) fn place_of(&self, at: Option<[f64; 3]>, object: Option<&str>) -> Option<[f64; 3]> {
+        at.or_else(|| {
+            let name = object?;
+            self.objects
+                .iter()
+                .find(|o| o.name == name)
+                .map(|o| o.position)
+                .or_else(|| {
+                    self.areas
+                        .iter()
+                        .find(|a| a.name == name)
+                        .map(|a| a.position)
+                })
+        })
+    }
+
+    /// Areas, and the home and break places of the transporters.
+    pub(crate) fn validate_places(&self, errors: &mut Vec<String>) {
+        let mut names: HashSet<&str> = self.objects.iter().map(|o| o.name.as_str()).collect();
+        for a in &self.areas {
+            if a.name.trim().is_empty() {
+                errors.push("há uma área sem nome".to_string());
+            } else if !names.insert(a.name.as_str()) {
+                errors.push(format!(
+                    "área '{}': o nome já é usado por um objeto ou outra área",
+                    a.name
+                ));
+            }
+            if !a.position.iter().all(|v| v.is_finite()) {
+                errors.push(format!("área '{}': position deve ser finita", a.name));
+            }
+            if !a.size.iter().all(|v| v.is_finite() && *v > 0.0) {
+                errors.push(format!("área '{}': size deve ser finito e > 0", a.name));
+            }
+        }
+        for obj in &self.objects {
+            let ObjectKind::Transporter {
+                home_at,
+                home_object,
+                break_at,
+                break_object,
+                ..
+            } = &obj.kind
+            else {
+                continue;
+            };
+            for (what, at, object) in [
+                ("home", home_at, home_object),
+                ("break", break_at, break_object),
+            ] {
+                if at.is_some() && object.is_some() {
+                    errors.push(format!(
+                        "{}: use {what}_at (um ponto) ou {what}_object (um objeto ou área), não os dois",
+                        obj.name
+                    ));
+                }
+                if at.is_some_and(|p| !p.iter().all(|v| v.is_finite())) {
+                    errors.push(format!("{}: {what}_at deve ser finito", obj.name));
+                }
+                if let Some(o) = object {
+                    if o == &obj.name {
+                        errors.push(format!(
+                            "{}: {what}_object não pode ser o próprio transportador",
+                            obj.name
+                        ));
+                    } else if self.place_of(None, Some(o)).is_none() {
+                        errors.push(format!(
+                            "{}: {what}_object '{o}' não é um objeto nem uma área do modelo",
+                            obj.name
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     /// The item types as the sources apply them.
     pub(crate) fn item_type_specs(&self) -> Vec<ItemTypeSpec> {
         self.item_types

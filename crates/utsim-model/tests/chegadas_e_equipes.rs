@@ -822,3 +822,121 @@ proptest::proptest! {
         }
     }
 }
+
+// ---------------------------------------------------------------- E5 home, areas, breaks
+
+/// One forklift at (0, 0) carrying items from `q` (5, 0) to `out` (10, 0); `fields` are
+/// extra Transporter fields, `extra` extra objects or model fields.
+fn homing_model(fields: &str, arrivals: &str, extra: &str) -> String {
+    format!(
+        r#"Model(
+            name: "casa",
+            run: (stop_time: 200.0),
+            {extra}
+            objects: [
+                (name: "src", kind: Source({arrivals})),
+                (name: "q", kind: Queue(), transport: "eq", position: (5.0, 0.0, 0.0)),
+                (name: "out", kind: Sink, position: (10.0, 0.0, 0.0)),
+                (name: "m", kind: Transporter(speed: 1.0{fields})),
+                (name: "eq", kind: Dispatcher(team: ["m"])),
+            ],
+            connections: [("src", "q"), ("q", "out")],
+        )"#
+    )
+}
+
+/// `(start time, end point)` of every travel of block `who`.
+fn travels(text: &str, who: &str) -> Vec<(f64, [f64; 3])> {
+    let (trace, names) = traced(text);
+    trace
+        .iter()
+        .filter_map(|r| match &r.event {
+            TraceEvent::Travel { carrier, path, .. } if names[*carrier] == who => {
+                Some((r.t, *path.last().unwrap()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+const ONE_ITEM: &str = "interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1";
+
+#[test]
+fn home_at_a_point_or_an_area() {
+    // Empty to q (5), loaded to out (5), then home.
+    let t = travels(
+        &homing_model(", home_at: (0.0, 4.0, 0.0)", ONE_ITEM, ""),
+        "m",
+    );
+    assert_eq!(t.last().unwrap(), &(10.0, [0.0, 4.0, 0.0]));
+    let t = travels(
+        &homing_model(
+            r#", home_object: "espera""#,
+            ONE_ITEM,
+            r#"areas: [(name: "espera", position: (2.0, -3.0, 0.0), size: (3.0, 2.0))],"#,
+        ),
+        "m",
+    );
+    assert_eq!(t.last().unwrap(), &(10.0, [2.0, -3.0, 0.0]));
+    // An object works as home too: its position.
+    let t = travels(&homing_model(r#", home_object: "q""#, ONE_ITEM, ""), "m");
+    assert_eq!(t.last().unwrap(), &(10.0, [5.0, 0.0, 0.0]));
+    // Without any home field the member stays at the sink, as before.
+    let t = travels(&homing_model("", ONE_ITEM, ""), "m");
+    assert_eq!(t.last().unwrap(), &(5.0, [10.0, 0.0, 0.0]));
+}
+
+#[test]
+fn break_place_on_pause_and_back() {
+    // Off shift from 50 to 70: at 50 the idle member walks to the break room (drawn,
+    // no run time), at 70 it walks back home.
+    // The shift goes on the object, after the kind: the fields close `Transporter(`.
+    let text = homing_model(
+        r#", home: true, break_object: "copa"), shifts: (period: 1000.0, off: [(start: 50.0, duration: 20.0)]"#,
+        ONE_ITEM,
+        r#"areas: [(name: "copa", position: (0.0, 8.0, 0.0))],"#,
+    );
+    let t = travels(&text, "m");
+    assert_eq!(
+        t,
+        [
+            (0.0, [5.0, 0.0, 0.0]),
+            (5.0, [10.0, 0.0, 0.0]),
+            (10.0, [0.0, 0.0, 0.0]),
+            (50.0, [0.0, 8.0, 0.0]),
+            (70.0, [0.0, 0.0, 0.0]),
+        ]
+    );
+    // Work that arrives during the break starts from the break room at 70.
+    let late = "interarrival: Const(60.0), max_arrivals: 1";
+    let t = travels(&text.replace(ONE_ITEM, late), "m");
+    assert_eq!(t[0], (50.0, [0.0, 8.0, 0.0]));
+    assert_eq!(t[1], (70.0, [5.0, 0.0, 0.0]));
+    let r = run(&text.replace(ONE_ITEM, late));
+    let tis = &r.block("out").unwrap().extra["time_in_system"];
+    // Waits 60 → 70, then |(0,8) - (5,0)| empty and 5 loaded.
+    assert!(
+        (tis.mean - (10.0 + 89f64.sqrt() + 5.0)).abs() < 1e-9,
+        "{}",
+        tis.mean
+    );
+}
+
+#[test]
+fn places_are_validated() {
+    let err = |fields: &str, extra: &str| {
+        Model::parse(&homing_model(fields, ONE_ITEM, extra))
+            .unwrap()
+            .validate()
+            .unwrap_err()
+            .to_string()
+    };
+    let e = err(r#", home_object: "nada""#, "");
+    assert!(e.contains("não é um objeto nem uma área"), "{e}");
+    let e = err(r#", home_at: (1.0, 1.0, 0.0), home_object: "q""#, "");
+    assert!(e.contains("não os dois"), "{e}");
+    let e = err("", r#"areas: [(name: "q")],"#);
+    assert!(e.contains("já é usado"), "{e}");
+    let e = err("", r#"areas: [(name: "z", size: (0.0, 1.0))],"#);
+    assert!(e.contains("size deve ser finito e > 0"), "{e}");
+}

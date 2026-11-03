@@ -412,6 +412,11 @@ impl Ctx<'_> {
         self.core.blocks[self.me.0].stops != 0
     }
 
+    /// Whether this block is off shift now (it may also be broken).
+    pub fn is_off_shift(&self) -> bool {
+        self.core.blocks[self.me.0].stops & OFF_SHIFT != 0
+    }
+
     /// Whether this block is finishing its work before going off shift
     /// (`ShiftEnd::Finish`): it runs, but must not start new work.
     pub fn is_closing(&self) -> bool {

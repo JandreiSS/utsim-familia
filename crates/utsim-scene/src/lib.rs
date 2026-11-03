@@ -187,6 +187,19 @@ pub struct StaticScene {
     /// [`Pose::item_type`] points here. Empty (and absent from the JSON) without types.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub item_types: Vec<ItemTypeStyle>,
+    /// Named floor areas of the model (waiting areas, break rooms), drawn on the floor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaShape>,
+}
+
+/// A named floor area (the model's `areas`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AreaShape {
+    pub name: String,
+    /// Centre on the floor, metres, Z-up.
+    pub position: [f32; 3],
+    /// Length along x and width along y, metres.
+    pub size: [f32; 2],
 }
 
 /// How the items of one item type look (the model's `item_types`).
