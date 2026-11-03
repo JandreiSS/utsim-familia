@@ -2,9 +2,8 @@
 //! the family (the Godot interface through `utsim-godot`, and later the launcher and the
 //! Lean Six Sigma app).
 //!
-//! The colours are the ones of the Godot theme (`godot/tema/utsim.tres`), so the panels
-//! drawn by egui and the ones still drawn by Godot look the same while the interface moves
-//! to Rust. Pure egui: no backend, no window.
+//! The colours are the ones of the old Godot theme (`godot/tema/utsim.tres`, removed when the
+//! whole interface around the 3D view became egui). Pure egui: no backend, no window.
 //!
 //! ```
 //! let ctx = egui::Context::default();
