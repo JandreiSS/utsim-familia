@@ -2,11 +2,13 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::traffic::{Traffic, segment_durations};
+use utsim_core::init::Accepts;
 use utsim_core::task::{
     MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_USER, distance, path_length, travel_time,
 };
 use utsim_core::{
-    Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, State, TaskKind, TaskRequest, Time,
+    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, State, TaskKind, TaskRequest,
+    Time,
 };
 
 /// Sent to the dispatcher right before [`MSG_IDLE`]: one coordinate of the member's
@@ -559,6 +561,56 @@ impl Behavior for Transporter {
         self.abandon_route(cx);
         self.position = cx.position(cx.me());
         cx.set_state(State::Idle);
+    }
+
+    /// `position`: idle there at `t = 0` (with `home`, it drives home at once). Tasks
+    /// are not part of the state: the objects that need it ask again when they restart.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Transporter",
+            Accepts {
+                position: true,
+                ..Accepts::default()
+            },
+        )?;
+        let Some(p) = state.position else {
+            return Ok(());
+        };
+        if !p.iter().all(|v| v.is_finite()) {
+            return Err(format!("position {p:?} precisa ter coordenadas finitas"));
+        }
+        self.position = p;
+        self.report_position(cx);
+        let home = cx.position(cx.me());
+        if self.home && distance(p, home) > 0.0 {
+            self.travel(cx, home, ARRIVED_HOME, State::TravelEmpty);
+        }
+        Ok(())
+    }
+
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let position = match &self.timer {
+            Some(Timer {
+                event: Some(_),
+                leg: Some(leg),
+                ..
+            }) => Self::progress(leg, cx.now()).0,
+            _ => self.position,
+        };
+        state.position = Some(position);
+        let carried = state.items.len();
+        state.items.clear();
+        let busy = !self.trip.is_empty() || !self.queue.is_empty();
+        match (carried, busy) {
+            (0, false) => None,
+            (0, true) => Some(
+                "as tarefas em curso não entram no estado gravado (os objetos que as pediram pedem de novo)"
+                    .into(),
+            ),
+            (n, _) => Some(format!(
+                "{n} item(ns) carregados pelo transportador não entram no estado gravado; as tarefas recomeçam"
+            )),
+        }
     }
 
     fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {

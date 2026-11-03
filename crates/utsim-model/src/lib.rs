@@ -7,10 +7,12 @@ pub mod html;
 pub mod replay;
 mod shifts;
 mod spans;
+pub mod state;
 pub mod synthetic;
 mod warnings;
 
 pub use spans::SpanDef;
+pub use state::InitialState;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;

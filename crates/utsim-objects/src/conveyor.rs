@@ -1,4 +1,5 @@
-use utsim_core::{Behavior, Ctx, EventId, Item, ItemId, State, Time};
+use utsim_core::init::Accepts;
+use utsim_core::{Behavior, BlockState, Ctx, EventId, Item, ItemId, State, Time};
 
 /// The front item reached the end of the belt.
 const ARRIVE: u32 = 0;
@@ -162,6 +163,66 @@ impl Behavior for Conveyor {
         self.arrive_event = None;
         self.reopen_event = None;
         cx.set_state(State::Empty);
+    }
+
+    /// Items are listed front first, each with its distance from the start (`at`);
+    /// without it they are queued at the end, as on a blocked belt.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Conveyor",
+            Accepts {
+                items: true,
+                at: true,
+                ..Accepts::default()
+            },
+        )?;
+        let n = state.items.len();
+        let cap = self.capacity();
+        if n > cap {
+            return Err(format!(
+                "{n} itens, mas cabem {cap} na esteira (length / item_length)"
+            ));
+        }
+        let now = cx.now();
+        let eps = self.eps();
+        let ids = cx.contents().to_vec();
+        let mut ahead: Option<f64> = None;
+        for (k, (&id, it)) in ids.iter().zip(&state.items).enumerate() {
+            let pos = it.at.unwrap_or_else(|| self.target(k));
+            if pos < -eps || pos > self.length + eps {
+                return Err(format!(
+                    "item {}: at = {pos} fica fora da esteira [0, {}]",
+                    k + 1,
+                    self.length
+                ));
+            }
+            if let Some(front) = ahead {
+                if pos > front - self.item_length + eps {
+                    return Err(format!(
+                        "item {}: at = {pos} precisa ficar pelo menos item_length ({}) atrás do item da frente (at = {front}); liste os itens da frente para trás",
+                        k + 1,
+                        self.item_length
+                    ));
+                }
+            }
+            ahead = Some(pos);
+            self.items.push(OnBelt {
+                id,
+                pos: pos.clamp(0.0, self.length),
+                since: now,
+            });
+        }
+        self.reschedule(cx);
+        self.update_state(cx);
+        Ok(())
+    }
+
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let positions = self.positions(cx.now());
+        for (it, id) in state.items.iter_mut().zip(cx.contents()) {
+            it.at = positions.iter().find(|(i, _)| i == id).map(|p| p.1);
+        }
+        None
     }
 
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {

@@ -12,6 +12,7 @@ use crate::block::{
     Behavior, BlockId, Downtime, OutputRule, ShiftEnd, ShiftTable, State, TransferDef, TransferPath,
 };
 use crate::dist::Dist;
+use crate::init::{self, BlockState, ItemState, StartState};
 use crate::item::{Item, ItemId, Value};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
@@ -146,6 +147,9 @@ struct BlockRuntime {
     open_windows: u32,
     /// Active stop reasons (bit set of `BREAKDOWN`, `OFF_SHIFT`); 0 = running.
     stops: u8,
+    /// Start of the breakdown in progress and end of the last repair (saved states).
+    down_since: Time,
+    up_since: Time,
     /// An off-shift window with `ShiftEnd::Finish` started while work was in progress:
     /// the inputs are closed and the block runs until the work is done (overtime).
     closing: bool,
@@ -242,6 +246,8 @@ pub struct Core {
     closing: Vec<BlockId>,
     /// Time-between-two-points meters, in registration order.
     meters: Vec<Meter>,
+    /// Calendar instant at `t = 0` (see [`crate::init`]); 0 without an initial state.
+    calendar: Time,
 }
 
 /// Measures, per item, the time from leaving `from` to entering `to`; each measurement
@@ -423,6 +429,19 @@ impl Ctx<'_> {
 
     pub fn rng(&mut self) -> &mut SimRng {
         &mut self.core.blocks[self.me.0].rng
+    }
+
+    /// Calendar instant that corresponds to `t = 0` (0 unless the run starts from an
+    /// initial state, see [`crate::init`]). Cycles such as arrival schedules start at
+    /// this point of the calendar.
+    pub fn calendar_start(&self) -> Time {
+        self.core.calendar
+    }
+
+    /// Time left of an activity with duration `dist` that already ran for `elapsed`,
+    /// from this block's stream (see [`Dist::sample_residual`]).
+    pub fn sample_residual(&mut self, dist: &Dist, elapsed: Time) -> Time {
+        dist.sample_residual(elapsed, self.rng())
     }
 
     pub fn sample(&mut self, dist: &Dist) -> f64 {
@@ -868,6 +887,8 @@ pub struct Simulation {
     behaviors: Vec<Box<dyn Behavior>>,
     config: RunConfig,
     started: bool,
+    /// Applied when the run starts (see [`Simulation::set_start_state`]).
+    start_state: Option<StartState>,
 }
 
 impl Simulation {
@@ -898,10 +919,12 @@ impl Simulation {
                 next_decision: 0,
                 closing: Vec::new(),
                 meters: Vec::new(),
+                calendar: 0.0,
             },
             behaviors: Vec::new(),
             config,
             started: false,
+            start_state: None,
         }
     }
 
@@ -927,6 +950,8 @@ impl Simulation {
             shifts: None,
             open_windows: 0,
             stops: 0,
+            down_since: 0.0,
+            up_since: 0.0,
             closing: false,
             state_when_up: None,
             contents: Vec::new(),
@@ -1049,6 +1074,96 @@ impl Simulation {
         {
             self.core.timed.push((block.0, measure.to_string()));
         }
+    }
+
+    /// Starts the run from `state` instead of an empty system (see [`crate::init`]).
+    /// Call it before the run starts; problems with the state are reported by the first
+    /// call that starts the run ([`Simulation::begin`], `run_until`, `run`).
+    pub fn set_start_state(&mut self, state: StartState) {
+        if !self.started {
+            self.start_state = Some(state);
+        }
+    }
+
+    /// Calendar instant that corresponds to `t = 0` (0 without an initial state).
+    pub fn calendar_start(&self) -> Time {
+        self.core.calendar
+    }
+
+    /// The state of every block now, ready to start another run from here (see
+    /// [`crate::init`]): items held with their times and labels, work in progress,
+    /// breakdowns, positions. `clock` is the calendar instant now. Blocks with nothing
+    /// to say are left out. The notes list what cannot be represented and is lost
+    /// (items in transit, packed items, items carried by transporters...).
+    pub fn save_state(&mut self) -> (StartState, Vec<String>) {
+        let now = self.core.now;
+        let mut notes = Vec::new();
+        let transit = self
+            .core
+            .items
+            .values()
+            .filter(|it| it.location.is_none() && it.container.is_none())
+            .count();
+        if transit > 0 {
+            notes.push(format!(
+                "{transit} item(ns) em trânsito entre objetos não entram no estado gravado"
+            ));
+        }
+        let mut blocks = Vec::new();
+        for b in 0..self.core.blocks.len() {
+            let mut state = BlockState::default();
+            let mut packed = 0;
+            {
+                let rt = &self.core.blocks[b];
+                for &id in &rt.contents {
+                    let it = &self.core.items[id];
+                    packed += it.contents.len();
+                    let stay = now - it.entered_at;
+                    state.items.push(ItemState {
+                        elapsed: stay,
+                        stay: Some(stay),
+                        age: Some(now - it.created_at),
+                        labels: it.labels.clone(),
+                        ..ItemState::default()
+                    });
+                }
+                if rt.downtime.is_some() {
+                    if rt.stops & BREAKDOWN != 0 {
+                        state.down = Some(now - rt.down_since);
+                    } else {
+                        state.up = Some(now - rt.up_since);
+                    }
+                }
+            }
+            let name = self.core.blocks[b].name.clone();
+            if packed > 0 {
+                notes.push(format!(
+                    "{name}: {packed} item(ns) embalados em contêineres não entram no estado gravado (o contêiner entra vazio)"
+                ));
+            }
+            let note = {
+                let Simulation {
+                    core, behaviors, ..
+                } = self;
+                let cx = Ctx {
+                    core,
+                    me: BlockId(b),
+                };
+                behaviors[b].save_state(&cx, &mut state)
+            };
+            if let Some(note) = note {
+                notes.push(format!("{name}: {note}"));
+            }
+            state.items.iter_mut().for_each(ItemState::tidy);
+            if !state.is_empty() {
+                blocks.push((BlockId(b), state));
+            }
+        }
+        let state = StartState {
+            clock: self.core.calendar + now,
+            blocks,
+        };
+        (state, notes)
     }
 
     /// Streams every [`TraceEvent`] to `observer` while the run progresses.
@@ -1216,6 +1331,23 @@ impl Simulation {
     }
 
     fn start(&mut self) -> Result<(), SimError> {
+        let n = self.core.blocks.len();
+        let mut states: Vec<Option<BlockState>> = vec![None; n];
+        if let Some(start) = self.start_state.take() {
+            if start.clock.is_finite() {
+                self.core.calendar = start.clock;
+            } else {
+                self.core.errors.push(format!(
+                    "estado inicial: o relógio (clock) deve ser finito (está {})",
+                    start.clock
+                ));
+            }
+            for (b, state) in start.blocks {
+                if let Some(slot) = states.get_mut(b.0) {
+                    *slot = Some(state);
+                }
+            }
+        }
         for b in 0..self.behaviors.len() {
             let me = BlockId(b);
             let Simulation {
@@ -1224,13 +1356,34 @@ impl Simulation {
             behaviors[b].reset(&mut Ctx { core, me });
             self.flush_doomed();
         }
+        for (b, state) in states.iter().enumerate() {
+            if let Some(state) = state {
+                self.restore_block(BlockId(b), state);
+            }
+        }
+        self.check()?;
         if self.config.warmup > 0.0 {
             self.core
                 .schedule_at(self.config.warmup, EventKind::EndWarmup);
         }
-        for b in 0..self.core.blocks.len() {
-            self.schedule_failure(BlockId(b));
-            self.schedule_shifts(BlockId(b));
+        for (b, state) in states.iter().enumerate() {
+            let b = BlockId(b);
+            match state.as_ref().map(|s| (s.down, s.up)) {
+                Some((Some(elapsed), _)) => self.start_down(b, elapsed),
+                Some((None, Some(elapsed))) => self.schedule_failure_after(b, elapsed),
+                _ => self.schedule_failure(b),
+            }
+            self.schedule_shifts(b);
+            if let Some(expected) = state.as_ref().and_then(|s| s.off_shift) {
+                let rt = &self.core.blocks[b.0];
+                if rt.shifts.is_some() && (rt.open_windows > 0) != expected {
+                    let message = format!(
+                        "estado inicial de {}: off_shift = {expected}, mas no relógio {} o calendário de turnos diz o contrário",
+                        rt.name, self.core.calendar
+                    );
+                    self.core.errors.push(message);
+                }
+            }
         }
         if self.sample_interval().is_some() {
             self.core.schedule_at(self.config.warmup, EventKind::Sample);
@@ -1272,6 +1425,30 @@ impl Simulation {
         }
     }
 
+    /// Initial state: the block has run `elapsed` since its last repair; the time to the
+    /// next failure is the residual of `mtbf`.
+    fn schedule_failure_after(&mut self, b: BlockId, elapsed: Time) {
+        let now = self.core.now;
+        let rt = &mut self.core.blocks[b.0];
+        if let Some(dt) = &rt.downtime {
+            let delay = dt.mtbf.sample_residual(elapsed, &mut rt.downtime_rng);
+            rt.up_since = now - elapsed;
+            self.core.schedule_at(now + delay, EventKind::Fail(b));
+        }
+    }
+
+    /// Initial state: the block has been down for `elapsed`; the repair takes the
+    /// residual of `mttr`.
+    fn start_down(&mut self, b: BlockId, elapsed: Time) {
+        let now = self.core.now;
+        let rt = &mut self.core.blocks[b.0];
+        let Some(dt) = &rt.downtime else { return };
+        let repair = dt.mttr.sample_residual(elapsed, &mut rt.downtime_rng);
+        rt.down_since = now - elapsed;
+        self.core.schedule_at(now + repair, EventKind::Repair(b));
+        self.stop(b, BREAKDOWN);
+    }
+
     fn fail(&mut self, b: BlockId) {
         let now = self.core.now;
         let rt = &mut self.core.blocks[b.0];
@@ -1279,34 +1456,60 @@ impl Simulation {
             .downtime
             .as_ref()
             .map_or(0.0, |dt| dt.mttr.sample(&mut rt.downtime_rng).max(0.0));
+        rt.down_since = now;
         self.core.schedule_at(now + repair, EventKind::Repair(b));
         self.stop(b, BREAKDOWN);
     }
 
     fn repair(&mut self, b: BlockId) {
+        self.core.blocks[b.0].up_since = self.core.now;
         self.resume(b, BREAKDOWN);
         self.schedule_failure(b);
     }
 
+    /// Schedules every off-shift window of the block. With a calendar start `c`, the
+    /// cycle is at `c mod period` at `t = 0`: a window already open starts at once with
+    /// the time it has left. Without one (`c = 0`) the windows start at their offsets.
     fn schedule_shifts(&mut self, b: BlockId) {
         let Some(table) = &self.core.blocks[b.0].shifts else {
             return;
         };
-        let starts: Vec<Time> = table.off.iter().map(|w| w.start).collect();
-        for (k, start) in starts.into_iter().enumerate() {
-            self.core.schedule_at(start, EventKind::ShiftOff(b, k));
+        let period = table.period;
+        let phase = self.core.calendar.rem_euclid(period);
+        let windows: Vec<(Time, Time)> = table.off.iter().map(|w| (w.start, w.duration)).collect();
+        let now = self.core.now;
+        for (k, (start, duration)) in windows.into_iter().enumerate() {
+            let off = start - phase;
+            if off >= 0.0 {
+                self.core.schedule_at(now + off, EventKind::ShiftOff(b, k));
+            } else if off + duration > 0.0 {
+                self.open_window(b, k, off + duration, off + period);
+            } else {
+                self.core
+                    .schedule_at(now + off + period, EventKind::ShiftOff(b, k));
+            }
         }
     }
 
     fn shift_off(&mut self, b: BlockId, k: usize) {
+        let Some(table) = &self.core.blocks[b.0].shifts else {
+            return;
+        };
+        let (period, duration) = (table.period, table.off[k].duration);
+        self.open_window(b, k, duration, period);
+    }
+
+    /// Window `k` opens now: it closes after `closes_in` and opens again after `next_in`.
+    fn open_window(&mut self, b: BlockId, k: usize, closes_in: Time, next_in: Time) {
         let now = self.core.now;
         let Some(table) = &self.core.blocks[b.0].shifts else {
             return;
         };
-        let (period, duration, on_end) = (table.period, table.off[k].duration, table.on_end);
-        self.core.schedule_at(now + duration, EventKind::ShiftOn(b));
+        let on_end = table.on_end;
         self.core
-            .schedule_at(now + period, EventKind::ShiftOff(b, k));
+            .schedule_at(now + closes_in, EventKind::ShiftOn(b));
+        self.core
+            .schedule_at(now + next_in, EventKind::ShiftOff(b, k));
         let rt = &mut self.core.blocks[b.0];
         rt.open_windows += 1;
         // `Finish` only matters for a running block: a stopped one has no progress to make.
@@ -1429,6 +1632,70 @@ impl Simulation {
         for k in 0..self.core.blocks[b.0].inputs.len() {
             let up = self.core.blocks[b.0].inputs[k];
             self.core.mark_dirty(up);
+        }
+    }
+
+    /// Places the items of an initial state in block `b` and lets the block rebuild its
+    /// timers ([`Behavior::restore`]). Problems become modelling errors.
+    fn restore_block(&mut self, b: BlockId, state: &BlockState) {
+        const MAX_ITEMS: usize = 10_000_000;
+        let name = self.core.blocks[b.0].name.clone();
+        let mut problems = Vec::new();
+        if let Err(e) = init::check_times(state) {
+            problems.push(e);
+        }
+        let rt = &self.core.blocks[b.0];
+        if (state.down.is_some() || state.up.is_some()) && rt.downtime.is_none() {
+            problems.push("'down' e 'up' exigem quebras (downtime) no objeto".to_string());
+        }
+        if state.off_shift.is_some() && rt.shifts.is_none() {
+            problems.push("'off_shift' exige turnos (shifts) no objeto".to_string());
+        }
+        if state.count.is_some_and(|n| n > MAX_ITEMS) || state.items.len() > MAX_ITEMS {
+            problems.push(format!("mais de {MAX_ITEMS} itens"));
+        }
+        if !problems.is_empty() {
+            for p in problems {
+                self.core
+                    .errors
+                    .push(format!("estado inicial de {name}: {p}"));
+            }
+            return;
+        }
+        let mut state = state.clone();
+        if let Some(n) = state.count.take() {
+            state.items = vec![ItemState::default(); n];
+        }
+        let now = self.core.now;
+        for it in &state.items {
+            let id = self.core.items.insert(Item {
+                labels: it.labels.clone(),
+                created_at: now - it.age_time(),
+                entered_at: now - it.stay_time(),
+                location: Some(b),
+                container: None,
+                contents: Vec::new(),
+                awaiting_transport: false,
+                marks: Vec::new(),
+            });
+            self.core.blocks[b.0].contents.push(id);
+            self.core.emit(TraceEvent::Created {
+                item: item_key(id),
+                block: b.0,
+            });
+        }
+        self.core.update_content(b);
+        let result = {
+            let Simulation {
+                core, behaviors, ..
+            } = self;
+            behaviors[b.0].restore(&mut Ctx { core, me: b }, &state)
+        };
+        self.flush_doomed();
+        if let Err(e) = result {
+            self.core
+                .errors
+                .push(format!("estado inicial de {name}: {e}"));
         }
     }
 

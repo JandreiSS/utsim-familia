@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, Ctx, Dist, EventId, Item, ItemId, State, Time};
+use utsim_core::init::Accepts;
+use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, Time};
 
 const ARRIVAL: u32 = 0;
 const LOST_CHECK: u32 = 1;
@@ -181,11 +182,13 @@ struct Clock {
     marks: Vec<(f64, Option<usize>)>,
     /// Cycle number and mark index of the next boundary event.
     next: (u64, usize),
+    /// Point of the cycle at `t = 0` (the calendar start modulo the cycle).
+    phase: f64,
 }
 
 impl Clock {
     fn time_of(&self, (n, i): (u64, usize)) -> Time {
-        n as f64 * self.schedule.cycle + self.marks[i].0
+        n as f64 * self.schedule.cycle + self.marks[i].0 - self.phase
     }
 
     fn after(&self, (n, i): (u64, usize)) -> (u64, usize) {
@@ -227,6 +230,8 @@ pub struct Source {
     next: Option<(EventId, Time)>,
     /// Time left on the arrival clock while down.
     paused: Option<Time>,
+    /// Length of the arrival clock now running (for saved states).
+    gap: Time,
     clock: Option<Clock>,
     /// Active period of the schedule (`None`: outside every period).
     current: Option<usize>,
@@ -245,6 +250,7 @@ impl Source {
             lost: 0,
             next: None,
             paused: None,
+            gap: 0.0,
             clock: None,
             current: None,
         }
@@ -279,6 +285,7 @@ impl Source {
             marks: schedule.marks(),
             schedule,
             next: (0, 0),
+            phase: 0.0,
         });
         self
     }
@@ -297,12 +304,16 @@ impl Source {
     }
 
     /// Time to the next arrival under the current process (`None`: no arrivals now).
-    fn gap(&self, cx: &mut Ctx) -> Option<Time> {
-        match self.process(self.current) {
+    fn gap(&mut self, cx: &mut Ctx) -> Option<Time> {
+        let gap = match self.process(self.current) {
             Process::Dist(d) => Some(cx.sample_duration(d)),
             Process::Rate(r) => Some(cx.sample_duration(&Dist::Exp { mean: 1.0 / r })),
             Process::Closed => None,
+        };
+        if let Some(g) = gap {
+            self.gap = g;
         }
+        gap
     }
 
     /// Schedules the next period boundary.
@@ -376,10 +387,18 @@ impl Behavior for Source {
         self.lost = 0;
         self.next = None;
         self.paused = None;
+        self.gap = 0.0;
         if let Some(clock) = &mut self.clock {
-            // The period in force at t = 0, then the first mark after 0.
-            self.current = clock.schedule.periods.iter().position(|p| p.start <= 0.0);
-            clock.next = match clock.marks.iter().position(|(m, _)| *m > 0.0) {
+            // The period in force at t = 0, then the first mark after it. The cycle is at
+            // the calendar start (0 unless the run starts from an initial state).
+            let phase = cx.calendar_start().rem_euclid(clock.schedule.cycle);
+            clock.phase = phase;
+            self.current = clock
+                .schedule
+                .periods
+                .iter()
+                .position(|p| p.start <= phase && phase < p.end);
+            clock.next = match clock.marks.iter().position(|(m, _)| *m > phase) {
                 Some(i) => (0, i),
                 None => (1, 0),
             };
@@ -387,10 +406,76 @@ impl Behavior for Source {
         self.schedule_boundary(cx);
         let open = self.process(self.current) != Process::Closed;
         if self.first_at_zero && self.max_arrivals != Some(0) && open {
+            self.gap = 0.0;
             self.arrive_in(cx, 0.0);
         } else {
             self.schedule_next(cx);
         }
+    }
+
+    /// `elapsed`: the arrival clock has run this long, so the next arrival draws the
+    /// residual of the inter-arrival time. One item (`Wait` only) is an item that could
+    /// not leave yet: the clock starts again when it leaves.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Source",
+            Accepts {
+                items: true,
+                elapsed: true,
+                ..Accepts::default()
+            },
+        )?;
+        let n = state.items.len();
+        if n > 1 || (n == 1 && self.on_blocked == OnBlocked::Drop) {
+            return Err(
+                "uma fonte só guarda um item que ainda não saiu, e só com on_blocked: Wait".into(),
+            );
+        }
+        if n == 1 {
+            if state.elapsed.is_some() {
+                return Err(
+                    "'elapsed' não vale com um item parado na fonte (o relógio de chegadas recomeça quando ele sai)"
+                        .into(),
+                );
+            }
+            if let Some((event, _)) = self.next.take() {
+                cx.cancel(event);
+            }
+            let id = cx.contents()[0];
+            cx.set_state(State::Blocked);
+            cx.release(id);
+            return Ok(());
+        }
+        if let (Some(elapsed), Some((event, _))) = (state.elapsed, self.next) {
+            let dist = match self.process(self.current) {
+                Process::Dist(d) => Some(d.clone()),
+                Process::Rate(_) | Process::Closed => None,
+            };
+            // A rate is a Poisson process: memoryless, the pending arrival stays.
+            if let Some(d) = dist {
+                cx.cancel(event);
+                self.next = None;
+                let left = cx.sample_residual(&d, elapsed);
+                self.gap = elapsed + left;
+                self.arrive_in(cx, left);
+            }
+        }
+        Ok(())
+    }
+
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        if !state.items.is_empty() {
+            return None;
+        }
+        let left = match (self.next, self.paused) {
+            (Some((_, due)), _) => Some((due - cx.now()).max(0.0)),
+            (None, Some(rest)) => Some(rest),
+            (None, None) => None,
+        };
+        state.elapsed = left
+            .map(|left| (self.gap - left).max(0.0))
+            .filter(|e| *e > 0.0);
+        None
     }
 
     fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dist::Dist;
 use crate::engine::Ctx;
+use crate::init::BlockState;
 use crate::item::{Item, ItemId};
 use crate::task::TaskRequest;
 
@@ -263,5 +264,41 @@ pub trait Behavior: Send {
     /// A message from another block (`MSG_*` tags in [`crate::task`]).
     fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
         let _ = (cx, from, tag, payload);
+    }
+
+    /// Applies this block's part of an initial state (see [`crate::init`]), right after
+    /// [`Behavior::reset`]. The kernel has already placed `state.items` in the block, in
+    /// the same order as [`Ctx::contents`], and handles `down`, `up` and `off_shift`
+    /// itself. The error is user-facing text. The default refuses anything of the
+    /// block's own, so a block type never accepts a state it does not understand.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        let _ = cx;
+        if state.has_block_part() {
+            Err(format!(
+                "objetos do tipo '{}' ainda não aceitam estado inicial",
+                self.kind()
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Writes this block's part of a saved state (see [`crate::Simulation::save_state`]).
+    /// The kernel has filled `state.items` with the items held, in content order, with
+    /// `elapsed` and `stay` equal to the time in the block, `age` and labels; the block
+    /// adds what only it knows (phases, elapsed work, belt positions, slots, position).
+    /// Returns a note about anything that cannot be represented and is lost. The
+    /// default drops the items with a note.
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let _ = cx;
+        if state.items.is_empty() {
+            return None;
+        }
+        let n = state.items.len();
+        state.items.clear();
+        Some(format!(
+            "{n} item(ns) num objeto do tipo '{}' não entram no estado gravado",
+            self.kind()
+        ))
     }
 }
