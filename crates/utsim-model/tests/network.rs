@@ -46,6 +46,7 @@ fn loop_with_shortcut() -> NetworkDef {
             edge("D", "A", false),
             edge("B", "E", true),
         ],
+        generated: None,
     }
 }
 
@@ -121,6 +122,7 @@ fn ties_resolve_deterministically_by_node_order() {
             edge("B", "D", true),
             edge("C", "D", true),
         ],
+        generated: None,
     };
     for _ in 0..50 {
         let r = NetworkRouter::new(&net);
@@ -154,6 +156,7 @@ fn validate_reports_unreachable_nodes() {
             node("C", 5.0, 0.0),
         ],
         edges: vec![edge("A", "B", true)],
+        generated: None,
     };
     let errors = split.validate();
     assert!(
@@ -166,6 +169,7 @@ fn validate_reports_unreachable_nodes() {
     let dead_end = NetworkDef {
         nodes: vec![node("A", 0.0, 0.0), node("B", 1.0, 0.0)],
         edges: vec![edge("A", "B", false)],
+        generated: None,
     };
     let errors = dead_end.validate();
     assert_eq!(errors.len(), 1, "{errors:?}");

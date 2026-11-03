@@ -18,6 +18,7 @@ default-members = [
     "crates/utsim-fluid",
     "crates/utsim-look",
     "crates/utsim-model",
+    "crates/utsim-nav",
     "crates/utsim-objects",
     "crates/utsim-opt",
     "crates/utsim-pert",
@@ -53,6 +54,7 @@ utsim-assets = { path = "crates/utsim-assets" }
 utsim-look = { path = "crates/utsim-look" }
 utsim-cad = { path = "crates/utsim-cad" }
 utsim-diagram = { path = "crates/utsim-diagram" }
+utsim-nav = { path = "crates/utsim-nav" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }

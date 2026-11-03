@@ -7730,12 +7730,24 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "utsim-cad",
  "utsim-core",
  "utsim-flow",
  "utsim-fluid",
+ "utsim-nav",
  "utsim-objects",
  "utsim-script",
  "utsim-stats",
+]
+
+[[package]]
+name = "utsim-nav"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-cad",
+ "utsim-core",
+ "utsim-objects",
 ]
 
 [[package]]
