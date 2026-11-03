@@ -9,6 +9,11 @@
 ##
 ## Widgets are named `Prop_<path>` (dots as underscores) so scripts can find them; a
 ## distribution adds `_familia`, `_<parameter>`, `_texto` (the toggle) and `_ron`.
+##
+## The asset of the look has a miniature (`Prop_visual_asset_miniatura`): the object
+## alone, drawn by the same scene code in its own small 3D world, with the asset chosen,
+## or with the one under the mouse while the list is open. `look_provider(asset)` gives
+## its scene (`UtsimDocument.look_scene`).
 class_name PainelPropriedades
 extends VBoxContainer
 
@@ -25,6 +30,13 @@ const SECTION := Color(0.62, 0.76, 0.98)
 const LABEL_WIDTH := 170
 
 var families := PackedStringArray()
+## `func(asset: String) -> UtsimPlayback` (or null): the scene of the selected object
+## drawn with `asset`, for the miniature.
+var look_provider := Callable()
+var _mini_view: SubViewport
+var _mini_scene: CenaUtsim
+var _mini_camera: Camera3D
+var _mini_asset := "-"
 var _as_text := {}
 var _asset_filter := ""
 var _props: Dictionary = {}
@@ -36,6 +48,8 @@ static func widget_name(path: String) -> String:
 
 
 func clear() -> void:
+	_mini_scene = null
+	_mini_view = null
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -428,6 +442,13 @@ func _asset(field: Dictionary) -> void:
 	o.item_selected.connect(func(k):
 		if values[k] != null:
 			edited.emit(path, values[k]))
+	# The miniature follows the entry under the mouse while the list is open.
+	var popup := o.get_popup()
+	popup.id_focused.connect(func(id):
+		var k := popup.get_item_index(id)
+		if k >= 0 and k < values.size() and values[k] != null:
+			_show_miniature(values[k]))
+	popup.popup_hide.connect(func(): _show_miniature(current))
 	row.add_child(o)
 	var search_row := HBoxContainer.new()
 	var pad := Control.new()
@@ -445,6 +466,68 @@ func _asset(field: Dictionary) -> void:
 	add_child(search_row)
 	if field["help"] != "":
 		add_child(_note(field["help"], Color(0.65, 0.70, 0.78)))
+	_miniature(path)
+	_show_miniature(current)
+
+
+## The miniature's small 3D world: a camera, a light and the object's scene.
+func _miniature(path: String) -> void:
+	_mini_asset = "-"
+	if not look_provider.is_valid():
+		return
+	var box := SubViewportContainer.new()
+	box.name = widget_name(path) + "_miniatura"
+	box.stretch = true
+	box.custom_minimum_size = Vector2(0, 150)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.tooltip_text = "Miniatura do objeto com o ativo escolhido (ou o que está sob o mouse na lista)"
+	_mini_view = SubViewport.new()
+	_mini_view.own_world_3d = true
+	_mini_view.msaa_3d = Viewport.MSAA_2X
+	box.add_child(_mini_view)
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0.16, 0.17, 0.21)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.80, 0.84, 0.92)
+	e.ambient_light_energy = 0.8
+	e.tonemap_mode = Environment.TONE_MAPPER_AGX
+	env.environment = e
+	_mini_view.add_child(env)
+	var sun := DirectionalLight3D.new()
+	sun.light_energy = 1.4
+	sun.transform = Transform3D(Basis.IDENTITY, Vector3(4, 8, 5)).looking_at(Vector3.ZERO, Vector3.UP)
+	_mini_view.add_child(sun)
+	_mini_camera = Camera3D.new()
+	_mini_camera.current = true
+	_mini_view.add_child(_mini_camera)
+	_mini_scene = CenaUtsim.new()
+	_mini_scene.show_floor = false
+	_mini_scene.show_connections = false
+	_mini_view.add_child(_mini_scene)
+	add_child(box)
+
+
+## Draws the object with `asset` in the miniature (only when it changed).
+func _show_miniature(asset: String) -> void:
+	if _mini_scene == null or not is_instance_valid(_mini_scene) or asset == _mini_asset:
+		return
+	_mini_asset = asset
+	var pb: Object = look_provider.call(asset)
+	if pb == null:
+		_mini_scene.clear()
+		return
+	_mini_scene.build(pb)
+	_mini_scene.apply(0.0, 0.0, true)
+	_mini_scene.set_labels_visible(false)
+	# Frame the object from the front-right, a little above.
+	var lo: Vector3 = _mini_scene.info.get("bounds_min", Vector3(-1, 0, -1))
+	var hi: Vector3 = _mini_scene.info.get("bounds_max", Vector3(1, 1, 1))
+	var size := maxf((hi - lo).length(), 1.0)
+	var center := (lo + hi) * 0.5
+	var eye := center + Vector3(0.9, 0.7, 1.1).normalized() * size * 1.1
+	_mini_camera.transform = Transform3D(Basis.IDENTITY, eye).looking_at(center, Vector3.UP)
 
 
 ## Outputs in port order, with ▲ ▼ to reorder and ✕ to remove; then the inputs.
