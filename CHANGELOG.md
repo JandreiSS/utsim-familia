@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Em desenvolvimento
+- Fluxograma do processo (`crates/utsim-diagram`, `utsim fluxograma modelo.ron [--svg] [--html] [--mermaid] [--csv] [--com-resultados]`): cada objeto vira uma etapa com o símbolo padrão do fluxograma de processo (operação, transporte, inspeção, espera, armazenagem, início e fim), com ramificações e porcentagens, junções, retrabalho, recursos como anotações laterais, tempos médios e distâncias das transferências; carta de processo do caminho principal em HTML e CSV; texto Mermaid; ocupação e fila média de uma rodada nas caixas. Manual em `docs/manual/src/fluxograma.md`.
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
 
 ## [0.1.0] - 2026-11-02
