@@ -143,6 +143,11 @@ pub struct Pose {
     /// model declares types. Absent otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_type: Option<u32>,
+    /// Where a moving mobile resource is going: the end of the travel in progress
+    /// (metres, Z-up; for an AGV the end of the current network piece). Absent when it
+    /// stands still and for every other entity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_target: Option<[f32; 3]>,
 }
 
 /// Everything that moves or changes, at time `time`. Entities absent from a frame

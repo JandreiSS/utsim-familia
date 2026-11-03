@@ -769,6 +769,15 @@ impl Timeline {
         self.ids.get(item).copied()
     }
 
+    /// End of the travel mobile block `b` is moving along at `t` (model coordinates).
+    pub fn travel_target(&self, b: usize, t: f64) -> Option<[f64; 3]> {
+        self.legs(b)
+            .iter()
+            .rev()
+            .find(|l| l.is_moving(t))
+            .and_then(|l| l.path.last().copied())
+    }
+
     /// Item type of item `item` (dense index): 1-based index in the model's `item_types`.
     pub fn item_type(&self, item: usize) -> Option<u32> {
         self.items.get(item).and_then(|it| it.item_type)

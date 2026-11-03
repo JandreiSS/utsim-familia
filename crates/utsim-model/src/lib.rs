@@ -16,6 +16,7 @@ mod shifts;
 mod spans;
 pub mod state;
 pub mod synthetic;
+pub mod teams;
 mod warnings;
 
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
@@ -417,11 +418,19 @@ pub enum ObjectKind {
         /// Whether a more urgent request takes a member travelling empty (absent: `Never`).
         #[serde(default, skip_serializing_if = "Preempt::is_never")]
         preempt: Preempt,
+        /// Team metrics in the report (`request_wait`, `requests.count`, per member
+        /// `member.<name>.requests` and `.busy`). Off by default.
+        #[serde(default, skip_serializing_if = "is_false")]
+        metrics: bool,
     },
 }
 
 fn yes() -> bool {
     true
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 fn one_f64() -> f64 {
@@ -1240,10 +1249,12 @@ impl Model {
                     rule,
                     pick,
                     preempt,
+                    metrics,
                 } => Box::new(
                     Dispatcher::new(team.iter().map(|m| ids[m.as_str()]).collect(), *rule)
                         .pick(*pick)
-                        .preempt(*preempt),
+                        .preempt(*preempt)
+                        .metrics(*metrics),
                 ),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);

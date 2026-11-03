@@ -1023,6 +1023,10 @@ impl Scene {
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
                     item_type: None,
+                    task_target: self
+                        .timeline
+                        .travel_target(b, t)
+                        .map(|p| p.map(|v| v as f32)),
                 },
                 None => Pose {
                     id: EntityId::Block(b as u32),
@@ -1034,6 +1038,7 @@ impl Scene {
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
                     item_type: None,
+                    task_target: None,
                 },
             };
             poses.push(pose);
@@ -1056,6 +1061,7 @@ impl Scene {
                 state: None,
                 fill: tank.then(|| fluids::fill_fraction(sample.level, node.capacity)),
                 item_type: None,
+                task_target: None,
             });
         }
         for p in self.items_at(t) {
@@ -1071,6 +1077,7 @@ impl Scene {
                 state: None,
                 fill: None,
                 item_type: self.timeline.item_type(p.item),
+                task_target: None,
             });
         }
         Frame { time: t, poses }

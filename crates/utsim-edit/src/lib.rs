@@ -909,6 +909,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             rule: Default::default(),
             pick: Default::default(),
             preempt: Default::default(),
+            metrics: false,
         },
         _ => return None,
     };

@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 use utsim_core::task::{MSG_IDLE, distance};
@@ -120,6 +120,18 @@ pub struct Dispatcher {
     /// Preemptions since the warm-up, and whether the member asked gave work back.
     preemptions: u64,
     gave_back: bool,
+    /// Team metrics on (see [`Dispatcher::metrics`]).
+    metrics: bool,
+    /// Member names, for the metric names.
+    names: Vec<String>,
+    /// When each waiting request reached the dispatcher (until its first assignment).
+    since: HashMap<u64, Time>,
+    /// Requests received and assigned per member, since the warm-up.
+    requests: u64,
+    served: Vec<u64>,
+    /// Start of the statistics window and the busy time of each member at that moment.
+    window_from: Time,
+    busy_at_window: Vec<Time>,
     /// Busy time of each member so far, and when its current work was assigned.
     busy: Vec<Time>,
     assigned_at: Vec<Time>,
@@ -148,6 +160,13 @@ impl Dispatcher {
             refused: vec![false; n],
             preemptions: 0,
             gave_back: false,
+            metrics: false,
+            names: Vec::new(),
+            since: HashMap::new(),
+            requests: 0,
+            served: vec![0; n],
+            window_from: 0.0,
+            busy_at_window: vec![0.0; n],
             busy: vec![0.0; n],
             assigned_at: vec![0.0; n],
             idle_since: vec![0.0; n],
@@ -168,6 +187,25 @@ impl Dispatcher {
         self
     }
 
+    /// Team metrics in the report: the tally `request_wait` (from the request reaching
+    /// the dispatcher to its first assignment to a member), `requests.count` and, per
+    /// member, `member.<name>.requests` (tasks handed to it) and `member.<name>.busy`
+    /// (fraction of the window between assignment and idle report).
+    pub fn metrics(mut self, on: bool) -> Self {
+        self.metrics = on;
+        self
+    }
+
+    /// Busy time of member `m` up to `now`, the work in progress included.
+    fn busy_until(&self, m: usize, now: Time) -> Time {
+        self.busy[m]
+            + if self.free[m] {
+                0.0
+            } else {
+                now - self.assigned_at[m]
+            }
+    }
+
     /// When to take work away from a busy member (see [`Preempt`]).
     pub fn preempt(mut self, preempt: Preempt) -> Self {
         self.preempt = preempt;
@@ -180,6 +218,12 @@ impl Dispatcher {
         }
         self.free[member] = false;
         self.assigned[member].push(request);
+        if self.metrics {
+            self.served[member] += 1;
+            if let Some(t) = self.since.remove(&request.id.0) {
+                cx.record("request_wait", cx.now() - t);
+            }
+        }
         cx.forward_task(self.team[member], request);
     }
 
@@ -340,6 +384,16 @@ impl Behavior for Dispatcher {
         self.refused = vec![false; self.team.len()];
         self.preemptions = 0;
         self.gave_back = false;
+        self.names = self
+            .team
+            .iter()
+            .map(|&m| cx.block_name(m).to_string())
+            .collect();
+        self.since.clear();
+        self.requests = 0;
+        self.served = vec![0; self.team.len()];
+        self.window_from = cx.now();
+        self.busy_at_window = vec![0.0; self.team.len()];
         cx.set_state(State::Idle);
     }
 
@@ -348,6 +402,10 @@ impl Behavior for Dispatcher {
     }
 
     fn on_task(&mut self, cx: &mut Ctx, request: TaskRequest) {
+        if self.metrics {
+            self.requests += 1;
+            self.since.insert(request.id.0, cx.now());
+        }
         match self.choose(cx, &request) {
             Some(member) => self.assign(cx, member, request),
             None => {
@@ -358,16 +416,41 @@ impl Behavior for Dispatcher {
         self.update_state(cx);
     }
 
-    fn on_warmup(&mut self, _cx: &mut Ctx) {
+    fn on_warmup(&mut self, cx: &mut Ctx) {
         self.preemptions = 0;
+        self.requests = 0;
+        self.served = vec![0; self.team.len()];
+        self.window_from = cx.now();
+        self.busy_at_window = (0..self.team.len())
+            .map(|m| self.busy_until(m, cx.now()))
+            .collect();
     }
 
-    /// With preemption: `preemptions.count` (members that gave their work back).
-    fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
-        if self.preempt == Preempt::Never {
-            return Vec::new();
+    /// With preemption: `preemptions.count` (members that gave their work back). With
+    /// [`Dispatcher::metrics`]: the team metrics.
+    fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
+        let mut out = Vec::new();
+        if self.preempt != Preempt::Never {
+            out.push(("preemptions.count".to_string(), self.preemptions as f64));
         }
-        vec![("preemptions.count".to_string(), self.preemptions as f64)]
+        if !self.metrics {
+            return out;
+        }
+        out.push(("requests.count".to_string(), self.requests as f64));
+        let window = now - self.window_from;
+        for (m, name) in self.names.iter().enumerate() {
+            out.push((format!("member.{name}.requests"), self.served[m] as f64));
+            let busy = self.busy_until(m, now) - self.busy_at_window[m];
+            out.push((
+                format!("member.{name}.busy"),
+                if window > 0.0 {
+                    (busy / window).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                },
+            ));
+        }
+        out
     }
 
     fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
@@ -424,6 +507,12 @@ impl Behavior for Dispatcher {
                             if same {
                                 let extra = self.queue.remove(i).expect("index in range");
                                 self.assigned[member].push(extra);
+                                if self.metrics {
+                                    self.served[member] += 1;
+                                    if let Some(t) = self.since.remove(&extra.id.0) {
+                                        cx.record("request_wait", cx.now() - t);
+                                    }
+                                }
                                 cx.forward_task(self.team[member], extra);
                                 taken += 1;
                             } else {

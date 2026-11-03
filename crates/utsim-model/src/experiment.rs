@@ -379,7 +379,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "break_object",
             ],
         ),
-        ObjectKind::Dispatcher { .. } => ("Dispatcher", &["team", "rule", "pick", "preempt"]),
+        ObjectKind::Dispatcher { .. } => (
+            "Dispatcher",
+            &["team", "rule", "pick", "preempt", "metrics"],
+        ),
         ObjectKind::Conveyor { .. } => (
             "Conveyor",
             &["length", "speed", "item_length", "accumulating"],
@@ -440,6 +443,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Dispatcher { rule, .. }, "rule") => set!(*rule),
         (ObjectKind::Dispatcher { pick, .. }, "pick") => set!(*pick),
         (ObjectKind::Dispatcher { preempt, .. }, "preempt") => set!(*preempt),
+        (ObjectKind::Dispatcher { metrics, .. }, "metrics") => set!(*metrics),
         (ObjectKind::Conveyor { length, .. }, "length") => set!(*length),
         (ObjectKind::Conveyor { speed, .. }, "speed") => set!(*speed),
         (ObjectKind::Conveyor { item_length, .. }, "item_length") => set!(*item_length),

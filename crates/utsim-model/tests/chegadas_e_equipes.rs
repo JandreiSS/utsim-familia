@@ -583,7 +583,6 @@ fn check_lists_the_item_types() {
 fn two_members(rule: &str) -> String {
     format!(
         r#"Model(
-            format: 2,
             name: "regras",
             run: (stop_time: 300.0),
             objects: [
@@ -644,7 +643,6 @@ fn random_rule_is_reproducible() {
 fn pick_model(pick: &str, far_priority: i32) -> String {
     format!(
         r#"Model(
-            format: 2,
             name: "escolha",
             run: (stop_time: 300.0),
             objects: [
@@ -939,4 +937,44 @@ fn places_are_validated() {
     assert!(e.contains("já é usado"), "{e}");
     let e = err("", r#"areas: [(name: "z", size: (0.0, 1.0))],"#);
     assert!(e.contains("size deve ser finito e > 0"), "{e}");
+}
+
+// ---------------------------------------------------------------- E8a team metrics
+
+#[test]
+fn team_metrics_count_requests_and_waits() {
+    // `pick_model`: requests at 0 (assigned at once), 1 (assigned at 2) and 1.5 (assigned
+    // at 51, when the far trip from s0 (2, 0) to qF (50, 0) and on to sF ends).
+    let text = pick_model("Priority", 0).replace(
+        r#"Dispatcher(team: ["m"], pick: Priority)"#,
+        r#"Dispatcher(team: ["m"], pick: Priority, metrics: true)"#,
+    );
+    let m = model(&text);
+    let r = m.run_replications().unwrap().remove(0);
+    let eq = r.block("eq").unwrap();
+    assert_eq!(eq.custom["requests.count"], 3.0);
+    assert_eq!(eq.custom["member.m.requests"], 3.0);
+    let wait = &eq.extra["request_wait"];
+    assert_eq!(wait.count, 3);
+    assert!(
+        (wait.mean - (0.0 + 1.0 + 49.5) / 3.0).abs() < 1e-9,
+        "{}",
+        wait.mean
+    );
+    assert!((wait.max - 49.5).abs() < 1e-9);
+    // Busy from 0 to 100 (the near task ends at 51 + 48 + 1) out of 300.
+    assert!((eq.custom["member.m.busy"] - 100.0 / 300.0).abs() < 1e-9);
+    let teams = m.team_summaries(&r);
+    assert_eq!(teams.len(), 1);
+    let t = &teams[0];
+    assert_eq!((t.dispatcher.as_str(), t.requests), ("eq", 3.0));
+    assert_eq!(t.wait_max, Some(49.5));
+    let member = &t.members[0];
+    assert!((member.travel_empty - (1.0 + 48.0 + 48.0) / 300.0).abs() < 1e-9);
+    assert!((member.travel_loaded - 3.0 / 300.0).abs() < 1e-9);
+    assert!(member.utilization > 0.0);
+    // Without `metrics` the report has none of these (old models are unchanged).
+    let plain = run(&pick_model("Priority", 0));
+    let eq = plain.block("eq").unwrap();
+    assert!(eq.custom.is_empty() && eq.extra.is_empty());
 }
