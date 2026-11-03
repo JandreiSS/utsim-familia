@@ -2,9 +2,8 @@
 //! the family (the Godot interface through `utsim-godot`, and later the launcher and the
 //! Lean Six Sigma app).
 //!
-//! The colours are the ones of the Godot theme (`godot/tema/utsim.tres`), so the panels
-//! drawn by egui and the ones still drawn by Godot look the same while the interface moves
-//! to Rust. Pure egui: no backend, no window.
+//! The colours are the ones of the old Godot theme (`godot/tema/utsim.tres`, removed when the
+//! whole interface around the 3D view became egui). Pure egui: no backend, no window.
 //!
 //! ```
 //! let ctx = egui::Context::default();
@@ -60,6 +59,8 @@ pub mod colors {
     pub const ERROR: Color32 = Color32::from_rgb(255, 115, 107);
     /// Warnings (it runs, but something looks wrong).
     pub const WARNING: Color32 = Color32::from_rgb(250, 204, 89);
+    /// Something checked and fine (the green light of a consistency check).
+    pub const SUCCESS: Color32 = Color32::from_rgb(115, 217, 128);
     /// The "dados" seal and other badges.
     pub const BADGE: Color32 = Color32::from_rgb(51, 107, 184);
 }
@@ -366,6 +367,7 @@ mod tests {
             assert!(contrast(TEXT_WEAK, bg) >= 4.5, "ajuda sobre {bg:?}");
             assert!(contrast(ERROR, bg) >= 4.5, "erro sobre {bg:?}");
             assert!(contrast(WARNING, bg) >= 4.5, "aviso sobre {bg:?}");
+            assert!(contrast(SUCCESS, bg) >= 4.5, "certo sobre {bg:?}");
         }
     }
 
