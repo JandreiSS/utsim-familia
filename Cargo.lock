@@ -7434,6 +7434,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-publicar"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "utsim-launcher-core",
+]
+
+[[package]]
 name = "utsim-scene"
 version = "0.1.0"
 dependencies = [

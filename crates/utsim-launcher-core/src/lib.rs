@@ -28,6 +28,8 @@ pub mod signature;
 pub mod state;
 pub mod transport;
 
+pub use ed25519_dalek::{SigningKey, VerifyingKey};
+
 use std::io;
 
 /// Every failure of the launcher core, with a message for the tester.
