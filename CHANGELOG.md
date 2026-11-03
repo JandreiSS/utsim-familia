@@ -85,5 +85,6 @@ Primeira versão para testes: simulação, editor 3D, resultados, cenários, oti
 - Modelos que travavam ou esgotavam a memória agora são recusados na validação (fontes com intervalo quase nulo, porta-paletes ou `Split` gigantes, fluxos com intervalo zero) ou terminam com erro (muitos eventos no mesmo instante).
 
 ### Alterado
+- Interface 3D (Godot): os nomes dos objetos na vista 3D têm uma placa escura translúcida atrás do texto e ficam legíveis sobre a grade e os modelos; abrir um modelo, Novo e a tecla F enquadram a cena na parte da tela livre dos painéis laterais, sem cortar objetos nem rótulos; a linha de desempenho (qps, ponte, cena) fica oculta e aparece com F3.
 - Empilhadeira `empilhadeira_kolosstudios` do catálogo no porte real de uma contrabalançada de 2,5 t (escala 1,5: 3,47 m com garfos, 1,27 m de largura, 2,13 m até o protetor do operador); o motorista passa a ter o tamanho de uma pessoa (escala 1,0) e o assento acompanha a escala. A empilhadeira da biblioteca já tinha o porte real (3,43 × 1,10 × 2,25 m).
 - Núcleo e índice da cena mais rápidos (10 % a 45 % no núcleo), sem mudar resultados.
