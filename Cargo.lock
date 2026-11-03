@@ -7023,6 +7023,7 @@ dependencies = [
  "serde_json",
  "utsim-cad",
  "utsim-core",
+ "utsim-diagram",
  "utsim-emu",
  "utsim-fit",
  "utsim-model",
@@ -7043,6 +7044,15 @@ dependencies = [
  "serde",
  "slotmap",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "utsim-diagram"
+version = "0.1.0"
+dependencies = [
+ "utsim-core",
+ "utsim-model",
+ "utsim-objects",
 ]
 
 [[package]]

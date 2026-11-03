@@ -1,0 +1,11 @@
+[package]
+name = "utsim-diagram"
+description = "Process flowchart and process chart generated from a UTSim model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-objects.workspace = true
