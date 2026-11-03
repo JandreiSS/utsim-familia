@@ -40,7 +40,7 @@ pub mod colors {
     pub const DISABLED: Color32 = Color32::from_rgb(36, 38, 46);
     /// Text fields and lists.
     pub const FIELD: Color32 = Color32::from_rgb(20, 23, 28);
-    pub const FIELD_BORDER: Color32 = Color32::from_rgb(64, 71, 87);
+    pub const FIELD_BORDER: Color32 = Color32::from_rgb(86, 96, 116);
     /// Menus and pop-ups.
     pub const MENU: Color32 = Color32::from_rgb(33, 36, 43);
     pub const MENU_BORDER: Color32 = Color32::from_rgb(69, 77, 92);
@@ -162,7 +162,8 @@ pub fn visuals() -> Visuals {
 
     w.inactive.bg_fill = FIELD;
     w.inactive.weak_bg_fill = BUTTON;
-    w.inactive.bg_stroke = Stroke::new(1.0, BUTTON_BORDER);
+    // Brighter than the button border: an unchecked box must read on the panel.
+    w.inactive.bg_stroke = Stroke::new(1.0, FIELD_BORDER);
     w.inactive.fg_stroke = Stroke::new(1.0, TEXT);
     w.inactive.corner_radius = radius;
     w.inactive.expansion = 0.0;
@@ -244,6 +245,36 @@ pub mod widgets {
     use egui::{Button, CornerRadius, Response, RichText, Stroke, Ui, Widget};
 
     use super::{colors, sizes};
+
+    /// The small "opens a list" arrow after a menu's name (`("Organizar", down_arrow())`):
+    /// a full-size triangle drawn small, which every UI font has.
+    pub fn down_arrow() -> RichText {
+        RichText::new("▼").size(9.0).color(colors::TEXT_WEAK)
+    }
+
+    /// A disclosure triangle at `center`: pointing down when `open`, right when closed.
+    pub fn paint_chevron(
+        painter: &egui::Painter,
+        center: egui::Pos2,
+        open: bool,
+        color: egui::Color32,
+    ) {
+        let s = 4.5;
+        let pts = if open {
+            vec![
+                center + egui::vec2(-s, -s * 0.6),
+                center + egui::vec2(s, -s * 0.6),
+                center + egui::vec2(0.0, s * 0.7),
+            ]
+        } else {
+            vec![
+                center + egui::vec2(-s * 0.6, -s),
+                center + egui::vec2(s * 0.7, 0.0),
+                center + egui::vec2(-s * 0.6, s),
+            ]
+        };
+        painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+    }
 
     /// A primary button ("Aplicar"): the selected fill and strong text.
     pub fn primary(text: &str) -> Button<'static> {
