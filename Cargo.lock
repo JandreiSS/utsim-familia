@@ -7641,6 +7641,7 @@ dependencies = [
  "utsim-edit",
  "utsim-emu",
  "utsim-fit",
+ "utsim-linhas",
  "utsim-model",
  "utsim-opt",
  "utsim-pert",

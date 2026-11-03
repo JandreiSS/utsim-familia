@@ -89,7 +89,7 @@ fn cause(role: Role) -> Option<usize> {
 }
 
 /// Time a person spent in each kind of state, as fractions of the window.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 pub struct Ocupacao {
     pub trabalhando: f64,
     pub andando: f64,
@@ -100,7 +100,7 @@ pub struct Ocupacao {
 }
 
 /// Indicators of one replication.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct Replicacao {
     pub concluidos: usize,
     pub lead_time: f64,

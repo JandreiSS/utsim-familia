@@ -319,6 +319,15 @@ infraestrutura do Lean Office, a multitarefa e a disciplina por rótulo), depois
 | 15 | Conferir termos e links do manual da linha | 1–2 | Haiku | 14 |
 | 16 | Lote de ativos com Tripo 3D e Blender (cadeira, computador, impressora, pessoas sentadas) | 6–10 mais créditos | Sonnet | **aprovação do gasto pelo dono** |
 
+**Situação em 2026-11-03:** passos 1 a 8 feitos (primeira entrega útil). Campos `line`,
+`preset`, `area` e `symbol` no modelo; crate `utsim-linhas` com o leitor e a validação dos
+pacotes e `utsim_edit::preset`; pacote `linhas/lean_office/` com as 12 predefinições e o
+vocabulário; `order: Desc/Asc("rótulo")` na `Queue`; métricas opcionais por item no núcleo
+(`Simulation::enable_item_log`); indicadores e relatório HTML da linha; VSM de escritório e
+raias por área; `utsim linha` e `utsim run --linha`; modelo pronto
+`examples/aprovacao_de_compras.ron`; capítulo `docs/manual/src/linhas/lean-office.md`.
+Próximos: passos 9 a 16 (a multitarefa, 10, na segunda entrega).
+
 **Primeira entrega útil** (passos 1 a 8): o dono abre o modelo de aprovação de compras com o
 vocabulário, roda e recebe o relatório com lead time, touch time, razão de atividade, %C&A,
 FPY, WIP e SLA, mais o VSM de escritório e as raias. São 55–78 h, sem tocar em `godot/` nem em

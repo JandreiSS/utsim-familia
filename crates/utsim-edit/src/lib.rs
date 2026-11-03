@@ -179,6 +179,8 @@ pub enum Command {
     },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
+    /// The specialised line of the model (`Model.line`, `None`: no line).
+    SetLine(Option<String>),
 }
 
 /// Where a distribution field gets its distribution from.
@@ -599,6 +601,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::RemoveFluidNode { name } => fluids::remove_node(model, name)?,
         Command::AddFluidLink { from, to } => fluids::add_link(model, from, to)?,
         Command::RemoveFluidLink { from, to } => fluids::remove_link(model, from, to)?,
+        Command::SetLine(line) => model.line = line.clone(),
         Command::SetInfo { name, description } => {
             let name = name.trim();
             if name.is_empty() {
