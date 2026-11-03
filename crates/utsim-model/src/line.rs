@@ -66,7 +66,10 @@ impl Model {
 
     /// Line the preset of `obj` belongs to (`"lean_office"` for `"lean_office/aprovacao"`).
     pub fn preset_line(obj: &crate::ObjectDef) -> Option<&str> {
-        obj.preset.as_deref().and_then(|p| p.split_once('/')).map(|(l, _)| l)
+        obj.preset
+            .as_deref()
+            .and_then(|p| p.split_once('/'))
+            .map(|(l, _)| l)
     }
 }
 

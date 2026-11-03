@@ -1,0 +1,13 @@
+[package]
+name = "utsim-linhas"
+description = "Specialised lines of UTSim: domain packs (presets, vocabulary, models) and their indicators"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-edit.workspace = true
+ron.workspace = true
+serde.workspace = true

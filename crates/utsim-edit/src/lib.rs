@@ -10,12 +10,14 @@
 //! returns a single [`Command::Batch`], so it is one undo step.
 //!
 //! [`network`] and [`fluids`] execute the commands on the path network and on the
-//! fluid network, and hold the helpers the editor draws them with.
+//! fluid network, and hold the helpers the editor draws them with. [`preset`] makes
+//! objects from the templates of a specialised line.
 
 pub mod aisles;
 pub mod arrange;
 pub mod fluids;
 pub mod network;
+pub mod preset;
 pub mod ron_text;
 
 use std::path::{Path, PathBuf};
