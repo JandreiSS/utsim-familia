@@ -7765,6 +7765,7 @@ name = "utsim-godot"
 version = "0.1.0"
 dependencies = [
  "egui",
+ "egui_plot",
  "godot",
  "ron 0.8.1",
  "serde",

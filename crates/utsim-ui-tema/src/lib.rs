@@ -60,6 +60,8 @@ pub mod colors {
     pub const ERROR: Color32 = Color32::from_rgb(255, 115, 107);
     /// Warnings (it runs, but something looks wrong).
     pub const WARNING: Color32 = Color32::from_rgb(250, 204, 89);
+    /// Something checked and fine (the green light of a consistency check).
+    pub const SUCCESS: Color32 = Color32::from_rgb(115, 217, 128);
     /// The "dados" seal and other badges.
     pub const BADGE: Color32 = Color32::from_rgb(51, 107, 184);
 }
@@ -366,6 +368,7 @@ mod tests {
             assert!(contrast(TEXT_WEAK, bg) >= 4.5, "ajuda sobre {bg:?}");
             assert!(contrast(ERROR, bg) >= 4.5, "erro sobre {bg:?}");
             assert!(contrast(WARNING, bg) >= 4.5, "aviso sobre {bg:?}");
+            assert!(contrast(SUCCESS, bg) >= 4.5, "certo sobre {bg:?}");
         }
     }
 
