@@ -904,6 +904,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             team: Vec::new(),
             rule: Default::default(),
             pick: Default::default(),
+            preempt: Default::default(),
         },
         _ => return None,
     };

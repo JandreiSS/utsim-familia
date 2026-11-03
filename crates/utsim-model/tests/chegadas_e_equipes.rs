@@ -677,3 +677,148 @@ fn pick_chooses_the_task_a_free_member_takes() {
     assert_eq!(order("Nearest", 1), ["s0", "sF", "sN"]);
     assert_eq!(order("NearestAny", 1), ["s0", "sN", "sF"]);
 }
+
+// ---------------------------------------------------------------- E4 preemption
+
+/// One forklift at the origin. At t = 0 a low-priority item waits at `qLow`; at t = 10
+/// an urgent one (priority 5) at `qHigh`.
+fn urgent_model(preempt: &str, q_low: &str, s_low: &str) -> String {
+    format!(
+        r#"Model(
+            name: "preempcao",
+            run: (stop_time: 2000.0),
+            objects: [
+                (name: "srcL", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1)),
+                (name: "srcH", kind: Source(interarrival: Const(10.0), max_arrivals: 1)),
+                (name: "qLow", kind: Queue(), transport: "eq", position: {q_low}),
+                (name: "qHigh", kind: Queue(), transport: "eq", transport_priority: 5, position: (0.0, 10.0, 0.0)),
+                (name: "sLow", kind: Sink, position: {s_low}),
+                (name: "sHigh", kind: Sink, position: (0.0, 20.0, 0.0)),
+                (name: "m", kind: Transporter(speed: 1.0)),
+                (name: "eq", kind: Dispatcher(team: ["m"]{preempt})),
+            ],
+            connections: [("srcL", "qLow"), ("srcH", "qHigh"), ("qLow", "sLow"), ("qHigh", "sHigh")],
+        )"#
+    )
+}
+
+#[test]
+fn preemption_takes_a_member_travelling_empty() {
+    let far = |p: &str| urgent_model(p, "(100.0, 0.0, 0.0)", "(110.0, 0.0, 0.0)");
+    let (trace, names) = traced(&far(""));
+    assert_eq!(
+        deliveries(&trace, &names, &["sLow", "sHigh"]),
+        ["sLow", "sHigh"]
+    );
+    let text = far(", preempt: Empty");
+    let (trace, names) = traced(&text);
+    assert_eq!(
+        deliveries(&trace, &names, &["sLow", "sHigh"]),
+        ["sHigh", "sLow"]
+    );
+    // Stopped at (10, 0) at t = 10, then |(10, 0) - (0, 10)| empty and 10 loaded.
+    let r = run(&text);
+    let high = &r.block("sHigh").unwrap().extra["time_in_system"];
+    assert!(
+        (high.mean - (200f64.sqrt() + 10.0)).abs() < 1e-9,
+        "{}",
+        high.mean
+    );
+    assert_eq!(r.block("eq").unwrap().custom["preemptions.count"], 1.0);
+    assert_eq!(r.block("sLow").unwrap().input, 1);
+}
+
+#[test]
+fn a_loaded_member_is_never_interrupted() {
+    // The low item is picked up at t = 1 and carried far: at t = 10 it is on board.
+    let text = urgent_model(", preempt: Empty", "(1.0, 0.0, 0.0)", "(100.0, 0.0, 0.0)");
+    let (trace, names) = traced(&text);
+    assert_eq!(
+        deliveries(&trace, &names, &["sLow", "sHigh"]),
+        ["sLow", "sHigh"]
+    );
+    let r = run(&text);
+    assert_eq!(r.block("eq").unwrap().custom["preemptions.count"], 0.0);
+}
+
+/// Random team models with priorities and preemption: `(x, y, priority, mean gap)` of
+/// three queues, two members, a fixed number of items.
+fn random_team(queues: &[(i8, i8, i8, u8)], seed: u64, rule: &str) -> String {
+    let mut objects = String::new();
+    let mut links = String::new();
+    for (k, (x, y, p, gap)) in queues.iter().enumerate() {
+        objects.push_str(&format!(
+            r#"(name: "src{k}", kind: Source(interarrival: Exp(mean: {}.0), max_arrivals: 15)),
+               (name: "q{k}", kind: Queue(), transport: "eq", transport_priority: {p}, position: ({x}.0, {y}.0, 0.0)),
+               (name: "s{k}", kind: Sink, position: ({}.0, {y}.0, 0.0)),"#,
+            *gap as u32 + 1,
+            *x as i32 + 5
+        ));
+        links.push_str(&format!(r#"("src{k}", "q{k}"), ("q{k}", "s{k}"), "#));
+    }
+    format!(
+        r#"Model(
+            name: "equipe_aleatoria",
+            run: (stop_time: 100000.0, seed: {seed}),
+            objects: [
+                {objects}
+                (name: "a", kind: Transporter(speed: 1.0, capacity: 2, home: true)),
+                (name: "b", kind: Transporter(speed: 1.5), position: (3.0, 3.0, 0.0)),
+                (name: "eq", kind: Dispatcher(team: ["a", "b"], rule: {rule}, preempt: Empty)),
+            ],
+            connections: [{links}],
+        )"#
+    )
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig { cases: 40, ..Default::default() })]
+
+    /// Preemption never loses an item and the same seed gives the same run.
+    #[test]
+    fn preemption_conserves_items_and_is_deterministic(
+        queues in proptest::collection::vec((-30i8..30, -30i8..30, -2i8..4, 0u8..20), 3),
+        seed in 1u64..1000,
+        rule in proptest::sample::select(vec!["FirstAvailable", "Nearest", "LeastBusy", "LongestIdle", "Random"]),
+    ) {
+        let text = random_team(&queues, seed, rule);
+        let r = run(&text);
+        let delivered: u64 = (0..3).map(|k| r.block(&format!("s{k}")).unwrap().input).sum();
+        proptest::prop_assert_eq!(delivered, 45);
+        let again = run(&text);
+        proptest::prop_assert_eq!(
+            serde_json::to_string(&r.blocks).unwrap(),
+            serde_json::to_string(&again.blocks).unwrap()
+        );
+    }
+
+    /// With one member and everything waiting at t = 0, deliveries follow the priorities.
+    #[test]
+    fn priorities_are_respected_when_all_wait(prios in proptest::collection::vec(-3i32..4, 3)) {
+        let mut objects = String::new();
+        let mut links = String::new();
+        for (k, p) in prios.iter().enumerate() {
+            objects.push_str(&format!(
+                r#"(name: "src{k}", kind: Source(interarrival: Const(0.0), first_at_zero: true, max_arrivals: 2)),
+                   (name: "q{k}", kind: Queue(), transport: "eq", transport_priority: {p}, position: ({k}.0, 0.0, 0.0)),
+                   (name: "s{k}", kind: Sink, position: ({k}.0, 5.0, 0.0)),"#
+            ));
+            links.push_str(&format!(r#"("src{k}", "q{k}"), ("q{k}", "s{k}"), "#));
+        }
+        let text = format!(
+            r#"Model(format: 2, name: "p", run: (stop_time: 1000.0), objects: [{objects}
+                (name: "m", kind: Transporter(speed: 1.0)),
+                (name: "eq", kind: Dispatcher(team: ["m"], preempt: Empty))],
+                connections: [{links}])"#
+        );
+        let (trace, names) = traced(&text);
+        let sinks = ["s0", "s1", "s2"];
+        let order = deliveries(&trace, &names, &sinks);
+        proptest::prop_assert_eq!(order.len(), 6);
+        // After the first delivery (assigned at once), priorities never increase.
+        let prio = |s: &str| prios[sinks.iter().position(|x| *x == s).unwrap()];
+        for w in order[1..].windows(2) {
+            proptest::prop_assert!(prio(&w[0]) >= prio(&w[1]), "{:?} {:?}", order, prios);
+        }
+    }
+}

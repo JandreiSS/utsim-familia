@@ -24,6 +24,18 @@ pub const MSG_POSITION_Z: u32 = MSG_USER + 3;
 /// queue (payload: edge id). The receiver already holds the edge when it arrives.
 pub const MSG_TRAFFIC_GRANT: u32 = MSG_USER + 10;
 
+/// Dispatcher to member: give up the work you are travelling empty to, for a request of
+/// higher priority ([`crate::Preempt::Empty`]); payload: that priority (`i32` as `i64`
+/// bits), so work of this priority or more is never given back. The member answers
+/// [`MSG_PREEMPTED`]
+/// once per task it gives back (payload: request id) followed by its idle report, or
+/// [`MSG_PREEMPT_REFUSED`] when it is no longer travelling empty.
+pub const MSG_PREEMPT: u32 = MSG_USER + 20;
+/// Member to dispatcher: the preemption was refused (loading, loaded, at the station...).
+pub const MSG_PREEMPT_REFUSED: u32 = MSG_USER + 21;
+/// Member to dispatcher: this task (payload: request id) is given back, not started.
+pub const MSG_PREEMPTED: u32 = MSG_USER + 22;
+
 const START: u32 = 10;
 const ARRIVED_PICKUP: u32 = 0;
 const LOADED: u32 = 1;
@@ -703,6 +715,57 @@ impl Transporter {
         self.timer = None;
     }
 
+    /// Whether the current work can be given back: travelling empty to the first stop
+    /// of the trip (nothing loaded yet), or about to start it.
+    fn travelling_empty(&self, cx: &Ctx, below: i32) -> bool {
+        if cx.is_down() || self.k != 0 {
+            return false;
+        }
+        if self
+            .trip
+            .iter()
+            .chain(&self.queue)
+            .any(|r| r.priority >= below)
+        {
+            return false;
+        }
+        let tag = match (&self.route, &self.timer) {
+            (Some(route), _) => Some(route.tag),
+            (None, Some(timer)) => Some(timer.tag),
+            (None, None) => None,
+        };
+        match tag {
+            Some(ARRIVED_PICKUP | ARRIVED_STATION) => !self.trip.is_empty(),
+            Some(START) => self.trip.is_empty() && !self.queue.is_empty(),
+            _ => false,
+        }
+    }
+
+    /// Gives the current trip (and queued tasks) back to the dispatcher and reports idle
+    /// from the point reached (see [`MSG_PREEMPT`]).
+    fn give_back(&mut self, cx: &mut Ctx, dispatcher: BlockId) {
+        if let Some(timer) = self.timer.take() {
+            if let Some(event) = timer.event {
+                cx.cancel(event);
+            }
+            if let Some(leg) = &timer.leg {
+                self.position = Self::progress(leg, cx.now()).0;
+                if leg.duration > 0.0 {
+                    cx.trace_travel(vec![self.position, self.position], 0.0);
+                }
+            }
+        }
+        if self.route.is_some() {
+            self.abandon_route(cx);
+        }
+        let tasks: Vec<TaskRequest> = self.trip.drain(..).chain(self.queue.drain(..)).collect();
+        self.k = 0;
+        for t in tasks {
+            cx.send(dispatcher, MSG_PREEMPTED, t.id.0);
+        }
+        self.go_idle(cx, true);
+    }
+
     /// Weight (kg) of the items still carried (from `self.k` on), for a person.
     fn load_kg(&self, cx: &Ctx) -> f64 {
         if !cx.is_person() {
@@ -956,7 +1019,7 @@ impl Behavior for Transporter {
         !self.trip.is_empty()
     }
 
-    fn on_message(&mut self, cx: &mut Ctx, _from: BlockId, tag: u32, payload: u64) {
+    fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
         if tag == MSG_TRAFFIC_GRANT {
             let edge = payload as usize;
             let Some(route) = &mut self.route else { return };
@@ -972,6 +1035,17 @@ impl Behavior for Transporter {
                 self.grant_pending = true;
             } else {
                 self.run_segment(cx);
+            }
+            return;
+        }
+        if tag == MSG_PREEMPT {
+            let Some(d) = self.dispatcher.filter(|d| *d == from) else {
+                return;
+            };
+            if self.travelling_empty(cx, payload as i64 as i32) {
+                self.give_back(cx, d);
+            } else {
+                cx.send(d, MSG_PREEMPT_REFUSED, payload);
             }
             return;
         }

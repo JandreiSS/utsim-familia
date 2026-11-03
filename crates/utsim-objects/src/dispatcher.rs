@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use utsim_core::task::{MSG_IDLE, distance};
 use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, State, TaskKind, TaskRequest, Time};
 
-use crate::transporter::{MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z};
+use crate::transporter::{
+    MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z, MSG_PREEMPT, MSG_PREEMPT_REFUSED, MSG_PREEMPTED,
+};
 
 /// How a dispatcher chooses among free team members.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +39,24 @@ pub enum TaskPick {
     /// The task that starts closest to the member, whatever its priority (ties: first
     /// come). Far or low-priority tasks may wait a long time.
     NearestAny,
+}
+
+/// When a dispatcher takes work away from a busy member for a more urgent request.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Preempt {
+    /// Never: the request waits for a member to become free.
+    #[default]
+    Never,
+    /// A member travelling empty to work of lower priority (nothing loaded, not yet at
+    /// the station) gives it back and takes the new request; the work given back goes to
+    /// the front of its priority in the queue. A loaded member is never interrupted.
+    Empty,
+}
+
+impl Preempt {
+    pub fn is_never(&self) -> bool {
+        *self == Preempt::Never
+    }
 }
 
 impl TaskPick {
@@ -73,6 +93,14 @@ impl TaskPick {
 /// a member that reports idle takes the first waiting task it is qualified for. Without
 /// skills this is exactly the behaviour above.
 ///
+/// **Preemption** ([`Preempt::Empty`]). When a request waits and no member is free, the
+/// dispatcher asks one busy member whose work all has a lower priority than the head of
+/// the queue (the one with the lowest such priority; ties: team order) to give it back.
+/// A member travelling empty to its first stop does so ([`MSG_PREEMPTED`] for each task,
+/// then its idle report from the point reached); otherwise it refuses and the next
+/// candidate is asked. One question at a time; a member that refused is not asked again
+/// before its next idle report. Work given back goes to the front of its priority.
+///
 /// **Position protocol.** Members send `MSG_POSITION_X/Y/Z` (coordinate as
 /// `f64::to_bits`) before `MSG_IDLE`; until the first report the dispatcher uses the
 /// member's block position. A member that is broken or off shift still counts as
@@ -81,7 +109,17 @@ pub struct Dispatcher {
     team: Vec<BlockId>,
     rule: DispatchRule,
     pick: TaskPick,
+    preempt: Preempt,
     free: Vec<bool>,
+    /// Tasks each member is working on (forwarded and not yet reported done).
+    assigned: Vec<Vec<TaskRequest>>,
+    /// Member asked to give its work back, waiting for the answer.
+    asking: Option<usize>,
+    /// Members that refused since their last idle report.
+    refused: Vec<bool>,
+    /// Preemptions since the warm-up, and whether the member asked gave work back.
+    preemptions: u64,
+    gave_back: bool,
     /// Busy time of each member so far, and when its current work was assigned.
     busy: Vec<Time>,
     assigned_at: Vec<Time>,
@@ -103,7 +141,13 @@ impl Dispatcher {
             team,
             rule,
             pick: TaskPick::Priority,
+            preempt: Preempt::Never,
             free: vec![true; n],
+            assigned: vec![Vec::new(); n],
+            asking: None,
+            refused: vec![false; n],
+            preemptions: 0,
+            gave_back: false,
             busy: vec![0.0; n],
             assigned_at: vec![0.0; n],
             idle_since: vec![0.0; n],
@@ -124,12 +168,63 @@ impl Dispatcher {
         self
     }
 
+    /// When to take work away from a busy member (see [`Preempt`]).
+    pub fn preempt(mut self, preempt: Preempt) -> Self {
+        self.preempt = preempt;
+        self
+    }
+
     fn assign(&mut self, cx: &mut Ctx, member: usize, request: TaskRequest) {
         if self.free[member] {
             self.assigned_at[member] = cx.now();
         }
         self.free[member] = false;
+        self.assigned[member].push(request);
         cx.forward_task(self.team[member], request);
+    }
+
+    /// Puts `request` in the queue after the tasks of higher or equal priority (`front`:
+    /// before the equal ones).
+    fn enqueue(&mut self, request: TaskRequest, front: bool) {
+        let at = self
+            .queue
+            .iter()
+            .position(|q| {
+                q.priority < request.priority || (front && q.priority == request.priority)
+            })
+            .unwrap_or(self.queue.len());
+        self.queue.insert(at, request);
+    }
+
+    /// With [`Preempt::Empty`]: asks a busy member with lower-priority work to give it
+    /// back for the head of the queue.
+    fn try_preempt(&mut self, cx: &mut Ctx) {
+        if self.preempt == Preempt::Never || self.asking.is_some() {
+            return;
+        }
+        let Some(head) = self.queue.front().copied() else {
+            return;
+        };
+        let mut best: Option<(usize, i32)> = None;
+        for m in 0..self.team.len() {
+            if self.free[m] || self.refused[m] || self.assigned[m].is_empty() {
+                continue;
+            }
+            let top = self.assigned[m].iter().map(|r| r.priority).max();
+            let Some(top) = top.filter(|p| *p < head.priority) else {
+                continue;
+            };
+            if cx.away_on_finish(self.team[m]) || !cx.qualified(self.team[m], &head) {
+                continue;
+            }
+            if best.is_none_or(|(_, bp)| top < bp) {
+                best = Some((m, top));
+            }
+        }
+        if let Some((m, _)) = best {
+            self.asking = Some(m);
+            cx.send(self.team[m], MSG_PREEMPT, head.priority as i64 as u64);
+        }
     }
 
     /// Picks the first free member among `open` with the smallest `key` (ties: team order).
@@ -240,6 +335,11 @@ impl Behavior for Dispatcher {
         self.capacity = vec![1; self.team.len()];
         self.next = 0;
         self.queue.clear();
+        self.assigned = vec![Vec::new(); self.team.len()];
+        self.asking = None;
+        self.refused = vec![false; self.team.len()];
+        self.preemptions = 0;
+        self.gave_back = false;
         cx.set_state(State::Idle);
     }
 
@@ -251,15 +351,23 @@ impl Behavior for Dispatcher {
         match self.choose(cx, &request) {
             Some(member) => self.assign(cx, member, request),
             None => {
-                let at = self
-                    .queue
-                    .iter()
-                    .position(|q| q.priority < request.priority)
-                    .unwrap_or(self.queue.len());
-                self.queue.insert(at, request);
+                self.enqueue(request, false);
+                self.try_preempt(cx);
             }
         }
         self.update_state(cx);
+    }
+
+    fn on_warmup(&mut self, _cx: &mut Ctx) {
+        self.preemptions = 0;
+    }
+
+    /// With preemption: `preemptions.count` (members that gave their work back).
+    fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
+        if self.preempt == Preempt::Never {
+            return Vec::new();
+        }
+        vec![("preemptions.count".to_string(), self.preemptions as f64)]
     }
 
     fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
@@ -270,11 +378,35 @@ impl Behavior for Dispatcher {
             MSG_POSITION_X => self.positions[member][0] = f64::from_bits(payload),
             MSG_POSITION_Y => self.positions[member][1] = f64::from_bits(payload),
             MSG_POSITION_Z => self.positions[member][2] = f64::from_bits(payload),
+            MSG_PREEMPTED => {
+                if let Some(i) = self.assigned[member].iter().position(|r| r.id.0 == payload) {
+                    let request = self.assigned[member].remove(i);
+                    self.enqueue(request, true);
+                    if self.asking == Some(member) {
+                        self.gave_back = true;
+                    }
+                }
+            }
+            MSG_PREEMPT_REFUSED => {
+                if self.asking == Some(member) {
+                    self.asking = None;
+                    self.refused[member] = true;
+                    self.try_preempt(cx);
+                }
+            }
             MSG_IDLE => {
                 self.capacity[member] = (payload as usize).max(1);
                 if !self.free[member] {
                     self.busy[member] += cx.now() - self.assigned_at[member];
                 }
+                if self.asking == Some(member) {
+                    self.asking = None;
+                    if std::mem::take(&mut self.gave_back) {
+                        self.preemptions += 1;
+                    }
+                }
+                self.assigned[member].clear();
+                self.refused[member] = false;
                 self.free[member] = true;
                 self.idle_since[member] = cx.now();
                 let me = self.team[member];
@@ -291,6 +423,7 @@ impl Behavior for Dispatcher {
                             ) && cx.qualified(me, &self.queue[i]);
                             if same {
                                 let extra = self.queue.remove(i).expect("index in range");
+                                self.assigned[member].push(extra);
                                 cx.forward_task(self.team[member], extra);
                                 taken += 1;
                             } else {
@@ -299,6 +432,7 @@ impl Behavior for Dispatcher {
                         }
                     }
                 }
+                self.try_preempt(cx);
             }
             _ => return,
         }

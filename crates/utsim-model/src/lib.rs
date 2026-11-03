@@ -43,8 +43,8 @@ use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
-    OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
-    TaskPick, Transporter, TypedSink,
+    OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink,
+    Source, TaskPick, Transporter, TypedSink,
 };
 
 pub use arrivals::ItemTypeDef;
@@ -398,6 +398,9 @@ pub enum ObjectKind {
         /// Which waiting task a member that becomes free takes (absent: `Priority`).
         #[serde(default, skip_serializing_if = "TaskPick::is_priority")]
         pick: TaskPick,
+        /// Whether a more urgent request takes a member travelling empty (absent: `Never`).
+        #[serde(default, skip_serializing_if = "Preempt::is_never")]
+        preempt: Preempt,
     },
 }
 
@@ -1209,9 +1212,15 @@ impl Model {
                     placement,
                     ..
                 } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement)),
-                ObjectKind::Dispatcher { team, rule, pick } => Box::new(
+                ObjectKind::Dispatcher {
+                    team,
+                    rule,
+                    pick,
+                    preempt,
+                } => Box::new(
                     Dispatcher::new(team.iter().map(|m| ids[m.as_str()]).collect(), *rule)
-                        .pick(*pick),
+                        .pick(*pick)
+                        .preempt(*preempt),
                 ),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
