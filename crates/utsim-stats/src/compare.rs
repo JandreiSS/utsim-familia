@@ -14,6 +14,7 @@
 
 use serde::Serialize;
 
+use crate::descriptive::mean;
 use crate::range::{ptukey, qtukey};
 use crate::special::{f_sf, t_cdf, t_ppf};
 
@@ -47,10 +48,6 @@ impl Anova {
     }
 }
 
-fn mean(xs: &[f64]) -> f64 {
-    xs.iter().sum::<f64>() / xs.len() as f64
-}
-
 /// One-way ANOVA of `groups`. `None` with fewer than two groups, an empty group or no
 /// degree of freedom left for the error (every group with a single value).
 pub fn anova(groups: &[&[f64]]) -> Option<Anova> {
@@ -63,7 +60,8 @@ pub fn anova(groups: &[&[f64]]) -> Option<Anova> {
         return None;
     }
     let means: Vec<f64> = groups.iter().map(|g| mean(g)).collect();
-    let grand = groups.iter().flat_map(|g| g.iter()).sum::<f64>() / n as f64;
+    let all: Vec<f64> = groups.iter().flat_map(|g| g.iter().copied()).collect();
+    let grand = mean(&all);
     let ss_between: f64 = groups
         .iter()
         .zip(&means)

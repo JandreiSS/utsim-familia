@@ -1,7 +1,7 @@
 //! Distribution functions built on `utsim_stats::special`: F and χ² tails, χ² and beta
 //! quantiles, two-sided t p-values and a composite Simpson rule.
 
-use utsim_stats::special::{beta_inc, brent, gamma_p, norm_cdf, t_cdf};
+use utsim_stats::special::{beta_inc, norm_cdf, t_cdf};
 
 /// Upper tail of the F distribution, `P(F > f)` with `d1` and `d2` degrees of freedom.
 pub fn f_sf(f: f64, d1: f64, d2: f64) -> f64 {
@@ -14,37 +14,9 @@ pub fn f_sf(f: f64, d1: f64, d2: f64) -> f64 {
     beta_inc(d2 / 2.0, d1 / 2.0, d2 / (d2 + d1 * f))
 }
 
-/// χ² CDF with `k` degrees of freedom.
-pub fn chi2_cdf(x: f64, k: f64) -> f64 {
-    if x <= 0.0 {
-        0.0
-    } else {
-        gamma_p(k / 2.0, x / 2.0)
-    }
-}
-
-/// χ² quantile with `k > 0` degrees of freedom, `0 < p < 1` (NaN outside).
-pub fn chi2_ppf(p: f64, k: f64) -> f64 {
-    if !(p > 0.0 && p < 1.0) || k <= 0.0 {
-        return f64::NAN;
-    }
-    let mut hi = (k + 10.0 * (2.0 * k).sqrt()).max(10.0);
-    while chi2_cdf(hi, k) < p {
-        hi *= 2.0;
-    }
-    brent(|x| chi2_cdf(x, k) - p, 0.0, hi, 1e-12).unwrap_or(f64::NAN)
-}
-
-/// Quantile of the beta distribution `Beta(a, b)`.
-pub fn beta_ppf(p: f64, a: f64, b: f64) -> f64 {
-    if p <= 0.0 {
-        return 0.0;
-    }
-    if p >= 1.0 {
-        return 1.0;
-    }
-    brent(|x| beta_inc(a, b, x) - p, 0.0, 1.0, 1e-13).unwrap_or(f64::NAN)
-}
+// The χ² CDF and quantile and the beta quantile live in `utsim_stats::special` (the
+// hypothesis tests of `utsim-stats` need them too); re-exported here for the callers.
+pub use utsim_stats::special::{beta_ppf, chi2_cdf, chi2_ppf};
 
 /// Two-sided p-value of a Student-t statistic.
 pub fn t_two_sided(t: f64, df: f64) -> f64 {
@@ -62,25 +34,8 @@ pub fn z_two_sided(z: f64) -> f64 {
     2.0 * norm_cdf(-z.abs())
 }
 
-/// Clopper-Pearson (exact) interval for `x` successes in `n` trials at `level`.
-pub fn clopper_pearson(x: usize, n: usize, level: f64) -> (f64, f64) {
-    if n == 0 {
-        return (f64::NAN, f64::NAN);
-    }
-    let a = (1.0 - level) / 2.0;
-    let (xf, nf) = (x as f64, n as f64);
-    let lo = if x == 0 {
-        0.0
-    } else {
-        beta_ppf(a, xf, nf - xf + 1.0)
-    };
-    let hi = if x == n {
-        1.0
-    } else {
-        beta_ppf(1.0 - a, xf + 1.0, nf - xf)
-    };
-    (lo, hi)
-}
+/// Clopper-Pearson (exact) interval (moved to [`utsim_stats::hypothesis`]).
+pub use utsim_stats::hypothesis::clopper_pearson;
 
 /// Composite Simpson rule of `f` on `[a, b]` with `n` (rounded up to even) intervals.
 pub fn simpson(f: impl Fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
@@ -113,15 +68,6 @@ pub(crate) fn simpson_weights(n: usize, h: f64) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn chi2_quantiles_match_the_usual_table() {
-        // χ² quantiles printed in every statistics table (e.g. NIST/SEMATECH e-Handbook,
-        // section 1.3.6.7.4): χ²(0.95; 1) = 3.841, χ²(0.975; 10) = 20.483, χ²(0.025; 10) = 3.247.
-        assert!((chi2_ppf(0.95, 1.0) - 3.841).abs() < 5e-4);
-        assert!((chi2_ppf(0.975, 10.0) - 20.483).abs() < 5e-4);
-        assert!((chi2_ppf(0.025, 10.0) - 3.247).abs() < 5e-4);
-    }
 
     #[test]
     fn f_tail_matches_the_usual_table() {
