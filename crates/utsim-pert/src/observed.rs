@@ -10,8 +10,9 @@
 //!   (queues are waiting, conveyors work for `length / speed` and wait the rest);
 //! - transporter trips and timed transfers are activities of their own, named like the
 //!   network's link activities ([`transport_name`], [`transfer_name`]); the wait for the
-//!   transporter stays in the origin object (state `waiting_transport`, counted as
-//!   blocking);
+//!   transporter (its empty trip and the loading included) stays in the origin object
+//!   (state `waiting_transport`, counted as blocking), so the observed trip is the loaded
+//!   trip plus the unloading;
 //! - in a `Combiner`, the critical input is the item of the set that arrived last (the one
 //!   that really held the assembly); the walk continues along that item;
 //! - an item that came out of a `Separator` (unpacked or a `Split` copy) continues along
@@ -153,7 +154,7 @@ pub struct ObservedResult {
     pub percentiles: Vec<(f64, f64)>,
     pub histogram: Option<Histogram>,
     pub deadline: Option<ObservedDeadline>,
-    /// Network activities first (in network order), then any other stop observed.
+    /// Network activities first (in topological order), then any other stop observed.
     pub activities: Vec<ObservedActivity>,
     /// Chains and the fraction of all units that followed each, most frequent first.
     pub paths: Vec<(Vec<String>, f64)>,
@@ -659,8 +660,9 @@ fn aggregate(
     });
 
     let mut names: Vec<String> = net
-        .activities
-        .iter()
+        .order()
+        .into_iter()
+        .map(|v| &net.activities[v])
         .filter(|a| !a.is_milestone())
         .map(|a| a.name.clone())
         .collect();

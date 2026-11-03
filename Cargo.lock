@@ -7017,6 +7017,7 @@ dependencies = [
  "utsim-fit",
  "utsim-model",
  "utsim-opt",
+ "utsim-pert",
  "utsim-scene",
  "winresource",
 ]
