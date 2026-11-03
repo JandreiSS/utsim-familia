@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use utsim_core::{RunReport, State, TraceEvent};
 use utsim_model::{Model, ObjectKind};
+use utsim_objects::network::router;
 
 /// An item going from one object to another.
 #[derive(Clone, Debug)]
@@ -13,8 +14,11 @@ pub struct Viagem {
     pub item: u64,
     pub de: usize,
     pub para: usize,
-    /// Length of the path (timed transfers) or of the straight line between the objects.
+    /// Length of `path`.
     pub dist: f64,
+    /// Where the item went: the path of a timed transfer, the route over the path network
+    /// (an item carried by a mobile resource rides its route) or the straight line.
+    pub path: Vec<[f64; 3]>,
 }
 
 /// A mobile resource moving along a path.
@@ -66,6 +70,10 @@ pub fn capturar(model: &Model, rep: u32) -> Result<Rastro, String> {
     let pos: Vec<[f64; 3]> = model.objects.iter().map(|o| o.position).collect();
     let is =
         |b: usize, f: fn(&ObjectKind) -> bool| model.objects.get(b).is_some_and(|o| f(&o.kind));
+    let rota = router(model.network.as_ref());
+    let carregador = |b: usize| is(b, |k| matches!(k, ObjectKind::Transporter { .. }));
+    // Items inside a mobile resource: where they boarded.
+    let mut a_bordo: BTreeMap<u64, usize> = BTreeMap::new();
     let mut viagens = Vec::new();
     let mut pernas = Vec::new();
     let mut estados: Vec<Vec<(f64, State)>> = vec![Vec::new(); n];
@@ -80,21 +88,36 @@ pub fn capturar(model: &Model, rep: u32) -> Result<Rastro, String> {
                 transit.insert(*item, path.clone());
             }
             TraceEvent::Moved { item, from, to } if *from < n && *to < n => {
-                let dist = transit
-                    .remove(item)
-                    .map_or_else(|| dist3(pos[*from], pos[*to]), |p| comprimento(&p));
+                let own = transit.remove(item);
+                // The ride of a mobile resource is one trip, from where the item boarded to
+                // where it got off, along the route of the path network.
+                let (de, para, carregado) = if carregador(*to) && !carregador(*from) {
+                    a_bordo.insert(*item, *from);
+                    jornadas.entry(*item).or_default();
+                    continue;
+                } else if carregador(*from) {
+                    (a_bordo.remove(item).unwrap_or(*from), *to, true)
+                } else {
+                    (*from, *to, false)
+                };
+                let path = match own {
+                    Some(p) => p,
+                    None if carregado => rota.route(pos[de], pos[para]),
+                    None => vec![pos[de], pos[para]],
+                };
                 viagens.push(Viagem {
                     t: r.t,
                     item: *item,
-                    de: *from,
-                    para: *to,
-                    dist,
+                    de,
+                    para,
+                    dist: comprimento(&path),
+                    path,
                 });
                 let j = jornadas.entry(*item).or_default();
                 if j.is_empty() {
-                    j.push(*from);
+                    j.push(de);
                 }
-                j.push(*to);
+                j.push(para);
             }
             TraceEvent::Travel { carrier, path, .. } if *carrier < n => pernas.push(Perna {
                 t: r.t,

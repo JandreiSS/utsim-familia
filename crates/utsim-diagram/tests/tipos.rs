@@ -255,3 +255,107 @@ fn index_lists_every_type() {
     let g = flowchart(&m, &Options::default());
     assert!(g.nodes.iter().any(|n| n.symbol == Symbol::Inicio));
 }
+
+#[test]
+fn items_carried_by_forklifts_follow_the_path_network() {
+    let m = example("centro_de_distribuicao.ron");
+    let r = rastro::capturar(&m, 0).unwrap();
+    let idx = |n: &str| m.objects.iter().position(|o| o.name == n).unwrap();
+    let (insp, rack) = (idx("inspecao"), idx("porta_paletes"));
+    let trips: Vec<_> = r
+        .viagens
+        .iter()
+        .filter(|v| v.de == insp && v.para == rack)
+        .collect();
+    assert!(
+        !trips.is_empty(),
+        "nenhuma viagem inspecao -> porta_paletes"
+    );
+    for v in &trips {
+        // insp (20,0) -> meio (40,0) -> rack (60,0): two corridors of 20.
+        assert!((v.dist - 40.0).abs() < 1e-9, "{}", v.dist);
+        assert_eq!(v.path.len(), 3);
+        assert_eq!(v.path[1], [40.0, 0.0, 0.0]);
+    }
+    // No trip ends at a forklift: the ride is one trip from the boarding to the exit.
+    assert!(r.viagens.iter().all(|v| {
+        !r.nomes[v.de].starts_with("empilhadeira") && !r.nomes[v.para].starts_with("empilhadeira")
+    }));
+    // Loaded legs of the forklifts have the same length as the item's trip.
+    assert!(r.pernas.iter().any(|p| (p.dist - 40.0).abs() < 1e-9));
+    // The route of the items goes straight from the inspection to the rack.
+    assert!(r.rotas[0].0.windows(2).any(|w| w == [insp, rack]));
+    // Nothing is drawn as a diagonal towards the garage (40, 20): every stroke of the
+    // spaghetti and of the flow-process map is horizontal or vertical.
+    for tipo in [TipoDiagrama::Espaguete, TipoDiagrama::Mapofluxograma] {
+        let svg = gerar(tipo, &m, &Options::default()).unwrap().svg.unwrap();
+        let mut tracos = 0;
+        for d in svg.split(" d=\"M").skip(1) {
+            let d = d.split('"').next().unwrap();
+            if d.contains('C') || d.contains('z') {
+                continue;
+            }
+            let pts: Vec<(f64, f64)> = format!("M{d}")
+                .split(['M', 'L'])
+                .filter_map(|p| {
+                    let mut it = p.split_whitespace().map(|n| n.parse::<f64>().ok());
+                    Some((it.next()??, it.next()??))
+                })
+                .collect();
+            for w in pts.windows(2) {
+                tracos += 1;
+                assert!(
+                    (w[0].0 - w[1].0).abs() < 0.2 || (w[0].1 - w[1].1).abs() < 0.2,
+                    "diagonal: {d}"
+                );
+            }
+        }
+        assert!(tracos > 5);
+    }
+}
+
+#[test]
+fn plan_labels_do_not_overlap() {
+    let m = example("centro_de_distribuicao.ron");
+    let r = rastro::capturar(&m, 0).unwrap();
+    let g = flowchart(&m, &Options::default());
+    let caixas = utsim_diagram::caixas_dos_rotulos(&m, &g, &r);
+    assert!(caixas.len() >= 10);
+    for (i, (na, a)) in caixas.iter().enumerate() {
+        for (nb, b) in &caixas[i + 1..] {
+            let cruzam = a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3;
+            assert!(!cruzam, "{na} x {nb}");
+        }
+    }
+}
+
+#[test]
+fn value_stream_availability_discounts_shifts() {
+    let m = example("centro_de_distribuicao.ron");
+    let out = gerar(TipoDiagrama::Vsm, &m, &Options::default()).unwrap();
+    let csv = out.csv.unwrap();
+    let disp = |nome: &str| -> f64 {
+        csv.lines()
+            .find(|l| l.starts_with(&format!("{nome},")))
+            .unwrap()
+            .split(',')
+            .nth(3)
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let sep = disp("separacao");
+    assert!(sep < 1.0 && sep > 0.9, "{sep}");
+    assert!(out.html.contains("fora de turno"));
+    // A process with no shifts or breakdowns stays at 100%.
+    assert!((disp("inspecao") - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn swimlane_label_column_grows_with_the_name() {
+    let m = example("centro_de_distribuicao.ron");
+    let out = gerar(TipoDiagrama::Raias, &m, &Options::default()).unwrap();
+    // The whole name is drawn, not cut with an ellipsis.
+    assert!(out.html.contains(">Equipe equipe_inspecao<"));
+    assert!(!out.html.contains("Equipe equipe_inspe…"));
+}

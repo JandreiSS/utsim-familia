@@ -128,12 +128,48 @@ impl Raias {
     }
 }
 
-const LABEL_W: f64 = 150.0;
+/// Narrowest and widest column of lane names, and the most characters on a line of it.
+const LABEL_W_MIN: f64 = 150.0;
+const LABEL_W_MAX: f64 = 260.0;
+const LABEL_CHARS: usize = 30;
+const LABEL_LINE_H: f64 = 14.0;
+
+/// Breaks a lane name into lines of at most `max` characters, at spaces (a longer word is
+/// cut with an ellipsis).
+pub fn quebrar(nome: &str, max: usize) -> Vec<String> {
+    let mut linhas: Vec<String> = Vec::new();
+    for palavra in nome.split_whitespace() {
+        let palavra = curto(palavra, max);
+        match linhas.last_mut() {
+            Some(l) if l.chars().count() + 1 + palavra.chars().count() <= max => {
+                l.push(' ');
+                l.push_str(&palavra);
+            }
+            _ => linhas.push(palavra),
+        }
+    }
+    if linhas.is_empty() {
+        linhas.push(String::new());
+    }
+    linhas
+}
+
+/// Width of the column of lane names: grows with the longest line, within limits.
+pub fn largura_rotulos(raias: &[String]) -> f64 {
+    let mais = raias
+        .iter()
+        .flat_map(|r| quebrar(r, LABEL_CHARS))
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(0);
+    (mais as f64 * 7.0 + 24.0).clamp(LABEL_W_MIN, LABEL_W_MAX)
+}
 const NODE_W: f64 = 150.0;
 const NODE_H: f64 = 40.0;
 const HALF_COL: f64 = 100.0;
 
 pub fn svg(r: &Raias, titulo: &str, standalone: bool) -> String {
+    let label_w = largura_rotulos(&r.raias);
     // Stack of boxes that share lane and column.
     let key = |p: &Passo| (p.raia, (p.col * 2.0).round() as i64);
     let mut slots: BTreeMap<(usize, i64), usize> = BTreeMap::new();
@@ -147,25 +183,30 @@ pub fn svg(r: &Raias, titulo: &str, standalone: bool) -> String {
     for (&(lane, _), &c) in &slots {
         band_h[lane] = band_h[lane].max(c);
     }
+    let altura = |k: usize| {
+        let nos = band_h[k].max(1) as f64 * (NODE_H + 14.0) + 16.0;
+        let texto = quebrar(&r.raias[k], LABEL_CHARS).len() as f64 * LABEL_LINE_H + 12.0;
+        nos.max(texto)
+    };
     let mut band_y = Vec::new();
     let mut y = 20.0;
-    for &c in &band_h {
+    for k in 0..band_h.len() {
         band_y.push(y);
-        y += c.max(1) as f64 * (NODE_H + 14.0) + 16.0;
+        y += altura(k);
     }
     let max_col = r.passos.iter().map(|p| p.col).fold(0.0, f64::max);
-    let width = LABEL_W + 60.0 + max_col * HALF_COL + NODE_W;
+    let width = label_w + 60.0 + max_col * HALF_COL + NODE_W;
     let height = y + 10.0;
     let pos = |i: usize| {
         let p = &r.passos[i];
         (
-            LABEL_W + 30.0 + p.col * HALF_COL,
+            label_w + 30.0 + p.col * HALF_COL,
             band_y[p.raia] + 10.0 + slot_of[i] as f64 * (NODE_H + 14.0),
         )
     };
     let mut b = String::new();
     for (k, name) in r.raias.iter().enumerate() {
-        let h = band_h[k].max(1) as f64 * (NODE_H + 14.0) + 16.0;
+        let h = altura(k);
         let _ = write!(
             b,
             "<rect class=\"raia\" x=\"4\" y=\"{:.1}\" width=\"{:.1}\" height=\"{h:.1}\"/>",
@@ -177,14 +218,13 @@ pub fn svg(r: &Raias, titulo: &str, standalone: bool) -> String {
             "<line class=\"eixo\" x1=\"{x}\" y1=\"{:.1}\" x2=\"{x}\" y2=\"{:.1}\"/>",
             band_y[k],
             band_y[k] + h,
-            x = LABEL_W
+            x = label_w
         );
-        b.push_str(&texto(
-            12.0,
-            band_y[k] + h / 2.0 + 4.0,
-            "b",
-            &curto(name, 20),
-        ));
+        let linhas = quebrar(name, LABEL_CHARS);
+        let topo = band_y[k] + h / 2.0 - linhas.len() as f64 * LABEL_LINE_H / 2.0 + 10.0;
+        for (j, l) in linhas.iter().enumerate() {
+            b.push_str(&texto(12.0, topo + j as f64 * LABEL_LINE_H, "b", l));
+        }
     }
     for l in &r.ligacoes {
         let ((xa, ya), (xb, yb)) = (pos(l.de), pos(l.para));
@@ -248,4 +288,26 @@ pub fn mermaid(r: &Raias) -> String {
         let _ = writeln!(s, "    r{} {arrow} r{}", l.de, l.para);
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn label_width_grows_within_limits() {
+        let curto = vec!["Esteiras".to_string()];
+        let longo = vec!["Equipe equipe_inspecao".to_string()];
+        let enorme = vec!["Palavra ".repeat(30)];
+        assert_eq!(largura_rotulos(&curto), 150.0);
+        assert!(largura_rotulos(&longo) >= 22.0 * 7.0);
+        assert!(largura_rotulos(&enorme) <= 260.0);
+        let linhas = quebrar(&enorme[0], 30);
+        assert!(linhas.len() > 1 && linhas.iter().all(|l| l.chars().count() <= 30));
+        assert_eq!(
+            quebrar("Equipe equipe_inspecao", 30),
+            ["Equipe equipe_inspecao"]
+        );
+        assert_eq!(quebrar("Equipe equipe_inspecao_da_linha", 12).len(), 2);
+    }
 }
