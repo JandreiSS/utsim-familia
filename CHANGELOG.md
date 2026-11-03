@@ -8,6 +8,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ### Em desenvolvimento
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
+- Launcher da família UTSim (`crates/utsim-launcher-core`, `utsim-publicar`, `utsim-launcher`): código de acesso por testador, canais estável e testes, manifesto assinado (ed25519), pacotes cifrados por código (XChaCha20-Poly1305 e Argon2id), download do Google Drive com retomada e página de confirmação, instalação por usuário com troca atômica de versão, relato de erro em .zip. Instalador próprio (`scripts/instalador-launcher.sh`). Plano em `docs/plano_launcher.md`; manual do testador em `docs/manual/src/launcher.md`.
 
 ## [0.1.0] - 2026-11-02
 

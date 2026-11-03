@@ -140,7 +140,7 @@ justifica a escolha com métricas estatísticas.
 - [ ] Fase 14: piloto com casos reais
 - [ ] Distribuição v0.1: instalador enviado direto aos testadores (repositório continua privado)
 - [ ] PERT/CPM: botão que monta a rede de atividades (com durações otimista, mais provável e pessimista ou distribuições), calcula início e fim mais cedo e mais tarde, folgas e caminho crítico, mostra o diagrama "bonitinho" e a probabilidade de terminar até uma data; com simulação de Monte Carlo usando as distribuições do UTSim (caminho crítico pode mudar entre replicações)
-- [ ] Launcher: código de acesso por testador, canais estável/testes, várias versões (editor atual, Godot, realidade virtual), atualização com assinatura digital, relato de erros; armazenamento custo zero no Google Drive do autor (manifesto de versões + instaladores; downloads grandes tratam a página de confirmação do Drive; instaladores cifrados por código de acesso, já que o link é aberto); assinatura de código no Windows a médio prazo
+- [ ] Launcher: código de acesso por testador, canais estável/testes, várias versões (editor atual, Godot, realidade virtual), atualização com assinatura digital, relato de erros; armazenamento custo zero no Google Drive do autor (manifesto de versões + instaladores; downloads grandes tratam a página de confirmação do Drive; instaladores cifrados por código de acesso, já que o link é aberto); assinatura de código no Windows a médio prazo. Núcleo, ferramenta do autor, aplicativo e instalador feitos (`docs/plano_launcher.md`); falta a primeira publicação real
 
 ## Fase 7+: avançado
 - [x] Otimização de parâmetros: grade, recozimento simulado, genético, refinamento, comparação pareada (`utsim otimizar`)
