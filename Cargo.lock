@@ -7018,6 +7018,7 @@ dependencies = [
  "utsim-model",
  "utsim-opt",
  "utsim-scene",
+ "utsim-stats",
  "winresource",
 ]
 
@@ -7084,6 +7085,7 @@ dependencies = [
  "serde",
  "serde_json",
  "utsim-core",
+ "utsim-stats",
 ]
 
 [[package]]
@@ -7131,6 +7133,7 @@ dependencies = [
  "utsim-fluid",
  "utsim-objects",
  "utsim-script",
+ "utsim-stats",
 ]
 
 [[package]]
@@ -7169,6 +7172,16 @@ name = "utsim-script"
 version = "0.1.0"
 dependencies = [
  "rhai",
+ "utsim-core",
+]
+
+[[package]]
+name = "utsim-stats"
+version = "0.1.0"
+dependencies = [
+ "rand 0.9.5",
+ "rand_pcg",
+ "serde",
  "utsim-core",
 ]
 
