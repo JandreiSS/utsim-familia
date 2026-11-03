@@ -11,6 +11,7 @@ pub mod dist;
 pub mod engine;
 pub mod init;
 pub mod item;
+pub mod item_log;
 pub mod maintenance;
 pub mod person;
 pub mod report;
@@ -33,6 +34,7 @@ pub use dist::Dist;
 pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
 pub use init::{BlockState, ItemState, StartState, WorkPhase};
 pub use item::{Item, ItemId, Value};
+pub use item_log::ItemRecord;
 pub use maintenance::{
     AgeBasis, Maintenance, MaintenanceCost, Preventive, RepairEffect, Trigger, Wear,
 };
