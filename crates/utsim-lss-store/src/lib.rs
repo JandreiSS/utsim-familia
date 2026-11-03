@@ -17,6 +17,8 @@
 //! - [`fsio`]: write-once and atomic writes, names worth reading;
 //! - [`project`]: open, create, commit edits, pick up other people's operations, snapshots,
 //!   presence, attachments, the local cache;
+//! - [`program`]: the program folder above the portfolios (stage L6): finding the
+//!   portfolios and projects, the coaching logs, the rewriting after an anonymisation;
 //! - [`lssz`]: export and import of a project as one `.lssz` file (a zip of the folder);
 //! - [`user`]: the person using this computer and the app preferences (outside the project).
 
@@ -27,6 +29,7 @@ use utsim_lss_core::format::FormatError;
 
 pub mod fsio;
 pub mod lssz;
+pub mod program;
 pub mod project;
 pub mod user;
 

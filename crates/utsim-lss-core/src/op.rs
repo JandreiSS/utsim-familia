@@ -78,10 +78,37 @@ pub enum Kind {
     /// A row or node of a tool deliverable (an FMEA row, an Ishikawa cause, a CTQ...).
     #[serde(rename = "item_ferramenta")]
     ToolItem,
+    // Stage L6 (implementation program, `docs/plano_lean_seis_sigma.md`, 8.1 to 8.4, 8.8).
+    #[serde(rename = "meta_programa")]
+    ProgramTarget,
+    #[serde(rename = "oportunidade")]
+    Opportunity,
+    #[serde(rename = "decisao_comite")]
+    CommitteeDecision,
+    #[serde(rename = "designacao")]
+    Assignment,
+    #[serde(rename = "ausencia")]
+    Absence,
+    /// Main entity of a belt's coaching log folder (restricted to the MBB and the belt).
+    #[serde(rename = "diario_mentoria")]
+    CoachingLog,
+    #[serde(rename = "sessao_mentoria")]
+    CoachingSession,
+    #[serde(rename = "compromisso")]
+    Commitment,
+    #[serde(rename = "competencia")]
+    Competence,
+    #[serde(rename = "revisao_tollgate")]
+    TollgateReview,
+    #[serde(rename = "pergunta_revisao")]
+    ReviewQuestion,
+    /// A profile of a person in the program's role list (kept by the MBB).
+    #[serde(rename = "perfil")]
+    ProgramRole,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 31] = [
+    pub const ALL: [Kind; 43] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -113,6 +140,18 @@ impl Kind {
         Kind::Holiday,
         Kind::SavingEntry,
         Kind::ToolItem,
+        Kind::ProgramTarget,
+        Kind::Opportunity,
+        Kind::CommitteeDecision,
+        Kind::Assignment,
+        Kind::Absence,
+        Kind::CoachingLog,
+        Kind::CoachingSession,
+        Kind::Commitment,
+        Kind::Competence,
+        Kind::TollgateReview,
+        Kind::ReviewQuestion,
+        Kind::ProgramRole,
     ];
 
     /// The key used in the files (`acao`, `projeto`...).
@@ -149,6 +188,18 @@ impl Kind {
             Kind::Holiday => "feriado",
             Kind::SavingEntry => "lancamento_ganho",
             Kind::ToolItem => "item_ferramenta",
+            Kind::ProgramTarget => "meta_programa",
+            Kind::Opportunity => "oportunidade",
+            Kind::CommitteeDecision => "decisao_comite",
+            Kind::Assignment => "designacao",
+            Kind::Absence => "ausencia",
+            Kind::CoachingLog => "diario_mentoria",
+            Kind::CoachingSession => "sessao_mentoria",
+            Kind::Commitment => "compromisso",
+            Kind::Competence => "competencia",
+            Kind::TollgateReview => "revisao_tollgate",
+            Kind::ReviewQuestion => "pergunta_revisao",
+            Kind::ProgramRole => "perfil",
         }
     }
 }

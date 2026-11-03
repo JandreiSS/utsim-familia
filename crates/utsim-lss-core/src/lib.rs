@@ -44,6 +44,16 @@ pub mod savings;
 pub mod schedule;
 pub mod tollgate;
 
+// Stage L6, implementation program (`docs/plano_lean_seis_sigma.md`, 8.1 to 8.4, 8.7 and
+// 8.8; module names of decision MB9).
+pub mod designacao;
+pub mod mentoria;
+pub mod painel;
+pub mod perfis;
+pub mod privacidade;
+pub mod programa;
+pub mod revisao;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};
