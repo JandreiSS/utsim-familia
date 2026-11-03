@@ -37,11 +37,14 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utsim_core::Dist;
-use utsim_fit::auto::{self, AutoConfig, AutoFit, Choice, Criterion, IndexEntry};
+use utsim_fit::auto::{AutoConfig, AutoFit, Choice, Criterion, IndexEntry};
 use utsim_fit::data::DataOptions;
 use utsim_fit::report::FitConfig;
 
 use crate::{Model, ModelError};
+
+/// The automatic fit API, re-exported for the editors.
+pub use utsim_fit::auto;
 
 /// One field fed by observed values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
