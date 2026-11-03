@@ -2,6 +2,7 @@
 
 pub mod analysis;
 pub mod csv;
+pub mod dados;
 pub mod experiment;
 pub mod html;
 pub mod replay;
@@ -122,6 +123,9 @@ pub struct Model {
     /// Time between two points of the flow, one block per measurement.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub spans: Vec<SpanDef>,
+    /// Distribution fields fed by observed values, fitted on load ([`dados`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data: Vec<dados::DataInput>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -343,6 +347,11 @@ fn one_usize() -> usize {
 
 impl Model {
     pub fn parse(text: &str) -> Result<Model, ModelError> {
+        Model::parse_in(text, None)
+    }
+
+    /// Like [`Model::parse`], with data files (`data: [..]`) taken relative to `base`.
+    pub fn parse_in(text: &str, base: Option<&Path>) -> Result<Model, ModelError> {
         let options = ron::Options::default()
             .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
         let found = options.from_str::<FormatProbe>(text)?.format.unwrap_or(1);
@@ -353,11 +362,14 @@ impl Model {
             });
         }
         let text = migrate(text, found, MIGRATIONS)?;
-        Ok(options.from_str(&text)?)
+        let mut model: Model = options.from_str(&text)?;
+        dados::resolve(&mut model, base)?;
+        Ok(model)
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Model, ModelError> {
-        Model::parse(&std::fs::read_to_string(path)?)
+        let path = path.as_ref();
+        Model::parse_in(&std::fs::read_to_string(path)?, path.parent())
     }
 
     /// Travel time that applies to the items leaving `obj` through direct connections.

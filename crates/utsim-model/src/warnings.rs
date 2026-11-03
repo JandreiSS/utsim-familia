@@ -144,6 +144,7 @@ impl Model {
                 ));
             }
         }
+        out.extend(crate::dados::warnings(self));
         out
     }
 }

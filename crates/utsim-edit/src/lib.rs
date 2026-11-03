@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 
 use utsim_core::Dist;
 pub use utsim_fluid::{FluidDef, FluidKind, FluidNode};
+use utsim_model::dados::{self, DataInput};
 use utsim_model::experiment::patch;
 use utsim_model::replay::Replay;
 use utsim_model::{Model, ModelError, ObjectDef, ObjectKind, VisualDef};
@@ -133,8 +134,26 @@ pub enum Command {
         name: String,
         description: String,
     },
+    /// Switches a distribution field (`<object>.<field>`, see
+    /// [`utsim_model::dados::dist_fields`]) between a fixed distribution and real data:
+    /// with [`FieldSource::Data`] the values are fitted at once (the command fails, and
+    /// nothing changes, when they cannot be read or fitted); with [`FieldSource::Dist`]
+    /// the data entry goes and the field keeps the given distribution.
+    SetFieldSource {
+        field: String,
+        source: FieldSource,
+    },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
+}
+
+/// Where a distribution field gets its distribution from.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FieldSource {
+    /// A distribution written in the model, as before.
+    Dist(Dist),
+    /// Observed values, fitted automatically (the entry's `field` is replaced).
+    Data(Box<DataInput>),
 }
 
 /// A validation problem, attached to an object when it concerns one.
@@ -167,7 +186,7 @@ impl Document {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, ModelError> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)?;
-        let model = Model::parse(&text)?;
+        let model = Model::parse_in(&text, path.parent())?;
         Ok(Document::from_model(
             model,
             Some(path.to_path_buf()),
@@ -226,6 +245,9 @@ impl Document {
     pub fn apply_coalescing(&mut self, command: Command, key: Option<&str>) -> Result<(), String> {
         let mut next = self.model.clone();
         execute(&mut next, &command)?;
+        // Data entries added or changed by the command are fitted now.
+        dados::resolve_pending(&mut next, self.path.as_deref().and_then(Path::parent))
+            .map_err(|e| e.to_string())?;
         let merge = key.is_some() && self.undo.last().is_some_and(|(_, k)| k.as_deref() == key);
         if merge {
             self.model = next;
@@ -328,6 +350,18 @@ impl Document {
             .collect()
     }
 
+    /// Full analysis of the data of `field` (ranking, choice, warnings and the HTML/CSV
+    /// report), for the interface. `Err` when the field has no data or they cannot be read.
+    pub fn data_analysis(&self, field: &str) -> Result<dados::auto::AutoFit, String> {
+        let input = self
+            .model
+            .data
+            .iter()
+            .find(|i| i.field == field)
+            .ok_or_else(|| format!("'{field}' não usa dados reais"))?;
+        input.analyze(self.path.as_deref().and_then(Path::parent))
+    }
+
     /// `base`, or `base_2`, `base_3`... whichever is free.
     pub fn unique_name(&self, base: &str) -> String {
         free_name(base, |n| self.model.objects.iter().any(|o| o.name == n))
@@ -415,6 +449,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 return Err(not_found(name));
             }
             model.connections.retain(|(a, b)| a != name && b != name);
+            dados::remove_object(model, name);
             // A time measurement needs both of its ends.
             model.spans.retain(|m| &m.from != name && &m.to != name);
         }
@@ -439,6 +474,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 }
             }
             fluids::rename_object(model, from, to);
+            dados::rename_object(model, from, to);
             for span in &mut model.spans {
                 for end in [&mut span.from, &mut span.to] {
                     if end == from {
@@ -518,6 +554,23 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
             model.name = name.to_string();
             model.description = description.clone();
         }
+        Command::SetFieldSource { field, source } => match source {
+            FieldSource::Dist(dist) => {
+                dados::set_dist(model, field, dist)?;
+                model.data.retain(|i| &i.field != field);
+            }
+            FieldSource::Data(input) => {
+                // Checks that the field exists and holds a distribution.
+                dados::get_dist(model, field)?;
+                let mut input = (**input).clone();
+                input.field = field.clone();
+                input.status = dados::DataStatus::Pending;
+                match model.data.iter_mut().find(|i| &i.field == field) {
+                    Some(existing) => *existing = input,
+                    None => model.data.push(input),
+                }
+            }
+        },
         Command::Batch(commands) => {
             for c in commands {
                 execute(model, c)?;
