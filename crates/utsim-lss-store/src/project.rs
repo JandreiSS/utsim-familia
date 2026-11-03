@@ -113,6 +113,42 @@ impl ProjectFolder {
         clock: &dyn Clock,
         cache_dir: Option<&Path>,
     ) -> Result<Self> {
+        Self::create_with(path, title, me, clock, cache_dir, |id| {
+            Project::create(id, title.trim(), approach, || clock.new_id())
+        })
+    }
+
+    /// Creates a portfolio folder (`docs/plano_lean_seis_sigma.md`, 1.1 and 8.1): the same
+    /// journal as a project, whose main entity (the manifest id) is a `carteira` with its
+    /// business unit and program, and the creator registered. Its project folders sit next
+    /// to it.
+    pub fn create_portfolio(
+        path: &Path,
+        name: &str,
+        unit: &str,
+        program: &str,
+        me: &Identity,
+        clock: &dyn Clock,
+        cache_dir: Option<&Path>,
+    ) -> Result<Self> {
+        Self::create_with(path, name, me, clock, cache_dir, |id| {
+            utsim_lss_core::portfolio::create(
+                id,
+                name,
+                (clock.new_id(), unit),
+                (clock.new_id(), program),
+            )
+        })
+    }
+
+    fn create_with(
+        path: &Path,
+        title: &str,
+        me: &Identity,
+        clock: &dyn Clock,
+        cache_dir: Option<&Path>,
+        initial: impl FnOnce(Id) -> Vec<Edit>,
+    ) -> Result<Self> {
         let title = title.trim();
         if title.is_empty() {
             return Err(Error::Invalid("dê um título ao projeto".into()));
@@ -140,7 +176,7 @@ impl ProjectFolder {
         let mpath = root.join(MANIFEST);
         fsio::write_new(&mpath, format::write(&manifest).as_bytes())?;
         let mut pf = Self::empty(root, manifest, me.clone(), cache_dir);
-        let mut edits = Project::create(pf.manifest.id, title, approach, || clock.new_id());
+        let mut edits = initial(pf.manifest.id);
         edits.extend(Person::register(pf.state(), me.person, &me.name, &me.email));
         pf.commit(edits, clock)?;
         Ok(pf)
@@ -317,13 +353,29 @@ impl ProjectFolder {
         &self.pending
     }
 
-    /// The current project title (from the journal; the manifest's as fallback).
+    /// The current project title (from the journal; the manifest's as fallback). For a
+    /// portfolio folder, its name.
     pub fn title(&self) -> String {
+        use utsim_lss_core::domain::fields;
         self.state()
             .entity(self.manifest.id)
-            .map(|e| e.text(utsim_lss_core::domain::fields::project::TITLE))
+            .map(|e| {
+                let t = e.text(fields::project::TITLE);
+                if t.is_empty() {
+                    e.text(fields::portfolio::NAME)
+                } else {
+                    t
+                }
+            })
             .filter(|t| !t.is_empty())
             .unwrap_or_else(|| self.manifest.title.clone())
+    }
+
+    /// Whether this folder is a portfolio (its main entity is a `carteira`).
+    pub fn is_portfolio(&self) -> bool {
+        self.state()
+            .entity(self.manifest.id)
+            .is_some_and(|e| e.kind == utsim_lss_core::Kind::Portfolio)
     }
 
     /// Where an operation file goes: `ops/AAAA/MM/<uuid>-<pessoa>.json` (month of the id).

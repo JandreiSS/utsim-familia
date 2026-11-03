@@ -17,6 +17,8 @@ thiserror.workspace = true
 sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
 getrandom = { version = "=0.2.17", features = ["std"] }
 zip = { version = "=2.6.1", default-features = false, features = ["deflate"] }
+# Local UTC offset for "today" (the same chrono already in Cargo.lock; clock feature only).
+chrono = { version = "=0.4.45", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

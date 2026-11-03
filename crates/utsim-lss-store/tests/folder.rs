@@ -615,3 +615,52 @@ fn system_clock_makes_v7_ids() {
     assert!(c.now_ms() > 1_700_000_000_000);
     let _ = Path::new("");
 }
+
+#[test]
+fn portfolio_folder_is_a_journal_with_its_unit_and_program() {
+    let dir = tempfile::tempdir().unwrap();
+    let clock = TestClock::new(4);
+    let ana = who(1, "Ana");
+    let pf = ProjectFolder::create_portfolio(
+        &dir.path().join("Carteira Estamparia"),
+        "Carteira Estamparia",
+        "Planta 1",
+        "Programa LSS",
+        &ana,
+        &clock,
+        None,
+    )
+    .unwrap();
+    assert!(pf.is_portfolio());
+    assert_eq!(pf.title(), "Carteira Estamparia");
+    let root = pf.root().to_path_buf();
+    assert!(project::is_project(&root), "same folder layout");
+    let again = ProjectFolder::open(&root, &ana, None).unwrap();
+    assert!(again.is_portfolio());
+    let c = utsim_lss_core::portfolio::read(again.state(), again.project_id()).unwrap();
+    assert_eq!(
+        utsim_lss_core::portfolio::name_of(again.state(), c.unit),
+        "Planta 1"
+    );
+    assert_eq!(
+        utsim_lss_core::portfolio::name_of(again.state(), c.program),
+        "Programa LSS"
+    );
+    // A project folder is not a portfolio.
+    let p = ProjectFolder::create(
+        &dir.path().join("Linha 2"),
+        "Linha 2",
+        Approach::Kaizen,
+        &ana,
+        &clock,
+        None,
+    )
+    .unwrap();
+    assert!(!p.is_portfolio());
+}
+
+#[test]
+fn system_clock_offset_is_within_a_day() {
+    let off = SystemClock.utc_offset_minutes();
+    assert!((-14 * 60..=14 * 60).contains(&off), "{off}");
+}

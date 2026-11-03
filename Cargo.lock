@@ -7833,6 +7833,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
+ "serde",
  "serde_json",
  "tempfile",
  "utsim-lss-core",
@@ -7847,13 +7848,17 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.21",
+ "utsim-core",
+ "utsim-pert",
 ]
 
 [[package]]
 name = "utsim-lss-store"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "getrandom 0.2.17",
  "serde",
  "serde_json",

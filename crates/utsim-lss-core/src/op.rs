@@ -50,13 +50,38 @@ pub enum Kind {
     Lesson,
     #[serde(rename = "anexo")]
     Attachment,
+    // Stage L1 (project management).
+    #[serde(rename = "programa")]
+    Program,
+    #[serde(rename = "unidade_negocio")]
+    BusinessUnit,
+    #[serde(rename = "ideia")]
+    Idea,
+    #[serde(rename = "objetivo_estrategico")]
+    StrategicObjective,
+    #[serde(rename = "criterio")]
+    Criterion,
+    #[serde(rename = "versao_termo")]
+    CharterVersion,
+    #[serde(rename = "celula_raci")]
+    RaciCell,
+    #[serde(rename = "decisao_tollgate")]
+    TollgateDecision,
+    #[serde(rename = "item_ata")]
+    MinutesItem,
+    #[serde(rename = "tarefa")]
+    Task,
+    #[serde(rename = "feriado")]
+    Holiday,
+    #[serde(rename = "lancamento_ganho")]
+    SavingEntry,
     /// A row or node of a tool deliverable (an FMEA row, an Ishikawa cause, a CTQ...).
     #[serde(rename = "item_ferramenta")]
     ToolItem,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 19] = [
+    pub const ALL: [Kind; 31] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -75,6 +100,18 @@ impl Kind {
         Kind::Study,
         Kind::Lesson,
         Kind::Attachment,
+        Kind::Program,
+        Kind::BusinessUnit,
+        Kind::Idea,
+        Kind::StrategicObjective,
+        Kind::Criterion,
+        Kind::CharterVersion,
+        Kind::RaciCell,
+        Kind::TollgateDecision,
+        Kind::MinutesItem,
+        Kind::Task,
+        Kind::Holiday,
+        Kind::SavingEntry,
         Kind::ToolItem,
     ];
 
@@ -99,6 +136,18 @@ impl Kind {
             Kind::Study => "estudo",
             Kind::Lesson => "licao",
             Kind::Attachment => "anexo",
+            Kind::Program => "programa",
+            Kind::BusinessUnit => "unidade_negocio",
+            Kind::Idea => "ideia",
+            Kind::StrategicObjective => "objetivo_estrategico",
+            Kind::Criterion => "criterio",
+            Kind::CharterVersion => "versao_termo",
+            Kind::RaciCell => "celula_raci",
+            Kind::TollgateDecision => "decisao_tollgate",
+            Kind::MinutesItem => "item_ata",
+            Kind::Task => "tarefa",
+            Kind::Holiday => "feriado",
+            Kind::SavingEntry => "lancamento_ganho",
             Kind::ToolItem => "item_ferramenta",
         }
     }

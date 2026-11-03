@@ -484,12 +484,13 @@ mod tests {
         let mut f = Fixture::new();
         let (t, src) = project_table(&f.state, f.project);
         assert_eq!((t, src), (ApTable::builtin(), TableSource::BuiltIn));
-        let all_high = "S,O,D,AP\n".to_string()
-            + &(1..=10)
-                .flat_map(|s| {
-                    (1..=10).flat_map(move |o| (1..=10).map(move |d| format!("{s},{o},{d},H\n")))
-                })
-                .collect::<String>();
+        // `String + &String` does not infer with the `Add` impls of utsim-core in scope.
+        let rows: String = (1..=10)
+            .flat_map(|s| {
+                (1..=10).flat_map(move |o| (1..=10).map(move |d| format!("{s},{o},{d},H\n")))
+            })
+            .collect();
+        let all_high = format!("S,O,D,AP\n{rows}");
         let e = import_table(f.project, &all_high, " Tabela da empresa ").unwrap();
         f.commit(e);
         let (t, src) = project_table(&f.state, f.project);
