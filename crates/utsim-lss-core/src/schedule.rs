@@ -517,9 +517,72 @@ pub fn project_ref(project: Id) -> EntityRef {
     Project::entity_ref(project)
 }
 
+/// Predecessors as typed on the screen: row numbers (1-based, in screen order) with an
+/// optional lag in working days, separated by `;` or `,`: `"2; 3+1"`.
+pub fn parse_preds(text: &str, tasks: &[Task]) -> Result<Vec<Pred>, String> {
+    let mut out = Vec::new();
+    for part in text
+        .split([';', ','])
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
+        let (num, lag) = match part.split_once('+') {
+            Some((n, l)) => (n.trim(), l.trim().replace(',', ".")),
+            None => (part, "0".to_string()),
+        };
+        let row: usize = num
+            .parse()
+            .map_err(|_| format!("'{part}' não é um número de linha"))?;
+        let lag: f64 = lag
+            .parse()
+            .map_err(|_| format!("defasagem inválida em '{part}'"))?;
+        let t = row
+            .checked_sub(1)
+            .and_then(|i| tasks.get(i))
+            .ok_or_else(|| format!("não há a linha {row}"))?;
+        out.push(Pred {
+            task: t.id,
+            lag: lag.max(0.0),
+        });
+    }
+    Ok(out)
+}
+
+/// The predecessors of a task as row numbers (the inverse of [`parse_preds`]).
+pub fn format_preds(task: &Task, tasks: &[Task]) -> String {
+    task.preds
+        .iter()
+        .filter_map(|p| {
+            let row = tasks.iter().position(|t| t.id == p.task)? + 1;
+            Some(if p.lag > 0.0 {
+                format!("{row}+{}", p.lag)
+            } else {
+                row.to_string()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn predecessors_typed_as_row_numbers() {
+        let tasks = vec![
+            task(1, 1.0, &[]),
+            task(2, 1.0, &[]),
+            task(3, 1.0, &[(1, 0.0), (2, 2.0)]),
+        ];
+        assert_eq!(format_preds(&tasks[2], &tasks), "1; 2+2");
+        let p = parse_preds(" 1 ; 2 + 2,", &tasks).unwrap();
+        assert_eq!(p, tasks[2].preds);
+        assert!(parse_preds("4", &tasks).is_err());
+        assert!(parse_preds("x", &tasks).is_err());
+        assert!(parse_preds("1+a", &tasks).is_err());
+        assert_eq!(parse_preds("", &tasks).unwrap(), vec![]);
+    }
 
     fn d(y: i32, m: u8, day: u8) -> Date {
         Date::new(y, m, day).unwrap()

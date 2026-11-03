@@ -40,9 +40,9 @@ pub fn wip_limits(state: &State, project: Id) -> BTreeMap<Column, Option<u32>> {
         .iter()
         .map(|c| {
             let lim = e
-                .and_then(|e| e.integer(&wip_field(*c)))
-                .filter(|n| *n > 0)
-                .map(|n| n.min(u32::MAX as i64) as u32);
+                .and_then(|e| e.number(&wip_field(*c)))
+                .filter(|n| *n >= 1.0)
+                .map(|n| n.round().min(f64::from(u32::MAX)) as u32);
             (*c, lim)
         })
         .collect()

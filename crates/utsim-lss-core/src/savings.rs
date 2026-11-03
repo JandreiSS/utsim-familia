@@ -142,9 +142,9 @@ impl Plan {
             monthly: e.number(f::MONTHLY).unwrap_or(0.0),
             start: e.opt_text(f::START).and_then(|s| s.parse().ok()),
             months: e
-                .integer(f::MONTHS)
-                .filter(|m| *m > 0)
-                .map_or(DEFAULT_FOLLOW_UP_MONTHS, |m| m.min(120) as u32),
+                .number(f::MONTHS)
+                .filter(|m| *m >= 1.0)
+                .map_or(DEFAULT_FOLLOW_UP_MONTHS, |m| m.round().min(120.0) as u32),
             forecast_by: e.id(f::FORECAST_BY),
             forecast_on: date(f::FORECAST_ON),
             validated_by: e.id(f::VALIDATED_BY),

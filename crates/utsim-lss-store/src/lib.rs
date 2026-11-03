@@ -80,6 +80,11 @@ pub trait Clock {
     fn new_id(&self) -> Id {
         Id::v7(self.now_ms().max(0) as u64, self.random())
     }
+
+    /// Offset of the local time from UTC now, minutes (for "today"). Tests keep UTC.
+    fn utc_offset_minutes(&self) -> i32 {
+        0
+    }
 }
 
 /// The system clock and the operating system's random generator.
@@ -104,5 +109,10 @@ impl Clock for SystemClock {
             r.copy_from_slice(&n.to_le_bytes()[..10]);
         }
         r
+    }
+
+    fn utc_offset_minutes(&self) -> i32 {
+        use chrono::Offset;
+        chrono::Local::now().offset().fix().local_minus_utc() / 60
     }
 }
