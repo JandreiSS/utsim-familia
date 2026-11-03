@@ -14,6 +14,11 @@ path = "src/lib.rs"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# Frozen hash of the deliverables at a tollgate decision (the same sha2 as the store).
+sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
+# Schedule: CPM, classic PERT and Monte Carlo come from the simulator's PERT crate (plan 1.6).
+utsim-pert.workspace = true
+utsim-core.workspace = true
 
 [dev-dependencies]
 proptest = { version = "=1.11.0", default-features = false, features = ["std"] }

@@ -26,6 +26,21 @@ pub mod overview;
 pub mod presence;
 pub mod state;
 
+// Stage L1, project management (`docs/plano_lean_seis_sigma.md`, 1.1 to 1.10).
+pub mod board;
+pub mod calendar;
+pub mod charter;
+pub mod closure;
+pub mod digest;
+pub mod lessons;
+pub mod meeting;
+pub mod portfolio;
+pub mod risk;
+pub mod roles;
+pub mod savings;
+pub mod schedule;
+pub mod tollgate;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};

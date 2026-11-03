@@ -175,6 +175,9 @@ pub enum ProjectStatus {
     Cancelled,
     #[serde(rename = "arquivada")]
     Archived,
+    /// Stopped by a tollgate decision (`suspender`); it can resume.
+    #[serde(rename = "suspensa")]
+    Suspended,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -239,7 +242,9 @@ pub enum Origin {
 }
 
 /// Roles in a project (`docs/plano_lean_seis_sigma.md`, 1.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub enum RoleKind {
     #[serde(rename = "patrocinador")]
     Sponsor,
