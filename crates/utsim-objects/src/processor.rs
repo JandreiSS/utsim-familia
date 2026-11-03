@@ -240,6 +240,8 @@ impl Processor {
             };
             t = cx.person_time(&crew, &task, t);
         }
+        let by_people = self.held.iter().any(|(i, _)| *i == item);
+        cx.log_work(item, t, by_people);
         self.start_timer(cx, item, tag, t);
     }
 

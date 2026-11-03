@@ -13,6 +13,25 @@ pub enum Discipline {
     Lifo,
 }
 
+/// Order of a queue by a numeric label (an inbox by priority or by deadline). It wins
+/// over the [`Discipline`]; ties and items without the label stay in arrival order, the
+/// latter after the labelled ones.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LabelOrder {
+    /// Smallest value first (the earliest deadline).
+    Asc(String),
+    /// Largest value first (the highest priority).
+    Desc(String),
+}
+
+impl LabelOrder {
+    pub fn label(&self) -> &str {
+        match self {
+            LabelOrder::Asc(l) | LabelOrder::Desc(l) => l,
+        }
+    }
+}
+
 /// Batching: items are held and released together.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Batch {
@@ -33,6 +52,7 @@ pub struct Queue {
     capacity: Option<usize>,
     discipline: Discipline,
     batch: Option<Batch>,
+    order: Option<LabelOrder>,
     /// Items held for the batch being collected.
     held: Vec<ItemId>,
     /// Released batch items that have not left yet.
@@ -47,6 +67,7 @@ impl Queue {
             capacity,
             discipline: Discipline::Fifo,
             batch: None,
+            order: None,
             held: Vec::new(),
             outstanding: 0,
             timer: PausableTimer::default(),
@@ -63,15 +84,27 @@ impl Queue {
         self
     }
 
+    /// Items leave by label value with `order` (see [`LabelOrder`]).
+    pub fn order(mut self, order: Option<LabelOrder>) -> Self {
+        self.order = order;
+        self
+    }
+
+    fn release_one(&self, cx: &mut Ctx, id: ItemId) {
+        match (&self.order, self.discipline) {
+            (Some(LabelOrder::Asc(l)), _) => cx.release_ordered(id, l, false),
+            (Some(LabelOrder::Desc(l)), _) => cx.release_ordered(id, l, true),
+            (None, Discipline::Fifo) => cx.release(id),
+            (None, Discipline::Lifo) => cx.release_front(id),
+        }
+    }
+
     fn release_held(&mut self, cx: &mut Ctx) {
         self.timer.cancel(cx);
         let held = std::mem::take(&mut self.held);
         self.outstanding += held.len();
         for id in held {
-            match self.discipline {
-                Discipline::Fifo => cx.release(id),
-                Discipline::Lifo => cx.release_front(id),
-            }
+            self.release_one(cx, id);
         }
     }
 
@@ -148,10 +181,7 @@ impl Behavior for Queue {
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
         let Some(batch) = self.batch else {
-            match self.discipline {
-                Discipline::Fifo => cx.release(item),
-                Discipline::Lifo => cx.release_front(item),
-            }
+            self.release_one(cx, item);
             cx.set_state(State::Releasing);
             return;
         };

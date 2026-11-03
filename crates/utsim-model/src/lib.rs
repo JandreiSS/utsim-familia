@@ -8,6 +8,8 @@ pub mod dados;
 pub mod experiment;
 mod format2;
 pub mod html;
+mod items;
+mod line;
 mod maintenance;
 mod movement;
 mod person;
@@ -19,6 +21,7 @@ pub mod synthetic;
 pub mod teams;
 mod warnings;
 
+pub use line::SYMBOL_IDS;
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
 pub use movement::{Movement, NavSet};
 pub use spans::SpanDef;
@@ -43,9 +46,9 @@ use utsim_fluid::{FluidDef, FluidNet};
 use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
-    OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink,
-    Source, TaskPick, Transporter, TypedSink,
+    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, LabelOrder,
+    OnBlocked, OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement, SeparateMode,
+    Separator, Sink, Source, TaskPick, Transporter, TypedSink,
 };
 
 pub use arrivals::{AreaDef, ItemTypeDef};
@@ -169,6 +172,10 @@ pub struct Model {
     /// Floor marking profile (absent: Brasil, 10 cm line, 2 s stop before crossings).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub floor_marking: Option<Box<FloorMarking>>,
+    /// Specialised line the model belongs to (`"lean_office"`): the interface and the
+    /// reports use its vocabulary, library and indicators. Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -252,6 +259,19 @@ pub struct ObjectDef {
     /// none of these effects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub person: Option<Box<utsim_core::Person>>,
+    /// Library preset the object was created from, `"<line>/<preset>"` (for example
+    /// `"lean_office/aprovacao"`): the domain name, icon and role in the line's reports.
+    /// Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    /// Area (department, sector) the object belongs to: lanes of the swimlane chart and
+    /// reports by department. Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
+    /// Flowchart symbol chosen for the object (one of [`SYMBOL_IDS`]); absent: the one
+    /// the flowchart infers from its kind. Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
 }
 
 /// Look of an object in 3D. Every field is optional; the viewer falls back to the
@@ -315,6 +335,10 @@ pub enum ObjectKind {
         /// Holds items and releases them in groups.
         #[serde(default)]
         batch: Option<Batch>,
+        /// Order by a numeric label (`Desc("prioridade")`, `Asc("prazo")`); wins over
+        /// `discipline`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        order: Option<LabelOrder>,
     },
     Processor {
         #[serde(default = "one_usize")]
@@ -618,8 +642,23 @@ impl Model {
                     }
                 }
                 ObjectKind::Queue {
-                    capacity, batch, ..
+                    capacity,
+                    batch,
+                    order,
+                    discipline,
                 } => {
+                    if let Some(o) = order {
+                        if o.label().trim().is_empty() {
+                            errors
+                                .push(format!("{}: order precisa do nome de um rótulo", obj.name));
+                        }
+                        if *discipline == Discipline::Lifo {
+                            errors.push(format!(
+                                "{}: use discipline: Lifo ou order, não os dois",
+                                obj.name
+                            ));
+                        }
+                    }
                     if *capacity == Some(0) {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
@@ -914,6 +953,7 @@ impl Model {
         self.validate_spans(&mut errors);
         self.validate_maintenance(&mut errors);
         self.validate_people(&mut errors);
+        self.validate_line(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -1173,7 +1213,13 @@ impl Model {
                     capacity,
                     discipline,
                     batch,
-                } => Box::new(Queue::new(*capacity).discipline(*discipline).batch(*batch)),
+                    order,
+                } => Box::new(
+                    Queue::new(*capacity)
+                        .discipline(*discipline)
+                        .batch(*batch)
+                        .order(order.clone()),
+                ),
                 ObjectKind::Combiner {
                     components,
                     mode,

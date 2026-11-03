@@ -10,7 +10,8 @@
 //! returns a single [`Command::Batch`], so it is one undo step.
 //!
 //! [`network`] and [`fluids`] execute the commands on the path network and on the
-//! fluid network, and hold the helpers the editor draws them with.
+//! fluid network, and hold the helpers the editor draws them with. [`preset`] makes
+//! objects from the templates of a specialised line.
 //!
 //! [`teams`] builds the commands of the team and request links (team members,
 //! `transport`, `operators`) that the editor creates by dragging.
@@ -19,6 +20,7 @@ pub mod aisles;
 pub mod arrange;
 pub mod fluids;
 pub mod network;
+pub mod preset;
 pub mod ron_text;
 pub mod teams;
 
@@ -181,6 +183,8 @@ pub enum Command {
     },
     /// Several commands undone as one step.
     Batch(Vec<Command>),
+    /// The specialised line of the model (`Model.line`, `None`: no line).
+    SetLine(Option<String>),
 }
 
 /// Where a distribution field gets its distribution from.
@@ -601,6 +605,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::RemoveFluidNode { name } => fluids::remove_node(model, name)?,
         Command::AddFluidLink { from, to } => fluids::add_link(model, from, to)?,
         Command::RemoveFluidLink { from, to } => fluids::remove_link(model, from, to)?,
+        Command::SetLine(line) => model.line = line.clone(),
         Command::SetInfo { name, description } => {
             let name = name.trim();
             if name.is_empty() {
@@ -860,6 +865,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             capacity: None,
             discipline: Default::default(),
             batch: None,
+            order: None,
         },
         "Processor" => ObjectKind::Processor {
             capacity: 1,
@@ -932,6 +938,9 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         visual: None,
         access: None,
         person: None,
+        preset: None,
+        area: None,
+        symbol: None,
     })
 }
 
