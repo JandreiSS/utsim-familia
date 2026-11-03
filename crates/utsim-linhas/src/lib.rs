@@ -5,6 +5,7 @@
 //! indicators with their report. [`pacote`] reads and checks a pack and places its
 //! presets in a model being edited; [`registro`] holds the lines that come with UTSim.
 
+pub mod lean_office;
 pub mod pacote;
 pub mod registro;
 
