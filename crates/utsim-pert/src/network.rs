@@ -299,8 +299,8 @@ pub fn derive(
     options: &DeriveOptions,
 ) -> Result<ActivityNetwork, PertError> {
     let mut all = derive_scenarios(model, selection, options)?;
-    let mut first = all.swap_remove(0);
-    if all.len() + 1 > 1 {
+    let mut first = all.remove(0);
+    if !all.is_empty() {
         first.warnings.push(format!(
             "{} cenários de ramos ponderados; esta rede é o mais provável ({:.1}%)",
             all.len() + 1,
