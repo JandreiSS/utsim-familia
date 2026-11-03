@@ -50,10 +50,13 @@ pub enum Kind {
     Lesson,
     #[serde(rename = "anexo")]
     Attachment,
+    /// A row or node of a tool deliverable (an FMEA row, an Ishikawa cause, a CTQ...).
+    #[serde(rename = "item_ferramenta")]
+    ToolItem,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 18] = [
+    pub const ALL: [Kind; 19] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -72,6 +75,7 @@ impl Kind {
         Kind::Study,
         Kind::Lesson,
         Kind::Attachment,
+        Kind::ToolItem,
     ];
 
     /// The key used in the files (`acao`, `projeto`...).
@@ -95,6 +99,7 @@ impl Kind {
             Kind::Study => "estudo",
             Kind::Lesson => "licao",
             Kind::Attachment => "anexo",
+            Kind::ToolItem => "item_ferramenta",
         }
     }
 }
