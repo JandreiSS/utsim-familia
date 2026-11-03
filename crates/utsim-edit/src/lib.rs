@@ -1042,7 +1042,7 @@ mod tests {
         let path = dir.join("antigo.ron");
         std::fs::write(
             &path,
-            "Model(name: \"a\", run: (stop_time: 5.0), objects: [])",
+            "Model(name: \"a\", run: (stop_time: 5.0), objects: [(name: \"p\", kind: Transporter(speed: 1.0))])",
         )
         .unwrap();
         let old = Document::open(&path).unwrap();

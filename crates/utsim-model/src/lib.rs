@@ -134,7 +134,7 @@ pub struct Model {
     /// CAD floor plan the layout was drawn on (record only: the simulation never reads the
     /// file; its walls and columns go to `obstacles`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub floor_plan: Option<FloorPlanDef>,
+    pub floor_plan: Option<Box<FloorPlanDef>>,
     /// Polygons no mobile resource crosses in `Free` and `Network` movement, besides the
     /// areas of the objects: walls and columns of the plan or drawn by hand.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1225,10 +1225,11 @@ mod format_tests {
     }
 
     #[test]
-    fn absent_format_is_version_1_migrated_to_legacy() {
+    fn absent_format_is_version_1_migrated_to_format_2() {
         let m = Model::parse(MINIMAL).unwrap();
         assert_eq!(m.format, Some(2));
-        assert_eq!(m.run.movement, Some(Movement::Legacy));
+        // No mobile resources: nothing to keep.
+        assert_eq!(m.run.movement, None);
     }
 
     #[test]

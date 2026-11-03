@@ -1,6 +1,6 @@
 //! Every shipped example is a format-1 file (no `format`, or `format: 1`): read through the
-//! `1 → 2` migration, it comes out in format 2 with `run.movement: Legacy`, the behaviour
-//! the golden snapshots lock. Also: format 2 round trip and the migration of explicit text.
+//! `1 → 2` migration, it comes out in format 2, with `run.movement: Legacy` when it has
+//! mobile resources: the behaviour the golden snapshots lock. Also: format 2 round trip.
 
 use utsim_model::{FORMAT_VERSION, Model, Movement};
 
@@ -27,6 +27,7 @@ fn model_texts() -> Vec<(std::path::PathBuf, String)> {
 fn examples_are_format_1_and_migrate_to_legacy() {
     assert_eq!(FORMAT_VERSION, 2);
     let mut checked = 0;
+    let mut with_mobile = 0;
     for (path, text) in model_texts() {
         assert!(
             !text.contains("format: 2"),
@@ -35,12 +36,13 @@ fn examples_are_format_1_and_migrate_to_legacy() {
         );
         let model = Model::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_eq!(model.format, Some(2), "{}", path.display());
-        assert_eq!(
-            model.run.movement,
-            Some(Movement::Legacy),
-            "{}",
-            path.display()
-        );
+        let mobile = model.objects.iter().any(|o| model.movement_of(o).is_some());
+        // Models without mobile resources have nothing to keep: no mode written.
+        let want = mobile.then_some(Movement::Legacy);
+        assert_eq!(model.run.movement, want, "{}", path.display());
+        if mobile {
+            with_mobile += 1;
+        }
         for o in &model.objects {
             if let Some(m) = model.movement_of(o) {
                 assert_eq!(m, Movement::Legacy, "{}: {}", path.display(), o.name);
@@ -49,6 +51,10 @@ fn examples_are_format_1_and_migrate_to_legacy() {
         checked += 1;
     }
     assert!(checked >= 10, "só {checked} exemplos verificados");
+    assert!(
+        with_mobile >= 5,
+        "só {with_mobile} exemplos com recursos móveis"
+    );
 }
 
 #[test]
@@ -60,7 +66,12 @@ fn migrated_model_saved_in_format_2_reads_back_the_same() {
         let model = Model::parse(&text).unwrap();
         let saved = ron::ser::to_string_pretty(&model, config.clone()).unwrap();
         assert!(saved.contains("format: 2"), "{}", path.display());
-        assert!(saved.contains("movement: Legacy"), "{}", path.display());
+        assert_eq!(
+            saved.contains("movement: Legacy"),
+            model.run.movement.is_some(),
+            "{}",
+            path.display()
+        );
         let again = Model::parse(&saved).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_eq!(again, model, "{}", path.display());
     }

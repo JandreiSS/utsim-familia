@@ -1,5 +1,6 @@
-//! Migração do formato 1 para o 2: grava `movement: Legacy` em `run` (o comportamento de
-//! sempre) e `format: 2`. No formato 2, `movement` ausente vale `Free`.
+//! Migração do formato 1 para o 2: grava `format: 2` e, se o modelo tem transportadores,
+//! `movement: Legacy` em `run` (o comportamento de sempre). No formato 2, `movement` ausente
+//! vale `Free`; num modelo sem transportadores o modo não significa nada e fica ausente.
 //!
 //! O passo reescreve o texto, não um valor RON genérico (ver `Migration`): um pequeno
 //! analisador léxico pula comentários, textos e atributos, acha os campos do `Model(...)` e
@@ -251,9 +252,14 @@ pub(crate) fn v1_to_v2(text: &str) -> Result<String, ModelError> {
         }
         _ => edits.push((toks[open].end, 0, "format: 2, ".to_string())),
     }
+    // Without mobile resources the mode means nothing: nothing to keep, so the model
+    // stays as a new one would be (and compares equal to it).
+    let mobile = toks
+        .iter()
+        .any(|t| t.kind == Tok::Ident && &text[t.start..t.end] == "Transporter");
     if let Some(run) = model_fields
         .iter()
-        .find(|f| name(text, &toks, f.name) == "run")
+        .find(|f| mobile && name(text, &toks, f.name) == "run")
     {
         let run_open = (run.value.0..run.value.1).find(|&i| toks[i].kind == Tok::Punct(b'('));
         if let Some(run_open) = run_open {
@@ -278,19 +284,34 @@ pub(crate) fn v1_to_v2(text: &str) -> Result<String, ModelError> {
 mod tests {
     use super::*;
 
+    const T: &str = "(name: \"t\", kind: Transporter(speed: 1.0))";
+
     #[test]
     fn adds_format_and_legacy_movement() {
-        let v1 = "Model(name: \"m\", run: (stop_time: 1.0), objects: [])";
+        let v1 = format!("Model(name: \"m\", run: (stop_time: 1.0), objects: [{T}])");
+        assert_eq!(
+            v1_to_v2(&v1).unwrap(),
+            format!(
+                "Model(format: 2, name: \"m\", run: (movement: Legacy, stop_time: 1.0), objects: [{T}])"
+            )
+        );
+    }
+
+    #[test]
+    fn without_transporters_only_the_format_changes() {
+        let v1 = "Model(name: \"m\", run: (stop_time: 1.0), objects: [(name: \"Transporter\", kind: Sink)])";
         assert_eq!(
             v1_to_v2(v1).unwrap(),
-            "Model(format: 2, name: \"m\", run: (movement: Legacy, stop_time: 1.0), objects: [])"
+            "Model(format: 2, name: \"m\", run: (stop_time: 1.0), objects: [(name: \"Transporter\", kind: Sink)])"
         );
     }
 
     #[test]
     fn replaces_an_explicit_format_and_keeps_comments_and_strings() {
-        let v1 = "// cabeçalho: run: (\n#![enable(implicit_some)]\nModel(\n    format: Some(1), // formato\n    name: \"run: ( (\",\n    /* run: ( */ run: RunSettings( stop_time: 5.0, ),\n    objects: [],\n)";
-        let v2 = v1_to_v2(v1).unwrap();
+        let v1 = format!(
+            "// cabeçalho: run: (\n#![enable(implicit_some)]\nModel(\n    format: Some(1), // formato\n    name: \"run: ( (\",\n    /* run: ( */ run: RunSettings( stop_time: 5.0, ),\n    objects: [{T}],\n)"
+        );
+        let v2 = v1_to_v2(&v1).unwrap();
         assert!(v2.contains("format: 2, // formato"), "{v2}");
         assert!(v2.contains("name: \"run: ( (\""), "{v2}");
         assert!(
@@ -302,19 +323,23 @@ mod tests {
 
     #[test]
     fn keeps_a_movement_that_is_already_there() {
-        let v1 =
-            "Model(format: 1, name: \"m\", run: (stop_time: 1.0, movement: Free), objects: [])";
-        let v2 = v1_to_v2(v1).unwrap();
+        let v1 = format!(
+            "Model(format: 1, name: \"m\", run: (stop_time: 1.0, movement: Free), objects: [{T}])"
+        );
         assert_eq!(
-            v2,
-            "Model(format: 2, name: \"m\", run: (stop_time: 1.0, movement: Free), objects: [])"
+            v1_to_v2(&v1).unwrap(),
+            format!(
+                "Model(format: 2, name: \"m\", run: (stop_time: 1.0, movement: Free), objects: [{T}])"
+            )
         );
     }
 
     #[test]
     fn nested_fields_named_run_are_not_touched() {
-        let v1 = "Model(name: \"m\", objects: [(name: \"a\", kind: Sink, run: (x: 1))], run: (stop_time: 2.0))";
-        let v2 = v1_to_v2(v1).unwrap();
+        let v1 = format!(
+            "Model(name: \"m\", objects: [(name: \"a\", kind: Sink, run: (x: 1)), {T}], run: (stop_time: 2.0))"
+        );
+        let v2 = v1_to_v2(&v1).unwrap();
         assert!(v2.contains("run: (x: 1)"), "{v2}");
         assert!(
             v2.contains("run: (movement: Legacy, stop_time: 2.0)"),
