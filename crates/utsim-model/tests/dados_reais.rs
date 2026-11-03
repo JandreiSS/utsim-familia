@@ -81,6 +81,11 @@ fn old_models_are_untouched() {
             continue;
         }
         let parsed = Model::load(&path).unwrap();
+        // Loading also migrates format 1 to 2 (`format` and `run.movement`); that migration
+        // has its own tests, so only the data fields are compared here.
+        let mut plain = plain;
+        plain.format = parsed.format;
+        plain.run.movement = parsed.run.movement;
         assert_eq!(parsed, plain, "{}", path.display());
         assert!(!ron::ser::to_string(&parsed).unwrap().contains("data:"));
     }
