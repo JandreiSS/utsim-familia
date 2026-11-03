@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Em desenvolvimento
+- Planta CAD, núcleo (`crates/utsim-cad`, `utsim planta`): leitura de DXF 2D (linhas, polilinhas com arco, círculos, arcos, textos e blocos aninhados), unidades do cabeçalho, calibração por dois pontos, simplificação, exportação para a interface e para SVG, papéis por camada com sugestão pelo nome e obstáculos de paredes e colunas. Proposta do campo `floor_plan` do modelo documentada em `docs/arquitetura.md`.
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
 
 ## [0.1.0] - 2026-11-02
