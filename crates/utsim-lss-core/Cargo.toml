@@ -1,0 +1,19 @@
+[package]
+name = "utsim-lss-core"
+description = "Domain of UTSim Seis Sigma (Lean Six Sigma projects): entities, operation journal in Lamport order, conflicts and the project format"
+# Own version and tag (`lss-v<version>`), apart from the simulator (docs/plano_lean_seis_sigma.md, R1).
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "utsim_lss_core"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { version = "=1.11.0", default-features = false, features = ["std"] }
