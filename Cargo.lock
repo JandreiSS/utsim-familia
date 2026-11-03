@@ -7017,6 +7017,7 @@ dependencies = [
  "utsim-fit",
  "utsim-model",
  "utsim-opt",
+ "utsim-pert",
  "utsim-scene",
  "utsim-stats",
  "winresource",
@@ -7168,6 +7169,19 @@ dependencies = [
  "serde",
  "utsim-core",
  "utsim-model",
+]
+
+[[package]]
+name = "utsim-pert"
+version = "0.1.0"
+dependencies = [
+ "rayon",
+ "serde",
+ "thiserror 2.0.21",
+ "utsim-core",
+ "utsim-model",
+ "utsim-objects",
+ "utsim-scene",
 ]
 
 [[package]]

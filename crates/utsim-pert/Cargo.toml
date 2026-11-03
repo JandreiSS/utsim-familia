@@ -1,0 +1,24 @@
+[package]
+name = "utsim-pert"
+description = "PERT/CPM of a part of a UTSim model: activity network, classic PERT, Monte Carlo and the critical path observed in the simulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-objects.workspace = true
+utsim-scene.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+rayon.workspace = true
+
+[features]
+# Monte Carlo blocks and simulated replications run on rayon threads; the results do not
+# depend on the number of threads (each block has its own random stream).
+default = ["parallel"]
+parallel = ["dep:rayon"]

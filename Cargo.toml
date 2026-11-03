@@ -18,6 +18,7 @@ default-members = [
     "crates/utsim-model",
     "crates/utsim-objects",
     "crates/utsim-opt",
+    "crates/utsim-pert",
     "crates/utsim-scene",
     "crates/utsim-script",
     "crates/utsim-stats",
@@ -41,6 +42,7 @@ utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
+utsim-pert = { path = "crates/utsim-pert" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }
