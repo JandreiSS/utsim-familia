@@ -1,5 +1,6 @@
 //! Model description: what is written in a `.ron` file and how it becomes a [`Simulation`].
 
+mod aisles;
 pub mod analysis;
 pub mod csv;
 pub mod dados;
@@ -19,6 +20,7 @@ pub use spans::SpanDef;
 pub use state::InitialState;
 pub use utsim_cad::FloorPlanDef;
 pub use utsim_nav::Obstacle;
+pub use utsim_nav::{Aisle, AisleKind, FloorMarking, MarkShape, Pattern, Profile, ProfileSpec};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -143,6 +145,13 @@ pub struct Model {
     /// areas of the objects: walls and columns of the plan or drawn by hand.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub obstacles: Vec<Obstacle>,
+    /// Circulation aisles (pedestrian, forklift, mixed) drawn on the floor: the `Aisles`
+    /// movement uses the network they generate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aisles: Vec<Aisle>,
+    /// Floor marking profile (absent: Brasil, 10 cm line, 2 s stop before crossings).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_marking: Option<Box<FloorMarking>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -793,6 +802,7 @@ impl Model {
             .collect();
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_movement(&mut errors);
+        self.validate_aisles(&mut errors);
         self.validate_logic(&mut errors);
         self.validate_spans(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
@@ -973,6 +983,8 @@ impl Model {
             (Some(def), Some(r)) => Some(Arc::new(Mutex::new(Traffic::new(def, r.clone())))),
             _ => None,
         };
+        // Pedestrian × vehicle crossings (movement `Aisles`), one board per simulation.
+        let crossings = nav.crossing_board();
         let dispatcher_of: HashMap<&str, BlockId> = self
             .objects
             .iter()
@@ -1049,6 +1061,7 @@ impl Model {
                     Transporter::new(*speed)
                         .agv(if *agv { traffic.clone() } else { None })
                         .router(nav.router(&obj.name))
+                        .crossings(nav.crossings_for(&obj.name, &crossings))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
                         .home(*home)

@@ -228,6 +228,8 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         data: Vec::new(),
         floor_plan: None,
         obstacles: Vec::new(),
+        aisles: Vec::new(),
+        floor_marking: None,
     })
 }
 

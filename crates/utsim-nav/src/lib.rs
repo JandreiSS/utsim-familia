@@ -9,7 +9,9 @@
 //!   por linha de visada (string pulling);
 //! - [`router`]: os roteadores dos modos `Free` e `Network` (trait `utsim_core::Router`),
 //!   com cache por par origem-destino;
-//! - [`generate`]: rede de caminhos (`NetworkDef`) a partir do caminho livre.
+//! - [`generate`]: rede de caminhos (`NetworkDef`) a partir do caminho livre;
+//! - [`aisles`]: corredores de circulação, rede gerada pelas linhas centrais, cruzamentos
+//!   pedestre × veículo, larguras mínimas por perfil e faixas no piso.
 //!
 //! Decisão: grade + A* em vez de grafo de visibilidade. A grade cresce com a área e não com o
 //! número de vértices (plantas com centenas de colunas ficam rápidas), trata paredes finas e
@@ -17,12 +19,17 @@
 //! soma de Minkowski com um círculo). O preço é o comprimento: em volta de um canto o
 //! caminho suavizado fica a menos de um lado de célula (0,25 m) do menor caminho exato.
 
+pub mod aisles;
 pub mod body;
 pub mod generate;
 pub mod geom;
 pub mod grid;
 pub mod router;
 
+pub use aisles::{
+    Aisle, AisleKind, AisleNet, AislesRouter, FloorMarking, MarkShape, Pattern, Profile,
+    ProfileSpec, User, aisle_network, floor_marks,
+};
 pub use body::{
     Body, Obstacle, Role, Shape, cad_obstacles, default_clearance, half_extents, half_width,
     role_of_asset,

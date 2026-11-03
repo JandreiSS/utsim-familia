@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::traffic::{Traffic, segment_durations};
+use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use utsim_core::init::Accepts;
 use utsim_core::task::{
     MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_USER, distance, path_length, travel_time,
@@ -42,6 +42,10 @@ struct Seg {
     /// Controlled edge to be held while travelling this piece.
     edge: Option<usize>,
     dur: Time,
+    /// Crossing zone starting here (crossing, time to cross it): ask the board first.
+    cross: Option<(usize, f64)>,
+    /// Standing still (stop or wait before a crossing).
+    stop: bool,
 }
 
 /// An AGV route in progress.
@@ -173,6 +177,8 @@ pub struct Transporter {
     announce_on_resume: bool,
     /// Own router (movement mode); `None` = the simulation's router.
     router: Option<Arc<dyn Router>>,
+    /// Pedestrian × vehicle crossings (movement `Aisles`) and whether this is a vehicle.
+    crossings: Option<(Arc<Mutex<Crossings>>, bool)>,
 }
 
 impl Transporter {
@@ -197,7 +203,16 @@ impl Transporter {
             grant_pending: false,
             announce_on_resume: false,
             router: None,
+            crossings: None,
         }
+    }
+
+    /// Takes part in the crossing reservations (movement `Aisles`): `(board, vehicle)`.
+    /// A vehicle stops before each crossing and yields to pedestrians; a pedestrian
+    /// waits only for a vehicle already inside (see [`Crossings`]). `None` = no crossings.
+    pub fn crossings(mut self, crossings: Option<(Arc<Mutex<Crossings>>, bool)>) -> Self {
+        self.crossings = crossings;
+        self
     }
 
     /// Routes this transporter's travels with `router` instead of the simulation's one
@@ -291,6 +306,8 @@ impl Transporter {
                 b: w[1],
                 edge: edges[k],
                 dur: durs[k],
+                cross: None,
+                stop: false,
             });
         }
         Some(segs)
@@ -317,6 +334,38 @@ impl Transporter {
             Some(r) => r.route(self.position, target),
             None => cx.route(self.position, target),
         };
+        if let Some((board, vehicle)) = self.crossings.clone() {
+            let plan = crossing_plan(
+                &path,
+                &board.lock().unwrap_or_else(|e| e.into_inner()),
+                vehicle,
+                self.speed,
+                self.acceleration,
+                self.deceleration,
+            );
+            if let Some(pieces) = plan.filter(|p| !p.is_empty()) {
+                let segs = pieces
+                    .into_iter()
+                    .map(|p| Seg {
+                        a: p.a,
+                        b: p.b,
+                        edge: None,
+                        dur: p.dur,
+                        cross: p.cross,
+                        stop: p.stop,
+                    })
+                    .collect();
+                self.route = Some(Route {
+                    segs,
+                    idx: 0,
+                    tag,
+                    state,
+                    wait: None,
+                });
+                self.begin_segment(cx);
+                return;
+            }
+        }
         let t = travel_time(
             path_length(&path),
             self.speed,
@@ -337,7 +386,11 @@ impl Transporter {
     /// Starts piece `route.idx`: asks for its edge (waiting if it is full) and, once
     /// the edge is held, runs the piece.
     fn begin_segment(&mut self, cx: &mut Ctx) {
+        if self.cross_wait(cx) {
+            return;
+        }
         let Some(traffic) = self.traffic.clone() else {
+            self.run_segment(cx);
             return;
         };
         let Some(route) = &mut self.route else { return };
@@ -376,10 +429,62 @@ impl Transporter {
         self.run_segment(cx);
     }
 
+    /// At the start of a crossing zone: asks the board. When it must wait, a standing
+    /// piece is inserted before the zone and started (`true`); a vehicle asks again after
+    /// it, a pedestrian is already booked.
+    fn cross_wait(&mut self, cx: &mut Ctx) -> bool {
+        let (Some((board, vehicle)), Some(route)) = (self.crossings.clone(), &mut self.route)
+        else {
+            return false;
+        };
+        let seg = route.segs[route.idx];
+        let Some((k, zone)) = seg.cross else {
+            return false;
+        };
+        let (now, me) = (cx.now(), cx.me());
+        let mut b = board.lock().unwrap_or_else(|e| e.into_inner());
+        let wait = if vehicle {
+            match b.vehicle_enter(k, me, now, zone) {
+                Ok(()) => 0.0,
+                Err(t) => {
+                    b.record_wait(k, t - now);
+                    t - now
+                }
+            }
+        } else {
+            b.pedestrian_enter(k, me, now, zone) - now
+        };
+        drop(b);
+        if !vehicle || wait <= 0.0 {
+            route.segs[route.idx].cross = None;
+        }
+        if wait <= 0.0 {
+            return false;
+        }
+        route.segs.insert(
+            route.idx,
+            Seg {
+                a: seg.a,
+                b: seg.a,
+                edge: None,
+                dur: wait,
+                cross: None,
+                stop: true,
+            },
+        );
+        self.run_segment(cx);
+        true
+    }
+
     /// Moves along the current piece (its edge, if any, is already held).
     fn run_segment(&mut self, cx: &mut Ctx) {
         let Some(route) = &self.route else { return };
         let seg = route.segs[route.idx];
+        if seg.stop {
+            cx.set_state(State::Blocked);
+        } else if route.idx > 0 && route.segs[route.idx - 1].stop {
+            cx.set_state(route.state);
+        }
         let tag = if route.idx + 1 == route.segs.len() {
             route.tag
         } else {
@@ -411,6 +516,12 @@ impl Transporter {
     fn abandon_route(&mut self, cx: &mut Ctx) {
         self.route = None;
         self.grant_pending = false;
+        if let Some((board, _)) = &self.crossings {
+            board
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .forget(cx.me(), cx.now());
+        }
         if let Some(traffic) = self.traffic.clone() {
             let granted = Self::lock(&traffic).forget(cx.me());
             self.held = None;

@@ -246,8 +246,345 @@ pub fn segment_durations(
     out
 }
 
+// ---------------------------------------------------------------------------------------
+// Pedestrian × vehicle crossings (aisles, movement `Aisles`)
+// ---------------------------------------------------------------------------------------
+
+/// A crossing between aisles of different kinds: where its conflict zone is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrossingSpec {
+    pub name: String,
+    pub position: [f64; 3],
+    /// Half length (m) of the conflict zone along any path through the crossing.
+    pub radius: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Booking {
+    who: BlockId,
+    vehicle: bool,
+    t_in: f64,
+    t_out: f64,
+}
+
+/// Tolerance of the time comparisons (s).
+const T_EPS: f64 = 1e-9;
+
+/// Reservations of the crossings of one simulation (shared like [`Traffic`]).
+///
+/// **Rule (pedestrian priority, deterministic, no physics).** A vehicle always stops
+/// `stop` seconds at the edge of the zone. Then it enters only if no pedestrian booking
+/// overlaps its own crossing time; otherwise it waits (state `Blocked`) until the last
+/// overlapping pedestrian leaves, and checks again. A vehicle books the zone only when it
+/// enters. A pedestrian arriving at the zone books it at once: if a vehicle is inside it
+/// waits until it leaves (the booking starts then), else it walks straight through. So a
+/// pedestrian at or in the crossing always goes before a vehicle that has not entered,
+/// and a vehicle already inside clears it first. Order of decisions = order of events.
+pub struct Crossings {
+    specs: Vec<CrossingSpec>,
+    stop: f64,
+    bookings: Vec<Vec<Booking>>,
+    /// Vehicle waits per crossing (count, total seconds), beyond the mandatory stop.
+    waits: Vec<(u64, f64)>,
+}
+
+impl Crossings {
+    pub fn new(specs: Vec<CrossingSpec>, stop: f64) -> Self {
+        let n = specs.len();
+        Crossings {
+            specs,
+            stop: stop.max(0.0),
+            bookings: vec![Vec::new(); n],
+            waits: vec![(0, 0.0); n],
+        }
+    }
+
+    /// Mandatory stop of a vehicle before a crossing (s).
+    pub fn stop(&self) -> f64 {
+        self.stop
+    }
+
+    pub fn specs(&self) -> &[CrossingSpec] {
+        &self.specs
+    }
+
+    /// Crossing at `p` (within 1 mm on the floor).
+    pub fn at(&self, p: [f64; 3]) -> Option<usize> {
+        self.specs.iter().position(|s| {
+            (s.position[0] - p[0]).abs() < 1e-3 && (s.position[1] - p[1]).abs() < 1e-3
+        })
+    }
+
+    pub fn radius(&self, k: usize) -> f64 {
+        self.specs[k].radius
+    }
+
+    /// Vehicle waits at crossing `k` beyond the stop: (count, total seconds).
+    pub fn waits(&self, k: usize) -> (u64, f64) {
+        self.waits[k]
+    }
+
+    fn prune(&mut self, k: usize, now: f64) {
+        self.bookings[k].retain(|b| b.t_out > now - T_EPS);
+    }
+
+    /// A vehicle wants to cross `k` now, taking `dur`. `Ok` = booked, it enters;
+    /// `Err(t)` = a pedestrian is (or will be) in the zone meanwhile: try again at `t`.
+    pub fn vehicle_enter(&mut self, k: usize, who: BlockId, now: f64, dur: f64) -> Result<(), f64> {
+        self.prune(k, now);
+        let end = now + dur;
+        let blocking = self.bookings[k]
+            .iter()
+            .filter(|b| !b.vehicle && b.t_in < end - T_EPS && b.t_out > now + T_EPS)
+            .map(|b| b.t_out)
+            .fold(f64::NEG_INFINITY, f64::max);
+        if blocking.is_finite() {
+            return Err(blocking);
+        }
+        self.bookings[k].push(Booking {
+            who,
+            vehicle: true,
+            t_in: now,
+            t_out: end,
+        });
+        Ok(())
+    }
+
+    /// Records a vehicle wait of `secs` at `k` (for the waiting metric).
+    pub fn record_wait(&mut self, k: usize, secs: f64) {
+        self.waits[k].0 += 1;
+        self.waits[k].1 += secs;
+    }
+
+    /// A pedestrian reaches the zone of `k` now and takes `dur` to cross it: books it and
+    /// returns when it enters (now, or when the vehicles inside leave).
+    pub fn pedestrian_enter(&mut self, k: usize, who: BlockId, now: f64, dur: f64) -> f64 {
+        self.prune(k, now);
+        let t_in = self.bookings[k]
+            .iter()
+            .filter(|b| b.vehicle && b.t_out > now + T_EPS)
+            .map(|b| b.t_out)
+            .fold(now, f64::max);
+        self.bookings[k].push(Booking {
+            who,
+            vehicle: false,
+            t_in,
+            t_out: t_in + dur,
+        });
+        t_in
+    }
+
+    /// Drops the bookings of `who` that have not started (a trip given up).
+    pub fn forget(&mut self, who: BlockId, now: f64) {
+        for list in &mut self.bookings {
+            list.retain(|b| b.who != who || b.t_in <= now + T_EPS);
+        }
+    }
+}
+
+/// One piece of a trip through crossings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Piece {
+    pub a: [f64; 3],
+    pub b: [f64; 3],
+    pub dur: f64,
+    /// First piece inside the zone of a crossing: (crossing, time to cross the zone).
+    pub cross: Option<(usize, f64)>,
+    /// Standing still (mandatory stop before a crossing).
+    pub stop: bool,
+}
+
+/// Splits a travel `path` at the conflict zones of the crossings it passes through (its
+/// vertices on a crossing). `None` when it passes none (the travel is unchanged).
+///
+/// A pedestrian keeps the trapezoidal profile of the whole path (the pieces add up to
+/// [`utsim_core::task::travel_time`]). A vehicle stops at the edge of every zone: the
+/// path becomes runs from rest to rest (start → first zone, zone → next zone, ...), each
+/// with its own profile, and a stop piece of [`Crossings::stop`] seconds before each zone.
+pub fn crossing_plan(
+    path: &[[f64; 3]],
+    board: &Crossings,
+    vehicle: bool,
+    speed: f64,
+    accel: Option<f64>,
+    decel: Option<f64>,
+) -> Option<Vec<Piece>> {
+    use utsim_core::task::distance;
+    if path.len() < 2 {
+        return None;
+    }
+    let mut cum = vec![0.0];
+    for w in path.windows(2) {
+        cum.push(cum.last().copied().unwrap_or(0.0) + distance(w[0], w[1]));
+    }
+    let total = *cum.last()?;
+    if total <= 0.0 {
+        return None;
+    }
+    let mut zones: Vec<(f64, f64, usize)> = Vec::new();
+    let mut last_end = 0.0;
+    for (i, p) in path.iter().enumerate() {
+        let Some(k) = board.at(*p) else { continue };
+        if zones.last().is_some_and(|z| z.2 == k) {
+            continue;
+        }
+        let r = board.radius(k);
+        let (s0, s1) = ((cum[i] - r).max(last_end), (cum[i] + r).min(total));
+        if s1 - s0 <= 1e-9 {
+            continue;
+        }
+        zones.push((s0, s1, k));
+        last_end = s1;
+    }
+    if zones.is_empty() {
+        return None;
+    }
+    let mut cuts: Vec<f64> = cum.clone();
+    for z in &zones {
+        cuts.extend([z.0, z.1]);
+    }
+    cuts.sort_by(f64::total_cmp);
+    cuts.dedup_by(|a, b| (*a - *b).abs() <= 1e-9);
+    let point_at = |s: f64| -> [f64; 3] {
+        for i in 0..path.len() - 1 {
+            if s <= cum[i + 1] + 1e-12 {
+                let seg = cum[i + 1] - cum[i];
+                let f = if seg > 0.0 { (s - cum[i]) / seg } else { 1.0 };
+                if f <= 1e-12 {
+                    return path[i];
+                }
+                if f >= 1.0 - 1e-12 {
+                    return path[i + 1];
+                }
+                let (a, b) = (path[i], path[i + 1]);
+                return [
+                    a[0] + (b[0] - a[0]) * f,
+                    a[1] + (b[1] - a[1]) * f,
+                    a[2] + (b[2] - a[2]) * f,
+                ];
+            }
+        }
+        path[path.len() - 1]
+    };
+    // Elementary pieces: (start, end, zone index).
+    let elems: Vec<(f64, f64, Option<usize>)> = cuts
+        .windows(2)
+        .filter(|w| w[1] - w[0] > 1e-9)
+        .map(|w| {
+            let z = zones
+                .iter()
+                .position(|z| w[0] >= z.0 - 1e-9 && w[1] <= z.1 + 1e-9);
+            (w[0], w[1], z)
+        })
+        .collect();
+    let first_of_zone: Vec<bool> = elems
+        .iter()
+        .enumerate()
+        .map(|(j, e)| e.2.is_some() && (j == 0 || elems[j - 1].2 != e.2))
+        .collect();
+    // Runs: the whole path for a pedestrian; rest to rest for a vehicle.
+    let mut durs = vec![0.0; elems.len()];
+    let mut start = 0;
+    for j in 0..=elems.len() {
+        let boundary = j == elems.len() || (vehicle && j > 0 && first_of_zone[j]);
+        if boundary {
+            let lens: Vec<f64> = elems[start..j].iter().map(|e| e.1 - e.0).collect();
+            let d = segment_durations(&lens, speed, accel, decel);
+            durs[start..j].copy_from_slice(&d);
+            start = j;
+        }
+    }
+    let mut out = Vec::new();
+    for (j, e) in elems.iter().enumerate() {
+        let mut cross = None;
+        if first_of_zone[j] {
+            let z = e.2.expect("zone");
+            let zone_dur: f64 = (j..elems.len())
+                .take_while(|&i| elems[i].2 == Some(z))
+                .map(|i| durs[i])
+                .sum();
+            if vehicle && board.stop() > 0.0 {
+                let p = point_at(e.0);
+                out.push(Piece {
+                    a: p,
+                    b: p,
+                    dur: board.stop(),
+                    cross: None,
+                    stop: true,
+                });
+            }
+            cross = Some((zones[z].2, zone_dur));
+        }
+        out.push(Piece {
+            a: point_at(e.0),
+            b: point_at(e.1),
+            dur: durs[j],
+            cross,
+            stop: false,
+        });
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use utsim_core::task::travel_time;
+
+    fn board() -> Crossings {
+        Crossings::new(
+            vec![CrossingSpec {
+                name: "x".into(),
+                position: [10.0, 0.0, 0.0],
+                radius: 1.0,
+            }],
+            2.0,
+        )
+    }
+
+    #[test]
+    fn paths_without_crossings_are_unchanged() {
+        let p = [[0.0, 5.0, 0.0], [20.0, 5.0, 0.0]];
+        assert!(crossing_plan(&p, &board(), true, 1.0, None, None).is_none());
+    }
+
+    #[test]
+    fn a_vehicle_stops_before_the_zone_and_a_pedestrian_does_not() {
+        let p = [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0]];
+        let v = crossing_plan(&p, &board(), true, 1.0, None, None).unwrap();
+        // 0→9, stop 2 s, 9→10 (zone), 10→11 (zone), 11→20.
+        let durs: Vec<f64> = v.iter().map(|x| x.dur).collect();
+        assert_eq!(durs, vec![9.0, 2.0, 1.0, 1.0, 9.0]);
+        assert!(v[1].stop && v[1].a == [9.0, 0.0, 0.0]);
+        assert_eq!(v[2].cross, Some((0, 2.0)));
+        let w = crossing_plan(&p, &board(), false, 1.0, None, None).unwrap();
+        let sum: f64 = w.iter().map(|x| x.dur).sum();
+        assert_eq!(sum, 20.0);
+        assert!(w.iter().all(|x| !x.stop));
+        // With acceleration, the pedestrian keeps the whole-route profile.
+        let w = crossing_plan(&p, &board(), false, 2.0, Some(1.0), Some(1.0)).unwrap();
+        let sum: f64 = w.iter().map(|x| x.dur).sum();
+        assert!((sum - travel_time(20.0, 2.0, Some(1.0), Some(1.0))).abs() < 1e-12);
+    }
+
+    #[test]
+    fn vehicles_yield_to_pedestrians_in_the_zone() {
+        let mut b = board();
+        let (car, man) = (BlockId(0), BlockId(1));
+        // Pedestrian enters at 5, crossing takes 2 s.
+        assert_eq!(b.pedestrian_enter(0, man, 5.0, 2.0), 5.0);
+        // Vehicle at 6 needs 2 s: overlap, retry at 7.
+        assert_eq!(b.vehicle_enter(0, car, 6.0, 2.0), Err(7.0));
+        // Vehicle wanting to go at 3 for 2 s would still be inside at 5: retry at 7.
+        assert_eq!(b.vehicle_enter(0, car, 3.0, 2.5), Err(7.0));
+        assert_eq!(b.vehicle_enter(0, car, 7.0, 2.0), Ok(()));
+        // A pedestrian arriving at 8 waits for the vehicle inside (until 9).
+        assert_eq!(b.pedestrian_enter(0, man, 8.0, 2.0), 9.0);
+    }
+}
+
+#[cfg(test)]
+mod durations_tests {
     use super::*;
     use utsim_core::task::travel_time;
 
