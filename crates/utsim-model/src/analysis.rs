@@ -9,11 +9,15 @@
 //! confidence level ([`utsim_stats::summary`]; at 95% they are identical).
 //!
 //! The output analyses of the [`advanced`] submodule (warm-up, precision, batch means,
-//! Little's law, shifting bottleneck) are re-exported here.
+//! Little's law, shifting bottleneck) and of the [`dynamics`] submodule (state Gantt,
+//! WIP and throughput with a band, scenario comparison, correlation, observations in
+//! long format) are re-exported here.
 
 mod advanced;
+mod dynamics;
 
 pub use advanced::*;
+pub use dynamics::*;
 
 use std::collections::BTreeMap;
 

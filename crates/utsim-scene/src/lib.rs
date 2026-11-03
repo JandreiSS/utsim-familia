@@ -45,6 +45,7 @@ pub mod compose;
 pub mod fluids;
 pub mod geometry;
 pub mod handling;
+pub mod heatmap;
 pub mod layout;
 pub mod live;
 pub mod network;
