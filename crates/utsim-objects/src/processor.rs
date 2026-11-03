@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::stats::TimeWeighted;
-use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED, request_priority};
+use utsim_core::task::{
+    MSG_ARRIVED, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_TRANSPORT_RESERVED,
+    request_priority,
+};
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind,
     Time, WorkPhase,
@@ -61,6 +64,9 @@ struct Timer {
     remaining: Time,
     /// Full length of the timer (for saved states: elapsed = duration - time left).
     duration: Time,
+    /// Paused because an operator of the item turned to another case (multitasking):
+    /// a repair does not restart it, only the operator's return does.
+    held_off: bool,
 }
 
 /// An item waiting for all its operators to arrive before `stage` starts.
@@ -84,6 +90,12 @@ type Crew = Vec<(RequestId, BlockId)>;
 /// are released when the last phase that needs them ends. Every item has its own
 /// requests, so capacity > 1 works. A breakdown does not release operators: a broken
 /// processor keeps its crew and the paused timers resume on repair.
+///
+/// **Multitasking operators.** An operator that works on several cases at once sends
+/// [`MSG_SUSPEND`] when it turns to another case and [`MSG_RESUME_WORK`] when it comes
+/// back (payload: its request id). The item's timer stands still while any of its
+/// operators is away, so the work time drawn at the start stays the touch time; the item
+/// does not count as a busy server meanwhile.
 pub struct Processor {
     capacity: usize,
     setup: Option<Dist>,
@@ -101,6 +113,8 @@ pub struct Processor {
     /// Initial state: work already done on an item's next phase; its timer draws the
     /// residual time instead of a full duration.
     resume: Vec<(ItemId, Time)>,
+    /// Items whose operators turned to other cases, with how many of them are away.
+    suspended: Vec<(ItemId, usize)>,
 }
 
 impl Processor {
@@ -117,6 +131,7 @@ impl Processor {
             busy: TimeWeighted::default(),
             blocked: TimeWeighted::default(),
             resume: Vec::new(),
+            suspended: Vec::new(),
         }
     }
 
@@ -143,7 +158,8 @@ impl Processor {
     }
 
     fn start_timer(&mut self, cx: &mut Ctx, item: ItemId, tag: u32, duration: Time) {
-        if cx.is_down() {
+        let held_off = self.is_suspended(item);
+        if cx.is_down() || held_off {
             // Operators arrived while stopped: start paused, resume on repair.
             self.timers.push(Timer {
                 item,
@@ -152,6 +168,7 @@ impl Processor {
                 due: cx.now() + duration,
                 remaining: duration,
                 duration,
+                held_off,
             });
             return;
         }
@@ -163,7 +180,72 @@ impl Processor {
             due: cx.now() + duration,
             remaining: 0.0,
             duration,
+            held_off: false,
         });
+    }
+
+    fn is_suspended(&self, item: ItemId) -> bool {
+        self.suspended.iter().any(|(i, _)| *i == item)
+    }
+
+    /// The item an operator request works for (crew complete or still gathering).
+    fn item_of_request(&self, id: RequestId) -> Option<ItemId> {
+        self.held
+            .iter()
+            .find(|(_, crew)| crew.iter().any(|(r, _)| *r == id))
+            .map(|(i, _)| *i)
+            .or_else(|| {
+                self.pending
+                    .iter()
+                    .find(|p| p.arrived.iter().any(|(r, _)| *r == id))
+                    .map(|p| p.item)
+            })
+    }
+
+    /// An operator of the job `id` turned to another case: the item's work stops.
+    fn suspend(&mut self, cx: &mut Ctx, id: RequestId) {
+        let Some(item) = self.item_of_request(id) else {
+            return;
+        };
+        match self.suspended.iter_mut().find(|(i, _)| *i == item) {
+            Some(entry) => entry.1 += 1,
+            None => self.suspended.push((item, 1)),
+        }
+        let now = cx.now();
+        for timer in self.timers.iter_mut().filter(|t| t.item == item) {
+            if timer.event.is_some() && timer.due <= now {
+                continue; // the work ends at this very instant: let it finish
+            }
+            timer.held_off = true;
+            if let Some(event) = timer.event.take() {
+                cx.cancel(event);
+                timer.remaining = (timer.due - now).max(0.0);
+            }
+        }
+    }
+
+    /// The operator is back on job `id`: the work goes on once no operator is away.
+    fn resume_work(&mut self, cx: &mut Ctx, id: RequestId) {
+        let Some(item) = self.item_of_request(id) else {
+            return;
+        };
+        let Some(at) = self.suspended.iter().position(|(i, _)| *i == item) else {
+            return;
+        };
+        self.suspended[at].1 -= 1;
+        if self.suspended[at].1 > 0 {
+            return;
+        }
+        self.suspended.remove(at);
+        let now = cx.now();
+        let down = cx.is_down();
+        for timer in self.timers.iter_mut().filter(|t| t.item == item) {
+            timer.held_off = false;
+            if !down && timer.event.is_none() {
+                timer.event = Some(cx.schedule(timer.remaining, timer.tag, Some(timer.item)));
+                timer.due = now + timer.remaining;
+            }
+        }
     }
 
     fn needs_operators(&self, stage: Phase) -> bool {
@@ -247,6 +329,7 @@ impl Processor {
 
     /// Sends MSG_RELEASE to the operators the item holds, if any.
     fn release_operators(&mut self, cx: &mut Ctx, item: ItemId) {
+        self.suspended.retain(|(i, _)| *i != item);
         if let Some(at) = self.held.iter().position(|(i, _)| *i == item) {
             for (request, operator) in self.held.remove(at).1 {
                 cx.send(operator, MSG_RELEASE, request.0);
@@ -258,12 +341,21 @@ impl Processor {
     /// processing > setup > waiting for operators > blocked/waiting transport > idle.
     /// So `WaitingOperator` shows only while nothing is being worked on.
     fn update_state(&mut self, cx: &mut Ctx) {
-        let has = |p: Phase| self.phases.iter().any(|(_, q)| *q == p);
+        let has = |p: Phase| {
+            self.phases
+                .iter()
+                .any(|(i, q)| *q == p && !self.is_suspended(*i))
+        };
+        // An item whose operator turned to another case waits for it like an operator.
+        let away = self
+            .phases
+            .iter()
+            .any(|(i, q)| matches!(q, Phase::Setup | Phase::Processing) && self.is_suspended(*i));
         let state = if has(Phase::Processing) {
             State::Processing
         } else if has(Phase::Setup) {
             State::Setup
-        } else if has(Phase::WaitingOperator) {
+        } else if has(Phase::WaitingOperator) || away {
             State::WaitingOperator
         } else if has(Phase::Done) {
             let waiting = self
@@ -288,11 +380,19 @@ impl Processor {
         let (busy, blocked) = if cx.is_down() {
             (0, 0)
         } else {
-            let count = |f: fn(Phase) -> bool| self.phases.iter().filter(|(_, p)| f(*p)).count();
-            (
-                count(|p| matches!(p, Phase::Setup | Phase::Processing)),
-                count(|p| p == Phase::Done),
-            )
+            let working = self
+                .phases
+                .iter()
+                .filter(|(i, p)| {
+                    matches!(p, Phase::Setup | Phase::Processing) && !self.is_suspended(*i)
+                })
+                .count();
+            let done = self
+                .phases
+                .iter()
+                .filter(|(_, p)| *p == Phase::Done)
+                .count();
+            (working, done)
         };
         let now = cx.now();
         self.busy.set(now, busy as f64);
@@ -311,6 +411,7 @@ impl Behavior for Processor {
         self.pending.clear();
         self.held.clear();
         self.resume.clear();
+        self.suspended.clear();
         self.busy = TimeWeighted::default();
         self.blocked = TimeWeighted::default();
         cx.set_state(State::Idle);
@@ -482,6 +583,14 @@ impl Behavior for Processor {
                 }
                 self.update_state(cx);
             }
+            MSG_SUSPEND => {
+                self.suspend(cx, RequestId(payload));
+                self.update_state(cx);
+            }
+            MSG_RESUME_WORK => {
+                self.resume_work(cx, RequestId(payload));
+                self.update_state(cx);
+            }
             _ => {}
         }
     }
@@ -504,7 +613,7 @@ impl Behavior for Processor {
         self.track_servers(cx);
         let now = cx.now();
         for timer in &mut self.timers {
-            if timer.event.is_none() {
+            if timer.event.is_none() && !timer.held_off {
                 timer.event = Some(cx.schedule(timer.remaining, timer.tag, Some(timer.item)));
                 timer.due = now + timer.remaining;
             }

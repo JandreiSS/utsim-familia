@@ -208,3 +208,35 @@ fn office_map_and_lanes_of_the_ready_model() {
     let page = diagramas::secoes(&m, Some(&pack), &k, Some((&m, &k)));
     assert!(page.contains("Estado futuro"));
 }
+
+#[test]
+fn multitasking_buyers_lose_time_switching_and_lengthen_the_lead_time() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/aprovacao_de_compras.ron"
+    );
+    // More desks than people, so cases pile up on the people instead of in the inboxes.
+    let text = std::fs::read_to_string(path)
+        .unwrap()
+        .replace("Processor(capacity: 1,", "Processor(capacity: 8,")
+        .replace("Processor(capacity: 2,", "Processor(capacity: 8,");
+    let mt = "Transporter(speed: 72.0, multitask: Some((max_open: 3, slice: Exp(mean: 15.0), switch: Const(5.0))))";
+    let multi = text.replace("Transporter(speed: 72.0)", mt);
+    assert_ne!(multi, text);
+    let base = run(&text);
+    let k = run(&multi);
+    let r = &k.reps[0];
+    let trocando: f64 = r.ocupacao.values().map(|o| o.trocando).sum();
+    assert!(trocando > 0.0, "{:?}", r.ocupacao);
+    for (name, o) in &r.ocupacao {
+        let total = o.trabalhando + o.trocando + o.andando + o.ocioso + o.fora;
+        assert!(total <= 1.0 + 1e-9, "{name}: {o:?}");
+    }
+    // The same work, more time lost: touch time stays, lead time grows.
+    let mean = |k: &Indicadores, f: fn(&Replicacao) -> f64| {
+        k.reps.iter().map(f).sum::<f64>() / k.reps.len() as f64
+    };
+    let (t0, t1) = (mean(&base, |r| r.touch), mean(&k, |r| r.touch));
+    assert!((t0 - t1).abs() / t0 < 0.05, "{t0} {t1}");
+    assert!(mean(&k, |r| r.lead_time) > mean(&base, |r| r.lead_time));
+}

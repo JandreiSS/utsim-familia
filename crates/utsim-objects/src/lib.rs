@@ -28,4 +28,4 @@ pub use source::{
     PeriodArrivals, Release, Source, TableMode, TableRepeat,
 };
 pub use span::Span;
-pub use transporter::Transporter;
+pub use transporter::{Multitask, Transporter};

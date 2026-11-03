@@ -2,15 +2,37 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
+use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::person::{TASK_LOAD, TASK_UNLOAD};
+use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
-    MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_USER, distance, path_length, travel_time,
+    MAINTENANCE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_USER,
+    distance, path_length, travel_time,
 };
 use utsim_core::{
-    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, Router, State, TaskKind,
-    TaskRequest, Time,
+    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, Router, State,
+    TaskKind, TaskRequest, Time,
 };
+
+/// A person that works on several cases at once (`docs/plano_linhas_especializadas.md`,
+/// section 2.2): up to `max_open` operator jobs open together, worked in turn for `slice`
+/// each, losing `switch` at every turn from one case to another. With `max_open: 1` the
+/// person works exactly as without multitasking.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Multitask {
+    /// Cases (operator jobs) open at the same time; at least 1.
+    pub max_open: usize,
+    /// Time worked on one case before turning to the next open one.
+    pub slice: Dist,
+    /// Time lost at each turn from one case to another (absent: none).
+    #[serde(default = "no_time")]
+    pub switch: Dist,
+}
+
+fn no_time() -> Dist {
+    Dist::Const(0.0)
+}
 
 /// Sent to the dispatcher right before [`MSG_IDLE`]: one coordinate of the member's
 /// position (payload: `f64::to_bits`). X, Y and Z are separate messages because a
@@ -35,6 +57,9 @@ pub const MSG_PREEMPT: u32 = MSG_USER + 20;
 pub const MSG_PREEMPT_REFUSED: u32 = MSG_USER + 21;
 /// Member to dispatcher: this task (payload: request id) is given back, not started.
 pub const MSG_PREEMPTED: u32 = MSG_USER + 22;
+/// Multitasking member to dispatcher: this case (payload: request id) is done and the
+/// member has room for another one while it goes on with its other open cases.
+pub const MSG_CASE_DONE: u32 = MSG_USER + 23;
 
 const START: u32 = 10;
 const ARRIVED_PICKUP: u32 = 0;
@@ -47,6 +72,10 @@ const ARRIVED_HOME: u32 = 5;
 const AGV_STEP: u32 = 6;
 /// A person finished a pause to recover from fatigue.
 const RESTED: u32 = 7;
+/// Multitasking: the time slice on the current case is over.
+const SLICE: u32 = 8;
+/// Multitasking: the turn to the next case is done.
+const SWITCHED: u32 = 9;
 
 /// One piece of an AGV route: a controlled/free network edge or a connector between
 /// a point off the network and its node.
@@ -170,6 +199,15 @@ fn point_along(path: &[[f64; 3]], fraction: f64) -> ([f64; 3], Vec<[f64; 3]>) {
 /// and unload times from [`Ctx::person_time`]; when its fatigue reached the limit, the
 /// person pauses (state `Resting`) after finishing a task and only then takes the next
 /// one or reports idle. Without a profile nothing of this happens.
+///
+/// **Multitasking** ([`Multitask`]). While operating a station, the member also takes
+/// other `Operate` jobs (not maintenance) up to `max_open` open cases; the dispatcher
+/// offers it such jobs when no member is free. It works the cases in turn: after `slice`
+/// on the current one, if another case is open, it sends [`MSG_SUSPEND`] to that station,
+/// spends `switch` in state `Setup`, walks to the next case's station and sends
+/// [`MSG_ARRIVED`] (first time) or [`MSG_RESUME_WORK`] there. When a case is released and
+/// others remain, it tells the dispatcher ([`MSG_CASE_DONE`]) and turns to the next one
+/// (paying `switch`); the idle report comes only when the last case is released.
 pub struct Transporter {
     speed: f64,
     /// Speed of the travel in progress (the person's walking speed, or `speed`).
@@ -208,6 +246,17 @@ pub struct Transporter {
     router: Option<Arc<dyn Router>>,
     /// Pedestrian × vehicle crossings (movement `Aisles`) and whether this is a vehicle.
     crossings: Option<(Arc<Mutex<Crossings>>, bool)>,
+    multitask: Option<Multitask>,
+    /// Open cases other than the current one, in turn order; `true` once its station
+    /// got `MSG_ARRIVED`.
+    others: VecDeque<(TaskRequest, bool)>,
+    /// Cases whose station already got `MSG_ARRIVED` (the current one included).
+    started: Vec<RequestId>,
+    /// Turns from one case to another since the warm-up, time spent turning and open
+    /// cases over time.
+    switches: u64,
+    switching: TimeWeighted,
+    open: TimeWeighted,
 }
 
 impl Transporter {
@@ -237,6 +286,93 @@ impl Transporter {
             announce_on_resume: false,
             router: None,
             crossings: None,
+            multitask: None,
+            others: VecDeque::new(),
+            started: Vec::new(),
+            switches: 0,
+            switching: TimeWeighted::default(),
+            open: TimeWeighted::default(),
+        }
+    }
+
+    /// Works on several cases at once (see [`Multitask`]); `None` = one at a time.
+    pub fn multitask(mut self, multitask: Option<Multitask>) -> Self {
+        self.multitask = multitask.filter(|m| m.max_open > 1);
+        self
+    }
+
+    /// Whether the current trip is an operator job that may be interleaved.
+    fn on_case(&self) -> bool {
+        matches!(
+            self.trip.first().map(|r| r.kind),
+            Some(TaskKind::Operate { tag, .. }) if tag != MAINTENANCE_TAG
+        )
+    }
+
+    fn open_cases(&self) -> usize {
+        self.others.len() + usize::from(self.on_case())
+    }
+
+    /// Whether `request` joins the open cases instead of the queue.
+    fn takes_case(&self, request: &TaskRequest) -> bool {
+        let Some(m) = &self.multitask else {
+            return false;
+        };
+        matches!(request.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
+            && (self.on_case() || !self.others.is_empty())
+            && self.open_cases() < m.max_open
+    }
+
+    /// Arms `tag` after `delay`, paused (to be resumed by `on_resume`) while stopped.
+    fn arm_or_hold(&mut self, cx: &mut Ctx, delay: Time, tag: u32) {
+        if cx.is_down() {
+            self.timer = Some(Timer {
+                tag,
+                event: None,
+                due: cx.now() + delay,
+                remaining: delay,
+                leg: None,
+            });
+        } else {
+            self.arm(cx, delay, tag, None);
+        }
+    }
+
+    /// Working at the station of a started case with others open: time the slice.
+    fn arm_slice(&mut self, cx: &mut Ctx) {
+        let at_station = self.timer.is_none()
+            && self.route.is_none()
+            && self
+                .trip
+                .first()
+                .is_some_and(|r| self.started.contains(&r.id));
+        if !at_station || self.others.is_empty() {
+            return;
+        }
+        let Some(m) = &self.multitask else { return };
+        let slice = m.slice.clone();
+        let t = cx.sample_duration(&slice);
+        self.arm_or_hold(cx, t, SLICE);
+    }
+
+    /// Leaves the current case (already set aside) and turns to the next open one.
+    fn begin_switch(&mut self, cx: &mut Ctx) {
+        let Some(m) = &self.multitask else { return };
+        let switch = m.switch.clone();
+        let t = cx.sample_duration(&switch);
+        self.switches += 1;
+        self.switching.set(cx.now(), 1.0);
+        self.open.set(cx.now(), self.open_cases() as f64);
+        cx.set_state(State::Setup);
+        self.arm_or_hold(cx, t, SWITCHED);
+    }
+
+    /// Cancels a pending time slice (the current case ended).
+    fn drop_slice(&mut self, cx: &mut Ctx) {
+        if self.timer.as_ref().is_some_and(|t| t.tag == SLICE) {
+            if let Some(event) = self.timer.take().and_then(|t| t.event) {
+                cx.cancel(event);
+            }
         }
     }
 
@@ -639,6 +775,17 @@ impl Transporter {
                 self.travel(cx, target, ARRIVED_PICKUP, State::TravelEmpty);
             }
             TaskKind::Operate { station, .. } => {
+                // Cases handed over together (an idle report) open together.
+                let limit = self.multitask.as_ref().map_or(1, |m| m.max_open);
+                while self.on_case() && self.open_cases() < limit {
+                    let Some(i) = self.queue.iter().position(|r| {
+                        matches!(r.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
+                    }) else {
+                        break;
+                    };
+                    let case = self.queue.remove(i).expect("index in range");
+                    self.others.push_back((case, false));
+                }
                 let target = cx.position(station);
                 self.travel(cx, target, ARRIVED_STATION, State::TravelEmpty);
             }
@@ -747,7 +894,7 @@ impl Transporter {
     /// Whether the current work can be given back: travelling empty to the first stop
     /// of the trip (nothing loaded yet), or about to start it.
     fn travelling_empty(&self, cx: &Ctx, below: i32) -> bool {
-        if cx.is_down() || self.k != 0 {
+        if cx.is_down() || self.k != 0 || !self.others.is_empty() {
             return false;
         }
         if self
@@ -861,6 +1008,11 @@ impl Behavior for Transporter {
         self.trip.clear();
         self.k = 0;
         self.timer = None;
+        self.others.clear();
+        self.started.clear();
+        self.switches = 0;
+        self.switching = TimeWeighted::default();
+        self.open = TimeWeighted::default();
         self.abandon_route(cx);
         self.position = cx.position(cx.me());
         cx.set_state(State::Idle);
@@ -903,7 +1055,7 @@ impl Behavior for Transporter {
         state.position = Some(position);
         let carried = state.items.len();
         state.items.clear();
-        let busy = !self.trip.is_empty() || !self.queue.is_empty();
+        let busy = !self.trip.is_empty() || !self.queue.is_empty() || !self.others.is_empty();
         match (carried, busy) {
             (0, false) => None,
             (0, true) => Some(
@@ -921,6 +1073,12 @@ impl Behavior for Transporter {
     }
 
     fn on_task(&mut self, cx: &mut Ctx, request: TaskRequest) {
+        if self.takes_case(&request) {
+            self.others.push_back((request, false));
+            self.open.set(cx.now(), self.open_cases() as f64);
+            self.arm_slice(cx);
+            return;
+        }
         self.queue_task(request);
         self.abandon_homing(cx);
         self.kick(cx);
@@ -963,6 +1121,35 @@ impl Behavior for Transporter {
             self.next_task(cx);
             return;
         }
+        if tag == SLICE {
+            let Some(current) = self.trip.first().copied() else {
+                return;
+            };
+            if self.others.is_empty() {
+                return;
+            }
+            if let TaskKind::Operate { station, .. } = current.kind {
+                cx.send(station, MSG_SUSPEND, current.id.0);
+            }
+            self.others.push_back((current, true));
+            self.trip.clear();
+            self.begin_switch(cx);
+            return;
+        }
+        if tag == SWITCHED {
+            self.switching.set(cx.now(), 0.0);
+            let Some((next, _)) = self.others.pop_front() else {
+                self.finish(cx);
+                return;
+            };
+            self.trip = vec![next];
+            self.k = 0;
+            if let TaskKind::Operate { station, .. } = next.kind {
+                let target = cx.position(station);
+                self.travel(cx, target, ARRIVED_STATION, State::TravelEmpty);
+            }
+            return;
+        }
         let Some(&task) = self.trip.get(self.k) else {
             return;
         };
@@ -1002,7 +1189,16 @@ impl Behavior for Transporter {
             }
             (ARRIVED_STATION, TaskKind::Operate { station, .. }) => {
                 cx.set_state(State::Utilize);
-                cx.send(station, MSG_ARRIVED, task.id.0);
+                if self.started.contains(&task.id) {
+                    cx.send(station, MSG_RESUME_WORK, task.id.0);
+                } else {
+                    cx.send(station, MSG_ARRIVED, task.id.0);
+                    if self.multitask.is_some() {
+                        self.started.push(task.id);
+                        self.open.set(cx.now(), self.open_cases() as f64);
+                    }
+                }
+                self.arm_slice(cx);
             }
             _ => {}
         }
@@ -1106,7 +1302,27 @@ impl Behavior for Transporter {
     /// The current trip (or station job) is work to finish; queued tasks and the drive
     /// home are not.
     fn work_in_progress(&self, _cx: &Ctx) -> bool {
-        !self.trip.is_empty()
+        !self.trip.is_empty() || !self.others.is_empty()
+    }
+
+    fn on_warmup(&mut self, cx: &mut Ctx) {
+        self.switches = 0;
+        self.switching.reset(cx.now());
+        self.open.reset(cx.now());
+    }
+
+    /// With multitasking: `multitask.switches` (turns from one case to another),
+    /// `multitask.switching` (fraction of the window spent turning) and `multitask.open`
+    /// (mean open cases).
+    fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
+        if self.multitask.is_none() {
+            return Vec::new();
+        }
+        vec![
+            ("multitask.switches".to_string(), self.switches as f64),
+            ("multitask.switching".to_string(), self.switching.mean(now)),
+            ("multitask.open".to_string(), self.open.mean(now)),
+        ]
     }
 
     fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {
@@ -1139,13 +1355,38 @@ impl Behavior for Transporter {
             }
             return;
         }
+        if tag != MSG_RELEASE {
+            return;
+        }
+        self.started.retain(|r| r.0 != payload);
+        if let Some(at) = self.others.iter().position(|(r, _)| r.id.0 == payload) {
+            // A case set aside was released (its other operators finished it).
+            self.others.remove(at);
+            self.open.set(cx.now(), self.open_cases() as f64);
+            if let Some(d) = self.dispatcher {
+                cx.send(d, MSG_CASE_DONE, payload);
+            }
+            return;
+        }
         let releases_current = self
             .trip
             .first()
             .is_some_and(|r| r.id.0 == payload && matches!(r.kind, TaskKind::Operate { .. }));
-        if tag == MSG_RELEASE && releases_current {
-            self.finish(cx);
+        if !releases_current {
+            return;
         }
+        self.drop_slice(cx);
+        if self.others.is_empty() {
+            self.open.set(cx.now(), 0.0);
+            self.finish(cx);
+            return;
+        }
+        self.trip.clear();
+        self.k = 0;
+        if let Some(d) = self.dispatcher {
+            cx.send(d, MSG_CASE_DONE, payload);
+        }
+        self.begin_switch(cx);
     }
 }
 
