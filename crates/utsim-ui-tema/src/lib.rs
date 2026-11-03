@@ -110,6 +110,9 @@ pub fn style() -> Style {
     // Tooltips come quickly but not on a mouse just passing by.
     style.interaction.tooltip_delay = 0.35;
     style.animation_time = 0.08;
+    // Scrolling to a widget (the focus, a scripted step) jumps there: no animation that a
+    // click could land in the middle of.
+    style.scroll_animation = egui::style::ScrollAnimation::none();
     style
 }
 
