@@ -145,6 +145,10 @@ impl Model {
             }
         }
         out.extend(crate::dados::warnings(self));
+        // Free and network movement: access points, paths, network edges over obstacles.
+        if !(uses_mobile && all_at_origin) {
+            self.movement_warnings(&mut out);
+        }
         out
     }
 }

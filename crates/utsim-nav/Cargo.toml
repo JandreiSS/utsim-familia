@@ -1,0 +1,13 @@
+[package]
+name = "utsim-nav"
+description = "Obstáculos, menor caminho livre no piso (grade e A*), pontos de acesso e geração de rede (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-objects.workspace = true
+utsim-cad.workspace = true
+serde.workspace = true
+

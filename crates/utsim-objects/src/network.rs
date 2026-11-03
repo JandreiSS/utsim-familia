@@ -35,6 +35,19 @@ fn yes() -> bool {
 pub struct NetworkDef {
     pub nodes: Vec<NodeDef>,
     pub edges: Vec<EdgeDef>,
+    /// Present when the network was generated from the free path (`utsim rede gerar`):
+    /// what it was generated from, to warn when the obstacles changed since.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated: Option<GeneratedNet>,
+}
+
+/// Where a generated network came from.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GeneratedNet {
+    /// Fingerprint of the obstacles and clearance used (`fnv1a64:...`).
+    pub fingerprint: String,
+    /// Clearance (m) the free paths kept from every obstacle.
+    pub clearance: f64,
 }
 
 impl NetworkDef {

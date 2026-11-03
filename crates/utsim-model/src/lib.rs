@@ -4,7 +4,9 @@ pub mod analysis;
 pub mod csv;
 pub mod dados;
 pub mod experiment;
+mod format2;
 pub mod html;
+mod movement;
 pub mod replay;
 mod shifts;
 mod spans;
@@ -12,8 +14,11 @@ pub mod state;
 pub mod synthetic;
 mod warnings;
 
+pub use movement::{Movement, NavSet};
 pub use spans::SpanDef;
 pub use state::InitialState;
+pub use utsim_cad::FloorPlanDef;
+pub use utsim_nav::Obstacle;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -54,9 +59,13 @@ struct FormatProbe {
 type Migration = fn(&str) -> Result<String, ModelError>;
 
 /// Migrations to the current format, as `(source version, step)` in ascending order.
-/// To add format 2: bump [`FORMAT_VERSION`], push `(1, v1_to_v2)` here (the step rewrites
-/// the text and sets `format: 2`), keep an old-format example in the tests, and document it.
-const MIGRATIONS: &[(u32, Migration)] = &[];
+/// To add format N + 1: bump [`FORMAT_VERSION`], push `(N, vN_to_vN1)` here (the step
+/// rewrites the text and sets `format: N + 1`), keep an old-format example in the tests,
+/// and document it.
+///
+/// - `1 → 2`: `run.movement: Legacy` written explicitly (the format-1 behaviour); in format
+///   2 an absent `movement` means `Free` ([`Movement`]).
+const MIGRATIONS: &[(u32, Migration)] = &[(1, format2::v1_to_v2)];
 
 /// Applies every step whose source version is `>= from`, in order. A model already at the
 /// current version passes through untouched.
@@ -93,7 +102,7 @@ const MAX_COUNT: usize = 1_000_000;
 
 /// Current version of the model file format (see `docs/versionamento.md`).
 /// Files without a `format` field are version 1.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Model {
@@ -126,6 +135,14 @@ pub struct Model {
     /// Distribution fields fed by observed values, fitted on load ([`dados`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data: Vec<dados::DataInput>,
+    /// CAD floor plan the layout was drawn on (record only: the simulation never reads the
+    /// file; its walls and columns go to `obstacles`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_plan: Option<Box<FloorPlanDef>>,
+    /// Polygons no mobile resource crosses in `Free` and `Network` movement, besides the
+    /// areas of the objects: walls and columns of the plan or drawn by hand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub obstacles: Vec<Obstacle>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -152,6 +169,10 @@ pub struct RunSettings {
     /// Objects with `transport` and conveyors (and objects feeding them) are not affected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transfer: Option<TransferDef>,
+    /// How mobile resources move unless they set their own (format 2: absent = `Free`;
+    /// models migrated from format 1 carry `Legacy`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub movement: Option<Movement>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -186,6 +207,11 @@ pub struct ObjectDef {
     /// read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visual: Option<VisualDef>,
+    /// Where mobile resources stop to serve this object in `Free` and `Network` movement,
+    /// in the object's own coordinates (metres, turned with it). Absent: on its `-y` side,
+    /// clear of its area by the resource's clearance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<[f64; 2]>,
 }
 
 /// Look of an object in 3D. Every field is optional; the viewer falls back to the
@@ -280,6 +306,13 @@ pub enum ObjectKind {
         /// waiting when an edge is full. The AGV front implements it.
         #[serde(default)]
         agv: bool,
+        /// Own movement mode (absent: `run.movement`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        movement: Option<Movement>,
+        /// Distance (m) kept from every obstacle in `Free` and `Network` movement. Absent:
+        /// half the width of its role (person 0.3, forklift 0.6, AGV or vehicle 0.5) + 0.3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clearance: Option<f64>,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -759,6 +792,7 @@ impl Model {
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
         self.validate_mobile(&kind_of, &mut errors);
+        self.validate_movement(&mut errors);
         self.validate_logic(&mut errors);
         self.validate_spans(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
@@ -912,6 +946,12 @@ impl Model {
 
     /// Builds one replication. Call [`Model::validate`] first.
     pub fn build(&self, replication: u32) -> Simulation {
+        self.build_with(replication, &self.nav_set())
+    }
+
+    /// Like [`Model::build`], with the routers of the movement modes already made
+    /// ([`Model::nav_set`]), so several replications share them (and their caches).
+    pub fn build_with(&self, replication: u32, nav: &NavSet) -> Simulation {
         let mut sim = Simulation::new(RunConfig {
             stop_time: self.run.stop_time,
             warmup: self.run.warmup,
@@ -1004,9 +1044,11 @@ impl Model {
                     unload_time,
                     home,
                     agv,
+                    ..
                 } => Box::new(
                     Transporter::new(*speed)
                         .agv(if *agv { traffic.clone() } else { None })
+                        .router(nav.router(&obj.name))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
                         .home(*home)
@@ -1125,11 +1167,12 @@ impl Model {
         self.validate()?;
         let done = AtomicU32::new(0);
         let stop = AtomicBool::new(false);
+        let nav = self.nav_set();
         let one = |r: u32| -> Result<RunReport, ModelError> {
             if stop.load(Ordering::Relaxed) {
                 return Err(ModelError::Cancelled);
             }
-            let mut sim = self.build(r);
+            let mut sim = self.build_with(r, &nav);
             prepare(&mut sim);
             let report = self.drive(&mut sim)?;
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
@@ -1194,8 +1237,24 @@ mod format_tests {
     }
 
     #[test]
-    fn absent_format_is_version_1() {
-        assert_eq!(Model::parse(MINIMAL).unwrap().format, None);
+    fn absent_format_is_version_1_migrated_to_format_2() {
+        let m = Model::parse(MINIMAL).unwrap();
+        assert_eq!(m.format, Some(2));
+        // No mobile resources: nothing to keep.
+        assert_eq!(m.run.movement, None);
+    }
+
+    #[test]
+    fn format_2_without_movement_is_free() {
+        let text = MINIMAL.replace("Model(", "Model(format: 2, ");
+        let m = Model::parse(&text).unwrap();
+        assert_eq!(m.run.movement, None);
+        let t = "Model(format: 2, name: \"m\", run: (stop_time: 1.0), objects: [\
+                 (name: \"p\", kind: Transporter(speed: 1.0))])";
+        let m = Model::parse(t).unwrap();
+        assert_eq!(m.movement_of(&m.objects[0]), Some(Movement::Free));
+        let m = Model::parse(&t.replace("format: 2, ", "")).unwrap();
+        assert_eq!(m.movement_of(&m.objects[0]), Some(Movement::Legacy));
     }
 
     #[test]

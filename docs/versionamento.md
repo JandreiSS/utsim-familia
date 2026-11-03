@@ -18,6 +18,11 @@ O arquivo `.ron` pode declarar `format: N` no topo do `Model(...)`. Ausente, val
 - O editor sempre salva com o formato atual.
 - O formato só sobe quando a mudança é incompatível (campo removido, renomeado ou com outro significado). Campos novos opcionais, com `#[serde(default)]`, não exigem nova versão.
 
+| Formato | Mudança | Migração |
+|---|---|---|
+| 1 | primeira versão | — |
+| 2 | modos de movimentação: `run.movement` ausente passa a valer `Free` (menor caminho no piso, desviando dos obstáculos) | `1 → 2` grava `format: 2` e, se o modelo tem transportadores, `movement: Legacy` em `run` (o comportamento do formato 1). Os resultados dos modelos antigos não mudam |
+
 ## Protocolo de cena (`utsim-scene/1`)
 
 A constante `PROTOCOL` de `utsim-scene` identifica o fluxo de cena (linhas JSON: cabeçalho e quadros) consumido por visualizadores e motores externos.

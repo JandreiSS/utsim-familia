@@ -7,8 +7,8 @@ use utsim_core::task::{
     MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_USER, distance, path_length, travel_time,
 };
 use utsim_core::{
-    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, State, TaskKind, TaskRequest,
-    Time,
+    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, Router, State, TaskKind,
+    TaskRequest, Time,
 };
 
 /// Sent to the dispatcher right before [`MSG_IDLE`]: one coordinate of the member's
@@ -171,6 +171,8 @@ pub struct Transporter {
     /// Finished its last task while closing (`ShiftEnd::Finish`) without telling the
     /// dispatcher: it reports `MSG_IDLE` when the shift comes back.
     announce_on_resume: bool,
+    /// Own router (movement mode); `None` = the simulation's router.
+    router: Option<Arc<dyn Router>>,
 }
 
 impl Transporter {
@@ -194,7 +196,16 @@ impl Transporter {
             held: None,
             grant_pending: false,
             announce_on_resume: false,
+            router: None,
         }
+    }
+
+    /// Routes this transporter's travels with `router` instead of the simulation's one
+    /// (movement modes: free path, network with access points). `None` = the simulation's.
+    /// AGVs under traffic control still follow the network edge by edge.
+    pub fn router(mut self, router: Option<Arc<dyn Router>>) -> Self {
+        self.router = router;
+        self
     }
 
     /// Makes this transporter an AGV: it follows the network edge by edge under the
@@ -302,7 +313,10 @@ impl Transporter {
                 return;
             }
         }
-        let path = cx.route(self.position, target);
+        let path = match &self.router {
+            Some(r) => r.route(self.position, target),
+            None => cx.route(self.position, target),
+        };
         let t = travel_time(
             path_length(&path),
             self.speed,
