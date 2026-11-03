@@ -7609,6 +7609,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
+name = "utsim-admin"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "tempfile",
+ "utsim-launcher-core",
+ "utsim-publicar",
+ "utsim-ui-tema",
+]
+
+[[package]]
 name = "utsim-assets"
 version = "0.1.0"
 dependencies = [
@@ -7791,6 +7802,7 @@ dependencies = [
  "eframe",
  "tempfile",
  "utsim-launcher-core",
+ "utsim-ui-tema",
  "winresource",
  "zip 2.6.1",
 ]
@@ -7949,6 +7961,7 @@ dependencies = [
 name = "utsim-publicar"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "clap",
  "serde",
  "serde_json",
@@ -8022,6 +8035,7 @@ name = "utsim-ui-tema"
 version = "0.1.0"
 dependencies = [
  "egui",
+ "png",
 ]
 
 [[package]]
