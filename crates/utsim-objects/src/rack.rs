@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, Ctx, Dist, EventId, Item, ItemId, State, Time};
+use utsim_core::init::Accepts;
+use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, Time, WorkPhase};
 
 const DWELL_DONE: u32 = 0;
 
@@ -21,6 +22,8 @@ struct Stay {
     due: Time,
     /// Time left when paused.
     remaining: Time,
+    /// Full dwell drawn for the item (for saved states).
+    duration: Time,
 }
 
 /// Addressable storage (phase 5): see `docs/arquitetura.md`, "Porta-paletes".
@@ -88,6 +91,7 @@ impl Rack {
                 event: None,
                 due,
                 remaining: duration,
+                duration,
             });
         } else {
             let event = cx.schedule(duration, DWELL_DONE, Some(item));
@@ -96,6 +100,7 @@ impl Rack {
                 event: Some(event),
                 due,
                 remaining: 0.0,
+                duration,
             });
         }
     }
@@ -119,6 +124,89 @@ impl Behavior for Rack {
         self.slots = vec![None; self.bays * self.levels];
         self.stays.clear();
         cx.set_state(State::Empty);
+    }
+
+    /// Items with a `slot` take it; the others follow the placement rule. The dwell
+    /// draws the residual of `dwell` given `elapsed`; `phase: Done` (or no dwell)
+    /// releases the item at once.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Rack",
+            Accepts {
+                items: true,
+                slot: true,
+                phase: true,
+                ..Accepts::default()
+            },
+        )?;
+        let cap = self.bays * self.levels;
+        let n = state.items.len();
+        if n > cap {
+            return Err(format!("{n} itens, mas o porta-paletes tem {cap} posições"));
+        }
+        let ids = cx.contents().to_vec();
+        for (k, (&id, it)) in ids.iter().zip(&state.items).enumerate() {
+            if matches!(it.phase, Some(WorkPhase::Setup | WorkPhase::Processing)) {
+                return Err(format!(
+                    "item {}: no porta-paletes só vale phase: Done (permanência mínima cumprida)",
+                    k + 1
+                ));
+            }
+            if let Some(s) = it.slot {
+                if s >= cap {
+                    return Err(format!(
+                        "item {}: slot {s} não existe (posições 0..{})",
+                        k + 1,
+                        cap - 1
+                    ));
+                }
+                if self.slots[s].is_some() {
+                    return Err(format!("item {}: slot {s} usado por dois itens", k + 1));
+                }
+                self.slots[s] = Some(id);
+            }
+        }
+        for (&id, it) in ids.iter().zip(&state.items) {
+            let slot = match it.slot {
+                Some(s) => s,
+                None => {
+                    let s = self.pick_slot(cx).expect("capacity checked above");
+                    self.slots[s] = Some(id);
+                    s
+                }
+            };
+            cx.trace_slot(id, slot);
+            match (&self.dwell, it.phase) {
+                (Some(dwell), None) => {
+                    let dwell = dwell.clone();
+                    let d = cx.sample_residual(&dwell, it.elapsed);
+                    self.start_stay(cx, id, d);
+                }
+                _ => cx.release(id),
+            }
+        }
+        self.update_state(cx);
+        Ok(())
+    }
+
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let now = cx.now();
+        for (it, &id) in state.items.iter_mut().zip(cx.contents()) {
+            it.slot = self.slot_of(id);
+            match self.stays.iter().find(|s| s.item == id) {
+                Some(stay) => {
+                    let left = if stay.event.is_some() {
+                        (stay.due - now).max(0.0)
+                    } else {
+                        stay.remaining
+                    };
+                    it.elapsed = (stay.duration - left).max(0.0);
+                }
+                None if self.dwell.is_some() => it.phase = Some(WorkPhase::Done),
+                None => {}
+            }
+        }
+        None
     }
 
     /// Stored items are not work: a rack goes off shift at once, as with `Pause`.

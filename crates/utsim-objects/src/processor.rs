@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use utsim_core::init::Accepts;
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED};
 use utsim_core::{
-    Behavior, BlockId, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind, Time,
+    Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind,
+    Time, WorkPhase,
 };
 
 /// Operators a processor needs (phase 4, contract): `count` members of `team`
@@ -46,6 +48,8 @@ struct Timer {
     due: Time,
     /// Time left when paused by a breakdown.
     remaining: Time,
+    /// Full length of the timer (for saved states: elapsed = duration - time left).
+    duration: Time,
 }
 
 /// An item waiting for all its operators to arrive before `stage` starts.
@@ -83,6 +87,9 @@ pub struct Processor {
     busy: TimeWeighted,
     /// Servers holding a finished item that cannot leave yet.
     blocked: TimeWeighted,
+    /// Initial state: work already done on an item's next phase; its timer draws the
+    /// residual time instead of a full duration.
+    resume: Vec<(ItemId, Time)>,
 }
 
 impl Processor {
@@ -98,6 +105,7 @@ impl Processor {
             held: Vec::new(),
             busy: TimeWeighted::default(),
             blocked: TimeWeighted::default(),
+            resume: Vec::new(),
         }
     }
 
@@ -132,6 +140,7 @@ impl Processor {
                 event: None,
                 due: cx.now() + duration,
                 remaining: duration,
+                duration,
             });
             return;
         }
@@ -142,6 +151,7 @@ impl Processor {
             event,
             due: cx.now() + duration,
             remaining: 0.0,
+            duration,
         });
     }
 
@@ -181,14 +191,22 @@ impl Processor {
 
     fn run_stage(&mut self, cx: &mut Ctx, item: ItemId, stage: Phase) {
         self.set_phase(item, stage);
-        if stage == Phase::Setup {
-            let setup = self.setup.clone().expect("setup stage needs a setup time");
-            let t = cx.sample_duration(&setup);
-            self.start_timer(cx, item, SETUP_DONE, t);
+        let elapsed = self
+            .resume
+            .iter()
+            .position(|(i, _)| *i == item)
+            .map(|at| self.resume.remove(at).1);
+        let (dist, tag) = if stage == Phase::Setup {
+            let setup = self.setup.as_ref().expect("setup stage needs a setup time");
+            (setup, SETUP_DONE)
         } else {
-            let t = cx.sample_duration(&self.process);
-            self.start_timer(cx, item, PROCESS_DONE, t);
-        }
+            (&self.process, PROCESS_DONE)
+        };
+        let t = match elapsed {
+            Some(e) => cx.sample_residual(dist, e),
+            None => cx.sample_duration(dist),
+        };
+        self.start_timer(cx, item, tag, t);
     }
 
     /// Sends MSG_RELEASE to the operators the item holds, if any.
@@ -256,9 +274,106 @@ impl Behavior for Processor {
         self.timers.clear();
         self.pending.clear();
         self.held.clear();
+        self.resume.clear();
         self.busy = TimeWeighted::default();
         self.blocked = TimeWeighted::default();
         cx.set_state(State::Idle);
+    }
+
+    /// Items in setup or processing restart their phase with the residual time; `Done`
+    /// items are released at once. With operators, every phase that needs them waits
+    /// for a new crew first (the operators start from wherever they are at `t = 0`).
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Processor",
+            Accepts {
+                items: true,
+                phase: true,
+                ..Accepts::default()
+            },
+        )?;
+        let n = state.items.len();
+        if n > self.capacity {
+            return Err(format!("{n} itens, mas a capacidade é {}", self.capacity));
+        }
+        let first = if self.setup.is_some() {
+            Phase::Setup
+        } else {
+            Phase::Processing
+        };
+        let ids = cx.contents().to_vec();
+        for (k, (&id, it)) in ids.iter().zip(&state.items).enumerate() {
+            let stage = match it.phase {
+                None => first,
+                Some(WorkPhase::Setup) if self.setup.is_none() => {
+                    return Err(format!(
+                        "item {}: fase Setup, mas o processador não tem setup",
+                        k + 1
+                    ));
+                }
+                Some(WorkPhase::Setup) => Phase::Setup,
+                Some(WorkPhase::Processing) => Phase::Processing,
+                Some(WorkPhase::Done) => Phase::Done,
+            };
+            if stage == Phase::Done {
+                self.set_phase(id, Phase::Done);
+                cx.release(id);
+                continue;
+            }
+            if it.elapsed > 0.0 {
+                self.resume.push((id, it.elapsed));
+            }
+            self.begin(cx, id, stage);
+        }
+        self.update_state(cx);
+        Ok(())
+    }
+
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let now = cx.now();
+        let work = |p: Phase| {
+            if p == Phase::Setup {
+                WorkPhase::Setup
+            } else {
+                WorkPhase::Processing
+            }
+        };
+        for (it, &id) in state.items.iter_mut().zip(cx.contents()) {
+            let Some(phase) = self.phases.iter().find(|(i, _)| *i == id).map(|p| p.1) else {
+                continue;
+            };
+            match phase {
+                Phase::Setup | Phase::Processing => {
+                    it.phase = Some(work(phase));
+                    it.elapsed = self.timers.iter().find(|t| t.item == id).map_or(0.0, |t| {
+                        let left = if t.event.is_some() {
+                            (t.due - now).max(0.0)
+                        } else {
+                            t.remaining
+                        };
+                        (t.duration - left).max(0.0)
+                    });
+                }
+                Phase::WaitingOperator => {
+                    let stage = self
+                        .pending
+                        .iter()
+                        .find(|p| p.item == id)
+                        .map_or(Phase::Processing, |p| p.stage);
+                    it.phase = Some(work(stage));
+                    it.elapsed = self
+                        .resume
+                        .iter()
+                        .find(|(i, _)| *i == id)
+                        .map_or(0.0, |r| r.1);
+                }
+                Phase::Done => {
+                    it.phase = Some(WorkPhase::Done);
+                    it.elapsed = 0.0;
+                }
+            }
+        }
+        None
     }
 
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
@@ -298,6 +413,7 @@ impl Behavior for Processor {
 
     fn on_exit(&mut self, cx: &mut Ctx, item: ItemId) {
         self.phases.retain(|(id, _)| *id != item);
+        self.resume.retain(|(id, _)| *id != item);
         self.update_state(cx);
     }
 

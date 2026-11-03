@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use utsim_core::{Behavior, Ctx, Item, ItemId, State};
+use utsim_core::init::Accepts;
+use utsim_core::{Behavior, BlockState, Ctx, Item, ItemId, State};
 
 use crate::timer::PausableTimer;
 
@@ -96,6 +97,40 @@ impl Behavior for Queue {
         self.outstanding = 0;
         self.timer = PausableTimer::default();
         cx.set_state(State::Empty);
+    }
+
+    /// The items enter in order, as if they had just arrived (batches are collected
+    /// again); the wait for a partial batch counts from the first held item's `elapsed`.
+    fn restore(&mut self, cx: &mut Ctx, state: &BlockState) -> Result<(), String> {
+        state.check(
+            "Queue",
+            Accepts {
+                items: true,
+                ..Accepts::default()
+            },
+        )?;
+        let n = state.items.len();
+        if let Some(cap) = self.capacity.filter(|cap| n > *cap) {
+            return Err(format!("{n} itens, mas a capacidade é {cap}"));
+        }
+        let ids = cx.contents().to_vec();
+        for &id in &ids {
+            self.on_entry(cx, id, 0);
+        }
+        if let (Some(batch), Some(first)) = (self.batch, self.held.first()) {
+            if batch.max_wait > 0.0 {
+                let k = ids.iter().position(|id| id == first).unwrap_or(0);
+                let left = (batch.max_wait - state.items[k].elapsed).max(0.0);
+                self.timer.cancel(cx);
+                self.timer.start(cx, left, MAX_WAIT, None);
+            }
+        }
+        Ok(())
+    }
+
+    /// The kernel already wrote the items with their waits; nothing else to add.
+    fn save_state(&self, _cx: &Ctx, _state: &mut BlockState) -> Option<String> {
+        None
     }
 
     /// Waiting items are not work: at the end of a shift with `Finish` a queue goes off

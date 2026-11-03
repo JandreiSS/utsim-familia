@@ -34,7 +34,7 @@ pub struct StartState {
 /// State of one block. Every field is optional; what a block type accepts is listed in
 /// `docs/manual/src/estado-inicial.md`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BlockState {
     /// That many items with no history (elapsed 0, no labels). Use either this or `items`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,7 +79,7 @@ pub enum WorkPhase {
 
 /// One item of a [`BlockState`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ItemState {
     /// Time already spent in the current activity: the phase of a processor, the dwell
     /// of a rack, the wait in a queue, the ride on a belt.

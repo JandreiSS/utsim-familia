@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 
 use utsim_core::task::{MSG_INJECT_REFUSED, MSG_ITEM_ENTERED, MSG_ITEM_EXITED};
-use utsim_core::{Behavior, BlockId, Ctx, EventId, Item, State, Time};
+use utsim_core::{Behavior, BlockId, BlockState, Ctx, EventId, Item, State, Time};
 
 use crate::solver::{Graph, Role, SolveError, solve};
 use crate::{FluidDef, FluidKind};
@@ -378,6 +378,27 @@ impl Behavior for FluidNet {
             }
         }
         self.resolve(cx);
+    }
+
+    /// Tank levels now. Restoring them is done by the model, which sets each tank's
+    /// `initial` level (the default `restore` refuses levels).
+    fn save_state(&self, cx: &Ctx, state: &mut BlockState) -> Option<String> {
+        let dt = (cx.now() - self.last).max(0.0);
+        let mut partial = false;
+        for (i, node) in self.def.nodes.iter().enumerate() {
+            match node.kind {
+                FluidKind::Tank { .. } => {
+                    state
+                        .levels
+                        .insert(node.name.clone(), self.level_after(i, dt));
+                }
+                FluidKind::ToItems { .. } => partial |= self.acc[i] > 0.0,
+                _ => {}
+            }
+        }
+        partial.then(|| {
+            "o volume parcial acumulado nos conversores ToItems não entra no estado gravado".into()
+        })
     }
 
     fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {
