@@ -7829,6 +7829,7 @@ name = "utsim-lss-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "egui_plot",
  "serde_json",
  "tempfile",
  "utsim-lss-core",

@@ -34,6 +34,9 @@ pub mod fields {
         pub const SCOPE_IN: &str = "escopo_dentro";
         pub const SCOPE_OUT: &str = "escopo_fora";
         pub const BUSINESS_CASE: &str = "caso_de_negocio";
+        /// The company's action priority table (1000 letters), when one was imported.
+        pub const AP_TABLE: &str = "tabela_ap";
+        pub const AP_TABLE_NAME: &str = "tabela_ap_nome";
     }
     pub mod phase {
         pub const PROJECT: &str = "projeto";
@@ -42,6 +45,7 @@ pub mod fields {
         pub const STATUS: &str = "estado";
     }
     pub mod deliverable {
+        pub const PROJECT: &str = "projeto";
         pub const PHASE: &str = "fase";
         pub const NAME: &str = "nome";
         pub const TOOL: &str = "ferramenta";
@@ -85,6 +89,8 @@ pub mod fields {
         pub const COLUMN: &str = "coluna";
         pub const ORDER: &str = "ordem";
         pub const PHASE: &str = "fase";
+        /// Entity the card came from (an FMEA row, a response plan signal).
+        pub const LINK: &str = "ligacao";
     }
     pub mod risk {
         pub const PROJECT: &str = "projeto";
@@ -477,6 +483,7 @@ pub struct Action {
     pub column: Column,
     pub order: f64,
     pub phase: Option<Id>,
+    pub link: Option<Id>,
 }
 
 impl Action {
@@ -496,6 +503,7 @@ impl Action {
             column: e.typed(f::COLUMN).unwrap_or_default(),
             order: e.number(f::ORDER).unwrap_or(0.0),
             phase: e.id(f::PHASE),
+            link: e.id(f::LINK),
         }
     }
 
