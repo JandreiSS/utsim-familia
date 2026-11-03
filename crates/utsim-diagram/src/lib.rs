@@ -33,6 +33,7 @@ pub use graph::{
     ResourceKind, Symbol, default_symbol,
 };
 pub use html::{carta_html, html};
+pub use mapa::caixas_dos_rotulos;
 pub use mermaid::mermaid;
 pub use svg::{svg, svg_inline};
 pub use tipos::{Saida, TipoDiagrama, gerar, indice};

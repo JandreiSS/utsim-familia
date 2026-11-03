@@ -6,9 +6,11 @@ use std::fmt::Write as _;
 use utsim_model::Model;
 use utsim_model::csv::{num as csvnum, row};
 
-use crate::desenho::{PALETTE, Parte, Plano, curto, svg_doc, texto};
+use crate::desenho::{
+    PALETTE, Parte, Plano, Rotulo, curto, desenhar_rotulos, posicionar_rotulos, svg_doc, texto,
+};
 use crate::graph::FlowGraph;
-use crate::rastro::{Rastro, dist3};
+use crate::rastro::{Rastro, comprimento};
 use crate::svg::glyph;
 use crate::text::{esc, num};
 
@@ -42,11 +44,6 @@ pub fn pontos(model: &Model, graph: &FlowGraph) -> (Vec<Option<(f64, f64)>>, boo
     (pts, true)
 }
 
-fn canvas_pts(pts: &[Option<(f64, f64)>]) -> Plano {
-    let v: Vec<(f64, f64)> = pts.iter().flatten().copied().collect();
-    Plano::new(&v)
-}
-
 fn simbolo_de(graph: &FlowGraph, name: &str) -> crate::graph::Symbol {
     graph
         .node_index(name)
@@ -61,14 +58,105 @@ fn desenhar_passos(
     pts: &[Option<(f64, f64)>],
     plano: &Plano,
 ) {
+    b.push_str(&etiquetas(model, graph, pts, plano).1);
+}
+
+/// Symbols and labels of the plan: the SVG and the placed labels.
+fn etiquetas(
+    model: &Model,
+    graph: &FlowGraph,
+    pts: &[Option<(f64, f64)>],
+    plano: &Plano,
+) -> (Vec<Rotulo>, String) {
+    let mut b = String::new();
+    let mut itens = Vec::new();
     for (i, o) in model.objects.iter().enumerate() {
         let (Some(p), Some(_)) = (pts[i], graph.node_index(&o.name)) else {
             continue;
         };
         let (x, y) = plano.at(p);
         b.push_str(&glyph(simbolo_de(graph, &o.name), x, y, 11.0));
-        b.push_str(&texto(x - 40.0, y + 28.0, "etq mut", &curto(&o.name, 18)));
+        itens.push((x, y, curto(&o.name, 18)));
     }
+    let rotulos = posicionar_rotulos(&itens);
+    b.push_str(&desenhar_rotulos(&rotulos));
+    (rotulos, b)
+}
+
+/// The canvas of a plan view: the objects and, when there are positions, the paths.
+fn plano_de(pts: &[Option<(f64, f64)>], rastro: &Rastro, layout: bool) -> Plano {
+    let mut all: Vec<(f64, f64)> = pts.iter().flatten().copied().collect();
+    if !layout {
+        all.extend(
+            rastro
+                .pernas
+                .iter()
+                .flat_map(|p| p.path.iter().map(|q| (q[0], q[1]))),
+        );
+        all.extend(
+            rastro
+                .viagens
+                .iter()
+                .flat_map(|v| v.path.iter().map(|q| (q[0], q[1]))),
+        );
+    }
+    Plano::new(&all)
+}
+
+/// Boxes of the labels of the plan views (left, top, width, height, in canvas
+/// coordinates), with the text; for checks.
+pub fn caixas_dos_rotulos(
+    model: &Model,
+    graph: &FlowGraph,
+    rastro: &Rastro,
+) -> Vec<(String, (f64, f64, f64, f64))> {
+    let (pts, layout) = pontos(model, graph);
+    let plano = plano_de(&pts, rastro, layout);
+    etiquetas(model, graph, &pts, &plano)
+        .0
+        .into_iter()
+        .map(|r| (r.texto, r.caixa))
+        .collect()
+}
+
+/// Path of the items between two objects as the trips took it (in plan coordinates).
+fn caminho(rastro: &Rastro, a: usize, c: usize) -> Option<Vec<(f64, f64)>> {
+    rastro
+        .viagens
+        .iter()
+        .find(|v| v.de == a && v.para == c)
+        .map(|v| v.path.iter().map(|q| (q[0], q[1])).collect())
+}
+
+/// Point halfway along a polyline, by length.
+fn ponto_medio(linha: &[(f64, f64)]) -> (f64, f64) {
+    let total: f64 = linha
+        .windows(2)
+        .map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1))
+        .sum();
+    let mut falta = total / 2.0;
+    for w in linha.windows(2) {
+        let l = (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1);
+        if falta <= l && l > 0.0 {
+            let f = falta / l;
+            return (
+                w[0].0 + (w[1].0 - w[0].0) * f,
+                w[0].1 + (w[1].1 - w[0].1) * f,
+            );
+        }
+        falta -= l;
+    }
+    linha.first().copied().unwrap_or((0.0, 0.0))
+}
+
+/// Polyline `d` attribute of points in plan coordinates.
+fn polilinha(plano: &Plano, pts: &[(f64, f64)]) -> String {
+    let mut d = String::new();
+    for (k, p) in pts.iter().enumerate() {
+        let (x, y) = plano.at(*p);
+        let _ = write!(d, "{}{x:.1} {y:.1} ", if k == 0 { "M" } else { "L" });
+    }
+    d.trim_end().to_string()
 }
 
 /// Flow-process map: the symbols of the process chart at the place of each step, and the
@@ -80,7 +168,7 @@ pub fn mapofluxograma(
     fundo: Option<&str>,
 ) -> Parte {
     let (pts, layout) = pontos(model, graph);
-    let plano = canvas_pts(&pts);
+    let plano = plano_de(&pts, rastro, layout);
     let rota: Vec<usize> = rastro
         .rotas
         .first()
@@ -107,14 +195,18 @@ pub fn mapofluxograma(
     );
     for (k, w) in rota.windows(2).enumerate() {
         let (a, c) = (w[0], w[1]);
+        let mut d = None;
         if let (Some(pa), Some(pc)) = (pts[a], pts[c]) {
-            let (pa, pc) = (plano.at(pa), plano.at(pc));
+            // The route the items took (over the path network when they rode a mobile
+            // resource); a straight line between the objects otherwise.
+            let linha = caminho(rastro, a, c).unwrap_or_else(|| vec![pa, pc]);
             let _ = write!(
                 b,
-                "<path class=\"fino\" style=\"stroke:{};stroke-width:2\" marker-end=\"url(#ponta)\" d=\"M{:.1} {:.1} L{:.1} {:.1}\"/>",
-                PALETTE[1], pa.0, pa.1, pc.0, pc.1
+                "<path class=\"fino\" style=\"stroke:{};stroke-width:2\" marker-end=\"url(#ponta)\" d=\"{}\"/>",
+                PALETTE[1],
+                polilinha(&plano, &linha)
             );
-            let (mx, my) = ((pa.0 + pc.0) / 2.0, (pa.1 + pc.1) / 2.0);
+            let (mx, my) = plano.at(ponto_medio(&linha));
             let _ = write!(
                 b,
                 "<circle cx=\"{mx:.1}\" cy=\"{my:.1}\" r=\"9\" style=\"fill:{};stroke:none\"/>\
@@ -123,8 +215,17 @@ pub fn mapofluxograma(
                 my + 3.5,
                 k + 1
             );
+            if !layout {
+                let tri: Vec<[f64; 3]> = linha.iter().map(|q| [q.0, q.1, 0.0]).collect();
+                d = Some(
+                    rastro
+                        .viagens
+                        .iter()
+                        .find(|v| v.de == a && v.para == c)
+                        .map_or_else(|| comprimento(&tri), |v| v.dist),
+                );
+            }
         }
-        let d = (!layout).then(|| dist3(rastro.pos[a], rastro.pos[c]));
         let _ = write!(
             tab,
             "<tr><td class=\"n\">{}</td><td>{}</td><td>{}</td><td class=\"n\">{}</td></tr>",
@@ -254,16 +355,7 @@ pub fn espaguete_svg(
     standalone: bool,
 ) -> String {
     let (pts, layout) = pontos(model, graph);
-    let mut all: Vec<(f64, f64)> = pts.iter().flatten().copied().collect();
-    if !layout {
-        all.extend(
-            rastro
-                .pernas
-                .iter()
-                .flat_map(|p| p.path.iter().map(|q| (q[0], q[1]))),
-        );
-    }
-    let plano = Plano::new(&all);
+    let plano = plano_de(&pts, rastro, layout);
     let mut b = String::new();
     // Items: one stroke per pair of objects, thicker the more trips.
     let mut pairs: BTreeMap<(usize, usize), usize> = BTreeMap::new();
@@ -273,16 +365,17 @@ pub fn espaguete_svg(
     let max_pair = pairs.values().copied().max().unwrap_or(1) as f64;
     for (&(a, c), &n) in &pairs {
         if let (Some(pa), Some(pc)) = (pts[a], pts[c]) {
-            let (pa, pc) = (plano.at(pa), plano.at(pc));
+            let linha = if layout {
+                vec![pa, pc]
+            } else {
+                caminho(rastro, a, c).unwrap_or_else(|| vec![pa, pc])
+            };
             let _ = write!(
                 b,
-                "<path style=\"fill:none;stroke:{};stroke-opacity:.55;stroke-width:{:.1}\" d=\"M{:.1} {:.1} L{:.1} {:.1}\"/>",
+                "<path style=\"fill:none;stroke:{};stroke-opacity:.55;stroke-width:{:.1}\" d=\"{}\"/>",
                 PALETTE[0],
                 1.0 + 7.0 * n as f64 / max_pair,
-                pa.0,
-                pa.1,
-                pc.0,
-                pc.1
+                polilinha(&plano, &linha)
             );
         }
     }

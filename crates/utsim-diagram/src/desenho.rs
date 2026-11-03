@@ -137,3 +137,123 @@ pub struct Parte {
     pub tabelas: String,
     pub csv: Option<String>,
 }
+
+/// A label of the plan view, placed so that it touches no other label and no symbol.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rotulo {
+    pub texto: String,
+    /// Centre of the text and its baseline.
+    pub x: f64,
+    pub y: f64,
+    /// Box of the text: left, top, width, height.
+    pub caixa: (f64, f64, f64, f64),
+    /// Callout line from the symbol to the label, when the label had to move away.
+    pub chamada: Option<((f64, f64), (f64, f64))>,
+}
+
+const CHAR_W: f64 = 5.8;
+const LABEL_H: f64 = 13.0;
+const SYMBOL_R: f64 = 13.0;
+
+fn cruza(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+    a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
+}
+
+/// Places one label per symbol centre, in order: first just below the symbol, then just
+/// above, then one step further down and up, and so on, taking the first spot that
+/// collides with nothing placed before. Labels that moved get a callout line. The result
+/// depends only on the input, so the same plan always gives the same drawing.
+pub fn posicionar_rotulos(itens: &[(f64, f64, String)]) -> Vec<Rotulo> {
+    let simbolos: Vec<(f64, f64, f64, f64)> = itens
+        .iter()
+        .map(|(x, y, _)| (x - SYMBOL_R, y - SYMBOL_R, 2.0 * SYMBOL_R, 2.0 * SYMBOL_R))
+        .collect();
+    let mut postos: Vec<Rotulo> = Vec::new();
+    for (x, y, t) in itens {
+        let w = t.chars().count() as f64 * CHAR_W + 4.0;
+        let esq = (x - w / 2.0).max(2.0);
+        let mut escolhido = None;
+        'busca: for nivel in 0..40 {
+            for abaixo in [true, false] {
+                let desloc = SYMBOL_R + 12.0 + nivel as f64 * (LABEL_H + 1.0);
+                let base = if abaixo { y + desloc } else { y - desloc + 8.0 };
+                let caixa = (esq, base - 10.0, w, LABEL_H);
+                let livre = postos.iter().all(|p| !cruza(caixa, p.caixa))
+                    && simbolos.iter().all(|s| !cruza(caixa, *s));
+                if livre {
+                    escolhido = Some((nivel, abaixo, base, caixa));
+                    break 'busca;
+                }
+            }
+        }
+        let (nivel, abaixo, base, caixa) = escolhido.unwrap_or_else(|| {
+            let base = y + SYMBOL_R + 12.0;
+            (0, true, base, (esq, base - 10.0, w, LABEL_H))
+        });
+        let chamada = (nivel > 0).then(|| {
+            let (ya, yb) = if abaixo {
+                (y + SYMBOL_R, caixa.1)
+            } else {
+                (y - SYMBOL_R, caixa.1 + caixa.3)
+            };
+            ((*x, ya), (*x, yb))
+        });
+        postos.push(Rotulo {
+            texto: t.clone(),
+            x: esq + w / 2.0,
+            y: base,
+            caixa,
+            chamada,
+        });
+    }
+    postos
+}
+
+/// SVG of the labels.
+pub fn desenhar_rotulos(rotulos: &[Rotulo]) -> String {
+    let mut b = String::new();
+    for r in rotulos {
+        if let Some(((x1, y1), (x2, y2))) = r.chamada {
+            let _ = write!(
+                b,
+                "<line class=\"eixo\" x1=\"{x1:.1}\" y1=\"{y1:.1}\" x2=\"{x2:.1}\" y2=\"{y2:.1}\"/>"
+            );
+        }
+        let _ = write!(
+            b,
+            "<text class=\"etq mut\" text-anchor=\"middle\" x=\"{:.1}\" y=\"{:.1}\">{}</text>",
+            r.x,
+            r.y,
+            esc(&r.texto)
+        );
+    }
+    b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn labels_never_overlap() {
+        let nomes = [
+            "chegada_caminhoes",
+            "descarga",
+            "recebimento",
+            "esteira_entrada",
+            "inspecao",
+        ];
+        let itens: Vec<(f64, f64, String)> = nomes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (80.0 + 57.0 * i as f64, 80.0, n.to_string()))
+            .collect();
+        let r = posicionar_rotulos(&itens);
+        assert_eq!(r, posicionar_rotulos(&itens));
+        for (i, a) in r.iter().enumerate() {
+            for b in &r[i + 1..] {
+                assert!(!cruza(a.caixa, b.caixa), "{} x {}", a.texto, b.texto);
+            }
+        }
+    }
+}

@@ -43,6 +43,24 @@ fn media(d: &utsim_core::Dist) -> f64 {
     if m.is_finite() { m } else { 0.0 }
 }
 
+/// Availability of a process: the part of the statistics window it was on shift and not
+/// broken down (`1 - off_shift - down`, from the states of the run). Without a run, the
+/// MTBF over MTBF + MTTR of its downtime, ignoring shifts.
+fn disponibilidade(obj: &utsim_model::ObjectDef, rep: Option<&utsim_core::BlockReport>) -> f64 {
+    if let Some(r) = rep {
+        let f = |s: &str| r.states.get(s).copied().unwrap_or(0.0);
+        return (1.0 - f("off_shift") - f("down")).clamp(0.0, 1.0);
+    }
+    obj.downtime.as_ref().map_or(1.0, |d| {
+        let (up, down) = (media(&d.mtbf), media(&d.mttr));
+        if up + down > 0.0 {
+            up / (up + down)
+        } else {
+            1.0
+        }
+    })
+}
+
 pub fn montar(model: &Model, graph: &FlowGraph, rastro: &Rastro) -> Vsm {
     let mut processos = Vec::new();
     let mut trechos = Vec::new();
@@ -73,14 +91,7 @@ pub fn montar(model: &Model, graph: &FlowGraph, rastro: &Rastro) -> Vsm {
                     ObjectKind::Separator { process, .. } => (media(process), 0.0, 0, 1),
                     _ => (0.0, 0.0, 0, 1),
                 };
-                let disponibilidade = obj.downtime.as_ref().map_or(1.0, |d| {
-                    let (up, down) = (media(&d.mtbf), media(&d.mttr));
-                    if up + down > 0.0 {
-                        up / (up + down)
-                    } else {
-                        1.0
-                    }
-                });
+                let disponibilidade = disponibilidade(obj, rep);
                 let agrega_valor = node.symbol == Symbol::Operacao;
                 processos.push(Processo {
                     nome: node.name.clone(),
@@ -182,7 +193,7 @@ pub fn gerar(model: &Model, graph: &FlowGraph, rastro: &Rastro) -> Parte {
         let lines = [
             format!("TC = {}", num(p.ciclo)),
             format!("TR (setup) = {}", num(p.setup)),
-            format!("Disponibilidade = {}", pct(p.disponibilidade)),
+            format!("Disponib. (turno e quebras) = {}", pct(p.disponibilidade)),
             format!("Operadores = {}", p.operadores),
             format!("Servidores = {}", p.servidores),
         ];
@@ -296,6 +307,9 @@ pub fn gerar(model: &Model, graph: &FlowGraph, rastro: &Rastro) -> Parte {
         );
     }
     tab.push_str("</tbody></table>");
+    tab.push_str(
+        "<p class=\"muted\">Disponibilidade = 1 - fração do tempo fora de turno - fração do tempo em quebra, medidas na janela de estatísticas da simulação (depois do aquecimento). Sem simulação, usa só MTBF / (MTBF + MTTR) da quebra.</p>",
+    );
     Parte {
         svg: Some(svg_doc(width, height, "Mapa do fluxo de valor", &b, true)),
         tabelas: tab,
