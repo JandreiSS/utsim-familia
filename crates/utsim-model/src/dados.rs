@@ -46,8 +46,9 @@ use crate::{Model, ModelError};
 /// The automatic fit API, re-exported for the editors.
 pub use utsim_fit::auto;
 
-/// One field fed by observed values.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// One field fed by observed values. Two entries are equal when everything that is
+/// saved is equal (the load [`DataStatus`] does not count).
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DataInput {
     /// The distribution field, e.g. `"Torno.process"`.
     pub field: String,
@@ -82,6 +83,22 @@ pub struct DataInput {
     /// What happened on the last load (not saved).
     #[serde(skip)]
     pub status: DataStatus,
+}
+
+impl PartialEq for DataInput {
+    fn eq(&self, o: &Self) -> bool {
+        self.field == o.field
+            && self.source == o.source
+            && self.column == o.column
+            && self.timestamps == o.timestamps
+            && self.values == o.values
+            && self.choose == o.choose
+            && self.criterion == o.criterion
+            && self.alpha == o.alpha
+            && self.bootstrap == o.bootstrap
+            && self.seed == o.seed
+            && self.fitted == o.fitted
+    }
 }
 
 fn is_false(b: &bool) -> bool {
