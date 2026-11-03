@@ -1,0 +1,20 @@
+Model(
+    format: 2,
+    name: "equipe_aleatoria",
+    run: (stop_time: 100000.0, seed: 1),
+    objects: [
+        (name: "src0", kind: Source(interarrival: Exp(mean: 1.0), max_arrivals: 15)),
+        (name: "q0", kind: Queue(), transport: "eq", transport_priority: 0, position: (0.0, 0.0, 0.0)),
+        (name: "s0", kind: Sink, position: (5.0, 0.0, 0.0)),
+        (name: "src1", kind: Source(interarrival: Exp(mean: 1.0), max_arrivals: 15)),
+        (name: "q1", kind: Queue(), transport: "eq", transport_priority: 0, position: (0.0, 0.0, 0.0)),
+        (name: "s1", kind: Sink, position: (5.0, 0.0, 0.0)),
+        (name: "src2", kind: Source(interarrival: Exp(mean: 1.0), max_arrivals: 15)),
+        (name: "q2", kind: Queue(), transport: "eq", transport_priority: 0, position: (0.0, 0.0, 0.0)),
+        (name: "s2", kind: Sink, position: (5.0, 0.0, 0.0)),
+        (name: "a", kind: Transporter(speed: 1.0, capacity: 2, home: true)),
+        (name: "b", kind: Transporter(speed: 1.5), position: (3.0, 3.0, 0.0)),
+        (name: "eq", kind: Dispatcher(team: ["a", "b"], rule: FirstAvailable)),
+    ],
+    connections: [("src0", "q0"), ("q0", "s0"), ("src1", "q1"), ("q1", "s1"), ("src2", "q2"), ("q2", "s2")],
+)
