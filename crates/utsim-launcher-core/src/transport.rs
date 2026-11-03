@@ -73,8 +73,90 @@ impl HttpTransport {
     }
 }
 
+/// Path of a `file://` address (`file:///C:/pasta/x` or `file:///home/x`), with `%20` and
+/// other escapes decoded.
+pub fn file_url_path(url: &str) -> Option<std::path::PathBuf> {
+    let rest = url.strip_prefix("file://")?;
+    // `file:///C:/x` is `C:/x` on Windows; `file:///home/x` is `/home/x` elsewhere.
+    let rest = match rest.strip_prefix('/') {
+        Some(r) if r.len() > 1 && r.as_bytes()[1] == b':' => r,
+        _ => rest,
+    };
+    let mut bytes = Vec::with_capacity(rest.len());
+    let b = rest.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&rest[i + 1..i + 3], 16) {
+                bytes.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        bytes.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8(bytes).ok().map(std::path::PathBuf::from)
+}
+
+/// `file://` address of a local path.
+pub fn file_url(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy().replace('\\', "/");
+    let s = s.replace(' ', "%20");
+    if s.starts_with('/') {
+        format!("file://{s}")
+    } else {
+        format!("file:///{s}")
+    }
+}
+
+fn serve_file(path: &std::path::Path, range_from: Option<u64>) -> Result<Response> {
+    use std::io::{Seek, SeekFrom};
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Ok(Response {
+                status: 404,
+                headers: Vec::new(),
+                body: Box::new(io::empty()),
+            });
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let total = f.metadata()?.len();
+    let mut headers = vec![(
+        "content-type".to_string(),
+        "application/octet-stream".to_string(),
+    )];
+    let status = match range_from {
+        Some(from) if from > 0 && from < total => {
+            f.seek(SeekFrom::Start(from))?;
+            headers.push((
+                "content-range".into(),
+                format!("bytes {from}-{}/{total}", total - 1),
+            ));
+            headers.push(("content-length".into(), (total - from).to_string()));
+            206
+        }
+        _ => {
+            headers.push(("content-length".into(), total.to_string()));
+            200
+        }
+    };
+    Ok(Response {
+        status,
+        headers,
+        body: Box::new(io::BufReader::new(f)),
+    })
+}
+
 impl Transport for HttpTransport {
+    /// Also reads `file://` addresses, so the author can test the launcher against the local
+    /// publication folder before anything is uploaded.
     fn get(&self, url: &str, range_from: Option<u64>) -> Result<Response> {
+        if let Some(path) = file_url_path(url) {
+            return serve_file(&path, range_from);
+        }
         let mut req = self.agent.get(url);
         if let Some(from) = range_from {
             req = req.set("Range", &format!("bytes={from}-"));
@@ -232,5 +314,37 @@ impl Transport for MemoryTransport {
             headers,
             body,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_urls() {
+        let p = file_url_path("file:///C:/Meu%20Drive/x.json").unwrap();
+        assert_eq!(p, std::path::PathBuf::from("C:/Meu Drive/x.json"));
+        let p = file_url_path("file:///home/a/x.json").unwrap();
+        assert_eq!(p, std::path::PathBuf::from("/home/a/x.json"));
+        assert_eq!(
+            file_url(std::path::Path::new(r"C:\Meu Drive\m.json")),
+            "file:///C:/Meu%20Drive/m.json"
+        );
+        assert!(file_url_path("https://x").is_none());
+    }
+
+    #[test]
+    fn local_files_are_served_with_ranges() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a b.bin");
+        std::fs::write(&path, b"0123456789").unwrap();
+        let t = HttpTransport::new();
+        let url = file_url(&path);
+        let r = t.get(&url, Some(4)).unwrap();
+        assert_eq!(r.status, 206);
+        assert_eq!(r.text(100).unwrap(), "456789");
+        assert_eq!(t.get(&url, None).unwrap().status, 200);
+        assert_eq!(t.get(&format!("{url}.nao"), None).unwrap().status, 404);
     }
 }
