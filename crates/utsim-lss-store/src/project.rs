@@ -68,6 +68,9 @@ pub struct ProjectFolder {
     pending: BTreeMap<PathBuf, String>,
     cache_dir: Option<PathBuf>,
     load: LoadInfo,
+    /// Every operation kept in memory, no snapshot nor cache (program folders and coaching
+    /// logs: their reconstruction checks each operation's author, `utsim_lss_core::perfis`).
+    full: bool,
 }
 
 /// The path with the `.lss` extension (added when missing).
@@ -192,7 +195,82 @@ impl ProjectFolder {
             pending: BTreeMap::new(),
             cache_dir: cache_dir.map(Path::to_path_buf),
             load: LoadInfo::default(),
+            full: false,
         }
+    }
+
+    /// Creates a program folder (`docs/plano_lean_seis_sigma.md`, 8.9): the same journal,
+    /// whose main entity is the `programa`, with its `mentoria/` subfolder for the coaching
+    /// logs. It keeps every operation in memory ([`ProjectFolder::all_ops`]).
+    pub fn create_program(
+        path: &Path,
+        name: &str,
+        me: &Identity,
+        clock: &dyn Clock,
+    ) -> Result<Self> {
+        let mut pf = Self::create_with(path, name, me, clock, None, |id| {
+            utsim_lss_core::programa::create(id, name)
+        })?;
+        pf.full = true;
+        let d = pf.root.join(crate::program::COACHING);
+        fs::create_dir_all(&d).map_err(|e| Error::io(&d, e))?;
+        Ok(pf)
+    }
+
+    /// Creates the coaching log folder of a belt (main entity `diario_mentoria`).
+    pub fn create_coaching(
+        path: &Path,
+        belt: Id,
+        program: Id,
+        me: &Identity,
+        clock: &dyn Clock,
+    ) -> Result<Self> {
+        let title = format!("Mentoria {}", belt.short());
+        let mut pf = Self::create_with(path, &title, me, clock, None, |id| {
+            let r = EntityRef::new(utsim_lss_core::Kind::CoachingLog, id);
+            vec![
+                Edit::new(r, utsim_lss_core::mentoria::fields::BELT, belt.to_string()),
+                Edit::new(
+                    r,
+                    utsim_lss_core::mentoria::fields::PROGRAM,
+                    program.to_string(),
+                ),
+            ]
+        })?;
+        pf.full = true;
+        Ok(pf)
+    }
+
+    /// Opens a folder keeping every operation in memory, without snapshots nor cache.
+    pub fn open_full(path: &Path, me: &Identity) -> Result<Self> {
+        let root = path.to_path_buf();
+        let mpath = root.join(MANIFEST);
+        if !mpath.is_file() {
+            return Err(Error::NotAProject(root));
+        }
+        let text = fsio::read_text(&mpath)?;
+        let manifest = format::read_manifest(&text).map_err(|e| Error::format(&mpath, e))?;
+        let mut pf = Self::empty(root, manifest, me.clone(), None);
+        pf.full = true;
+        pf.load_all();
+        Ok(pf)
+    }
+
+    /// Every operation, in order. Complete only for a folder opened with
+    /// [`ProjectFolder::open_full`] or created as a program or coaching log; otherwise the
+    /// operations after the snapshot in use.
+    pub fn all_ops(&self) -> impl Iterator<Item = &Op> {
+        self.journal.tail()
+    }
+
+    /// The kind of the main entity (the manifest id).
+    pub fn main_kind(&self) -> Option<utsim_lss_core::Kind> {
+        self.state().entity(self.manifest.id).map(|e| e.kind)
+    }
+
+    /// Whether this folder is a program (its main entity is a `programa`).
+    pub fn is_program(&self) -> bool {
+        self.main_kind() == Some(utsim_lss_core::Kind::Program)
     }
 
     /// Opens an existing project folder. `cache_dir` is the local cache (outside the synced
@@ -438,7 +516,7 @@ impl ProjectFolder {
             report.full_replay = true;
         }
         report.pending = self.pending.len();
-        if self.journal.tail_len() >= SNAPSHOT_EVERY {
+        if !self.full && self.journal.tail_len() >= SNAPSHOT_EVERY {
             report.snapshot = Some(self.write_snapshot(clock)?);
             // Following refreshes keep the in-memory journal; the snapshot serves the next
             // opening (here or elsewhere).
