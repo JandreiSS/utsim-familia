@@ -913,6 +913,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         on_entry: None,
         visual: None,
         access: None,
+        person: None,
     })
 }
 

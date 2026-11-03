@@ -41,6 +41,8 @@ pub enum State {
     WaitingRepair,
     /// In preventive maintenance ([`crate::maintenance`]).
     Maintenance,
+    /// A person pausing to recover from fatigue ([`crate::person`]).
+    Resting,
 }
 
 impl State {
@@ -66,6 +68,7 @@ impl State {
             State::Stopped => "stopped",
             State::WaitingRepair => "waiting_repair",
             State::Maintenance => "maintenance",
+            State::Resting => "resting",
         }
     }
 }

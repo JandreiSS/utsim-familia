@@ -8,7 +8,8 @@ use utsim_core::{
 };
 
 /// Operators a processor needs (phase 4, contract): `count` members of `team`
-/// (a transporter or a dispatcher), during setup and/or processing.
+/// (a transporter or a dispatcher), during setup and/or processing. With `requires`,
+/// only people whose profile lists that skill may operate (a dispatcher skips the others).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OperatorUse {
     pub team: String,
@@ -18,6 +19,9 @@ pub struct OperatorUse {
     pub setup: bool,
     #[serde(default = "yes")]
     pub process: bool,
+    /// Skill the operators must have (absent: anyone of the team).
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "exige")]
+    pub requires: Option<String>,
 }
 
 fn one() -> usize {
@@ -174,8 +178,16 @@ impl Processor {
                 PROCESS_DONE
             };
             let me = cx.me();
+            let skill = op.requires.as_deref();
             let requests = (0..op.count)
-                .map(|_| cx.request_task(team, TaskKind::Operate { station: me, tag }, 0))
+                .map(|_| {
+                    cx.request_task_requiring(
+                        team,
+                        TaskKind::Operate { station: me, tag },
+                        0,
+                        skill,
+                    )
+                })
                 .collect();
             self.pending.push(Pending {
                 item,
@@ -202,10 +214,20 @@ impl Processor {
         } else {
             (&self.process, PROCESS_DONE)
         };
-        let t = match elapsed {
+        let mut t = match elapsed {
             Some(e) => cx.sample_residual(dist, e),
             None => cx.sample_duration(dist),
         };
+        // People operating: their pace (fatigue, learning, individual pace).
+        if let Some((_, crew)) = self.held.iter().find(|(i, _)| *i == item) {
+            let crew: Vec<BlockId> = crew.iter().map(|(_, b)| *b).collect();
+            let task = if stage == Phase::Setup {
+                format!("{}:setup", cx.name())
+            } else {
+                cx.name().to_string()
+            };
+            t = cx.person_time(&crew, &task, t);
+        }
         self.start_timer(cx, item, tag, t);
     }
 

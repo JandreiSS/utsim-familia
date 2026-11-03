@@ -34,6 +34,11 @@ pub enum DispatchRule {
 /// order, further waiting `Transport` tasks that start at the same block, up to its
 /// capacity, so it can serve them in one trip.
 ///
+/// **Skills.** A request that needs a skill ([`Ctx::qualified`]) goes only to members
+/// whose person profile lists it: the rules choose among the qualified free members, and
+/// a member that reports idle takes the first waiting task it is qualified for. Without
+/// skills this is exactly the behaviour above.
+///
 /// **Position protocol.** Members send `MSG_POSITION_X/Y/Z` (coordinate as
 /// `f64::to_bits`) before `MSG_IDLE`; until the first report the dispatcher uses the
 /// member's block position. A member that is broken or off shift still counts as
@@ -86,7 +91,11 @@ impl Dispatcher {
         let n = self.team.len();
         // A member that ends its shift with `Finish` takes no new work until it is back.
         let open: Vec<bool> = (0..n)
-            .map(|m| self.free[m] && !cx.away_on_finish(self.team[m]))
+            .map(|m| {
+                self.free[m]
+                    && !cx.away_on_finish(self.team[m])
+                    && cx.qualified(self.team[m], request)
+            })
             .collect();
         match self.rule {
             DispatchRule::FirstAvailable => open.iter().position(|&f| f),
@@ -163,7 +172,9 @@ impl Behavior for Dispatcher {
             MSG_POSITION_Z => self.positions[member][2] = f64::from_bits(payload),
             MSG_IDLE => {
                 self.capacity[member] = (payload as usize).max(1);
-                match self.queue.pop_front() {
+                let me = self.team[member];
+                let first = self.queue.iter().position(|q| cx.qualified(me, q));
+                match first.and_then(|i| self.queue.remove(i)) {
                     Some(head) => {
                         self.assign(cx, member, head);
                         if let TaskKind::Transport { from: origin, .. } = head.kind {
@@ -173,7 +184,7 @@ impl Behavior for Dispatcher {
                                 let same = matches!(
                                     self.queue[i].kind,
                                     TaskKind::Transport { from: f, .. } if f == origin
-                                );
+                                ) && cx.qualified(me, &self.queue[i]);
                                 if same {
                                     let extra = self.queue.remove(i).expect("index in range");
                                     cx.forward_task(self.team[member], extra);

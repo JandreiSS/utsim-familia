@@ -25,6 +25,7 @@ use crate::task::{
 use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
 mod maint;
+mod person;
 
 #[derive(Clone, Debug)]
 pub struct RunConfig {
@@ -182,6 +183,8 @@ struct BlockRuntime {
     maint: Option<Box<maint::MaintState>>,
     /// A preventive is due: the inputs are closed and the block finishes its work.
     draining: bool,
+    /// Person profile (fatigue, learning, skills...); `None` = not a person.
+    person: Option<Box<person::PersonState>>,
 }
 
 /// Work that involves another block's hooks, run by the kernel after the current
@@ -258,6 +261,8 @@ pub struct Core {
     calendar: Time,
     /// Blocks finishing their work before a preventive maintenance.
     draining: Vec<BlockId>,
+    /// Skill each open request needs ([`Ctx::request_task_requiring`]), by request id.
+    required: BTreeMap<u64, String>,
 }
 
 /// Measures, per item, the time from leaving `from` to entering `to`; each measurement
@@ -340,6 +345,9 @@ impl Core {
         self.emit(TraceEvent::State { block: b.0, state });
         if self.blocks[b.0].maint.is_some() {
             self.maint_refresh(b);
+        }
+        if self.blocks[b.0].person.is_some() {
+            self.person_refresh(b);
         }
     }
 
@@ -877,6 +885,9 @@ const MAINTENANCE: u8 = 8;
 /// Offset of the maintenance random streams (preventive durations).
 const MAINTENANCE_STREAMS: u64 = 1 << 41;
 
+/// Offset of the person random streams (individual pace).
+const PERSON_STREAMS: u64 = 1 << 42;
+
 /// A question the simulation asks an external agent (reinforcement learning,
 /// a human): pick one of `options`. The run pauses until [`Simulation::decide`].
 #[derive(Clone, Debug, PartialEq)]
@@ -940,6 +951,7 @@ impl Simulation {
                 meters: Vec::new(),
                 calendar: 0.0,
                 draining: Vec::new(),
+                required: BTreeMap::new(),
             },
             behaviors: Vec::new(),
             config,
@@ -997,6 +1009,7 @@ impl Simulation {
             port_script: None,
             maint: None,
             draining: false,
+            person: None,
         });
         self.behaviors.push(behavior);
         id
@@ -1177,6 +1190,9 @@ impl Simulation {
                 notes.push(format!("{name}: {note}"));
             }
             if let Some(note) = self.maint_save(BlockId(b), &mut state) {
+                notes.push(format!("{name}: {note}"));
+            }
+            if let Some(note) = self.person_save(BlockId(b), &mut state) {
                 notes.push(format!("{name}: {note}"));
             }
             state.items.iter_mut().for_each(ItemState::tidy);
@@ -1383,6 +1399,11 @@ impl Simulation {
             } = self;
             behaviors[b].reset(&mut Ctx { core, me });
             self.flush_doomed();
+        }
+        for (b, state) in states.iter().enumerate() {
+            if self.core.blocks[b].person.is_some() {
+                self.person_start(BlockId(b), state.as_ref());
+            }
         }
         for (b, state) in states.iter().enumerate() {
             if let Some(state) = state {
@@ -1697,6 +1718,9 @@ impl Simulation {
         if let Some(p) = self.maint_check_state(b, state) {
             problems.push(p);
         }
+        if let Some(p) = self.person_check_state(b, state) {
+            problems.push(p);
+        }
         let rt = &self.core.blocks[b.0];
         if state.off_shift.is_some() && rt.shifts.is_none() {
             problems.push("'off_shift' exige turnos (shifts) no objeto".to_string());
@@ -1800,6 +1824,7 @@ impl Simulation {
                         m.reset_stats(now);
                     }
                 });
+                self.core.person_warmup();
                 for b in 0..self.behaviors.len() {
                     let Simulation {
                         core, behaviors, ..
@@ -1841,6 +1866,9 @@ impl Simulation {
                 tag,
                 payload,
             } => {
+                if tag == crate::task::MSG_ARRIVED && !self.core.required.is_empty() {
+                    self.core.required.remove(&payload);
+                }
                 let for_maintenance = tag == crate::task::MSG_ARRIVED
                     && self.core.blocks[to.0]
                         .maint
@@ -2206,6 +2234,7 @@ impl Simulation {
                     .custom_metrics(now)
                     .into_iter()
                     .chain(self.maint_metrics(BlockId(i), now))
+                    .chain(self.person_metrics(BlockId(i), now))
                     .collect(),
                 series: rt.series.clone(),
             })

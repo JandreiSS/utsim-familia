@@ -45,6 +45,7 @@ pub fn state_label(state: Option<State>) -> &'static str {
         Some(State::Stopped) => "parado (comando externo)",
         Some(State::WaitingRepair) => "aguardando técnico",
         Some(State::Maintenance) => "em manutenção preventiva",
+        Some(State::Resting) => "em pausa (fadiga)",
     }
 }
 
