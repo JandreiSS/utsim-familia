@@ -78,8 +78,8 @@ use crate::style::{self, Shape};
 use crate::timeline::{FluidSample, ItemPos, Timeline, TransitSetting, TravelLeg};
 use crate::turning::{self, Neighbour};
 use crate::{
-    AreaShape, EntityId, EntityKind, Frame, Header, ItemTypeStyle, MobileRole, Motion, PROTOCOL,
-    Pose, Segment, StaticEntity, StaticScene,
+    AreaShape, EntityId, EntityKind, Frame, Header, ItemTypeStyle, LinkLine, MobileRole, Motion,
+    PROTOCOL, Pose, Segment, StaticEntity, StaticScene,
 };
 
 /// Edge of the default item cube, metres.
@@ -244,6 +244,8 @@ pub struct Scene {
     item_types: Vec<ItemTypeStyle>,
     /// Floor areas of the model (empty without a model or without areas).
     areas: Vec<AreaShape>,
+    /// Team and request links of the model (empty without a model).
+    links: Vec<LinkLine>,
 }
 
 impl Scene {
@@ -431,6 +433,7 @@ impl Scene {
                     })
                     .collect()
             }),
+            links: opts.model.map_or(Vec::new(), crate::links::team_links),
         }
     }
 
@@ -987,6 +990,7 @@ impl Scene {
             bounds: (min, max),
             item_types: self.item_types.clone(),
             areas: self.areas.clone(),
+            links: self.links.clone(),
         }
     }
 

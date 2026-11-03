@@ -105,7 +105,7 @@ fn num(v: f64) -> String {
 
 impl Model {
     /// Position of a place given as a point or as an object or area name.
-    pub(crate) fn place_of(&self, at: Option<[f64; 3]>, object: Option<&str>) -> Option<[f64; 3]> {
+    pub fn place_of(&self, at: Option<[f64; 3]>, object: Option<&str>) -> Option<[f64; 3]> {
         at.or_else(|| {
             let name = object?;
             self.objects

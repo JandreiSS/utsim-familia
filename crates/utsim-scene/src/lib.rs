@@ -47,6 +47,7 @@ pub mod geometry;
 pub mod handling;
 pub mod heatmap;
 pub mod layout;
+pub mod links;
 pub mod live;
 pub mod network;
 #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
@@ -57,6 +58,7 @@ pub mod tokens;
 pub mod turning;
 
 pub use compose::{ItemPlacement, MobilePose, Scene, SceneOptions};
+pub use links::{LinkKind, LinkLine, team_links};
 pub use live::LiveScene;
 
 /// Stream/protocol identifier. Bump on any incompatible change to the types below.
@@ -195,6 +197,10 @@ pub struct StaticScene {
     /// Named floor areas of the model (waiting areas, break rooms), drawn on the floor.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub areas: Vec<AreaShape>,
+    /// Team and request links (dispatcher → member, object → carrier, processor →
+    /// operators, object → repair crew, member → home and break place), see [`links`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<LinkLine>,
 }
 
 /// A named floor area (the model's `areas`).
