@@ -31,6 +31,7 @@ default-members = [
     "crates/utsim-script",
     "crates/utsim-stats",
     "crates/utsim-twin",
+    "crates/utsim-ui-tema",
     "crates/utsim-web",
 ]
 
@@ -64,6 +65,7 @@ utsim-diagram = { path = "crates/utsim-diagram" }
 utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }
 utsim-twin = { path = "crates/utsim-twin" }
+utsim-ui-tema = { path = "crates/utsim-ui-tema" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }

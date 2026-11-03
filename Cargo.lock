@@ -7764,6 +7764,7 @@ dependencies = [
 name = "utsim-godot"
 version = "0.1.0"
 dependencies = [
+ "egui",
  "godot",
  "ron 0.8.1",
  "serde",
@@ -7779,6 +7780,7 @@ dependencies = [
  "utsim-pert",
  "utsim-scene",
  "utsim-stats",
+ "utsim-ui-tema",
 ]
 
 [[package]]
@@ -7995,6 +7997,13 @@ dependencies = [
  "utsim-model",
  "utsim-quality",
  "utsim-stats",
+]
+
+[[package]]
+name = "utsim-ui-tema"
+version = "0.1.0"
+dependencies = [
+ "egui",
 ]
 
 [[package]]
