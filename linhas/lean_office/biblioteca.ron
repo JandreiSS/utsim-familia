@@ -1,0 +1,240 @@
+// Biblioteca da linha Lean Office: as predefinições de objetos de escritório sobre os
+// objetos comuns do UTSim (docs/plano_linhas_especializadas.md, seção 1.3).
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name}
+// é o nome escolhido para o objeto; as outras chaves são os campos mostrados, com o valor
+// padrão em RON. Colocar uma predefinição cria objetos comuns, marcados com
+// preset: "lean_office/<id>", e o modelo continua legível e editável fora da linha.
+//
+// Unidade de tempo: minuto. Distâncias: metro (pessoas a 72 m/min, 1,2 m/s).
+//
+// Convenções de rótulos dos casos, lidas pelos indicadores da linha:
+// - prioridade: número, maior é mais urgente (caixa de entrada com order: Desc("prioridade"));
+// - sla: prazo em minutos a partir da entrada; a primeira caixa de entrada grava
+//   prazo = instante + sla (caixa com order: Asc("prazo") atende o prazo mais curto);
+// - erro: 1 quando o caso tem um erro ainda não percebido; erros_<etapa>: quantos erros a
+//   etapa gerou no caso (o %C&A da etapa).
+Library(
+    line: "lean_office",
+    name: "Lean Office",
+    description: "Escritórios e processos administrativos: casos, caixas de entrada, postos de trabalho, aprovações, verificações, tramitações e esperas por informação.",
+    models: [
+        (
+            file: "examples/aprovacao_de_compras.ron",
+            name: "Aprovação de compras",
+            description: "Três níveis de aprovação por valor, devoluções, conferência com erro e reunião semanal do comitê.",
+        ),
+    ],
+    presets: [
+        (
+            id: "entrada",
+            name: "Entrada de pedidos",
+            icon: "bandeja_entrada",
+            role: Entry,
+            description: "Onde os casos chegam: intervalo entre pedidos, rótulos (prioridade, sla, valor) e horário.",
+            name_base: "entrada",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre pedidos (min)", default: "Exp(mean: 30.0)"),
+                (key: "rotulos", label: "Rótulos do caso", default: "{\"prioridade\": Discrete([(1.0, 0.8), (2.0, 0.2)]), \"sla\": Const(2400.0)}",
+                 help: "prioridade (maior é mais urgente) e sla (prazo em minutos) são lidos pelos indicadores"),
+                (key: "expediente", label: "Horário de chegada", default: "None",
+                 help: "Calendar(\"expediente\") para chegar só no horário comercial"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: ${rotulos}),
+                    shifts: ${expediente}, symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "caixa_entrada",
+            name: "Caixa de entrada",
+            icon: "bandeja_pilha",
+            role: Inbox,
+            description: "Casos parados à espera da próxima etapa; ordem por chegada, prioridade ou prazo.",
+            name_base: "caixa",
+            fields: [
+                (key: "ordem", label: "Ordem", default: "None",
+                 help: "None (chegada), Desc(\"prioridade\") ou Asc(\"prazo\")"),
+                (key: "limite", label: "Limite de casos", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${limite}, order: ${ordem}), symbol: "espera",
+                    on_entry: "if label(item, \"prazo\", -1.0) < 0.0 && label(item, \"sla\", -1.0) >= 0.0 { item.prazo = now + item.sla; }")"#,
+            ],
+        ),
+        (
+            id: "posto",
+            name: "Posto de trabalho",
+            icon: "mesa_computador",
+            role: Work,
+            description: "Etapa de trabalho feita por uma pessoa da equipe; %C&A é a fração dos casos que saem completos e corretos.",
+            name_base: "posto",
+            fields: [
+                (key: "tempo", label: "Tempo de trabalho, touch (min)", default: "Triangular(min: 10.0, mode: 20.0, max: 40.0)"),
+                (key: "equipe", label: "Equipe", default: "\"equipe\""),
+                (key: "ca", label: "%C&A da etapa (0 a 1)", default: "1.0"),
+                (key: "mesas", label: "Casos em trabalho ao mesmo tempo (mesas)", default: "1",
+                 help: "os outros casos esperam na caixa de entrada antes do posto"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${mesas}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao",
+                    on_entry: "if random() > ${ca} { item.erro = 1.0; item.erros_${name} = label(item, \"erros_${name}\", 0.0) + 1.0; }")"#,
+            ],
+        ),
+        (
+            id: "aprovacao",
+            name: "Aprovação",
+            icon: "mesa_carimbo",
+            role: Approval,
+            description: "Aprovador decide: a primeira saída é a aprovação, a segunda a devolução (ligue nessa ordem).",
+            name_base: "aprovacao",
+            fields: [
+                (key: "tempo", label: "Tempo de análise (min)", default: "Triangular(min: 5.0, mode: 10.0, max: 20.0)"),
+                (key: "aprovador", label: "Aprovador (equipe ou pessoa)", default: "\"aprovadores\""),
+                (key: "aprova", label: "Peso da aprovação", default: "0.9"),
+                (key: "devolve", label: "Peso da devolução", default: "0.1"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo},
+                    operators: Some(OperatorUse(team: ${aprovador}))),
+                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao")"#,
+            ],
+        ),
+        (
+            id: "verificacao",
+            name: "Verificação",
+            icon: "lupa",
+            role: Check,
+            description: "Confere o caso e percebe os erros das etapas anteriores: a primeira saída segue, a segunda devolve.",
+            name_base: "verificacao",
+            fields: [
+                (key: "tempo", label: "Tempo de conferência (min)", default: "Triangular(min: 3.0, mode: 5.0, max: 10.0)"),
+                (key: "equipe", label: "Equipe", default: "\"equipe\""),
+                (key: "percebe", label: "Fração dos erros percebidos (0 a 1)", default: "1.0"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}))),
+                    output: ByLabel("rota"), symbol: "inspecao",
+                    on_entry: "item.rota = 1.0; if label(item, \"erro\", 0.0) >= 1.0 && random() < ${percebe} { item.erro = 0.0; item.rota = 2.0; }")"#,
+            ],
+        ),
+        (
+            id: "tramitacao",
+            name: "Tramitação",
+            icon: "envelope_seta",
+            role: Transit,
+            description: "Passagem entre departamentos (malote, e-mail, sistema): tempo de passagem, sem pessoa.",
+            name_base: "tramitacao",
+            fields: [
+                (key: "tempo", label: "Tempo de passagem (min)", default: "Uniform(min: 30.0, max: 240.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: 100000, process: ${tempo}), symbol: "transporte")"#,
+            ],
+        ),
+        (
+            id: "espera_informacao",
+            name: "Espera por informação",
+            icon: "relogio_balao",
+            role: WaitInfo,
+            description: "O caso espera a resposta de fora (cliente, fornecedor, outro setor).",
+            name_base: "espera_info",
+            fields: [
+                (key: "tempo", label: "Tempo de resposta (min)", default: "Exp(mean: 480.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: 100000, process: ${tempo}), symbol: "espera")"#,
+            ],
+        ),
+        (
+            id: "lote",
+            name: "Agrupamento em lote",
+            icon: "pilha_amarrada",
+            role: Batch,
+            description: "Junta os casos e libera em lote (papelada levada de uma vez).",
+            name_base: "lote",
+            fields: [
+                (key: "tamanho", label: "Tamanho do lote", default: "10"),
+                (key: "espera_maxima", label: "Espera máxima do lote (min, 0 = sem limite)", default: "480.0"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(batch: Some(Batch(size: ${tamanho}, max_wait: ${espera_maxima}))), symbol: "espera")"#,
+            ],
+        ),
+        (
+            id: "reuniao",
+            name: "Reunião ou comitê",
+            icon: "mesa_redonda",
+            role: Meeting,
+            description: "Os casos esperam na pauta e só são vistos no horário da reunião; primeira saída aprova, segunda devolve.",
+            name_base: "comite",
+            fields: [
+                (key: "tempo", label: "Tempo por caso na reunião (min)", default: "Exp(mean: 10.0)"),
+                (key: "horario", label: "Horário da reunião (turnos)",
+                 default: "(period: 10080.0, off: [(start: 0.0, duration: 3720.0), (start: 3840.0, duration: 6240.0)])",
+                 help: "padrão: quartas-feiras das 14h às 16h (semana de 10080 min começando na segunda 0h)"),
+                (key: "aprova", label: "Peso da aprovação", default: "0.85"),
+                (key: "devolve", label: "Peso da devolução", default: "0.15"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), shifts: ${horario},
+                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao")"#,
+                r#"(name: "${name}_pauta", kind: Queue(), position: (-2.0, 0.0, 0.0), symbol: "espera")"#,
+            ],
+            connections: [("${name}_pauta", "${name}")],
+        ),
+        (
+            id: "equipe",
+            name: "Equipe",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Grupo de pessoas que atende os postos; começa com duas pessoas (acrescente outras com a predefinição Pessoa).",
+            name_base: "equipe",
+            fields: [
+                (key: "regra", label: "Regra de escolha da pessoa", default: "FirstAvailable",
+                 help: "FirstAvailable, RoundRobin ou Nearest"),
+                (key: "expediente", label: "Horário das pessoas", default: "None",
+                 help: "Calendar(\"expediente\") para trabalhar só no horário comercial"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: ${regra}))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 72.0), position: (0.0, 1.5, 0.0),
+                    shifts: ${expediente}, visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "lean_office/pessoa")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 72.0), position: (0.0, -1.5, 0.0),
+                    shifts: ${expediente}, visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "lean_office/pessoa")"#,
+            ],
+        ),
+        (
+            id: "pessoa",
+            name: "Pessoa",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Analista, aprovador: anda a 1,2 m/s até o posto; habilidades e horário.",
+            name_base: "pessoa",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[]"),
+                (key: "expediente", label: "Horário", default: "None",
+                 help: "Calendar(\"expediente\") para trabalhar só no horário comercial"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 72.0), shifts: ${expediente},
+                    visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})))"#,
+            ],
+        ),
+        (
+            id: "conclusao",
+            name: "Conclusão",
+            icon: "pasta_arquivada",
+            role: Done,
+            description: "Onde os casos terminam; use uma por desfecho (concluído, cancelado).",
+            name_base: "concluido",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+    ],
+)

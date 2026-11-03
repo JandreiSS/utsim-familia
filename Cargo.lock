@@ -7641,6 +7641,7 @@ dependencies = [
  "utsim-edit",
  "utsim-emu",
  "utsim-fit",
+ "utsim-linhas",
  "utsim-model",
  "utsim-opt",
  "utsim-pert",
@@ -7813,6 +7814,18 @@ dependencies = [
  "ureq",
  "zeroize",
  "zip 2.6.1",
+]
+
+[[package]]
+name = "utsim-linhas"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "utsim-core",
+ "utsim-diagram",
+ "utsim-edit",
+ "utsim-model",
 ]
 
 [[package]]
