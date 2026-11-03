@@ -454,9 +454,73 @@ pub fn t_ppf(p: f64, df: f64) -> f64 {
     brent(|t| t_cdf(t, df) - p, 0.0, hi, 1e-14 * hi).unwrap_or(f64::NAN)
 }
 
+/// χ² CDF with `k` degrees of freedom, `P(k/2, x/2)` (0 for `x ≤ 0`).
+pub fn chi2_cdf(x: f64, k: f64) -> f64 {
+    if x <= 0.0 {
+        0.0
+    } else {
+        gamma_p(k / 2.0, x / 2.0)
+    }
+}
+
+/// Upper tail of the χ² distribution, `P(X > x) = Q(k/2, x/2)` (the p-value of a χ²
+/// test; computed from `Q` directly, so small p-values keep their digits).
+pub fn chi2_sf(x: f64, k: f64) -> f64 {
+    if x.is_nan() || k.is_nan() || k <= 0.0 {
+        return f64::NAN;
+    }
+    if x <= 0.0 {
+        1.0
+    } else if x.is_infinite() {
+        0.0
+    } else {
+        gamma_q(k / 2.0, x / 2.0)
+    }
+}
+
+/// χ² quantile with `k > 0` degrees of freedom, `0 < p < 1` (NaN outside).
+pub fn chi2_ppf(p: f64, k: f64) -> f64 {
+    if !(p > 0.0 && p < 1.0) || k <= 0.0 {
+        return f64::NAN;
+    }
+    let mut hi = (k + 10.0 * (2.0 * k).sqrt()).max(10.0);
+    while chi2_cdf(hi, k) < p {
+        hi *= 2.0;
+    }
+    brent(|x| chi2_cdf(x, k) - p, 0.0, hi, 1e-12).unwrap_or(f64::NAN)
+}
+
+/// Quantile of the beta distribution `Beta(a, b)` (0 for `p ≤ 0`, 1 for `p ≥ 1`).
+pub fn beta_ppf(p: f64, a: f64, b: f64) -> f64 {
+    if p <= 0.0 {
+        return 0.0;
+    }
+    if p >= 1.0 {
+        return 1.0;
+    }
+    brent(|x| beta_inc(a, b, x) - p, 0.0, 1.0, 1e-13).unwrap_or(f64::NAN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chi2_against_published_tables() {
+        // χ² quantiles printed in every statistics table (e.g. NIST/SEMATECH e-Handbook,
+        // section 1.3.6.7.4): χ²(0.95; 1) = 3.841, χ²(0.975; 10) = 20.483, χ²(0.025; 10) = 3.247.
+        assert!((chi2_ppf(0.95, 1.0) - 3.841).abs() < 5e-4);
+        assert!((chi2_ppf(0.975, 10.0) - 20.483).abs() < 5e-4);
+        assert!((chi2_ppf(0.025, 10.0) - 3.247).abs() < 5e-4);
+        // χ²₂ is exponential with mean 2: P(X > x) = e^{-x/2}.
+        close(chi2_sf(3.0, 2.0), (-1.5f64).exp(), 1e-13);
+        close(chi2_sf(80.0, 2.0), (-40.0f64).exp(), 1e-10);
+        close(chi2_cdf(5.0, 4.0) + chi2_sf(5.0, 4.0), 1.0, 1e-14);
+        assert_eq!(chi2_sf(0.0, 3.0), 1.0);
+        assert!(chi2_sf(1.0, 0.0).is_nan());
+        // Beta(2, 1) has CDF x², so its quantile is √p.
+        close(beta_ppf(0.36, 2.0, 1.0), 0.6, 1e-12);
+    }
 
     fn close(a: f64, b: f64, tol: f64) {
         assert!((a - b).abs() <= tol * (1.0 + b.abs()), "{a} vs {b}");

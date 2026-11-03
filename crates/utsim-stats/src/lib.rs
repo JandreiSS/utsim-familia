@@ -12,11 +12,25 @@
 //! - [`compare`]: several scenarios at once (one-way ANOVA, Tukey's HSD, Bonferroni
 //!   paired comparisons under common random numbers);
 //! - [`range`]: the studentized range distribution behind Tukey's test;
-//! - [`correlation`]: Pearson and Spearman correlations and their matrix.
+//! - [`correlation`]: Pearson and Spearman correlations and their matrix;
+//! - [`descriptive`]: summary of a sample (quartiles, shape, mode, intervals of the
+//!   mean, standard deviation and median) and the data of its graphs (histogram,
+//!   box plot, normal probability plot, run chart);
+//! - [`hypothesis`]: t tests (one sample, Welch, pooled, paired), one-way ANOVA with
+//!   Tukey, χ² of independence and goodness of fit, Fisher's exact test, one and two
+//!   proportions;
+//! - [`nonparametric`]: Mann-Whitney and Wilcoxon signed-rank tests, exact for small
+//!   samples without ties.
+//!
+//! The statistical tests of the Lean Six Sigma plan (`docs/plano_lean_seis_sigma.md`,
+//! phase L3) live here; control charts, capability and MSA are in `utsim-quality`.
 
 pub mod compare;
 pub mod correlation;
+pub mod descriptive;
+pub mod hypothesis;
 pub mod little;
+pub mod nonparametric;
 pub mod precision;
 pub mod range;
 pub mod special;
