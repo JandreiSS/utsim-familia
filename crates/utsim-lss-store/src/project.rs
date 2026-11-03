@@ -624,6 +624,76 @@ impl ProjectFolder {
         presence::others(&all, self.me.person, now_ms)
     }
 
+    /// Writes a data file into `dados/<sha256>.<ext>` (once per content); returns the file
+    /// name and the hash of the content.
+    pub fn add_data(&self, bytes: &[u8], ext: &str) -> Result<(String, String)> {
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        let hash: String = hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let name = format!("{hash}.{ext}");
+        let target = self.root.join(DATA).join(&name);
+        if !target.is_file() {
+            fs::create_dir_all(self.root.join(DATA)).map_err(|e| Error::io(&self.root, e))?;
+            fsio::write_new(&target, bytes)?;
+        }
+        Ok((name, hash))
+    }
+
+    /// The text of a data file of `dados/`.
+    pub fn read_data(&self, file: &str) -> Result<String> {
+        if file.contains(['/', '\\']) || file.contains("..") {
+            return Err(Error::Invalid(format!("nome de arquivo inválido: {file}")));
+        }
+        fsio::read_text(&self.root.join(DATA).join(file))
+    }
+
+    /// Where a data file of `dados/` lives (to open it outside the app).
+    pub fn data_path(&self, file: &str) -> PathBuf {
+        self.root.join(DATA).join(file)
+    }
+
+    /// Copies a model into `modelos/<name>` (a new name when another content is there) and
+    /// returns its path relative to the project folder.
+    pub fn copy_model(&self, source: &Path, text: &str) -> Result<String> {
+        let stem = source.file_stem().map_or_else(
+            || "modelo".to_string(),
+            |s| s.to_string_lossy().into_owned(),
+        );
+        let dir = self.root.join(MODELS);
+        fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+        for i in 0.. {
+            let name = if i == 0 {
+                format!("{stem}.ron")
+            } else {
+                format!("{stem}-{i}.ron")
+            };
+            let target = dir.join(&name);
+            if target.is_file() {
+                if fsio::read_text(&target).ok().as_deref() == Some(text) {
+                    return Ok(format!("{MODELS}/{name}"));
+                }
+                continue;
+            }
+            fsio::write_new(&target, text.as_bytes())?;
+            return Ok(format!("{MODELS}/{name}"));
+        }
+        unreachable!()
+    }
+
+    /// The absolute path of a model link's path (relative to the project, or absolute).
+    pub fn model_path(&self, rel: &str) -> PathBuf {
+        let p = Path::new(rel);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            self.root.join(p)
+        }
+    }
+
     /// Copies a file into `anexos/<sha256>.<ext>` (once per content) and returns its name.
     pub fn add_attachment(&self, source: &Path) -> Result<String> {
         let mut f = fs::File::open(source).map_err(|e| Error::io(source, e))?;
