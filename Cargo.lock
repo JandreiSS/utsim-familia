@@ -7673,6 +7673,7 @@ dependencies = [
  "serde_json",
  "utsim-core",
  "utsim-model",
+ "utsim-pert",
  "utsim-scene",
  "utsim-stats",
  "zip 2.6.1",

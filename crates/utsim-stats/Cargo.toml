@@ -1,6 +1,6 @@
 [package]
 name = "utsim-stats"
-description = "Output analysis for UTSim: confidence intervals at any level, warm-up detection, precision, batch means and Little's law"
+description = "Output analysis for UTSim: confidence intervals at any level, warm-up detection, precision, batch means, Little's law, scenario comparison (ANOVA, Tukey, Bonferroni) and correlation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

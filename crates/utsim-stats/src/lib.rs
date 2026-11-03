@@ -8,10 +8,17 @@
 //!   [`Summary::from_samples`] at the default 95%;
 //! - [`warmup`]: Welch's moving average and MSER-5;
 //! - [`precision`]: replications needed for a target half-width, batch means;
-//! - [`little`]: Little's law `L = λ·W` as a consistency check.
+//! - [`little`]: Little's law `L = λ·W` as a consistency check;
+//! - [`compare`]: several scenarios at once (one-way ANOVA, Tukey's HSD, Bonferroni
+//!   paired comparisons under common random numbers);
+//! - [`range`]: the studentized range distribution behind Tukey's test;
+//! - [`correlation`]: Pearson and Spearman correlations and their matrix.
 
+pub mod compare;
+pub mod correlation;
 pub mod little;
 pub mod precision;
+pub mod range;
 pub mod special;
 pub mod warmup;
 

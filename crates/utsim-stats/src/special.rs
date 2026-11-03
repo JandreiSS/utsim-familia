@@ -410,6 +410,27 @@ pub fn t_cdf(t: f64, df: f64) -> f64 {
     if t >= 0.0 { 1.0 - tail } else { tail }
 }
 
+/// Upper tail of the F distribution with `(d1, d2)` degrees of freedom:
+/// `P(F > f) = I_{d2/(d2 + d1 f)}(d2/2, d1/2)` (the p-value of an ANOVA). NaN for
+/// non-positive degrees of freedom.
+pub fn f_sf(f: f64, d1: f64, d2: f64) -> f64 {
+    if f.is_nan() || !(d1 > 0.0 && d2 > 0.0) {
+        return f64::NAN;
+    }
+    if f <= 0.0 {
+        return 1.0;
+    }
+    if f.is_infinite() {
+        return 0.0;
+    }
+    beta_inc(0.5 * d2, 0.5 * d1, d2 / (d2 + d1 * f))
+}
+
+/// CDF of the F distribution, `1 - f_sf`.
+pub fn f_cdf(f: f64, d1: f64, d2: f64) -> f64 {
+    1.0 - f_sf(f, d1, d2)
+}
+
 /// Student-t quantile: the `t` with `t_cdf(t, df) = p`, for `0 < p < 1` and `df > 0`
 /// (NaN outside). Found by Brent's method on the CDF, after bracketing.
 pub fn t_ppf(p: f64, df: f64) -> f64 {
@@ -510,6 +531,26 @@ mod tests {
             }
         }
         assert!(t_ppf(0.0, 3.0).is_nan() && t_ppf(0.5, 0.0).is_nan());
+    }
+
+    #[test]
+    fn f_distribution_against_published_tables() {
+        // Upper 5% and 1% points of F from the standard table: P(F > f) = alpha.
+        for (d1, d2, f05, f01) in [
+            (1.0, 10.0, 4.96, 10.04),
+            (2.0, 12.0, 3.89, 6.93),
+            (3.0, 16.0, 3.24, 5.29),
+            (4.0, 20.0, 2.87, 4.43),
+        ] {
+            assert!((f_sf(f05, d1, d2) - 0.05).abs() < 1e-3, "{d1},{d2}");
+            assert!((f_sf(f01, d1, d2) - 0.01).abs() < 3e-4, "{d1},{d2}");
+        }
+        // F(1, d) is t² with d degrees of freedom.
+        let t = t_ppf(0.975, 7.0);
+        close(f_sf(t * t, 1.0, 7.0), 0.05, 1e-12);
+        close(f_cdf(2.0, 3.0, 9.0) + f_sf(2.0, 3.0, 9.0), 1.0, 1e-15);
+        assert_eq!(f_sf(0.0, 2.0, 3.0), 1.0);
+        assert!(f_sf(1.0, 0.0, 3.0).is_nan());
     }
 
     #[test]
