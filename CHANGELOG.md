@@ -6,6 +6,10 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Adicionado
+- Estatística avançada, prioridade P1 (`docs/plano_analises_e_dinamica.md`, seção 2): crate `utsim-stats` com as funções especiais (movidas de `utsim-fit`, que as reexporta), o quantil t para qualquer nível de confiança, Welch e MSER-5, replicações necessárias para uma semiamplitude alvo, médias em lotes e a lei de Little. Comando `utsim analisar modelo.ron` com `--aquecimento`, `--precisao 2%`, `--lotes`, `--little` e `--gargalo-movel` (período ativo, gargalo único e compartilhado), `--confianca`, `--medida`, `--metrica` e `--json`. Os intervalos de 95% continuam idênticos.
+- Registro opcional do instante de cada observação de uma medida (`Simulation::keep_timed`, `Model::run_replications_timed`), ligado só pelas análises; sem ele nada muda nos resultados nem no JSON.
+
 ### Em desenvolvimento
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
 
