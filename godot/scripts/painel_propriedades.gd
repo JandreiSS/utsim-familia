@@ -23,6 +23,14 @@ signal gesture_ended
 signal reorder(index: int, delta: int)
 signal disconnect_output(to: String)
 signal action(path: String)
+## Real data in a distribution field (`dados_reais.gd`): `path` is the field inside the
+## selected object (`process`). `draft` holds the choices of the form.
+signal data_apply(path: String, draft: Dictionary)
+## The applied entry has no analysis yet (a file opened with data, an undo): fit it.
+signal data_analyze(path: String, draft: Dictionary)
+signal data_to_dist(path: String)
+signal data_report
+signal data_pick_file(path: String)
 
 const RED := Color(1.0, 0.45, 0.42)
 const YELLOW := Color(0.98, 0.80, 0.35)
@@ -31,6 +39,15 @@ const HELP := Color(0.65, 0.70, 0.78)
 const LABEL_WIDTH := 170
 
 var families := PackedStringArray()
+## Names of the families a field can be fixed to (`UtsimDocument.data_families`).
+var data_families := PackedStringArray()
+## `func(file: String) -> Array`: the columns of a data file.
+var columns_provider := Callable()
+## Drafts of the "Dados reais" forms by `object|path`, and the entry each was made from.
+var drafts := {}
+var drafts_seen := {}
+var _data_mode := {}
+var _requested := {}
 ## `func(asset: String) -> UtsimPlayback` (or null): the scene of the selected object
 ## drawn with `asset`, for the miniature.
 var look_provider := Callable()
@@ -389,6 +406,56 @@ func _dist(field: Dictionary) -> void:
 	var view: Dictionary = field.get("dist", {})
 	if view.is_empty():
 		return
+	var data: Dictionary = (_props.get("data", {}) as Dictionary).get(path, {})
+	if not data.is_empty():
+		var applied: bool = data.get("source", "") == "dados"
+		var key := draft_key(path)
+		if applied:
+			var seal := Label.new()
+			seal.name = widget_name(path) + "_selo"
+			seal.text = "dados"
+			seal.theme_type_variation = &"Selo"
+			seal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			seal.tooltip_text = "Este campo vem de dados reais: " + String(data.get("label", ""))
+			row.add_child(seal)
+		var indent_src := 14 * (int(field["depth"]) + 1)
+		var using_data: bool = applied or _data_mode.get(key, false)
+		var src_row := HBoxContainer.new()
+		var src_pad := Control.new()
+		src_pad.custom_minimum_size = Vector2(indent_src, 0)
+		src_row.add_child(src_pad)
+		var src_label := Label.new()
+		src_label.text = "Fonte"
+		src_label.theme_type_variation = &"RotuloCampo"
+		src_label.custom_minimum_size = Vector2(LABEL_WIDTH - indent_src, 0)
+		src_row.add_child(src_label)
+		var src := OptionButton.new()
+		src.name = widget_name(path) + "_fonte"
+		src.fit_to_longest_item = false
+		src.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		src.custom_minimum_size = Vector2(60, 0)
+		src.add_item("Distribuição")
+		src.add_item("Dados reais")
+		src.selected = 1 if using_data else 0
+		src.tooltip_text = "De onde vem a distribuição deste campo: parâmetros informados ou valores reais, ajustados automaticamente"
+		src.item_selected.connect(func(k):
+			if k == 1:
+				_data_mode[key] = true
+				redraw()
+			elif applied:
+				_data_mode.erase(key)
+				data_to_dist.emit(path)
+			else:
+				_data_mode.erase(key)
+				redraw())
+		src_row.add_child(src)
+		add_child(src_row)
+		if using_data:
+			var box := DadosReais.new()
+			box.name = widget_name(path) + "_dados"
+			add_child(box)
+			box.build(self, path, data, indent_src)
+			return
 	var family := OptionButton.new()
 	family.fit_to_longest_item = false
 	family.name = widget_name(path) + "_familia"
@@ -447,6 +514,39 @@ func _dist(field: Dictionary) -> void:
 	mh.add_child(mpad)
 	mh.add_child(mean)
 	box.add_child(mh)
+
+
+## Key of the draft of the data form of `path` (per selected object).
+func draft_key(path: String) -> String:
+	return "%s|%s" % [_props.get("name", ""), path]
+
+
+## Draws the panel again with the same properties (after a local choice).
+func redraw() -> void:
+	(func(): show_properties(_props, _extra)).call_deferred()
+
+
+## Asks for the analysis of an applied entry that has none yet (once per entry).
+func request_analysis(path: String, draft: Dictionary) -> void:
+	var k := draft_key(path)
+	if _requested.has(k):
+		return
+	_requested[k] = true
+	data_analyze.emit.call_deferred(path, draft)
+
+
+func clear_requests() -> void:
+	_requested.clear()
+
+
+## The file chosen in the dialog for the data of `path`.
+func set_data_file(path: String, file: String) -> void:
+	var k := draft_key(path)
+	if drafts.has(k):
+		drafts[k]["source"] = file
+		drafts[k]["column"] = ""
+		drafts[k]["origem"] = "arquivo"
+	redraw()
 
 
 ## The asset of the look: a search box and the library and catalogue entries, with the

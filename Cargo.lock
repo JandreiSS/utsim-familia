@@ -7700,6 +7700,7 @@ dependencies = [
  "utsim-assets",
  "utsim-core",
  "utsim-edit",
+ "utsim-fit",
  "utsim-flow",
  "utsim-look",
  "utsim-model",

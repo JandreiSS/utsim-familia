@@ -5,6 +5,17 @@
 [ext_resource type="Texture2D" path="res://tema/caixa_marcada_off.svg" id="3_marcada_off"]
 [ext_resource type="Texture2D" path="res://tema/caixa_vazia_off.svg" id="4_vazia_off"]
 
+[sub_resource type="StyleBoxFlat" id="selo"]
+bg_color = Color(0.20, 0.42, 0.72, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 7.0
+content_margin_top = 1.0
+content_margin_right = 7.0
+content_margin_bottom = 1.0
+
 [sub_resource type="StyleBoxFlat" id="painel"]
 content_margin_left = 10.0
 content_margin_top = 8.0
@@ -464,3 +475,13 @@ Ajuda/font_sizes/font_size = 13
 RotuloCampo/base_type = &"Label"
 RotuloCampo/colors/font_color = Color(0.80, 0.83, 0.88, 1)
 RotuloCampo/font_sizes/font_size = 14
+Selo/base_type = &"Label"
+Selo/colors/font_color = Color(1, 1, 1, 1)
+Selo/font_sizes/font_size = 12
+Selo/styles/normal = SubResource("selo")
+AvisoDados/base_type = &"Label"
+AvisoDados/colors/font_color = Color(0.98, 0.80, 0.35, 1)
+AvisoDados/font_sizes/font_size = 13
+ErroDados/base_type = &"Label"
+ErroDados/colors/font_color = Color(1.0, 0.45, 0.42, 1)
+ErroDados/font_sizes/font_size = 13
