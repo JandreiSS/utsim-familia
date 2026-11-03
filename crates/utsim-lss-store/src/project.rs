@@ -241,6 +241,41 @@ impl ProjectFolder {
         Ok(pf)
     }
 
+    /// Creates a restricted training folder (main entity `pasta_formacao`): the question
+    /// bank, the grades or a class folder of the program.
+    pub fn create_training(
+        path: &Path,
+        folder: crate::program::TrainingFolder,
+        program: Id,
+        me: &Identity,
+        clock: &dyn Clock,
+    ) -> Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+        }
+        let mut pf = Self::create_with(path, &folder.title(), me, clock, None, |id| {
+            let r = EntityRef::new(utsim_lss_core::Kind::TrainingFolder, id);
+            let mut e = vec![
+                Edit::new(
+                    r,
+                    utsim_lss_core::formacao::fields::PROGRAM,
+                    program.to_string(),
+                ),
+                Edit::new(r, utsim_lss_core::formacao::fields::KIND, folder.key()),
+            ];
+            if let crate::program::TrainingFolder::Class(c) = folder {
+                e.push(Edit::new(
+                    r,
+                    utsim_lss_core::formacao::fields::CLASS,
+                    c.to_string(),
+                ));
+            }
+            e
+        })?;
+        pf.full = true;
+        Ok(pf)
+    }
+
     /// Opens a folder keeping every operation in memory, without snapshots nor cache.
     pub fn open_full(path: &Path, me: &Identity) -> Result<Self> {
         let root = path.to_path_buf();
