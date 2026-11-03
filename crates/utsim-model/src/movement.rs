@@ -2,7 +2,7 @@
 //! geração da rede a partir do caminho livre, validação e avisos.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use utsim_core::Router;
@@ -10,6 +10,7 @@ use utsim_nav::{
     Body, FreeRouter, Generated, GridOptions, NavGrid, NetworkModeRouter, Obstacle, Pt, Role, Shape,
 };
 use utsim_objects::network::NetworkRouter;
+use utsim_objects::traffic::{CrossingSpec, Crossings};
 
 use crate::{Model, ObjectDef, ObjectKind, is_mobile};
 
@@ -24,7 +25,8 @@ pub enum Movement {
     Free,
     /// Pela rede de caminhos, com a ligação livre (desviando) até o ponto de acesso.
     Network,
-    /// Só pelos corredores da classe do recurso (plano, seção 6): ainda não disponível.
+    /// Só pelos corredores da classe do recurso (`aisles`): pessoas nos de pedestres e
+    /// mistos, veículos nos de empilhadeiras e mistos; cruzamentos com prioridade ao pedestre.
     Aisles,
 }
 
@@ -34,7 +36,7 @@ impl Movement {
             Movement::Legacy => "legado (linha reta ou rede, até o centro do objeto)",
             Movement::Free => "livre (menor caminho no piso, desviando dos obstáculos)",
             Movement::Network => "pela rede de caminhos (ligação livre até o ponto de acesso)",
-            Movement::Aisles => "pelos corredores",
+            Movement::Aisles => "pelos corredores (só os da sua classe e os mistos)",
         }
     }
 }
@@ -43,16 +45,41 @@ impl Movement {
 /// compartilhados pelas replicações (os caches não mudam resultados).
 #[derive(Clone, Default)]
 pub struct NavSet {
-    routers: HashMap<String, Arc<dyn Router>>,
+    pub(crate) routers: HashMap<String, Arc<dyn Router>>,
+    /// Recursos em `Aisles` que entram nas reservas de cruzamento: nome → é veículo.
+    pub(crate) crossing_users: HashMap<String, bool>,
+    /// Cruzamentos pedestre × veículo e a parada obrigatória (s).
+    pub(crate) crossings: Vec<CrossingSpec>,
+    pub(crate) crossing_stop: f64,
 }
 
 impl NavSet {
     pub fn router(&self, name: &str) -> Option<Arc<dyn Router>> {
         self.routers.get(name).cloned()
     }
+
+    /// Reservas de cruzamento novas (uma por simulação), se algum recurso as usa.
+    pub fn crossing_board(&self) -> Option<Arc<Mutex<Crossings>>> {
+        (!self.crossing_users.is_empty() && !self.crossings.is_empty()).then(|| {
+            Arc::new(Mutex::new(Crossings::new(
+                self.crossings.clone(),
+                self.crossing_stop,
+            )))
+        })
+    }
+
+    /// `(board, é veículo)` para o transportador `name`, se ele entra nas reservas.
+    pub fn crossings_for(
+        &self,
+        name: &str,
+        board: &Option<Arc<Mutex<Crossings>>>,
+    ) -> Option<(Arc<Mutex<Crossings>>, bool)> {
+        let vehicle = *self.crossing_users.get(name)?;
+        board.clone().map(|b| (b, vehicle))
+    }
 }
 
-fn role_name(role: Role) -> &'static str {
+pub(crate) fn role_name(role: Role) -> &'static str {
     match role {
         Role::Person => "pessoa",
         Role::Forklift => "empilhadeira",
@@ -61,7 +88,7 @@ fn role_name(role: Role) -> &'static str {
     }
 }
 
-fn fmt_m(v: f64) -> String {
+pub(crate) fn fmt_m(v: f64) -> String {
     format!("{v:.2}").replace('.', ",")
 }
 
@@ -279,10 +306,14 @@ impl Model {
             .as_ref()
             .map(|def| Arc::new(NetworkRouter::new(def)));
         let mut set = NavSet::default();
+        self.aisle_routers(&mut set);
         for o in &self.objects {
             let Some(mode) = self.routed_mode(o) else {
                 continue;
             };
+            if mode == Movement::Aisles {
+                continue;
+            }
             let c = self.clearance_of(o);
             let fr = free
                 .entry(c.to_bits())
@@ -333,14 +364,14 @@ impl Model {
 
     /// Um AGV com rede segue a rede aresta por aresta sob controle de tráfego, qualquer
     /// que seja o modo.
-    fn traffic_agv(&self, obj: &ObjectDef) -> bool {
+    pub(crate) fn traffic_agv(&self, obj: &ObjectDef) -> bool {
         matches!(obj.kind, ObjectKind::Transporter { agv: true, .. }) && self.network.is_some()
     }
 
-    /// Modo do recurso quando ele usa um roteador próprio (`Free` ou `Network`).
-    fn routed_mode(&self, obj: &ObjectDef) -> Option<Movement> {
+    /// Modo do recurso quando ele usa um roteador próprio (`Free`, `Network` ou `Aisles`).
+    pub(crate) fn routed_mode(&self, obj: &ObjectDef) -> Option<Movement> {
         self.movement_of(obj)
-            .filter(|m| matches!(m, Movement::Free | Movement::Network))
+            .filter(|m| matches!(m, Movement::Free | Movement::Network | Movement::Aisles))
             .filter(|_| !self.traffic_agv(obj))
     }
 
@@ -358,7 +389,14 @@ impl Model {
                     ));
                 }
                 let mut line = format!("{}: {}", o.name, mode.label());
-                if self.routed_mode(o).is_some() {
+                if mode == Movement::Aisles && !self.traffic_agv(o) {
+                    let user = self.aisle_user(o);
+                    line.push_str(&format!(
+                        " ({}, corredores {})",
+                        role_name(self.role_of(o)),
+                        user.aisles_label()
+                    ));
+                } else if self.routed_mode(o).is_some() {
                     line.push_str(&format!(
                         " ({}, folga {} m)",
                         role_name(self.role_of(o)),
@@ -376,8 +414,8 @@ impl Model {
             Some(Movement::Network) if self.network.is_none() => errors.push(format!(
                 "{who}: movement = Network exige `network` no modelo (desenhe a rede ou gere com `utsim rede gerar`)"
             )),
-            Some(Movement::Aisles) => errors.push(format!(
-                "{who}: movement = Aisles (pelos corredores) ainda não está disponível nesta versão; use Free ou Network"
+            Some(Movement::Aisles) if self.aisles.is_empty() => errors.push(format!(
+                "{who}: movement = Aisles exige `aisles` no modelo (desenhe os corredores)"
             )),
             _ => {}
         }
@@ -426,6 +464,9 @@ impl Model {
             let Some(mode) = self.routed_mode(t) else {
                 continue;
             };
+            if mode == Movement::Aisles {
+                continue; // checked by the aisle warnings
+            }
             uses_network |= mode == Movement::Network;
             let c = self.clearance_of(t);
             let grid = grids.entry(c.to_bits()).or_insert_with(|| self.nav_grid(c));
