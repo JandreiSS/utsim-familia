@@ -7575,6 +7575,7 @@ dependencies = [
  "utsim-model",
  "utsim-opt",
  "utsim-pert",
+ "utsim-quality",
  "utsim-scene",
  "utsim-stats",
  "winresource",
@@ -7810,6 +7811,17 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-launcher-core",
+]
+
+[[package]]
+name = "utsim-quality"
+version = "0.1.0"
+dependencies = [
+ "rand 0.9.5",
+ "rand_distr 0.5.1",
+ "rand_pcg",
+ "serde",
+ "utsim-stats",
 ]
 
 [[package]]
