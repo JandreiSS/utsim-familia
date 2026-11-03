@@ -19,3 +19,4 @@ docs/guia/*.run.xml
 docs/guia/*.fls
 docs/guia/*.fdb_latexmk
 docs/guia/main.pdf
+dist/
