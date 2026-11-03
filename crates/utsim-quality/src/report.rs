@@ -43,6 +43,11 @@ pub fn num(x: f64) -> String {
     s.replace('.', ",")
 }
 
+/// Short number without trailing zeros (`6`, `5,15`).
+fn short(x: f64) -> String {
+    format!("{x}").replace('.', ",")
+}
+
 fn opt(x: Option<f64>) -> String {
     x.map_or("—".into(), num)
 }
@@ -533,7 +538,10 @@ pub fn box_cox_text(title: &str, r: &BoxCoxCapability) -> String {
             num(b.p_value)
         );
     }
-    s.push_str(&capability_text(title, &r.transformed));
+    s.push_str(&capability_text(
+        &format!("{title} (escala transformada)"),
+        &r.transformed,
+    ));
     s
 }
 
@@ -835,7 +843,7 @@ pub fn gage_text(title: &str, studies: &[GageRR]) -> String {
             "Componente",
             "Variância",
             "%Contr.",
-            format!("VE ({}σ)", num(g.k)),
+            format!("VE ({}σ)", short(g.k)),
             "%VE",
             "%Tol."
         );
@@ -900,7 +908,7 @@ fn gage_section(g: &GageRR) -> String {
         b,
         "<h3>Componentes</h3><table><tr><th>Componente</th><th>Variância</th><th>%Contribuição</th>\
          <th>Desvio</th><th>VE ({}σ)</th><th>%VE</th><th>%Tolerância</th></tr>",
-        esc(&num(g.k))
+        esc(&short(g.k))
     );
     for c in &g.components {
         let hot = if c.name == crate::msa::GRR {
@@ -1132,9 +1140,10 @@ pub fn bias_text(title: &str, lin: Option<&Linearity>, single: Option<&Bias>) ->
         }
         let _ = writeln!(
             s,
-            "  viés = {} + {} · referência (p da inclinação {}, p do intercepto {}, R² = {})",
+            "  viés = {} {} {} · referência (p da inclinação {}, p do intercepto {}, R² = {})",
             num(l.intercept),
-            num(l.slope),
+            if l.slope < 0.0 { "−" } else { "+" },
+            num(l.slope.abs()),
             num(l.p_slope),
             num(l.p_intercept),
             num(l.r2)

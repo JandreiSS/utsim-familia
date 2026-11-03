@@ -7559,6 +7559,7 @@ dependencies = [
  "utsim-model",
  "utsim-opt",
  "utsim-pert",
+ "utsim-quality",
  "utsim-scene",
  "utsim-stats",
  "winresource",

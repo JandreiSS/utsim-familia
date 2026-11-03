@@ -39,6 +39,17 @@ pub fn number(cell: &str, decimal_comma: bool) -> Option<f64> {
     t.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
+/// Text of a CSV file: UTF-8 (a leading BOM is dropped) or, when the bytes are not
+/// valid UTF-8, Latin-1 (the accented letters of Portuguese have the same codes in the
+/// Windows code page that spreadsheets often save in). The flag tells which was used.
+pub fn decode(bytes: &[u8]) -> (String, bool) {
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    match std::str::from_utf8(bytes) {
+        Ok(s) => (s.to_string(), false),
+        Err(_) => (bytes.iter().map(|&b| b as char).collect(), true),
+    }
+}
+
 /// Splits the text into a table.
 pub fn parse(text: &str) -> Table {
     let lines: Vec<&str> = text
@@ -315,6 +326,12 @@ mod tests {
         let (g, notes) = subgroups(&t, Some(2)).unwrap();
         assert_eq!(g.len(), 2);
         assert_eq!(notes.len(), 1);
+    }
+
+    #[test]
+    fn utf8_and_latin1() {
+        assert_eq!(decode("\u{feff}peça".as_bytes()), ("peça".into(), false));
+        assert_eq!(decode(b"pe\xe7a"), ("peça".into(), true));
     }
 
     #[test]

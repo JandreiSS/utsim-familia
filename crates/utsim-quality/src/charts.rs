@@ -670,9 +670,10 @@ pub fn phase1(
             ChartKind::XbarR => "R̄/d2",
             _ => "S̄/c4",
         };
-        chart
-            .notes
-            .insert(0, format!("σ estimado por {how} = {sigma:.6}"));
+        chart.notes.insert(
+            0,
+            format!("σ estimado por {how} = {}", crate::report::num(*sigma)),
+        );
     }
     if !excluded.is_empty() {
         chart.notes.push(format!(

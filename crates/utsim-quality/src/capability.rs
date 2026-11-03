@@ -314,9 +314,9 @@ pub fn capability(
         && ad.p_value < 0.05
     {
         notes.push(format!(
-            "o teste de Anderson-Darling rejeita a normalidade (p = {:.4}): use Box-Cox ou o \
+            "o teste de Anderson-Darling rejeita a normalidade (p = {}): use Box-Cox ou o \
              método dos percentis",
-            ad.p_value
+            crate::report::num(ad.p_value)
         ));
     }
     if n < 30 {
@@ -493,7 +493,10 @@ pub fn box_cox_capability(
     // Observed PPM must be counted on the original scale (identical, the map is monotone).
     transformed.notes.insert(
         0,
-        format!("índices sobre os dados transformados por Box-Cox com λ = {l:.3}"),
+        format!(
+            "índices sobre os dados transformados por Box-Cox com λ = {}",
+            crate::report::num(l)
+        ),
     );
     Ok(BoxCoxCapability {
         fit,

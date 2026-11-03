@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::d2_star;
 use crate::prob::{f_sf, t_two_sided};
+use crate::report::num;
 
 /// One measurement of a gauge study.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -303,6 +304,15 @@ pub fn gage_anova(data: &GageData, options: &GageOptions) -> Result<GageRR, Stri
         f,
         p: pv,
     };
+    // The total line has no mean square.
+    let total_row = |df: f64, ss: f64| AnovaRow {
+        source: "Total".into(),
+        df,
+        ss,
+        ms: f64::NAN,
+        f: None,
+        p: None,
+    };
     let total_ss = ss_p + ss_o + ss_po + ss_e;
     let total_df = pf * of * rf - 1.0;
     let (rep, oper, inter, part, anova);
@@ -323,12 +333,13 @@ pub fn gage_anova(data: &GageData, options: &GageOptions) -> Result<GageRR, Stri
                 Some(f_sf(fo, df_o, df_err)),
             ),
             row("Repetibilidade", df_err, ss_err, None, None),
-            row("Total", total_df, total_ss, None, None),
+            total_row(total_df, total_ss),
         ];
         warnings.push(format!(
-            "interação peça × operador sem efeito (p = {p_po:.4} > {}): incorporada à \
+            "interação peça × operador sem efeito (p = {} > {}): incorporada à \
              repetibilidade (modelo reduzido)",
-            options.alpha_interaction
+            num(p_po),
+            num(options.alpha_interaction)
         ));
         rep = ms_err;
         oper = (ms_o - ms_err) / (pf * rf);
@@ -348,7 +359,7 @@ pub fn gage_anova(data: &GageData, options: &GageOptions) -> Result<GageRR, Stri
             ),
             row("Peça × operador", df_po, ss_po, Some(f_po), Some(p_po)),
             row("Repetibilidade", df_e, ss_e, None, None),
-            row("Total", total_df, total_ss, None, None),
+            total_row(total_df, total_ss),
         ];
         rep = ms_e;
         inter = (ms_po - ms_e) / rf;
@@ -358,7 +369,8 @@ pub fn gage_anova(data: &GageData, options: &GageOptions) -> Result<GageRR, Stri
     let mut trunc = |name: &str, v: f64| {
         if v < 0.0 {
             warnings.push(format!(
-                "componente de variância de {name} estimado negativo ({v:.3e}): truncado em 0"
+                "componente de variância de {name} estimado negativo ({}): truncado em 0",
+                num(v)
             ));
             0.0
         } else {
@@ -426,14 +438,14 @@ pub fn gage_average_range(data: &GageData, options: &GageOptions) -> Result<Gage
     let (components, ratio) = components(ev * ev, av2, 0.0, pv * pv, options, false);
     let (ndc, ndc_raw) = ndc_of(ratio);
     warnings.push(format!(
-        "constantes: d2*({r}, {}) = {:.4}, d2*({o}, 1) = {:.4}, d2*({p}, 1) = {:.4}",
+        "constantes: d2*({r}, {}) = {}, d2*({o}, 1) = {}, d2*({p}, 1) = {}",
         p * o,
-        d2_star(r, p * o),
-        d2_star(o, 1),
-        d2_star(p, 1)
+        num(d2_star(r, p * o)),
+        num(d2_star(o, 1)),
+        num(d2_star(p, 1))
     ));
     Ok(GageRR {
-        method: "Médias e amplitudes".into(),
+        method: "médias e amplitudes".into(),
         parts: p,
         operators: o,
         reps: r,
