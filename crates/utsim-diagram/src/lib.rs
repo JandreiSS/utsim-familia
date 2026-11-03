@@ -8,12 +8,22 @@
 //! asked, figures of a run, and writes text. See `docs/manual/src/fluxograma.md`.
 
 pub mod carta;
+mod depara;
+mod desenho;
 pub mod graph;
+pub mod homem_maquina;
 pub mod html;
 pub mod layout;
+mod mapa;
 pub mod mermaid;
+mod operacoes;
+mod raias;
+pub mod rastro;
+mod sipoc;
 pub mod svg;
 mod text;
+pub mod tipos;
+mod vsm;
 
 use std::collections::BTreeMap;
 
@@ -25,6 +35,7 @@ pub use graph::{
 pub use html::{carta_html, html};
 pub use mermaid::mermaid;
 pub use svg::{svg, svg_inline};
+pub use tipos::{Saida, TipoDiagrama, gerar, indice};
 use utsim_model::Model;
 use utsim_model::analysis::ObjectStats;
 

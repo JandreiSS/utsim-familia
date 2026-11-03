@@ -7,7 +7,7 @@ use crate::graph::{FlowGraph, Symbol};
 use crate::svg::{CSS, glyph, svg_inline};
 use crate::text::esc;
 
-const PAGE_CSS: &str = r#"
+pub(crate) const PAGE_CSS: &str = r#"
 body{font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:1200px;margin:2rem auto;padding:0 1rem}
 h1{font-size:1.5rem}h2{font-size:1.15rem;margin-top:2rem}
 table{border-collapse:collapse;width:100%;font-size:.85rem}
@@ -25,7 +25,7 @@ tr.total td{font-weight:700;background:var(--card)}
 @media print{body{max-width:none}.rolagem{overflow:visible;border:none}}
 "#;
 
-fn legend() -> String {
+pub(crate) fn legend() -> String {
     let mut h = String::from("<div class=\"legenda\">");
     for s in Symbol::ALL {
         let _ = write!(

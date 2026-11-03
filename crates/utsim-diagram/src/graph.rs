@@ -274,6 +274,16 @@ pub struct Options {
     pub overrides: BTreeMap<String, Symbol>,
     /// Figures of a run, by object name.
     pub stats: Option<BTreeMap<String, NodeStats>>,
+    /// Replication the dynamic diagrams record (0 is the first).
+    pub replication: u32,
+    /// Time window of the man-machine chart (default: a tenth of the run after the warm-up).
+    pub window: Option<(f64, f64)>,
+    /// Lane (area) chosen for an object, by name, in the swimlane chart.
+    pub areas: BTreeMap<String, String>,
+    /// Hook for the floor plan: an SVG fragment drawn under the plan-view diagrams.
+    pub plant_background: Option<String>,
+    /// Second model of the spaghetti comparison (this one is the "before").
+    pub compare: Option<Box<Model>>,
 }
 
 impl Default for Options {
@@ -297,6 +307,11 @@ impl Default for Options {
             .collect(),
             overrides: BTreeMap::new(),
             stats: None,
+            replication: 0,
+            window: None,
+            areas: BTreeMap::new(),
+            plant_background: None,
+            compare: None,
         }
     }
 }
@@ -684,7 +699,7 @@ pub fn build(model: &Model, options: &Options) -> FlowGraph {
 }
 
 /// Marks the arrows that close a loop (found by a depth-first walk from the entries).
-fn mark_rework(edges: &mut [Edge], n: usize) {
+pub(crate) fn mark_rework(edges: &mut [Edge], n: usize) {
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (k, e) in edges.iter().enumerate() {
         adj[e.from].push(k);

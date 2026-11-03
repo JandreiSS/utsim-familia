@@ -6,12 +6,24 @@ use crate::graph::{FlowGraph, Symbol};
 use crate::text::{num, pct};
 
 /// Escapes one piece of text for a quoted Mermaid label.
-fn q(s: &str) -> String {
+pub(crate) fn q(s: &str) -> String {
     s.replace('&', "#amp;")
         .replace('"', "#quot;")
         .replace('<', "#lt;")
         .replace('>', "#gt;")
         .replace(['\n', '\r'], " ")
+}
+
+/// Mermaid shape (brackets included) of a symbol around an already quoted label.
+pub(crate) fn shape(symbol: Symbol, l: &str) -> String {
+    match symbol {
+        Symbol::Inicio | Symbol::Fim => format!("([{l}])"),
+        Symbol::Operacao => format!("(({l}))"),
+        Symbol::Transporte => format!(">{l}]"),
+        Symbol::Inspecao => format!("[{l}]"),
+        Symbol::Espera => format!("({l})"),
+        Symbol::Armazenagem => format!("{{{{{l}}}}}"),
+    }
 }
 
 fn id(i: usize) -> String {
@@ -43,15 +55,7 @@ pub fn mermaid(graph: &FlowGraph) -> String {
             let _ = write!(label, "<br/>ocupação {}", pct(u));
         }
         let l = format!("\"{label}\"");
-        let shape = match n.symbol {
-            Symbol::Inicio | Symbol::Fim => format!("([{l}])"),
-            Symbol::Operacao => format!("(({l}))"),
-            Symbol::Transporte => format!(">{l}]"),
-            Symbol::Inspecao => format!("[{l}]"),
-            Symbol::Espera => format!("({l})"),
-            Symbol::Armazenagem => format!("{{{{{l}}}}}"),
-        };
-        let _ = writeln!(s, "    {}{shape}", id(i));
+        let _ = writeln!(s, "    {}{}", id(i), shape(n.symbol, &l));
     }
     for e in &graph.edges {
         let mut parts: Vec<String> = Vec::new();
