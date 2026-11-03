@@ -272,3 +272,20 @@ fn agvs_with_a_network_keep_traffic_control_in_any_mode() {
     let json = |m: &Model| serde_json::to_string(&m.run_replications().unwrap()).unwrap();
     assert_eq!(json(&legacy), json(&free));
 }
+
+/// Regression: in `Free` movement the stop for a point that is also an object's position
+/// is that object's access point. A homing transporter whose block sits on the same
+/// point as other objects (here three queues and their sources, all at the origin) so
+/// never reached its own position: on arriving it started a zero-length trip "home"
+/// again, forever, at the same instant.
+#[test]
+fn home_on_a_point_shared_with_objects_does_not_loop() {
+    let m = model(include_str!("fixtures/home_on_shared_point.ron"));
+    let r = m
+        .run_replications()
+        .expect("the run ends without a same-instant loop")
+        .remove(0);
+    for s in ["s0", "s1", "s2"] {
+        assert_eq!(r.block(s).unwrap().input, 15, "{s}");
+    }
+}

@@ -832,7 +832,11 @@ impl Behavior for Transporter {
             return;
         }
         if tag == ARRIVED_HOME {
-            self.go_idle(cx, false);
+            // Home is wherever the trip home ends, which need not be the block position:
+            // a router may stop elsewhere (the access point of an object placed on the
+            // same point). Driving "home" again from there would be a zero-length trip
+            // repeated forever at the same instant.
+            cx.set_state(State::Idle);
             self.report_position(cx);
             return;
         }
@@ -982,5 +986,60 @@ impl Behavior for Transporter {
         if tag == MSG_RELEASE && releases_current {
             self.finish(cx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use utsim_core::{OutputRule, RunConfig, Simulation, StartState};
+
+    /// Straight lines, except that going to the origin stops at `(1, 0, 0)`, like an
+    /// access point of an object placed at the origin.
+    struct StopsBeside;
+
+    impl Router for StopsBeside {
+        fn route(&self, from: [f64; 3], to: [f64; 3]) -> Vec<[f64; 3]> {
+            let to = if to == [0.0; 3] { [1.0, 0.0, 0.0] } else { to };
+            if from == to {
+                vec![from]
+            } else {
+                vec![from, to]
+            }
+        }
+    }
+
+    #[test]
+    fn homing_ends_where_the_router_stops() {
+        let mut sim = Simulation::new(RunConfig {
+            stop_time: 10.0,
+            warmup: 0.0,
+            seed: 1,
+            replication: 0,
+            sample_interval: None,
+            histogram_bins: None,
+        });
+        let t = Transporter::new(1.0)
+            .home(true)
+            .router(Some(Arc::new(StopsBeside)));
+        let f = sim.add_block("f", OutputRule::default(), Box::new(t));
+        sim.set_position(f, [0.0; 3]);
+        // Starts at (5, 0, 0): drives "home", which ends at (1, 0, 0) after 4.
+        sim.set_start_state(StartState {
+            clock: 0.0,
+            blocks: vec![(
+                f,
+                BlockState {
+                    position: Some([5.0, 0.0, 0.0]),
+                    ..BlockState::default()
+                },
+            )],
+        });
+        let r = sim
+            .run()
+            .expect("no same-instant loop at the stop beside home");
+        let states = &r.block("f").unwrap().states;
+        assert!((states["travel_empty"] - 0.4).abs() < 1e-12, "{states:?}");
+        assert!((states["idle"] - 0.6).abs() < 1e-12, "{states:?}");
     }
 }
