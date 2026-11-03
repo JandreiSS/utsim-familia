@@ -197,9 +197,8 @@ pub fn suggest(trainees: &[Trainee], rules: &Rules) -> Suggestion {
     for t in &ts {
         *area_count.entry(t.area.clone()).or_default() += 1;
     }
-    let constrained = |t: &Trainee| {
-        !t.avoid.is_empty() || ts.iter().any(|u| u.avoid.contains(&t.id))
-    };
+    let constrained =
+        |t: &Trainee| !t.avoid.is_empty() || ts.iter().any(|u| u.avoid.contains(&t.id));
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|a, b| {
         let (ta, tb) = (&ts[*a], &ts[*b]);
@@ -264,8 +263,8 @@ pub fn suggest(trainees: &[Trainee], rules: &Rules) -> Suggestion {
                         let mut nb = groups[gb].clone();
                         na[ia] = b;
                         nb[ib] = a;
-                        let after = group_cost(&na, &ts, rules, max)
-                            + group_cost(&nb, &ts, rules, max);
+                        let after =
+                            group_cost(&na, &ts, rules, max) + group_cost(&nb, &ts, rules, max);
                         if after < before - 1e-9 {
                             groups[ga] = na;
                             groups[gb] = nb;
@@ -355,7 +354,8 @@ pub fn check(groups: &[Vec<Id>], trainees: &[Trainee], rules: &Rules) -> Vec<Vio
             for b in &members[i + 1..] {
                 let ta = find(*a);
                 let tb = find(*b);
-                if ta.is_some_and(|t| t.avoid.contains(b)) || tb.is_some_and(|t| t.avoid.contains(a))
+                if ta.is_some_and(|t| t.avoid.contains(b))
+                    || tb.is_some_and(|t| t.avoid.contains(a))
                 {
                     v.push(Violation::Conflict {
                         group: g,

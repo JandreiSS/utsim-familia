@@ -132,7 +132,13 @@ const GREEN: [Template; 7] = [
         name: "Analisar",
         hours: 16.0,
         objectives: "Levantar e priorizar causas e comprová-las com testes de hipótese.",
-        tools: &["pareto", "ishikawa", "cinco_porques", "matriz_ce", "testes_hipotese"],
+        tools: &[
+            "pareto",
+            "ishikawa",
+            "cinco_porques",
+            "matriz_ce",
+            "testes_hipotese",
+        ],
     },
     Template {
         name: "Melhorar",
@@ -279,10 +285,7 @@ pub fn set_tools(module: Id, tools: &[String]) -> Edit {
 
 /// Prerequisites not given in the sessions before the first session of `module`: the
 /// order of the sessions breaks the curriculum. `(module, missing prerequisite)`.
-pub fn order_problems(
-    modules: &[Module],
-    sessions: &[&super::ClassSession],
-) -> Vec<(Id, Id)> {
+pub fn order_problems(modules: &[Module], sessions: &[&super::ClassSession]) -> Vec<(Id, Id)> {
     let first = |m: Id| {
         sessions
             .iter()

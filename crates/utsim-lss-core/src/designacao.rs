@@ -290,7 +290,7 @@ pub fn assign(program: Id, id: Id, input: &AssignInput) -> Vec<Edit> {
 }
 
 /// The load of one person over the whole program.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Load {
     pub person: Id,
     pub level: Option<BeltLevel>,

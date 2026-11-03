@@ -19,6 +19,9 @@ sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
 # Schedule: CPM, classic PERT and Monte Carlo come from the simulator's PERT crate (plan 1.6).
 utsim-pert.workspace = true
 utsim-core.workspace = true
+# Expected answers of the practical problems and the teaching data sets (plan 8.5 and 8.6).
+utsim-stats.workspace = true
+utsim-quality.workspace = true
 
 [dev-dependencies]
 proptest = { version = "=1.11.0", default-features = false, features = ["std"] }

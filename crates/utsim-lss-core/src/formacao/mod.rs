@@ -118,7 +118,9 @@ pub enum TrainingError {
     NoPerson,
     #[error("escreva a justificativa da indicação")]
     NoJustification,
-    #[error("green e black belt precisam de uma oportunidade candidata do funil (o projeto de formação)")]
+    #[error(
+        "green e black belt precisam de uma oportunidade candidata do funil (o projeto de formação)"
+    )]
     NoOpportunity,
     #[error("informe o gestor imediato, que aprova as horas; não pode ser a própria pessoa")]
     BadManager,
@@ -590,8 +592,12 @@ pub fn training_hours_week(class: &Class, sessions: &[ClassSession]) -> f64 {
         .filter(|s| s.class == Some(class.id))
         .collect();
     let total: f64 = mine.iter().map(|s| s.hours).sum();
-    let first = class.start.or_else(|| mine.iter().filter_map(|s| s.date).min());
-    let last = class.end.or_else(|| mine.iter().filter_map(|s| s.date).max());
+    let first = class
+        .start
+        .or_else(|| mine.iter().filter_map(|s| s.date).min());
+    let last = class
+        .end
+        .or_else(|| mine.iter().filter_map(|s| s.date).max());
     let weeks = match (first, last) {
         (Some(a), Some(b)) => ((a.days_until(b) + 1) as f64 / 7.0).ceil().max(1.0),
         _ => 1.0,
@@ -1021,7 +1027,7 @@ pub fn evaluate(n: &Nomination, cs: &[Criterion], ctx: &CriteriaContext<'_>) -> 
         passed: true,
         ..Evaluation::default()
     };
-    let (mut num, mut den) = (0.0, 0.0);
+    let (mut acc, mut den) = (0.0, 0.0);
     for c in cs.iter().filter(|c| c.applies(n.level)) {
         let (passed, part, value) = match c.kind {
             CriterionKind::Tenure => match n.tenure_months {
@@ -1053,11 +1059,7 @@ pub fn evaluate(n: &Nomination, cs: &[Criterion], ctx: &CriteriaContext<'_>) -> 
             CriterionKind::PriorLevel => {
                 let has = member.and_then(|m| m.level);
                 let ok = previous_level(n.level).is_none_or(|need| has.is_some_and(|h| h >= need));
-                (
-                    ok,
-                    if ok { 1.0 } else { 0.0 },
-                    has.map(level_key),
-                )
+                (ok, if ok { 1.0 } else { 0.0 }, has.map(level_key))
             }
             CriterionKind::ManagerRating => match n.rating {
                 Some(r) => {
@@ -1087,7 +1089,7 @@ pub fn evaluate(n: &Nomination, cs: &[Criterion], ctx: &CriteriaContext<'_>) -> 
         if c.eliminatory {
             ev.passed &= passed;
         } else {
-            num += c.weight * part;
+            acc += c.weight * part;
             den += c.weight;
         }
         ev.results.push(CriterionResult {
@@ -1099,7 +1101,7 @@ pub fn evaluate(n: &Nomination, cs: &[Criterion], ctx: &CriteriaContext<'_>) -> 
             value,
         });
     }
-    ev.score = if den > 0.0 { 100.0 * num / den } else { 0.0 };
+    ev.score = if den > 0.0 { 100.0 * acc / den } else { 0.0 };
     ev
 }
 
@@ -1446,9 +1448,7 @@ pub fn trainees(
                 .iter()
                 .filter(|r| !r.training && r.belts.contains(&p))
                 .collect();
-            let assigned = assignments
-                .iter()
-                .any(|a| a.person == Some(p) && !a.ended);
+            let assigned = assignments.iter().any(|a| a.person == Some(p) && !a.ended);
             let unit = m.and_then(|m| m.unit);
             let champion = running.iter().any(|r| !r.champions.is_empty())
                 || units
@@ -1645,10 +1645,7 @@ pub fn certification_requests(
         .filter(|n| n.status == NominationStatus::Selected && n.level >= BeltLevel::Green)
         .filter_map(|n| {
             let p = n.person?;
-            if assignments
-                .iter()
-                .any(|a| a.person == Some(p) && !a.ended)
-            {
+            if assignments.iter().any(|a| a.person == Some(p) && !a.ended) {
                 return None;
             }
             let selected = n
