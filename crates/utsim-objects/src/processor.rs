@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::stats::TimeWeighted;
-use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED};
+use utsim_core::task::{MSG_ARRIVED, MSG_RELEASE, MSG_TRANSPORT_RESERVED, request_priority};
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind,
     Time, WorkPhase,
@@ -22,6 +22,13 @@ pub struct OperatorUse {
     /// Skill the operators must have (absent: anyone of the team).
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "exige")]
     pub requires: Option<String>,
+    /// Priority of the operator requests at the team's dispatcher (higher goes first;
+    /// absent: 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i32>,
+    /// Item label whose value, when the item has it, replaces `priority`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority_label: Option<String>,
 }
 
 fn one() -> usize {
@@ -179,12 +186,17 @@ impl Processor {
             };
             let me = cx.me();
             let skill = op.requires.as_deref();
+            let priority = request_priority(
+                cx.item(item),
+                op.priority.unwrap_or(0),
+                op.priority_label.as_deref(),
+            );
             let requests = (0..op.count)
                 .map(|_| {
                     cx.request_task_requiring(
                         team,
                         TaskKind::Operate { station: me, tag },
-                        0,
+                        priority,
                         skill,
                     )
                 })

@@ -47,6 +47,7 @@ pub mod geometry;
 pub mod handling;
 pub mod heatmap;
 pub mod layout;
+pub mod links;
 pub mod live;
 pub mod network;
 #[cfg(all(feature = "server", not(target_arch = "wasm32")))]
@@ -57,6 +58,7 @@ pub mod tokens;
 pub mod turning;
 
 pub use compose::{ItemPlacement, MobilePose, Scene, SceneOptions};
+pub use links::{LinkKind, LinkLine, team_links};
 pub use live::LiveScene;
 
 /// Stream/protocol identifier. Bump on any incompatible change to the types below.
@@ -139,6 +141,15 @@ pub struct Pose {
     pub state: Option<String>,
     /// Fill fraction 0..1 for tanks; `None` otherwise.
     pub fill: Option<f32>,
+    /// Item type of an item (1-based index into [`StaticScene::item_types`]), when the
+    /// model declares types. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_type: Option<u32>,
+    /// Where a moving mobile resource is going: the end of the travel in progress
+    /// (metres, Z-up; for an AGV the end of the current network piece). Absent when it
+    /// stands still and for every other entity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_target: Option<[f32; 3]>,
 }
 
 /// Everything that moves or changes, at time `time`. Entities absent from a frame
@@ -179,6 +190,39 @@ pub struct StaticScene {
     pub network: Vec<Segment>,
     /// Axis-aligned bounds `(min, max)` of everything, metres.
     pub bounds: ([f32; 3], [f32; 3]),
+    /// Item types of the model: the colour and the look of the items whose
+    /// [`Pose::item_type`] points here. Empty (and absent from the JSON) without types.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_types: Vec<ItemTypeStyle>,
+    /// Named floor areas of the model (waiting areas, break rooms), drawn on the floor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaShape>,
+    /// Team and request links (dispatcher → member, object → carrier, processor →
+    /// operators, object → repair crew, member → home and break place), see [`links`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<LinkLine>,
+}
+
+/// A named floor area (the model's `areas`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AreaShape {
+    pub name: String,
+    /// Centre on the floor, metres, Z-up.
+    pub position: [f32; 3],
+    /// Length along x and width along y, metres.
+    pub size: [f32; 2],
+}
+
+/// How the items of one item type look (the model's `item_types`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ItemTypeStyle {
+    /// 1-based index, the value of the item's `type` label and of [`Pose::item_type`].
+    pub index: u32,
+    pub name: String,
+    /// "#rrggbb", when the type sets one.
+    pub color: Option<String>,
+    /// Asset id of the built-in library or a `.glb` file, when the type sets one.
+    pub asset: Option<String>,
 }
 
 /// First line of a scene stream.

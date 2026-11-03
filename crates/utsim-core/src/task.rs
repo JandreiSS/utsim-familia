@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::block::BlockId;
-use crate::item::ItemId;
+use crate::item::{Item, ItemId};
 
 /// Identifies one task request for its whole life.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -40,6 +40,19 @@ pub struct TaskRequest {
     pub requester: BlockId,
     /// Higher runs first.
     pub priority: i32,
+}
+
+/// Priority of a request made for `item`: the numeric value of its label `label`
+/// (rounded to the nearest integer, saturating at the `i32` range) when the label is set
+/// and the item has it, else `fixed`.
+pub fn request_priority(item: &Item, fixed: i32, label: Option<&str>) -> i32 {
+    label
+        .and_then(|l| item.label(l))
+        .and_then(|v| v.as_num())
+        .filter(|v| !v.is_nan())
+        .map_or(fixed, |v| {
+            v.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+        })
 }
 
 /// Message tags understood by every block. Block-specific tags start at [`MSG_USER`].

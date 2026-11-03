@@ -32,7 +32,7 @@ pub use block::{
 pub use dist::Dist;
 pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
 pub use init::{BlockState, ItemState, StartState, WorkPhase};
-pub use item::{Item, ItemId, Value};
+pub use item::{ITEM_TYPE_LABEL, Item, ItemId, Value};
 pub use maintenance::{
     AgeBasis, Maintenance, MaintenanceCost, Preventive, RepairEffect, Trigger, Wear,
 };

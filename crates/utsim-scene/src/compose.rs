@@ -78,8 +78,8 @@ use crate::style::{self, Shape};
 use crate::timeline::{FluidSample, ItemPos, Timeline, TransitSetting, TravelLeg};
 use crate::turning::{self, Neighbour};
 use crate::{
-    EntityId, EntityKind, Frame, Header, MobileRole, Motion, PROTOCOL, Pose, Segment, StaticEntity,
-    StaticScene,
+    AreaShape, EntityId, EntityKind, Frame, Header, ItemTypeStyle, LinkLine, MobileRole, Motion,
+    PROTOCOL, Pose, Segment, StaticEntity, StaticScene,
 };
 
 /// Edge of the default item cube, metres.
@@ -240,6 +240,12 @@ pub struct Scene {
     pub fork_scale: f32,
     model: String,
     blocks: Vec<BlockInfo>,
+    /// Item types of the model (empty without a model or without types).
+    item_types: Vec<ItemTypeStyle>,
+    /// Floor areas of the model (empty without a model or without areas).
+    areas: Vec<AreaShape>,
+    /// Team and request links of the model (empty without a model).
+    links: Vec<LinkLine>,
 }
 
 impl Scene {
@@ -405,7 +411,35 @@ impl Scene {
             end,
             model: replay.model.clone(),
             blocks,
+            item_types: opts.model.map_or(Vec::new(), |m| {
+                m.item_types
+                    .iter()
+                    .enumerate()
+                    .map(|(k, t)| ItemTypeStyle {
+                        index: k as u32 + 1,
+                        name: t.name.clone(),
+                        color: t.color.clone(),
+                        asset: t.asset.clone(),
+                    })
+                    .collect()
+            }),
+            areas: opts.model.map_or(Vec::new(), |m| {
+                m.areas
+                    .iter()
+                    .map(|a| AreaShape {
+                        name: a.name.clone(),
+                        position: a.position.map(|v| v as f32),
+                        size: a.size.map(|v| v as f32),
+                    })
+                    .collect()
+            }),
+            links: opts.model.map_or(Vec::new(), crate::links::team_links),
         }
+    }
+
+    /// Item types of the model (see [`StaticScene::item_types`]).
+    pub fn item_types(&self) -> &[ItemTypeStyle] {
+        &self.item_types
     }
 
     /// Whether replay block `b` is not drawn as an object (token flow or fluid network).
@@ -954,6 +988,9 @@ impl Scene {
             entities,
             network,
             bounds: (min, max),
+            item_types: self.item_types.clone(),
+            areas: self.areas.clone(),
+            links: self.links.clone(),
         }
     }
 
@@ -989,6 +1026,11 @@ impl Scene {
                     parent: None,
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
+                    item_type: None,
+                    task_target: self
+                        .timeline
+                        .travel_target(b, t)
+                        .map(|p| p.map(|v| v as f32)),
                 },
                 None => Pose {
                     id: EntityId::Block(b as u32),
@@ -999,6 +1041,8 @@ impl Scene {
                     parent: None,
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
+                    item_type: None,
+                    task_target: None,
                 },
             };
             poses.push(pose);
@@ -1020,6 +1064,8 @@ impl Scene {
                 parent: None,
                 state: None,
                 fill: tank.then(|| fluids::fill_fraction(sample.level, node.capacity)),
+                item_type: None,
+                task_target: None,
             });
         }
         for p in self.items_at(t) {
@@ -1034,6 +1080,8 @@ impl Scene {
                 parent: p.parent,
                 state: None,
                 fill: None,
+                item_type: self.timeline.item_type(p.item),
+                task_target: None,
             });
         }
         Frame { time: t, poses }

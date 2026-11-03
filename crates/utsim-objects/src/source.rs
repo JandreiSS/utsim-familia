@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
@@ -7,6 +7,173 @@ use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, 
 const ARRIVAL: u32 = 0;
 const LOST_CHECK: u32 = 1;
 const BOUNDARY: u32 = 2;
+const TABLE_ROW: u32 = 3;
+const SPAWN_NEXT: u32 = 4;
+
+/// How the items of one arrival (a batch or a table row) leave the source.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Release {
+    /// All at the instant of the arrival (the next object decides whether they fit).
+    #[default]
+    Together,
+    /// One by one, this long apart (sampled for each gap).
+    OneByOne(Dist),
+}
+
+impl Release {
+    pub fn is_together(&self) -> bool {
+        *self == Release::Together
+    }
+}
+
+/// Most items one row of an arrival table may create.
+pub const MAX_ROW_COUNT: u64 = 1_000_000;
+
+/// How a source walks its [`ArrivalTable`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TableMode {
+    /// Arrival schedule: each row creates its items at the instant `at` of the cycle.
+    #[default]
+    Times,
+    /// Arrival sequence: the rows in order, one per arrival, with the source's
+    /// `interarrival` between two rows.
+    Sequence,
+}
+
+/// What a source does at the end of its [`ArrivalTable`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum TableRepeat {
+    /// Stop after the last row (state `idle`).
+    #[default]
+    Once,
+    /// `Times` only: repeat the rows every this many time units (`at` inside the cycle).
+    Cycle(f64),
+    /// `Sequence` only: go back to the first row.
+    Loop,
+}
+
+impl TableRepeat {
+    pub fn is_once(&self) -> bool {
+        *self == TableRepeat::Once
+    }
+}
+
+/// An ordered table of arrivals ("horário" or "sequência de chegadas"). See [`Source`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ArrivalTable {
+    #[serde(default)]
+    pub mode: TableMode,
+    #[serde(default, skip_serializing_if = "TableRepeat::is_once")]
+    pub repeat: TableRepeat,
+    pub rows: Vec<ArrivalRow>,
+}
+
+/// One row of an [`ArrivalTable`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ArrivalRow {
+    /// Instant of the row (`Times` only), inside the cycle with `Cycle`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<f64>,
+    /// Items the row creates at once (0 is allowed: the row creates nothing).
+    #[serde(default = "one_u64")]
+    pub count: u64,
+    /// Item type of the row's items (a name of the model's `item_types`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_type: Option<String>,
+    /// Constant labels of the row's items; they replace the source's labels of the same
+    /// name (labels the source does not have are added).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, f64>,
+}
+
+fn one_u64() -> u64 {
+    1
+}
+
+impl ArrivalTable {
+    /// Checks the rows against the mode and the repetition. Messages are user-facing
+    /// (Portuguese); rows are numbered from 1, as in experiment keys.
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.rows.is_empty() {
+            errors.push("table precisa de ao menos uma linha".into());
+        }
+        let cycle = match (self.mode, self.repeat) {
+            (TableMode::Times, TableRepeat::Loop) => {
+                errors.push(
+                    "table: Loop só vale no modo Sequence; no modo Times use Cycle(duração)".into(),
+                );
+                None
+            }
+            (TableMode::Sequence, TableRepeat::Cycle(_)) => {
+                errors.push(
+                    "table: Cycle só vale no modo Times; no modo Sequence use Loop ou Once".into(),
+                );
+                None
+            }
+            (_, TableRepeat::Cycle(d)) => {
+                if !(d.is_finite() && d > 0.0) {
+                    errors.push(format!("table: Cycle({d}) precisa de duração finita e > 0"));
+                    None
+                } else {
+                    Some(d)
+                }
+            }
+            _ => None,
+        };
+        let mut prev = f64::NEG_INFINITY;
+        for (k, row) in self.rows.iter().enumerate() {
+            let n = k + 1;
+            match (self.mode, row.at) {
+                (TableMode::Times, None) => {
+                    errors.push(format!("table.rows[{n}]: o modo Times precisa de `at`"));
+                }
+                (TableMode::Times, Some(at)) => {
+                    if !(at.is_finite() && at >= 0.0) {
+                        errors.push(format!(
+                            "table.rows[{n}]: at deve ser finito e >= 0 (está {at})"
+                        ));
+                    } else {
+                        if at < prev {
+                            errors.push(format!(
+                                "table.rows[{n}]: at ({at}) antes da linha anterior ({prev}); \
+                                 as linhas precisam estar em ordem de at"
+                            ));
+                        }
+                        if let Some(d) = cycle.filter(|d| at >= *d) {
+                            errors.push(format!(
+                                "table.rows[{n}]: at ({at}) precisa estar dentro do ciclo [0, {d})"
+                            ));
+                        }
+                        prev = at;
+                    }
+                }
+                (TableMode::Sequence, Some(_)) => errors.push(format!(
+                    "table.rows[{n}]: `at` só vale no modo Times (na sequência o intervalo vem de interarrival)"
+                )),
+                (TableMode::Sequence, None) => {}
+            }
+            if row.count > MAX_ROW_COUNT {
+                errors.push(format!(
+                    "table.rows[{n}]: count deve ser no máximo {MAX_ROW_COUNT}"
+                ));
+            }
+            for (name, v) in &row.labels {
+                if !v.is_finite() {
+                    errors.push(format!(
+                        "table.rows[{n}].labels.{name}: o valor deve ser finito"
+                    ));
+                }
+            }
+        }
+        errors
+    }
+
+    /// Items created per pass over the table.
+    pub fn items_per_pass(&self) -> f64 {
+        self.rows.iter().map(|r| r.count as f64).sum()
+    }
+}
 
 /// What the source does with an item that cannot leave at the instant it is created.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,6 +402,43 @@ pub struct Source {
     clock: Option<Clock>,
     /// Active period of the schedule (`None`: outside every period).
     current: Option<usize>,
+    table: Option<ArrivalTable>,
+    /// Next row of the table and, for `Times` with `Cycle`, the cycle it belongs to.
+    row: usize,
+    pass: u64,
+    /// Point of the table's cycle at `t = 0` (`Times`).
+    table_phase: f64,
+    /// The table has no rows left (`Once` after the last row).
+    exhausted: bool,
+    /// Items of the current arrival still in the source; the next arrival clock starts
+    /// when it reaches zero (`Times` rows do not wait).
+    outstanding: usize,
+    /// Arrivals (rows, or single items without a table), total and since the warm-up.
+    arrivals: u64,
+    arrivals_window: u64,
+    /// Items per arrival without a table (absent: one).
+    batch: Option<Dist>,
+    release: Release,
+    /// Items of the arrivals not created yet (`OneByOne`): count left and table row.
+    burst: VecDeque<(u64, Option<usize>)>,
+    /// Pending `SPAWN_NEXT` and its due time; time left while stopped.
+    spawn_next: Option<(EventId, Time)>,
+    spawn_paused: Option<Time>,
+    /// Item types of the model (see [`ItemTypeSpec`]); empty without types.
+    types: Vec<ItemTypeSpec>,
+    /// Type of every item (1-based), or drawn from `mix`, unless the table row sets one.
+    fixed_type: Option<u32>,
+    mix: Option<Dist>,
+    /// Type of each table row (1-based), when it sets one.
+    row_types: Vec<Option<u32>>,
+}
+
+/// An item type as a source applies it: its name and the constant labels its items get
+/// (the source's and the row's labels of the same name win).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemTypeSpec {
+    pub name: String,
+    pub labels: Vec<(String, f64)>,
 }
 
 impl Source {
@@ -253,6 +457,244 @@ impl Source {
             gap: 0.0,
             clock: None,
             current: None,
+            table: None,
+            row: 0,
+            pass: 0,
+            table_phase: 0.0,
+            exhausted: false,
+            outstanding: 0,
+            arrivals: 0,
+            arrivals_window: 0,
+            batch: None,
+            release: Release::Together,
+            burst: VecDeque::new(),
+            spawn_next: None,
+            spawn_paused: None,
+            types: Vec::new(),
+            fixed_type: None,
+            mix: None,
+            row_types: Vec::new(),
+        }
+    }
+
+    /// Item types (call after [`Source::table`]): the model's types, the type of every
+    /// item (`fixed`) or the weighted mix to draw it from, by name. Table rows with an
+    /// `item_type` use theirs. Names must exist (validate the model first); unknown
+    /// names are ignored.
+    pub fn item_types(
+        mut self,
+        types: Vec<ItemTypeSpec>,
+        fixed: Option<&str>,
+        mix: &[(String, f64)],
+    ) -> Self {
+        let index = |name: &str| {
+            types
+                .iter()
+                .position(|t| t.name == name)
+                .map(|k| k as u32 + 1)
+        };
+        self.fixed_type = fixed.and_then(index);
+        let table: Vec<(f64, f64)> = mix
+            .iter()
+            .filter_map(|(name, w)| Some((index(name)? as f64, *w)))
+            .collect();
+        self.mix = (!table.is_empty()).then_some(Dist::Discrete(table));
+        self.row_types = self.table.as_ref().map_or(Vec::new(), |t| {
+            t.rows
+                .iter()
+                .map(|r| r.item_type.as_deref().and_then(index))
+                .collect()
+        });
+        self.types = types;
+        self
+    }
+
+    /// The type of a new item of `row` (1-based), drawing from the mix when needed.
+    fn type_of(&self, cx: &mut Ctx, row: Option<usize>) -> Option<u32> {
+        if let Some(t) = row.and_then(|r| self.row_types.get(r).copied().flatten()) {
+            return Some(t);
+        }
+        if self.fixed_type.is_some() {
+            return self.fixed_type;
+        }
+        self.mix.as_ref().map(|d| cx.sample(d) as u32)
+    }
+
+    /// Items created per arrival (rounded, at least 0) when there is no table; absent:
+    /// one. Validate the distribution first.
+    pub fn batch(mut self, batch: Option<Dist>) -> Self {
+        self.batch = batch;
+        self
+    }
+
+    /// How the items of one arrival leave: together or spaced (see [`Release`]).
+    pub fn release(mut self, release: Release) -> Self {
+        self.release = release;
+        self
+    }
+
+    /// Whether the source reports `arrivals.count` (several items per arrival possible).
+    fn counts_arrivals(&self) -> bool {
+        self.table.is_some() || self.batch.is_some()
+    }
+
+    /// Arrival table (see [`ArrivalTable`]); validate it first. Not used with a schedule.
+    pub fn table(mut self, table: Option<ArrivalTable>) -> Self {
+        self.table = table;
+        self
+    }
+
+    /// Whether arrivals come at the fixed instants of a `Times` table.
+    fn timed(&self) -> bool {
+        self.table.as_ref().map(|t| t.mode) == Some(TableMode::Times)
+    }
+
+    /// Schedules the next row of a `Times` table (or goes idle at its end).
+    fn schedule_row(&mut self, cx: &mut Ctx) {
+        let Some(table) = &self.table else { return };
+        if self.exhausted || self.max_arrivals.is_some_and(|max| self.arrivals >= max) {
+            self.next = None;
+            if self.outstanding == 0 {
+                cx.set_state(State::Idle);
+            }
+            return;
+        }
+        let at = table.rows[self.row].at.unwrap_or(0.0);
+        let cycle = match table.repeat {
+            TableRepeat::Cycle(d) => d,
+            _ => 0.0,
+        };
+        let due = self.pass as f64 * cycle + at - self.table_phase;
+        let delay = (due - cx.now()).max(0.0);
+        let event = cx.schedule(delay, TABLE_ROW, None);
+        self.next = Some((event, cx.now() + delay));
+        if self.outstanding == 0 {
+            cx.set_state(State::Generating);
+        }
+    }
+
+    /// Moves to the next row after one was used.
+    fn advance_row(&mut self) {
+        let Some(table) = &self.table else { return };
+        self.row += 1;
+        if self.row < table.rows.len() {
+            return;
+        }
+        self.row = 0;
+        match table.repeat {
+            TableRepeat::Once => self.exhausted = true,
+            TableRepeat::Cycle(_) => self.pass += 1,
+            TableRepeat::Loop => {}
+        }
+    }
+
+    /// One arrival: creates `count` items with the source's labels, then the row's.
+    /// With `OneByOne`, the first item now and the others queued (see [`Release`]).
+    fn arrive(&mut self, cx: &mut Ctx, count: u64, row: Option<usize>) {
+        self.arrivals += 1;
+        self.arrivals_window += 1;
+        self.outstanding += count as usize;
+        if self.release.is_together() || count <= 1 {
+            for _ in 0..count {
+                self.spawn_one(cx, row);
+            }
+            return;
+        }
+        let first = if self.burst.is_empty() { 1 } else { 0 };
+        if count > first {
+            self.burst.push_back((count - first, row));
+        }
+        if first == 1 {
+            self.spawn_one(cx, row);
+            self.schedule_spawn(cx);
+        }
+    }
+
+    /// Schedules the next item of a `OneByOne` arrival.
+    fn schedule_spawn(&mut self, cx: &mut Ctx) {
+        let Release::OneByOne(gap) = &self.release else {
+            return;
+        };
+        if self.burst.is_empty() {
+            return;
+        }
+        let gap = cx.sample_duration(gap);
+        let event = cx.schedule(gap, SPAWN_NEXT, None);
+        self.spawn_next = Some((event, cx.now() + gap));
+    }
+
+    /// Creates and releases one item of an arrival.
+    fn spawn_one(&mut self, cx: &mut Ctx, row: Option<usize>) {
+        let id = cx.spawn_item();
+        if let Some(k) = self.type_of(cx, row) {
+            cx.set_item_type(id, k);
+            if let Some(spec) = self.types.get(k as usize - 1) {
+                for (name, v) in &spec.labels {
+                    cx.item_mut(id).set_label(name.clone(), *v);
+                }
+            }
+        }
+        self.label_item(cx, id);
+        if let Some(r) = row {
+            let labels = &self.table.as_ref().expect("row of a table").rows[r].labels;
+            for (name, v) in labels {
+                cx.item_mut(id).set_label(name.clone(), *v);
+            }
+        }
+        self.created += 1;
+        cx.set_state(State::Blocked);
+        cx.release(id);
+        if self.on_blocked == OnBlocked::Drop {
+            cx.schedule(0.0, LOST_CHECK, Some(id));
+        }
+    }
+
+    /// Items of one arrival without a table.
+    fn batch_size(&self, cx: &mut Ctx) -> u64 {
+        match &self.batch {
+            None => 1,
+            Some(d) => (cx.sample(d).round().max(0.0) as u64).min(MAX_ROW_COUNT),
+        }
+    }
+
+    /// Labels drawn when an item is created (with the period in force).
+    fn label_item(&self, cx: &mut Ctx, id: ItemId) {
+        let overrides = match (&self.clock, self.current) {
+            (Some(clock), Some(k)) => Some(&clock.schedule.periods[k].labels),
+            _ => None,
+        }
+        .filter(|m| !m.is_empty());
+        for (name, dist) in &self.labels {
+            let dist = overrides.and_then(|m| m.get(name)).unwrap_or(dist);
+            let value = cx.sample(dist);
+            cx.item_mut(id).set_label(name.clone(), value);
+        }
+        for (name, dist) in overrides.into_iter().flatten() {
+            if !self.labels.iter().any(|(n, _)| n == name) {
+                let value = cx.sample(dist);
+                cx.item_mut(id).set_label(name.clone(), value);
+            }
+        }
+    }
+
+    /// The last item of an arrival left (or was lost): start the next arrival clock.
+    fn arrival_done(&mut self, cx: &mut Ctx) {
+        if self.timed() {
+            cx.set_state(if self.next.is_some() {
+                State::Generating
+            } else {
+                State::Idle
+            });
+            return;
+        }
+        if cx.is_down() {
+            // Stopped in this same instant: park the clock until resume.
+            self.paused = self.gap(cx);
+            if self.paused.is_none() {
+                cx.set_state(State::OffShift);
+            }
+        } else {
+            self.schedule_next(cx);
         }
     }
 
@@ -365,7 +807,7 @@ impl Source {
     }
 
     fn schedule_next(&mut self, cx: &mut Ctx) {
-        if self.max_arrivals.is_some_and(|max| self.created >= max) {
+        if self.exhausted || self.max_arrivals.is_some_and(|max| self.arrivals >= max) {
             cx.set_state(State::Idle);
             return;
         }
@@ -388,6 +830,32 @@ impl Behavior for Source {
         self.next = None;
         self.paused = None;
         self.gap = 0.0;
+        self.row = 0;
+        self.pass = 0;
+        self.exhausted = false;
+        self.outstanding = 0;
+        self.arrivals = 0;
+        self.arrivals_window = 0;
+        self.burst.clear();
+        self.spawn_next = None;
+        self.spawn_paused = None;
+        if let Some(table) = self.table.as_ref().filter(|t| t.mode == TableMode::Times) {
+            // Where the run starts in the table (the calendar start, 0 unless the run
+            // starts from an initial state), then the first row at or after it.
+            let start = cx.calendar_start();
+            self.table_phase = match table.repeat {
+                TableRepeat::Cycle(d) => start.rem_euclid(d),
+                _ => start,
+            };
+            let phase = self.table_phase;
+            match table.rows.iter().position(|r| r.at.unwrap_or(0.0) >= phase) {
+                Some(i) => self.row = i,
+                None if matches!(table.repeat, TableRepeat::Cycle(_)) => self.pass = 1,
+                None => self.exhausted = true,
+            }
+            self.schedule_row(cx);
+            return;
+        }
         if let Some(clock) = &mut self.clock {
             // The period in force at t = 0, then the first mark after it. The cycle is at
             // the calendar start (0 unless the run starts from an initial state).
@@ -432,6 +900,7 @@ impl Behavior for Source {
             );
         }
         if n == 1 {
+            self.outstanding = 1;
             if state.elapsed.is_some() {
                 return Err(
                     "'elapsed' não vale com um item parado na fonte (o relógio de chegadas recomeça quando ele sai)"
@@ -445,6 +914,9 @@ impl Behavior for Source {
             cx.set_state(State::Blocked);
             cx.release(id);
             return Ok(());
+        }
+        if self.timed() {
+            return Ok(()); // the rows keep their instants
         }
         if let (Some(elapsed), Some((event, _))) = (state.elapsed, self.next) {
             let dist = match self.process(self.current) {
@@ -489,16 +961,33 @@ impl Behavior for Source {
                 cx.destroy(id);
                 cx.record("lost", 1.0);
                 self.lost += 1;
-                if cx.is_down() {
-                    // Stopped in this same instant: park the clock until resume.
-                    self.paused = self.gap(cx);
-                    if self.paused.is_none() {
-                        cx.set_state(State::OffShift);
-                    }
-                } else {
-                    self.schedule_next(cx);
+                self.outstanding = self.outstanding.saturating_sub(1);
+                if self.outstanding == 0 {
+                    self.arrival_done(cx);
                 }
             }
+            return;
+        }
+        if tag == SPAWN_NEXT {
+            self.spawn_next = None;
+            if let Some((left, row)) = self.burst.front_mut() {
+                let row = *row;
+                *left -= 1;
+                if *left == 0 {
+                    self.burst.pop_front();
+                }
+                self.spawn_one(cx, row);
+            }
+            self.schedule_spawn(cx);
+            return;
+        }
+        if tag == TABLE_ROW {
+            self.next = None;
+            let row = self.row;
+            let count = self.table.as_ref().map_or(0, |t| t.rows[row].count);
+            self.advance_row();
+            self.arrive(cx, count, Some(row));
+            self.schedule_row(cx);
             return;
         }
         if tag == BOUNDARY {
@@ -509,49 +998,58 @@ impl Behavior for Source {
             return;
         }
         self.next = None;
-        let id = cx.spawn_item();
-        let overrides = match (&self.clock, self.current) {
-            (Some(clock), Some(k)) => Some(&clock.schedule.periods[k].labels),
-            _ => None,
+        let (count, row) = match &self.table {
+            // Sequence: the next row.
+            Some(t) => (t.rows[self.row].count, Some(self.row)),
+            None => (self.batch_size(cx), None),
+        };
+        if row.is_some() {
+            self.advance_row();
         }
-        .filter(|m| !m.is_empty());
-        for (name, dist) in &self.labels {
-            let dist = overrides.and_then(|m| m.get(name)).unwrap_or(dist);
-            let value = cx.sample(dist);
-            cx.item_mut(id).set_label(name.clone(), value);
-        }
-        for (name, dist) in overrides.into_iter().flatten() {
-            if !self.labels.iter().any(|(n, _)| n == name) {
-                let value = cx.sample(dist);
-                cx.item_mut(id).set_label(name.clone(), value);
-            }
-        }
-        self.created += 1;
-        cx.set_state(State::Blocked);
-        cx.release(id);
-        if self.on_blocked == OnBlocked::Drop {
-            cx.schedule(0.0, LOST_CHECK, Some(id));
+        self.arrive(cx, count, row);
+        if self.outstanding == 0 {
+            // A row with no items: the next one follows.
+            self.arrival_done(cx);
         }
     }
 
     fn on_exit(&mut self, cx: &mut Ctx, _item: ItemId) {
         self.entered += 1;
-        self.schedule_next(cx);
+        self.outstanding = self.outstanding.saturating_sub(1);
+        if self.outstanding > 0 {
+            return;
+        }
+        if self.timed() {
+            self.arrival_done(cx);
+        } else {
+            self.schedule_next(cx);
+        }
     }
 
     fn on_warmup(&mut self, _cx: &mut Ctx) {
         self.entered = 0;
         self.lost = 0;
+        self.arrivals_window = 0;
     }
 
     /// For `Drop` sources: `lost.count`, `entered.count` and `loss_fraction`, always
     /// present (zero when nothing was lost) so they work as optimisation objectives.
+    ///
+    /// With a table: `arrivals.count` (arrivals since the warm-up) and `entered.count`
+    /// (items that left).
     fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
+        let mut out = Vec::new();
+        if self.counts_arrivals() {
+            out.push(("arrivals.count".to_string(), self.arrivals_window as f64));
+            if self.on_blocked != OnBlocked::Drop {
+                out.push(("entered.count".to_string(), self.entered as f64));
+            }
+        }
         if self.on_blocked != OnBlocked::Drop {
-            return Vec::new();
+            return out;
         }
         let total = (self.lost + self.entered) as f64;
-        vec![
+        out.extend([
             ("lost.count".to_string(), self.lost as f64),
             ("entered.count".to_string(), self.entered as f64),
             (
@@ -562,7 +1060,8 @@ impl Behavior for Source {
                     0.0
                 },
             ),
-        ]
+        ]);
+        out
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {
@@ -570,9 +1069,24 @@ impl Behavior for Source {
             cx.cancel(event);
             self.paused = Some((due - cx.now()).max(0.0));
         }
+        if let Some((event, due)) = self.spawn_next.take() {
+            cx.cancel(event);
+            self.spawn_paused = Some((due - cx.now()).max(0.0));
+        }
     }
 
     fn on_resume(&mut self, cx: &mut Ctx) {
+        if let Some(left) = self.spawn_paused.take() {
+            let event = cx.schedule(left, SPAWN_NEXT, None);
+            self.spawn_next = Some((event, cx.now() + left));
+        }
+        if self.timed() {
+            // Rows due while stopped arrive now, in order.
+            if self.paused.take().is_some() {
+                self.schedule_row(cx);
+            }
+            return;
+        }
         if let Some(remaining) = self.paused.take() {
             self.arrive_in(cx, remaining);
         }

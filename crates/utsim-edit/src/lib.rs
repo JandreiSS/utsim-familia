@@ -11,12 +11,16 @@
 //!
 //! [`network`] and [`fluids`] execute the commands on the path network and on the
 //! fluid network, and hold the helpers the editor draws them with.
+//!
+//! [`teams`] builds the commands of the team and request links (team members,
+//! `transport`, `operators`) that the editor creates by dragging.
 
 pub mod aisles;
 pub mod arrange;
 pub mod fluids;
 pub mod network;
 pub mod ron_text;
+pub mod teams;
 
 use std::path::{Path, PathBuf};
 
@@ -846,6 +850,11 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             labels: Default::default(),
             on_blocked: Default::default(),
             schedule: None,
+            table: None,
+            batch: None,
+            release: Default::default(),
+            item_type: None,
+            item_type_mix: Vec::new(),
         },
         "Queue" => ObjectKind::Queue {
             capacity: None,
@@ -880,6 +889,10 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             agv: false,
             movement: None,
             clearance: None,
+            home_at: None,
+            home_object: None,
+            break_at: None,
+            break_object: None,
         },
         "Conveyor" => ObjectKind::Conveyor {
             length: 5.0,
@@ -898,6 +911,9 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         "Dispatcher" => ObjectKind::Dispatcher {
             team: Vec::new(),
             rule: Default::default(),
+            pick: Default::default(),
+            preempt: Default::default(),
+            metrics: false,
         },
         _ => return None,
     };
@@ -909,6 +925,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         downtime: None,
         shifts: None,
         transport: None,
+        transport_priority: None,
+        transport_priority_label: None,
         transfer: None,
         on_entry: None,
         visual: None,

@@ -17,12 +17,15 @@ mod transporter;
 
 pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
-pub use dispatcher::{DispatchRule, Dispatcher};
+pub use dispatcher::{DispatchRule, Dispatcher, Preempt, TaskPick};
 pub use processor::{OperatorUse, Processor};
 pub use queue::{Batch, Discipline, Queue};
 pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
-pub use sink::Sink;
-pub use source::{ArrivalPeriod, ArrivalSchedule, OnBlocked, PeriodArrivals, Source};
+pub use sink::{Sink, TypedSink};
+pub use source::{
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, ItemTypeSpec, OnBlocked,
+    PeriodArrivals, Release, Source, TableMode, TableRepeat,
+};
 pub use span::Span;
 pub use transporter::Transporter;

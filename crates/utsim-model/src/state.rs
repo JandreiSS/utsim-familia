@@ -291,6 +291,7 @@ impl Model {
                 ObjectKind::Source {
                     interarrival,
                     schedule: None,
+                    table: None,
                     ..
                 },
             ) = (bs.elapsed, &obj.kind)

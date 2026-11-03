@@ -881,7 +881,7 @@ fn add_resources(model: &Model, objs: &[&ObjectDef], nodes: &mut [Node]) -> Vec<
         used.sort_unstable();
         used.dedup();
         match &obj.kind {
-            ObjectKind::Dispatcher { team, rule } => {
+            ObjectKind::Dispatcher { team, rule, .. } => {
                 let kind = match (transports.is_some(), operates.is_some()) {
                     (true, true) => ResourceKind::EquipeEFrota,
                     (true, false) => ResourceKind::Frota,

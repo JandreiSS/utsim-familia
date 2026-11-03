@@ -49,6 +49,8 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         downtime: None,
         shifts: None,
         transport: None,
+        transport_priority: None,
+        transport_priority_label: None,
         transfer: None,
         on_entry: None,
         visual: None,
@@ -82,6 +84,11 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         labels: BTreeMap::new(),
         on_blocked: OnBlocked::default(),
         schedule: None,
+        table: None,
+        batch: None,
+        release: Default::default(),
+        item_type: None,
+        item_type_mix: Vec::new(),
     }
 }
 
@@ -220,6 +227,8 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             movement: None,
         },
         calendars: BTreeMap::new(),
+        areas: Vec::new(),
+        item_types: Vec::new(),
         objects: objs,
         connections,
         network: None,

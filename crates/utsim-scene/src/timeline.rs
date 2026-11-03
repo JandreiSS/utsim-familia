@@ -96,6 +96,8 @@ struct ItemTrack {
     steps: Vec<(f64, ItemStep)>,
     created: f64,
     destroyed: f64,
+    /// Item type (1-based index in the model's `item_types`), when the model has types.
+    item_type: Option<u32>,
 }
 
 /// One `Travel` event of a mobile resource.
@@ -444,6 +446,7 @@ impl Timeline {
                     steps: Vec::new(),
                     created: f64::INFINITY,
                     destroyed: f64::INFINITY,
+                    item_type: None,
                 });
                 at.push(None);
                 items.len() - 1
@@ -646,6 +649,10 @@ impl Timeline {
                     let m = max_slot.entry(*block).or_insert(0);
                     *m = (*m).max(*slot);
                 }
+                TraceEvent::ItemType { item, item_type } => {
+                    let i = item_index(*item, &mut index, &mut items, &mut at);
+                    items[i].item_type = Some(*item_type);
+                }
             }
         }
         // Items only seen as containers (no own event) never exist visually.
@@ -760,6 +767,20 @@ impl Timeline {
     /// Trace id of item `item` (dense index).
     pub fn item_id(&self, item: usize) -> Option<u64> {
         self.ids.get(item).copied()
+    }
+
+    /// End of the travel mobile block `b` is moving along at `t` (model coordinates).
+    pub fn travel_target(&self, b: usize, t: f64) -> Option<[f64; 3]> {
+        self.legs(b)
+            .iter()
+            .rev()
+            .find(|l| l.is_moving(t))
+            .and_then(|l| l.path.last().copied())
+    }
+
+    /// Item type of item `item` (dense index): 1-based index in the model's `item_types`.
+    pub fn item_type(&self, item: usize) -> Option<u32> {
+        self.items.get(item).and_then(|it| it.item_type)
     }
 
     /// Travel legs of mobile block `b`, in time order.

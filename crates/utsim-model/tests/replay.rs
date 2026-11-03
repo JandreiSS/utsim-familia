@@ -85,7 +85,7 @@ fn item_of(event: &TraceEvent) -> Option<u64> {
         | TraceEvent::Unpacked { item, .. }
         | TraceEvent::Transit { item, .. }
         | TraceEvent::Destroyed { item } => Some(item),
-        TraceEvent::Slot { item, .. } => Some(item),
+        TraceEvent::Slot { item, .. } | TraceEvent::ItemType { item, .. } => Some(item),
         TraceEvent::State { .. }
         | TraceEvent::Travel { .. }
         | TraceEvent::Tokens { .. }
@@ -185,6 +185,10 @@ impl Ledger {
             TraceEvent::Slot { block, .. } => check_block(block)?,
             TraceEvent::Tokens { flow, .. } => check_block(flow)?,
             TraceEvent::Fluid { net, .. } => check_block(net)?,
+            TraceEvent::ItemType { item, .. } => {
+                // Right after the item was created, while it is still in the source.
+                self.loc_of(item)?;
+            }
             TraceEvent::Unpacked { item, block } => {
                 check_block(block)?;
                 let Loc::Packed(container) = self.loc_of(item)? else {

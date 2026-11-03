@@ -2,6 +2,7 @@
 
 mod aisles;
 pub mod analysis;
+mod arrivals;
 pub mod csv;
 pub mod dados;
 pub mod experiment;
@@ -15,6 +16,7 @@ mod shifts;
 mod spans;
 pub mod state;
 pub mod synthetic;
+pub mod teams;
 mod warnings;
 
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
@@ -42,13 +44,17 @@ use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
-    OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
-    Transporter,
+    OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink,
+    Source, TaskPick, Transporter, TypedSink,
 };
 
+pub use arrivals::{AreaDef, ItemTypeDef};
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
-pub use utsim_objects::{ArrivalPeriod, ArrivalSchedule, PeriodArrivals};
+pub use utsim_objects::{
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
+    TableRepeat,
+};
 
 /// Reads only the `format` field; every other field is ignored.
 #[derive(Deserialize)]
@@ -121,6 +127,14 @@ pub struct Model {
     /// Named shift tables that objects reference with `shifts: Calendar("name")`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub calendars: BTreeMap<String, ShiftTable>,
+    /// Named floor areas (waiting areas, break rooms, office zones): markers outside the
+    /// flow that transporters use as home or break place.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub areas: Vec<AreaDef>,
+    /// Item types (name, colour, 3D look, default labels). An item of type `k` (1-based,
+    /// in this order) carries the reserved label `type = k`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_types: Vec<ItemTypeDef>,
     pub objects: Vec<ObjectDef>,
     /// `(from, to)` pairs. Order defines port numbers and pull priority.
     #[serde(default)]
@@ -208,6 +222,14 @@ pub struct ObjectDef {
     /// (instead of handing them over instantly).
     #[serde(default)]
     pub transport: Option<String>,
+    /// Priority of this object's transport requests at the dispatcher (higher goes first,
+    /// FIFO among equals). Absent: 0, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_priority: Option<i32>,
+    /// Item label whose value, when the item has it, replaces `transport_priority`
+    /// (e.g. an urgent order created with `"prioridade": 9` goes ahead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_priority_label: Option<String>,
     /// Travel time of items leaving this object through direct connections:
     /// `delay + distance / speed`, with room reserved at the destination meanwhile.
     /// Absent means instantaneous (unless `run.transfer` is set).
@@ -267,6 +289,23 @@ pub enum ObjectKind {
         /// Arrivals by period of a repeating cycle (absent: `interarrival` all the time).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         schedule: Option<ArrivalSchedule>,
+        /// Arrival table: fixed instants (`Times`) or an ordered sequence (`Sequence`),
+        /// each row with a count and labels. Not together with `schedule`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        table: Option<ArrivalTable>,
+        /// Items created per arrival (rounded, at least 0) without a table; absent: one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        batch: Option<Dist>,
+        /// How the items of one arrival (batch or table row) leave: `Together` or
+        /// `OneByOne(Dist)`.
+        #[serde(default, skip_serializing_if = "Release::is_together")]
+        release: Release,
+        /// Item type of every item (a name of the model's `item_types`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_type: Option<String>,
+        /// Item types drawn for each item, `(name, weight)`; not with `item_type`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        item_type_mix: Vec<(String, f64)>,
     },
     Queue {
         #[serde(default)]
@@ -331,6 +370,18 @@ pub enum ObjectKind {
         /// half the width of its role (person 0.3, forklift 0.6, AGV or vehicle 0.5) + 0.3.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clearance: Option<f64>,
+        /// Home at this point instead of the object's own position (implies `home`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        home_at: Option<[f64; 3]>,
+        /// Home at this object or area (its position; implies `home`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        home_object: Option<String>,
+        /// Break place: point the member walks to when its shift pauses with nothing to do.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        break_at: Option<[f64; 3]>,
+        /// Break place at an object or area (its position).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        break_object: Option<String>,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -361,11 +412,25 @@ pub enum ObjectKind {
         team: Vec<String>,
         #[serde(default)]
         rule: DispatchRule,
+        /// Which waiting task a member that becomes free takes (absent: `Priority`).
+        #[serde(default, skip_serializing_if = "TaskPick::is_priority")]
+        pick: TaskPick,
+        /// Whether a more urgent request takes a member travelling empty (absent: `Never`).
+        #[serde(default, skip_serializing_if = "Preempt::is_never")]
+        preempt: Preempt,
+        /// Team metrics in the report (`request_wait`, `requests.count`, per member
+        /// `member.<name>.requests` and `.busy`). Off by default.
+        #[serde(default, skip_serializing_if = "is_false")]
+        metrics: bool,
     },
 }
 
 fn yes() -> bool {
     true
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 fn one_f64() -> f64 {
@@ -519,8 +584,29 @@ impl Model {
                     interarrival,
                     labels,
                     schedule,
+                    table,
+                    batch,
+                    release,
                     ..
                 } => {
+                    errors.extend(arrivals::validate_source(
+                        &obj.name,
+                        interarrival,
+                        schedule,
+                        table,
+                    ));
+                    if batch.is_some() && table.is_some() {
+                        errors.push(format!(
+                            "{}: com `table` a quantidade de cada chegada vem de rows[].count; tire `batch`",
+                            obj.name
+                        ));
+                    }
+                    if let Some(b) = batch {
+                        dists.push(("batch".into(), b));
+                    }
+                    if let Release::OneByOne(d) = release {
+                        dists.push(("release".into(), d));
+                    }
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
                     if let Some(s) = schedule {
@@ -770,17 +856,27 @@ impl Model {
                     interarrival,
                     max_arrivals,
                     schedule,
+                    table,
+                    batch,
                     ..
                 },
             ) = (dists_ok, &obj.kind)
             {
-                let mean = match schedule {
+                let per_arrival = batch.as_ref().map_or(1.0, |b| b.mean().max(0.0));
+                let mean = match (table, schedule) {
+                    (Some(t), _) => arrivals::mean_gap(t, interarrival),
                     // Mean time between arrivals over a whole cycle.
-                    Some(s) if s.validate().is_empty() => {
+                    (None, Some(s)) if s.validate().is_empty() => {
                         s.cycle / s.expected_per_cycle(interarrival)
                     }
-                    Some(_) => f64::NAN,
-                    None => interarrival.mean(),
+                    (None, Some(_)) => f64::NAN,
+                    (None, None) => interarrival.mean(),
+                };
+                // Items, not arrivals: a batch multiplies them.
+                let mean = if table.is_none() {
+                    mean / per_arrival
+                } else {
+                    mean
                 };
                 let limit = max_arrivals.map_or(f64::INFINITY, |n| n as f64);
                 if mean.is_finite() && run.stop_time.is_finite() {
@@ -809,6 +905,8 @@ impl Model {
             .iter()
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
+        self.validate_item_types(&mut errors);
+        self.validate_places(&mut errors);
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_movement(&mut errors);
         self.validate_aisles(&mut errors);
@@ -882,6 +980,24 @@ impl Model {
         let mobile = |name: &str| kind_of.get(name).is_some_and(|k| is_mobile(k));
         let mut in_team: HashMap<&str, &str> = HashMap::new();
         for obj in &self.objects {
+            if obj.transport.is_none()
+                && (obj.transport_priority.is_some() || obj.transport_priority_label.is_some())
+            {
+                errors.push(format!(
+                    "{}: transport_priority e transport_priority_label só valem com `transport`",
+                    obj.name
+                ));
+            }
+            if obj
+                .transport_priority_label
+                .as_deref()
+                .is_some_and(|l| l.trim().is_empty())
+            {
+                errors.push(format!(
+                    "{}: transport_priority_label precisa do nome de um rótulo",
+                    obj.name
+                ));
+            }
             if let Some(t) = &obj.transport {
                 if !mobile(t) {
                     errors.push(format!(
@@ -898,6 +1014,16 @@ impl Model {
                 ..
             } = &obj.kind
             {
+                if op
+                    .priority_label
+                    .as_deref()
+                    .is_some_and(|l| l.trim().is_empty())
+                {
+                    errors.push(format!(
+                        "{}: operators.priority_label precisa do nome de um rótulo",
+                        obj.name
+                    ));
+                }
                 if !mobile(&op.team) {
                     errors.push(format!(
                         "{}: operators.team '{}' precisa ser um Transporter ou Dispatcher",
@@ -1014,12 +1140,29 @@ impl Model {
                     labels,
                     on_blocked,
                     schedule,
+                    table,
+                    batch,
+                    release,
+                    item_type,
+                    item_type_mix,
                 } => {
                     let source = Source::new(interarrival.clone())
+                        .batch(batch.clone())
+                        .release(release.clone())
                         .on_blocked(*on_blocked)
                         .first_at_zero(*first_at_zero)
                         .max_arrivals(*max_arrivals)
-                        .schedule(schedule.clone());
+                        .schedule(schedule.clone())
+                        .table(table.clone());
+                    let source = if self.item_types.is_empty() {
+                        source
+                    } else {
+                        source.item_types(
+                            self.item_type_specs(),
+                            item_type.as_deref(),
+                            item_type_mix,
+                        )
+                    };
                     Box::new(
                         labels
                             .iter()
@@ -1057,6 +1200,9 @@ impl Model {
                                 .map(|op| (ids[op.team.as_str()], op.clone())),
                         ),
                 ),
+                ObjectKind::Sink if !self.item_types.is_empty() => Box::new(TypedSink::new(
+                    self.item_types.iter().map(|t| t.name.clone()).collect(),
+                )),
                 ObjectKind::Sink => Box::new(Sink),
                 ObjectKind::Transporter {
                     speed,
@@ -1067,15 +1213,21 @@ impl Model {
                     unload_time,
                     home,
                     agv,
+                    home_at,
+                    home_object,
+                    break_at,
+                    break_object,
                     ..
                 } => Box::new(
                     Transporter::new(*speed)
+                        .home_point(self.place_of(*home_at, home_object.as_deref()))
+                        .break_point(self.place_of(*break_at, break_object.as_deref()))
                         .agv(if *agv { traffic.clone() } else { None })
                         .router(nav.router(&obj.name))
                         .crossings(nav.crossings_for(&obj.name, &crossings))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
-                        .home(*home)
+                        .home(*home || home_at.is_some() || home_object.is_some())
                         .handling(load_time.clone(), unload_time.clone())
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),
@@ -1092,15 +1244,30 @@ impl Model {
                     placement,
                     ..
                 } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement)),
-                ObjectKind::Dispatcher { team, rule } => Box::new(Dispatcher::new(
-                    team.iter().map(|m| ids[m.as_str()]).collect(),
-                    *rule,
-                )),
+                ObjectKind::Dispatcher {
+                    team,
+                    rule,
+                    pick,
+                    preempt,
+                    metrics,
+                } => Box::new(
+                    Dispatcher::new(team.iter().map(|m| ids[m.as_str()]).collect(), *rule)
+                        .pick(*pick)
+                        .preempt(*preempt)
+                        .metrics(*metrics),
+                ),
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
             sim.set_position(id, obj.position);
             if let Some(t) = &obj.transport {
                 sim.set_transport(id, ids[t.as_str()]);
+                if obj.transport_priority.is_some() || obj.transport_priority_label.is_some() {
+                    sim.set_transport_priority(
+                        id,
+                        obj.transport_priority.unwrap_or(0),
+                        obj.transport_priority_label.clone(),
+                    );
+                }
             }
             if let Some(script) = obj
                 .on_entry
