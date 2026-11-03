@@ -1,0 +1,43 @@
+// Vocabulário da linha Lean Office: termo do núcleo -> termo do escritório, aplicado na
+// interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam de nome.
+Vocabulary(
+    line: "lean_office",
+    terms: {
+        // Coisas e objetos.
+        "item": "caso",
+        "itens": "casos",
+        "Source": "entrada de pedidos",
+        "Queue": "caixa de entrada",
+        "Processor": "posto de trabalho",
+        "Combiner": "junção de documentos",
+        "Separator": "separação de documentos",
+        "Sink": "conclusão",
+        "Transporter": "pessoa",
+        "Dispatcher": "equipe",
+        "operador": "pessoa",
+        "operadores": "pessoas",
+        // Medidas.
+        "time_in_system": "lead time",
+        "process_time": "touch time",
+        "content": "casos parados",
+        "throughput": "casos concluídos por dia",
+        "staytime": "tempo na etapa",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "livre",
+        "processing": "trabalhando no caso",
+        "setup": "preparando",
+        "blocked": "sem espaço na próxima etapa",
+        "waiting_operator": "esperando a pessoa",
+        "waiting_transport": "esperando quem leve",
+        "off_shift": "fora do expediente",
+        "down": "parado (sistema fora do ar)",
+        "utilize": "trabalhando no caso",
+        "travel_empty": "andando",
+        "travel_loaded": "levando o caso",
+        "resting": "pausa",
+        "releasing": "com casos parados",
+        "collecting": "juntando o lote",
+        "empty": "vazia",
+    },
+)
