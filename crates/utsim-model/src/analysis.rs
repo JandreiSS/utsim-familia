@@ -5,12 +5,21 @@
 //!
 //! Every interval comes from [`Summary::from_samples`] over the per-replication values,
 //! the same statistics as [`utsim_core::summarize`] (a metric missing from a replication
-//! counts as 0), so the numbers match `utsim run`.
+//! counts as 0), so the numbers match `utsim run`. The `*_at` variants take another
+//! confidence level ([`utsim_stats::summary`]; at 95% they are identical).
+//!
+//! The output analyses of the [`advanced`] submodule (warm-up, precision, batch means,
+//! Little's law, shifting bottleneck) are re-exported here.
+
+mod advanced;
+
+pub use advanced::*;
 
 use std::collections::BTreeMap;
 
 use utsim_core::stats::{Histogram, Summary};
 use utsim_core::{RunReport, Utilization};
+use utsim_stats::DEFAULT_LEVEL;
 
 pub use utsim_core::report::BUSY_TRAVEL_STATES;
 
@@ -66,13 +75,18 @@ pub fn utilization_of(block: &utsim_core::BlockReport) -> Option<Utilization> {
     block.utilization()
 }
 
-fn summary_of(values: impl Iterator<Item = f64>) -> Summary {
+fn summary_of(values: impl Iterator<Item = f64>, level: f64) -> Summary {
     let xs: Vec<f64> = values.collect();
-    Summary::from_samples(&xs)
+    utsim_stats::summary(&xs, level)
 }
 
 /// One row per block of the first report, in report order.
-pub fn object_stats(_model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
+pub fn object_stats(model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
+    object_stats_at(model, reports, DEFAULT_LEVEL)
+}
+
+/// [`object_stats`] with intervals at confidence `level` (e.g. `0.90`).
+pub fn object_stats_at(_model: &Model, reports: &[RunReport], level: f64) -> Vec<ObjectStats> {
     let Some(first) = reports.first() else {
         return Vec::new();
     };
@@ -84,8 +98,9 @@ pub fn object_stats(_model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
             // Blocks keep the same order in every replication of one model.
             let of = |r: &RunReport| r.blocks.get(i).filter(|x| x.name == b.name).cloned();
             let blocks: Vec<utsim_core::BlockReport> = reports.iter().filter_map(of).collect();
-            let field =
-                |f: &dyn Fn(&utsim_core::BlockReport) -> f64| summary_of(blocks.iter().map(f));
+            let field = |f: &dyn Fn(&utsim_core::BlockReport) -> f64| {
+                summary_of(blocks.iter().map(f), level)
+            };
             let mut state_names: Vec<&String> =
                 blocks.iter().flat_map(|x| x.states.keys()).collect();
             state_names.sort();
@@ -126,6 +141,7 @@ pub fn object_stats(_model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
                         blocks
                             .iter()
                             .map(|x| utilization_of(x).map_or(0.0, |u| f(&u))),
+                        level,
                     )
                 })
             };
@@ -151,10 +167,15 @@ pub fn object_stats(_model: &Model, reports: &[RunReport]) -> Vec<ObjectStats> {
 /// Model-wide metrics (`model.*`: items lost by `Drop` sources and the loss fraction),
 /// each with its 95% interval; empty when the model has no source that can lose items.
 pub fn model_stats(reports: &[RunReport]) -> Vec<(String, Summary)> {
+    model_stats_at(reports, DEFAULT_LEVEL)
+}
+
+/// [`model_stats`] with intervals at confidence `level`.
+pub fn model_stats_at(reports: &[RunReport], level: f64) -> Vec<(String, Summary)> {
     per_replication(reports)
         .into_iter()
         .filter(|(k, _)| k.starts_with("model."))
-        .map(|(k, xs)| (k, Summary::from_samples(&xs)))
+        .map(|(k, xs)| (k, utsim_stats::summary(&xs, level)))
         .collect()
 }
 
@@ -290,11 +311,17 @@ pub fn metric_values(reports: &[RunReport], metric: &str) -> Vec<f64> {
 /// Paired difference `a - b` (same seeds, replication by replication): mean and 95%
 /// half-width. Only the replications both sides have are paired.
 pub fn paired_difference(a: &[f64], b: &[f64]) -> Summary {
-    let d: Vec<f64> = a.iter().zip(b).map(|(x, y)| x - y).collect();
-    Summary::from_samples(&d)
+    paired_difference_at(a, b, DEFAULT_LEVEL)
 }
 
-/// Whether a paired difference is significant at 95%: its interval excludes zero.
+/// [`paired_difference`] with the interval at confidence `level`.
+pub fn paired_difference_at(a: &[f64], b: &[f64], level: f64) -> Summary {
+    let d: Vec<f64> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+    utsim_stats::summary(&d, level)
+}
+
+/// Whether a paired difference is significant at the level of its interval (95% for
+/// [`paired_difference`]): its interval excludes zero.
 /// Without an interval (fewer than two replications) nothing is significant.
 pub fn is_significant(d: &Summary) -> bool {
     !d.half_width.is_nan() && d.mean.abs() > d.half_width
@@ -473,6 +500,7 @@ mod tests {
                 min: 0.0,
                 max: 0.0,
                 histogram: None,
+                observations: None,
             },
             states: BTreeMap::from([
                 ("idle".to_string(), 0.4),

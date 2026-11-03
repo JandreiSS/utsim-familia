@@ -16,6 +16,10 @@ pub struct TallySummary {
     pub max: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub histogram: Option<Histogram>,
+    /// `(t, x)` of every observation of the statistics window, only when an analysis
+    /// asked for this measure (`Simulation::keep_timed`); `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observations: Option<Vec<[f64; 2]>>,
 }
 
 impl From<&Tally> for TallySummary {
@@ -27,6 +31,7 @@ impl From<&Tally> for TallySummary {
             min: t.min(),
             max: t.max(),
             histogram: None,
+            observations: t.timed().map(<[[f64; 2]]>::to_vec),
         }
     }
 }

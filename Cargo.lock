@@ -7132,6 +7132,7 @@ dependencies = [
  "utsim-fluid",
  "utsim-objects",
  "utsim-script",
+ "utsim-stats",
 ]
 
 [[package]]

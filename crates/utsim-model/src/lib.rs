@@ -1082,6 +1082,31 @@ impl Model {
         &self,
         progress: &(dyn Fn(u32) -> bool + Sync),
     ) -> Result<Vec<RunReport>, ModelError> {
+        self.run_replications_prepared(progress, &|_| {})
+    }
+
+    /// Like [`Model::run_replications`], keeping the instant of every observation of
+    /// the given `(object, measure)` tallies (see [`Simulation::keep_timed`]): the
+    /// reports carry them in `TallySummary::observations`. The statistics are the same
+    /// as without it. Used by the warm-up analysis.
+    pub fn run_replications_timed(
+        &self,
+        measures: &[(String, String)],
+    ) -> Result<Vec<RunReport>, ModelError> {
+        self.run_replications_prepared(&|_| true, &|sim: &mut Simulation| {
+            for (object, measure) in measures {
+                if let Some(id) = sim.block_id(object) {
+                    sim.keep_timed(id, measure);
+                }
+            }
+        })
+    }
+
+    fn run_replications_prepared(
+        &self,
+        progress: &(dyn Fn(u32) -> bool + Sync),
+        prepare: &(dyn Fn(&mut Simulation) + Sync),
+    ) -> Result<Vec<RunReport>, ModelError> {
         use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         self.validate()?;
         let done = AtomicU32::new(0);
@@ -1090,7 +1115,9 @@ impl Model {
             if stop.load(Ordering::Relaxed) {
                 return Err(ModelError::Cancelled);
             }
-            let report = self.drive(&mut self.build(r))?;
+            let mut sim = self.build(r);
+            prepare(&mut sim);
+            let report = self.drive(&mut sim)?;
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             if !progress(n) {
                 stop.store(true, Ordering::Relaxed);
