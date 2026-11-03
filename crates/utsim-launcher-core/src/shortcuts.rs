@@ -20,8 +20,9 @@ pub struct Shortcut {
     pub icon: Option<PathBuf>,
 }
 
-/// `%APPDATA%\Microsoft\Windows\Start Menu\Programs\UTSim` or
-/// `~/.local/share/applications`.
+/// `%APPDATA%\Microsoft\Windows\Start Menu\Programs\UTSim Launcher` (the launcher's own
+/// installer uses the same folder; the standalone editor installer uses `UTSim`, so the two
+/// never overwrite each other's shortcuts) or `~/.local/share/applications`.
 pub fn start_menu_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         std::env::var_os("APPDATA").map(|a| {
@@ -30,7 +31,7 @@ pub fn start_menu_dir() -> Option<PathBuf> {
                 .join("Windows")
                 .join("Start Menu")
                 .join("Programs")
-                .join("UTSim")
+                .join("UTSim Launcher")
         })
     } else {
         std::env::var_os("XDG_DATA_HOME")
