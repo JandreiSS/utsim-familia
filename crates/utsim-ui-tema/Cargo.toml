@@ -1,0 +1,12 @@
+[package]
+name = "utsim-ui-tema"
+description = "The UTSim look for egui: colours, spacing and fonts shared by the Godot bridge, the launcher and the Lean Six Sigma app"
+version.workspace = true
+edition.workspace = true
+# egui 0.36 needs Rust 1.95.
+rust-version = "1.95"
+
+[dependencies]
+# The workspace's single egui (eframe 0.36.2 in the launcher, bevy_egui 0.43 in the viewer):
+# pure egui, no backend.
+egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"] }
