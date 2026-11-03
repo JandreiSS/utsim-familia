@@ -7005,6 +7005,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-cad"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "utsim-cli"
 version = "0.1.0"
 dependencies = [
@@ -7012,6 +7021,7 @@ dependencies = [
  "ron 0.8.1",
  "serde",
  "serde_json",
+ "utsim-cad",
  "utsim-core",
  "utsim-emu",
  "utsim-fit",

@@ -1,0 +1,13 @@
+[package]
+name = "utsim-cad"
+description = "Leitura de plantas DXF 2D, calibração, camadas e obstáculos (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ron.workspace = true
