@@ -253,6 +253,8 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             "warmup" => set!(run.warmup),
             "seed" => set!(run.seed),
             "replications" => set!(run.replications),
+            "sample_interval" => set!(run.sample_interval),
+            "histogram_bins" => set!(run.histogram_bins),
             "default_decision" => set!(run.default_decision),
             "transfer" => set!(run.transfer),
             "transfer.speed" | "transfer.delay" => {
@@ -260,7 +262,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             }
             _ => {
                 return Err(invalid(format!(
-                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications, default_decision, transfer, transfer.speed, transfer.delay"
+                    "'{key}': campo 'run.{field}' não existe; campos válidos: stop_time, warmup, seed, replications, sample_interval, histogram_bins, default_decision, transfer, transfer.speed, transfer.delay"
                 )));
             }
         }
@@ -579,6 +581,19 @@ mod tests {
             _ => unreachable!(),
         }
         assert_eq!((m.run.stop_time, m.run.seed), (50.0, 9));
+    }
+
+    #[test]
+    fn patches_series_and_histograms_of_the_run() {
+        let m = set(&[
+            ("run.sample_interval", "10.0"),
+            ("run.histogram_bins", "Some(20)"),
+        ])
+        .unwrap();
+        assert_eq!(m.run.sample_interval, Some(10.0));
+        assert_eq!(m.run.histogram_bins, Some(20));
+        let m = set(&[("run.sample_interval", "None")]).unwrap();
+        assert_eq!(m.run.sample_interval, None);
     }
 
     #[test]

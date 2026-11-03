@@ -52,7 +52,7 @@ func build(owner_main: Node) -> void:
 	root.add_child(head)
 	_title = Label.new()
 	_title.text = "PERT/CPM"
-	_title.add_theme_font_size_override("font_size", 18)
+	_title.theme_type_variation = &"TituloPainel"
 	_title.clip_text = true
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_title)

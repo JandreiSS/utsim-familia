@@ -32,6 +32,7 @@ var _chart_object: OptionButton
 var _chart_extra: OptionButton
 var _chart: Grafico
 var _chart_note: Label
+var _chart_enable: Button
 var _warm_series: LineEdit
 var _warm_window: SpinBox
 var _warm_chart: Grafico
@@ -69,7 +70,7 @@ func build(owner_main: Node) -> void:
 	root.add_child(head)
 	var title := Label.new()
 	title.text = "Resultados"
-	title.add_theme_font_size_override("font_size", 18)
+	title.theme_type_variation = &"TituloPainel"
 	head.add_child(title)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -131,8 +132,8 @@ func _rich(id: String, height := 0.0) -> RichTextLabel:
 func _heading(parent: Node, text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 16)
-	l.add_theme_color_override("font_color", Color(0.62, 0.76, 0.98))
+	l.theme_type_variation = &"RotuloSecao"
+	l.add_theme_font_size_override("font_size", 15)
 	parent.add_child(l)
 
 
@@ -140,7 +141,7 @@ func _explain(parent: Node, text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_color_override("font_color", Color(0.70, 0.74, 0.80))
+	l.theme_type_variation = &"Ajuda"
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(l)
 	return l
@@ -320,6 +321,8 @@ func _build_charts() -> void:
 	_chart_extra = _option(h, "Res_DetalheGrafico", ["trabalho", "turno", "bloqueio"])
 	_chart_extra.item_selected.connect(func(_k): _update_chart())
 	_chart_note = _explain(v, "")
+	_chart_enable = _button(_row(v), "Res_LigarAmostras", "Ligar e rodar de novo", "Liga no modelo a série do conteúdo (run.sample_interval, pelo tempo de simulação) e os histogramas (run.histogram_bins = 20), num passo que se desfaz com Ctrl+Z, e roda as replicações de novo", func(): main.enable_samples_and_rerun())
+	_chart_enable.visible = false
 	_chart = _chart_box(v, "Res_Grafico", 320)
 
 
@@ -389,6 +392,10 @@ func _update_chart(object_changed := false) -> void:
 			_chart.empty_text = "sem histograma: ligue run.histogram_bins no modelo"
 			_chart.histogram(results.histogram(object, tally))
 			_chart_note.text = "Histograma de %s.%s, juntando todas as replicações." % [object, tally]
+	# Series and histograms are only recorded when the model asks for them: offer to.
+	_chart_enable.visible = kind >= 2 and _chart.count() == 0 and not main.playing_replay
+	if _chart_enable.visible:
+		_chart_note.text += " O modelo não grava %s: \"Ligar e rodar de novo\" liga e simula outra vez." % ("a série do conteúdo" if kind == 2 else "os histogramas")
 
 
 static func _pct(x: Variant) -> Variant:
