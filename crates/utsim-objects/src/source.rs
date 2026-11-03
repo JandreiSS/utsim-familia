@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
@@ -8,6 +8,23 @@ const ARRIVAL: u32 = 0;
 const LOST_CHECK: u32 = 1;
 const BOUNDARY: u32 = 2;
 const TABLE_ROW: u32 = 3;
+const SPAWN_NEXT: u32 = 4;
+
+/// How the items of one arrival (a batch or a table row) leave the source.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Release {
+    /// All at the instant of the arrival (the next object decides whether they fit).
+    #[default]
+    Together,
+    /// One by one, this long apart (sampled for each gap).
+    OneByOne(Dist),
+}
+
+impl Release {
+    pub fn is_together(&self) -> bool {
+        *self == Release::Together
+    }
+}
 
 /// Most items one row of an arrival table may create.
 pub const MAX_ROW_COUNT: u64 = 1_000_000;
@@ -396,6 +413,14 @@ pub struct Source {
     /// Arrivals (rows, or single items without a table), total and since the warm-up.
     arrivals: u64,
     arrivals_window: u64,
+    /// Items per arrival without a table (absent: one).
+    batch: Option<Dist>,
+    release: Release,
+    /// Items of the arrivals not created yet (`OneByOne`): count left and table row.
+    burst: VecDeque<(u64, Option<usize>)>,
+    /// Pending `SPAWN_NEXT` and its due time; time left while stopped.
+    spawn_next: Option<(EventId, Time)>,
+    spawn_paused: Option<Time>,
 }
 
 impl Source {
@@ -422,7 +447,30 @@ impl Source {
             outstanding: 0,
             arrivals: 0,
             arrivals_window: 0,
+            batch: None,
+            release: Release::Together,
+            burst: VecDeque::new(),
+            spawn_next: None,
+            spawn_paused: None,
         }
+    }
+
+    /// Items created per arrival (rounded, at least 0) when there is no table; absent:
+    /// one. Validate the distribution first.
+    pub fn batch(mut self, batch: Option<Dist>) -> Self {
+        self.batch = batch;
+        self
+    }
+
+    /// How the items of one arrival leave: together or spaced (see [`Release`]).
+    pub fn release(mut self, release: Release) -> Self {
+        self.release = release;
+        self
+    }
+
+    /// Whether the source reports `arrivals.count` (several items per arrival possible).
+    fn counts_arrivals(&self) -> bool {
+        self.table.is_some() || self.batch.is_some()
     }
 
     /// Arrival table (see [`ArrivalTable`]); validate it first. Not used with a schedule.
@@ -476,25 +524,63 @@ impl Source {
     }
 
     /// One arrival: creates `count` items with the source's labels, then the row's.
+    /// With `OneByOne`, the first item now and the others queued (see [`Release`]).
     fn arrive(&mut self, cx: &mut Ctx, count: u64, row: Option<usize>) {
         self.arrivals += 1;
         self.arrivals_window += 1;
-        for _ in 0..count {
-            let id = cx.spawn_item();
-            self.label_item(cx, id);
-            if let Some(r) = row {
-                let labels = &self.table.as_ref().expect("row of a table").rows[r].labels;
-                for (name, v) in labels {
-                    cx.item_mut(id).set_label(name.clone(), *v);
-                }
+        self.outstanding += count as usize;
+        if self.release.is_together() || count <= 1 {
+            for _ in 0..count {
+                self.spawn_one(cx, row);
             }
-            self.created += 1;
-            self.outstanding += 1;
-            cx.set_state(State::Blocked);
-            cx.release(id);
-            if self.on_blocked == OnBlocked::Drop {
-                cx.schedule(0.0, LOST_CHECK, Some(id));
+            return;
+        }
+        let first = if self.burst.is_empty() { 1 } else { 0 };
+        if count > first {
+            self.burst.push_back((count - first, row));
+        }
+        if first == 1 {
+            self.spawn_one(cx, row);
+            self.schedule_spawn(cx);
+        }
+    }
+
+    /// Schedules the next item of a `OneByOne` arrival.
+    fn schedule_spawn(&mut self, cx: &mut Ctx) {
+        let Release::OneByOne(gap) = &self.release else {
+            return;
+        };
+        if self.burst.is_empty() {
+            return;
+        }
+        let gap = cx.sample_duration(gap);
+        let event = cx.schedule(gap, SPAWN_NEXT, None);
+        self.spawn_next = Some((event, cx.now() + gap));
+    }
+
+    /// Creates and releases one item of an arrival.
+    fn spawn_one(&mut self, cx: &mut Ctx, row: Option<usize>) {
+        let id = cx.spawn_item();
+        self.label_item(cx, id);
+        if let Some(r) = row {
+            let labels = &self.table.as_ref().expect("row of a table").rows[r].labels;
+            for (name, v) in labels {
+                cx.item_mut(id).set_label(name.clone(), *v);
             }
+        }
+        self.created += 1;
+        cx.set_state(State::Blocked);
+        cx.release(id);
+        if self.on_blocked == OnBlocked::Drop {
+            cx.schedule(0.0, LOST_CHECK, Some(id));
+        }
+    }
+
+    /// Items of one arrival without a table.
+    fn batch_size(&self, cx: &mut Ctx) -> u64 {
+        match &self.batch {
+            None => 1,
+            Some(d) => (cx.sample(d).round().max(0.0) as u64).min(MAX_ROW_COUNT),
         }
     }
 
@@ -677,6 +763,9 @@ impl Behavior for Source {
         self.outstanding = 0;
         self.arrivals = 0;
         self.arrivals_window = 0;
+        self.burst.clear();
+        self.spawn_next = None;
+        self.spawn_paused = None;
         if let Some(table) = self.table.as_ref().filter(|t| t.mode == TableMode::Times) {
             // Where the run starts in the table (the calendar start, 0 unless the run
             // starts from an initial state), then the first row at or after it.
@@ -806,6 +895,19 @@ impl Behavior for Source {
             }
             return;
         }
+        if tag == SPAWN_NEXT {
+            self.spawn_next = None;
+            if let Some((left, row)) = self.burst.front_mut() {
+                let row = *row;
+                *left -= 1;
+                if *left == 0 {
+                    self.burst.pop_front();
+                }
+                self.spawn_one(cx, row);
+            }
+            self.schedule_spawn(cx);
+            return;
+        }
         if tag == TABLE_ROW {
             self.next = None;
             let row = self.row;
@@ -826,7 +928,7 @@ impl Behavior for Source {
         let (count, row) = match &self.table {
             // Sequence: the next row.
             Some(t) => (t.rows[self.row].count, Some(self.row)),
-            None => (1, None),
+            None => (self.batch_size(cx), None),
         };
         if row.is_some() {
             self.advance_row();
@@ -864,7 +966,7 @@ impl Behavior for Source {
     /// (items that left).
     fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
         let mut out = Vec::new();
-        if self.table.is_some() {
+        if self.counts_arrivals() {
             out.push(("arrivals.count".to_string(), self.arrivals_window as f64));
             if self.on_blocked != OnBlocked::Drop {
                 out.push(("entered.count".to_string(), self.entered as f64));
@@ -894,9 +996,17 @@ impl Behavior for Source {
             cx.cancel(event);
             self.paused = Some((due - cx.now()).max(0.0));
         }
+        if let Some((event, due)) = self.spawn_next.take() {
+            cx.cancel(event);
+            self.spawn_paused = Some((due - cx.now()).max(0.0));
+        }
     }
 
     fn on_resume(&mut self, cx: &mut Ctx) {
+        if let Some(left) = self.spawn_paused.take() {
+            let event = cx.schedule(left, SPAWN_NEXT, None);
+            self.spawn_next = Some((event, cx.now() + left));
+        }
         if self.timed() {
             // Rows due while stopped arrive now, in order.
             if self.paused.take().is_some() {

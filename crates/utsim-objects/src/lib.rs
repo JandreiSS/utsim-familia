@@ -24,8 +24,8 @@ pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
 pub use sink::Sink;
 pub use source::{
-    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, OnBlocked, PeriodArrivals, Source,
-    TableMode, TableRepeat,
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, OnBlocked, PeriodArrivals, Release,
+    Source, TableMode, TableRepeat,
 };
 pub use span::Span;
 pub use transporter::Transporter;

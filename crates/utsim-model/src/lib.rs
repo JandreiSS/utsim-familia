@@ -50,7 +50,7 @@ use utsim_objects::{
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
-    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, TableMode,
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
     TableRepeat,
 };
 
@@ -283,6 +283,13 @@ pub enum ObjectKind {
         /// each row with a count and labels. Not together with `schedule`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         table: Option<ArrivalTable>,
+        /// Items created per arrival (rounded, at least 0) without a table; absent: one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        batch: Option<Dist>,
+        /// How the items of one arrival (batch or table row) leave: `Together` or
+        /// `OneByOne(Dist)`.
+        #[serde(default, skip_serializing_if = "Release::is_together")]
+        release: Release,
     },
     Queue {
         #[serde(default)]
@@ -536,6 +543,8 @@ impl Model {
                     labels,
                     schedule,
                     table,
+                    batch,
+                    release,
                     ..
                 } => {
                     errors.extend(arrivals::validate_source(
@@ -544,6 +553,18 @@ impl Model {
                         schedule,
                         table,
                     ));
+                    if batch.is_some() && table.is_some() {
+                        errors.push(format!(
+                            "{}: com `table` a quantidade de cada chegada vem de rows[].count; tire `batch`",
+                            obj.name
+                        ));
+                    }
+                    if let Some(b) = batch {
+                        dists.push(("batch".into(), b));
+                    }
+                    if let Release::OneByOne(d) = release {
+                        dists.push(("release".into(), d));
+                    }
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
                     if let Some(s) = schedule {
@@ -794,10 +815,12 @@ impl Model {
                     max_arrivals,
                     schedule,
                     table,
+                    batch,
                     ..
                 },
             ) = (dists_ok, &obj.kind)
             {
+                let per_arrival = batch.as_ref().map_or(1.0, |b| b.mean().max(0.0));
                 let mean = match (table, schedule) {
                     (Some(t), _) => arrivals::mean_gap(t, interarrival),
                     // Mean time between arrivals over a whole cycle.
@@ -806,6 +829,12 @@ impl Model {
                     }
                     (None, Some(_)) => f64::NAN,
                     (None, None) => interarrival.mean(),
+                };
+                // Items, not arrivals: a batch multiplies them.
+                let mean = if table.is_none() {
+                    mean / per_arrival
+                } else {
+                    mean
                 };
                 let limit = max_arrivals.map_or(f64::INFINITY, |n| n as f64);
                 if mean.is_finite() && run.stop_time.is_finite() {
@@ -1068,8 +1097,12 @@ impl Model {
                     on_blocked,
                     schedule,
                     table,
+                    batch,
+                    release,
                 } => {
                     let source = Source::new(interarrival.clone())
+                        .batch(batch.clone())
+                        .release(release.clone())
                         .on_blocked(*on_blocked)
                         .first_at_zero(*first_at_zero)
                         .max_arrivals(*max_arrivals)

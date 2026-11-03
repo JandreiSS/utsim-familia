@@ -85,6 +85,8 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         on_blocked: OnBlocked::default(),
         schedule: None,
         table: None,
+        batch: None,
+        release: Default::default(),
     }
 }
 

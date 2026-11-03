@@ -355,3 +355,96 @@ fn experiment_keys_change_table_rows() {
         .to_string();
     assert!(e.contains("linha 3 não existe"), "{e}");
 }
+
+// ---------------------------------------------------------------- C2 batch per arrival
+
+#[test]
+fn batch_creates_several_items_per_arrival() {
+    let text = table_model(
+        "interarrival: Const(10.0), first_at_zero: true, batch: Const(3.0)",
+        35.0,
+        false,
+    );
+    let (trace, _) = traced(&text);
+    assert_eq!(
+        created_at(&trace),
+        [
+            0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 20.0, 20.0, 20.0, 30.0, 30.0, 30.0
+        ]
+    );
+    let r = run(&text);
+    let src = r.block("src").unwrap();
+    assert_eq!(src.custom["arrivals.count"], 4.0);
+    assert_eq!(src.custom["entered.count"], 12.0);
+}
+
+#[test]
+fn one_by_one_spaces_the_items_and_waits_for_the_last() {
+    // Items at 0, 1, 2; the next arrival starts its gap when the last left (2 + 10).
+    let text = table_model(
+        "interarrival: Const(10.0), first_at_zero: true, batch: Const(3.0), release: OneByOne(Const(1.0))",
+        35.0,
+        false,
+    );
+    let (trace, _) = traced(&text);
+    assert_eq!(
+        created_at(&trace),
+        [0.0, 1.0, 2.0, 12.0, 13.0, 14.0, 24.0, 25.0, 26.0]
+    );
+    // The same spacing applies to the rows of a table.
+    let text = table_model(
+        "interarrival: Const(1.0), release: OneByOne(Const(0.5)), table: (rows: [(at: 4.0, count: 3)])",
+        35.0,
+        false,
+    );
+    let (trace, _) = traced(&text);
+    assert_eq!(created_at(&trace), [4.0, 4.5, 5.0]);
+}
+
+#[test]
+fn batch_with_drop_loses_what_does_not_fit() {
+    // Queue of 1 before a machine that never finishes in the run: the first arrival
+    // places two items (machine and queue) and loses one; the next three lose all three.
+    let text = r#"Model(
+        format: 2,
+        name: "lote_perdido",
+        run: (stop_time: 35.0),
+        objects: [
+            (name: "src", kind: Source(interarrival: Const(10.0), first_at_zero: true,
+                batch: Const(3.0), on_blocked: Drop)),
+            (name: "q", kind: Queue(capacity: 1)),
+            (name: "m", kind: Processor(process: Const(1000.0))),
+            (name: "out", kind: Sink),
+        ],
+        connections: [("src", "q"), ("q", "m"), ("m", "out")],
+    )"#;
+    let r = run(text);
+    let src = r.block("src").unwrap();
+    assert_eq!(src.custom["arrivals.count"], 4.0);
+    assert_eq!(src.custom["lost.count"], 10.0);
+    assert_eq!(src.custom["entered.count"], 2.0);
+}
+
+#[test]
+fn batch_is_validated() {
+    let e = Model::parse(&table_model(
+        "interarrival: Const(1.0), batch: Const(2.0), table: (rows: [(at: 1.0)])",
+        10.0,
+        false,
+    ))
+    .unwrap()
+    .validate()
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("tire `batch`"), "{e}");
+    let e = Model::parse(&table_model(
+        "interarrival: Const(1.0), batch: Normal(mean: 1.0, sd: -1.0)",
+        10.0,
+        false,
+    ))
+    .unwrap()
+    .validate()
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("src.batch"), "{e}");
+}

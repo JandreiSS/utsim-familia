@@ -346,6 +346,8 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "schedule[n].rate",
                 "schedule[n].interarrival",
                 "schedule[n].labels",
+                "batch",
+                "release",
                 "table",
                 "table.rows[n]",
                 "table.rows[n].at",
@@ -402,6 +404,8 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             return patch_schedule(schedule, key, &f["schedule".len()..], text);
         }
         (ObjectKind::Source { table, .. }, "table") => set!(*table),
+        (ObjectKind::Source { batch, .. }, "batch") => set!(*batch),
+        (ObjectKind::Source { release, .. }, "release") => set!(*release),
         (ObjectKind::Source { table, .. }, f) if f.starts_with("table.rows[") => {
             return patch_table(table, key, &f["table.rows".len()..], text);
         }
