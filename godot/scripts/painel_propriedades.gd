@@ -195,7 +195,8 @@ func _field(field: Dictionary) -> void:
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			add_child(t)
 			var apply := Button.new()
-			apply.text = "Aplicar script"
+			apply.name = widget_name(path) + "_aplicar"
+			apply.text = "Aplicar" if path == "description" else "Aplicar script"
 			apply.pressed.connect(func(): edited.emit(path, t.text))
 			add_child(apply)
 		"float", "int":
@@ -216,6 +217,7 @@ func _field(field: Dictionary) -> void:
 		"choice":
 			var row := _row(field)
 			var o := OptionButton.new()
+			o.fit_to_longest_item = false
 			o.name = widget_name(path)
 			o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			o.clip_text = true
@@ -285,15 +287,19 @@ func _mono() -> Font:
 	return f
 
 
-## A text field committed on Enter or when it loses focus (only when changed).
+## A text field committed on Enter or when it loses focus, only when the text differs
+## from the last one sent (Enter and then losing focus is one edit, not two undo steps).
 func _line(path: String, value: String) -> LineEdit:
 	var e := LineEdit.new()
 	e.name = widget_name(path)
 	e.text = value
 	e.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	e.select_all_on_focus = true
+	# Lambdas capture by value: the last text sent goes in a dictionary.
+	var sent := {"text": value}
 	var commit := func(_t = null):
-		if e.text != value:
+		if e.text != sent["text"]:
+			sent["text"] = e.text
 			edited.emit(path, e.text)
 	e.text_submitted.connect(commit)
 	e.focus_exited.connect(commit)
@@ -336,6 +342,7 @@ func _dist(field: Dictionary) -> void:
 	if view.is_empty():
 		return
 	var family := OptionButton.new()
+	family.fit_to_longest_item = false
 	family.name = widget_name(path) + "_familia"
 	family.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for k in families.size():
@@ -399,6 +406,7 @@ func _asset(field: Dictionary) -> void:
 	var row := _row(field)
 	var current: String = field["value"]
 	var o := OptionButton.new()
+	o.fit_to_longest_item = false
 	o.name = widget_name(path)
 	o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	o.clip_text = true
