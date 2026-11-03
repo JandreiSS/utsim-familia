@@ -7,6 +7,7 @@ exclude = ["crates/utsim-py", "tools/icone"]
 # bridge (`-p utsim-godot`, a GDExtension library) is opt-in too: `scripts/godot.sh`.
 default-members = [
     "crates/utsim-assets",
+    "crates/utsim-cad",
     "crates/utsim-cli",
     "crates/utsim-core",
     "crates/utsim-edit",
@@ -43,6 +44,7 @@ utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }
 utsim-scene = { path = "crates/utsim-scene" }
 utsim-assets = { path = "crates/utsim-assets" }
+utsim-cad = { path = "crates/utsim-cad" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }
