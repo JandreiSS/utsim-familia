@@ -329,6 +329,38 @@ próprio leitor de argumentos) e `utsim run --linha`; modelo pronto
 `examples/aprovacao_de_compras.ron`; capítulo `docs/manual/src/linhas/lean-office.md`.
 Próximos: passos 9 a 16 (a multitarefa, 10, na segunda entrega).
 
+**Passo 10 feito em 2026-11-03** (o dono pediu a multitarefa antes dos outros passos da
+segunda entrega). Como ficou o projeto:
+
+- **Campo.** `multitask: Some((max_open, slice, switch))` no `Transporter` (a pessoa), não
+  no `person`: vale para qualquer membro de equipe. `max_open: 1` é idêntico a não ter o
+  campo (teste byte a byte do relatório).
+- **Rodízio.** A pessoa trabalha um caso por `slice`, avisa o posto (`MSG_SUSPEND`), fica
+  `switch` no estado `Setup` ("trocando de caso"), anda até o posto do próximo caso e manda
+  `MSG_ARRIVED` (caso novo) ou `MSG_RESUME_WORK` (caso retomado). Fatias e trocas usam o
+  mesmo relógio único do transportador, então quebras e turnos as pausam como já pausavam as
+  viagens.
+- **Posto.** O `Processor` para o relógio do item enquanto algum operador dele está em outro
+  caso; o trabalho sorteado na entrada continua sendo o touch time, e o item não conta como
+  servidor ocupado. Um trabalho que termina no mesmo instante em que a fatia acaba termina
+  (sem troca inútil).
+- **Equipe.** O `Dispatcher` recebe o limite de cada membro (`open_limits`); um pedido de
+  operador vai primeiro a um membro livre e, se não há, a um ocupado só com casos e abaixo do
+  limite. Ao ficar livre, o membro pega a cabeça da fila e mais casos até o limite; ao fechar
+  um caso com outros abertos, avisa (`MSG_CASE_DONE`) e recebe mais um.
+- **Fora do rodízio.** Transporte de itens e manutenção (`MAINTENANCE_TAG`) nunca são
+  intercalados; preempção nunca tira trabalho de quem tem casos abertos.
+- **Estados.** A troca usa o estado `Setup` existente, sem estado novo, para não mudar os
+  relatórios dos modelos existentes (golden inalterados). Métricas novas só com o campo:
+  `multitask.switches`, `multitask.switching`, `multitask.open`.
+- **Lean Office.** Ocupação das pessoas ganhou "trocando de caso"; Pessoa e Equipe ganharam
+  o campo "Casos abertos ao mesmo tempo". No modelo pronto com mais mesas que pessoas, três
+  casos abertos (fatia de 15 min, troca de 5 min) levam o lead time de cerca de 19,5 h para
+  23,3 h com o mesmo touch time.
+- **Testes.** Linha do tempo à mão (dois casos de 10 min, fatia 2, troca 1: terminam em 26 e
+  29, 9 trocas), conservação do tempo da pessoa e dos casos, touch time igual ao trabalho,
+  `max_open: 1` igual a nenhum, validação.
+
 **Nome do campo de departamento.** O plano chamava o campo do objeto de `area`. Na integração
 com a fase 1, o modelo ganhou a lista `areas` (áreas de piso com posição e tamanho: sala de
 espera, local de pausa, casa do transportador), e `home_at` e `break_at` procuram nomes entre
@@ -369,7 +401,7 @@ aprovado.
 | RF-272 | A linha Lean Office calcula lead time, tempo de processamento, touch time, razão de atividade, %C&A por etapa, FPY, WIP de casos, % dentro do SLA, ocupação das pessoas e espera por causa, com intervalo de confiança |
 | RF-273 | A linha Lean Office gera o VSM de escritório (atual e futuro) e o fluxograma de raias por departamento a partir do modelo e da rodada |
 | RF-274 | As filas aceitam ordem por rótulo (prioridade ou prazo) |
-| RF-275 | Uma pessoa pode ter vários casos abertos ao mesmo tempo, com custo de troca entre eles |
+| RF-275 | Uma pessoa pode ter vários casos abertos ao mesmo tempo, com custo de troca entre eles (feito: `multitask` do `Transporter`) |
 | RF-276 | O UTSim Seis Sigma oferece modelos de projeto de Kaizen de escritório e DMAIC transacional ligados à linha Lean Office |
 
 ---

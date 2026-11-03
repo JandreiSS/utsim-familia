@@ -7,6 +7,9 @@
 //!   projeto.json                 manifest (main entity: programa)
 //!   ops/ presenca/               as in a project
 //!   mentoria/<belt>.lss/         coaching log of each belt (restricted: MBB and the belt)
+//!   formacao/questoes.lss/       question bank with the keys (restricted: MBB, instructors)
+//!   formacao/notas.lss/          grades (restricted: MBB, instructors)
+//!   formacao/turmas/<turma>.lss/ papers without the key and the trainees' answers
 //!   carteiras/<unidade>/         optional: portfolio and project folders of a unit
 //! ```
 //!
@@ -36,6 +39,50 @@ use crate::{Result, fsio};
 pub const COACHING: &str = "mentoria";
 /// Optional subfolder of the units' portfolios.
 pub const PORTFOLIOS: &str = "carteiras";
+/// Subfolder of the training (stage L7).
+pub const TRAINING: &str = "formacao";
+
+/// The restricted folders of the training (`docs/plano_lean_seis_sigma.md`, 8.9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TrainingFolder {
+    /// The question bank with the answer keys.
+    Questions,
+    /// The grades.
+    Grades,
+    /// A class: the papers without the key and the trainees' answers.
+    Class(Id),
+}
+
+impl TrainingFolder {
+    /// The key written in the folder's main entity.
+    pub fn key(self) -> &'static str {
+        match self {
+            TrainingFolder::Questions => "questoes",
+            TrainingFolder::Grades => "notas",
+            TrainingFolder::Class(_) => "turma",
+        }
+    }
+
+    pub fn title(self) -> String {
+        match self {
+            TrainingFolder::Questions => "Banco de questões".into(),
+            TrainingFolder::Grades => "Notas".into(),
+            TrainingFolder::Class(c) => format!("Turma {}", c.short()),
+        }
+    }
+}
+
+/// Where a training folder lives.
+pub fn training_path(program_root: &Path, f: TrainingFolder) -> PathBuf {
+    let base = program_root.join(TRAINING);
+    match f {
+        TrainingFolder::Questions => base.join(format!("questoes.{}", project::EXTENSION)),
+        TrainingFolder::Grades => base.join(format!("notas.{}", project::EXTENSION)),
+        TrainingFolder::Class(c) => base
+            .join("turmas")
+            .join(format!("{c}.{}", project::EXTENSION)),
+    }
+}
 
 /// Where the coaching log of a belt lives.
 pub fn coaching_path(program_root: &Path, belt: Id) -> PathBuf {

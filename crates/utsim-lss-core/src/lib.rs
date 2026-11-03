@@ -54,6 +54,10 @@ pub mod privacidade;
 pub mod programa;
 pub mod revisao;
 
+// Stage L7, training and certification (`docs/plano_lean_seis_sigma.md`, 8.5).
+pub mod certificacao;
+pub mod formacao;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};

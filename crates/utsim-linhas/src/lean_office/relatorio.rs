@@ -385,7 +385,7 @@ pub fn html(k: &Indicadores, voc: &Vocabulary, diagramas: &str) -> String {
     // People.
     let _ = write!(
         h,
-        "<h2>Ocupação das {}</h2><table><thead><tr><th>Pessoa</th><th class=\"n\">{}</th><th class=\"n\">{}</th><th class=\"n\">{}</th><th class=\"n\">{}</th><th class=\"n\">Ocupação no expediente</th></tr></thead><tbody>",
+        "<h2>Ocupação das {}</h2><table><thead><tr><th>Pessoa</th><th class=\"n\">{}</th><th class=\"n\">Trocando de caso</th><th class=\"n\">{}</th><th class=\"n\">{}</th><th class=\"n\">{}</th><th class=\"n\">Ocupação no expediente</th></tr></thead><tbody>",
         esc(voc.term("operadores")),
         esc(&capital(voc.term("utilize"))),
         esc(&capital(voc.term("travel_empty"))),
@@ -410,9 +410,10 @@ pub fn html(k: &Indicadores, voc: &Vocabulary, diagramas: &str) -> String {
             .map_or("-".into(), |s| pct_hw(&s));
         let _ = write!(
             h,
-            "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{on}</td></tr>",
+            "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{on}</td></tr>",
             esc(name),
             get(|o| o.trabalhando),
+            get(|o| o.trocando),
             get(|o| o.andando),
             get(|o| o.ocioso),
             get(|o| o.fora),

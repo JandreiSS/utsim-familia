@@ -62,7 +62,7 @@ pub mod fields {
 /// The tools of the competence map: the deliverable tools of the app (section 2, their
 /// file keys) and the analyses and methods of the later stages, so the map, the
 /// curriculum (L7) and the exercises (L8) share one list.
-pub const EXTRA_TOOLS: [&str; 10] = [
+pub const EXTRA_TOOLS: [&str; 12] = [
     "termo",
     "cronograma",
     "msa",
@@ -73,6 +73,8 @@ pub const EXTRA_TOOLS: [&str; 10] = [
     "doe",
     "vsm",
     "kaizen",
+    "acoes",
+    "cinco_s",
 ];
 
 /// File key of a deliverable tool (`fmea`, `sipoc`...).
@@ -866,6 +868,8 @@ mod tests {
             submitted_on: None,
             approved_on: Some(d(2026, 9, 1)),
             verified: vec![],
+            frozen_hash: String::new(),
+            changed_after_approval: false,
         }];
         let s = Session {
             id: Id::v7(8, [8; 10]),

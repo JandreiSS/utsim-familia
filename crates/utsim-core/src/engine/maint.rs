@@ -19,7 +19,7 @@ use crate::rng::SimRng;
 use crate::task::{MSG_RELEASE, RequestId, TaskKind};
 
 /// Station tag of the maintenance `Operate` requests (blocks never see them).
-const MAINT_TAG: u32 = u32::MAX;
+const MAINT_TAG: u32 = crate::task::MAINTENANCE_TAG;
 
 /// Maintenance events of one block.
 #[derive(Clone, Copy, Debug)]

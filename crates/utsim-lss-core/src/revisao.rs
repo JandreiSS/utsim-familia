@@ -609,6 +609,8 @@ mod tests {
             submitted_on: submitted,
             approved_on: None,
             verified: vec![("Existe MSA".into(), true)],
+            frozen_hash: String::new(),
+            changed_after_approval: false,
         }
     }
 

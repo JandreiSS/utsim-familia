@@ -12,6 +12,7 @@ mod items;
 mod line;
 mod maintenance;
 mod movement;
+mod multitask;
 mod person;
 pub mod replay;
 mod shifts;
@@ -47,8 +48,8 @@ use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, LabelOrder,
-    OnBlocked, OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement, SeparateMode,
-    Separator, Sink, Source, TaskPick, Transporter, TypedSink,
+    Multitask, OnBlocked, OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement,
+    SeparateMode, Separator, Sink, Source, TaskPick, Transporter, TypedSink,
 };
 
 pub use arrivals::{AreaDef, ItemTypeDef};
@@ -407,6 +408,11 @@ pub enum ObjectKind {
         /// Break place at an object or area (its position).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         break_object: Option<String>,
+        /// A person that works on several cases at once: `max_open` operator jobs open
+        /// together, worked in turn for `slice` each, losing `switch` at every turn
+        /// (absent: one job at a time).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        multitask: Option<Multitask>,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -764,10 +770,24 @@ impl Model {
                     capacity,
                     load_time,
                     unload_time,
+                    multitask,
                     ..
                 } => {
                     if !(speed.is_finite() && *speed > 0.0) {
                         errors.push(format!("{}: speed deve ser finita e > 0", obj.name));
+                    }
+                    if let Some(m) = multitask {
+                        if m.max_open == 0 {
+                            errors.push(format!("{}: multitask.max_open deve ser >= 1", obj.name));
+                        }
+                        if matches!(m.slice, Dist::Const(v) if v.is_nan() || v <= 0.0) {
+                            errors.push(format!(
+                                "{}: multitask.slice deve ser > 0 (a pessoa trocaria de caso sem trabalhar)",
+                                obj.name
+                            ));
+                        }
+                        dists.push(("multitask.slice".into(), &m.slice));
+                        dists.push(("multitask.switch".into(), &m.switch));
                     }
                     for (what, v) in [
                         ("acceleration", acceleration),
@@ -1264,9 +1284,11 @@ impl Model {
                     home_object,
                     break_at,
                     break_object,
+                    multitask,
                     ..
                 } => Box::new(
                     Transporter::new(*speed)
+                        .multitask(multitask.clone())
                         .home_point(self.place_of(*home_at, home_object.as_deref()))
                         .break_point(self.place_of(*break_at, break_object.as_deref()))
                         .agv(if *agv { traffic.clone() } else { None })
@@ -1299,6 +1321,7 @@ impl Model {
                     metrics,
                 } => Box::new(
                     Dispatcher::new(team.iter().map(|m| ids[m.as_str()]).collect(), *rule)
+                        .open_limits(team.iter().map(|m| self.open_limit(m)).collect())
                         .pick(*pick)
                         .preempt(*preempt)
                         .metrics(*metrics),

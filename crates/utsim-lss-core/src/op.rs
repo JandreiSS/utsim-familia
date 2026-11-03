@@ -105,10 +105,44 @@ pub enum Kind {
     /// A profile of a person in the program's role list (kept by the MBB).
     #[serde(rename = "perfil")]
     ProgramRole,
+    // Stage L7 (training and certification, `docs/plano_lean_seis_sigma.md`, 8.5).
+    #[serde(rename = "onda")]
+    Wave,
+    #[serde(rename = "turma")]
+    TrainingClass,
+    #[serde(rename = "sessao_aula")]
+    ClassSession,
+    #[serde(rename = "indicacao")]
+    Nomination,
+    #[serde(rename = "criterio_indicacao")]
+    NominationCriterion,
+    #[serde(rename = "modulo")]
+    CurriculumModule,
+    #[serde(rename = "grupo_formacao")]
+    TrainingGroup,
+    #[serde(rename = "instrutor")]
+    Instructor,
+    /// A question of the bank, with its answer key (restricted folder `formacao/questoes.lss`).
+    #[serde(rename = "questao")]
+    Question,
+    #[serde(rename = "prova")]
+    Exam,
+    /// The answers of a trainee, written by the trainee in the class folder.
+    #[serde(rename = "resposta_prova")]
+    ExamAnswer,
+    #[serde(rename = "resultado_prova")]
+    ExamResult,
+    #[serde(rename = "requisito_certificacao")]
+    CertificationRequirement,
+    #[serde(rename = "certificacao")]
+    Certification,
+    /// Main entity of a restricted training folder (question bank, grades, class).
+    #[serde(rename = "pasta_formacao")]
+    TrainingFolder,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 43] = [
+    pub const ALL: [Kind; 58] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -152,6 +186,21 @@ impl Kind {
         Kind::TollgateReview,
         Kind::ReviewQuestion,
         Kind::ProgramRole,
+        Kind::Wave,
+        Kind::TrainingClass,
+        Kind::ClassSession,
+        Kind::Nomination,
+        Kind::NominationCriterion,
+        Kind::CurriculumModule,
+        Kind::TrainingGroup,
+        Kind::Instructor,
+        Kind::Question,
+        Kind::Exam,
+        Kind::ExamAnswer,
+        Kind::ExamResult,
+        Kind::CertificationRequirement,
+        Kind::Certification,
+        Kind::TrainingFolder,
     ];
 
     /// The key used in the files (`acao`, `projeto`...).
@@ -200,6 +249,21 @@ impl Kind {
             Kind::TollgateReview => "revisao_tollgate",
             Kind::ReviewQuestion => "pergunta_revisao",
             Kind::ProgramRole => "perfil",
+            Kind::Wave => "onda",
+            Kind::TrainingClass => "turma",
+            Kind::ClassSession => "sessao_aula",
+            Kind::Nomination => "indicacao",
+            Kind::NominationCriterion => "criterio_indicacao",
+            Kind::CurriculumModule => "modulo",
+            Kind::TrainingGroup => "grupo_formacao",
+            Kind::Instructor => "instrutor",
+            Kind::Question => "questao",
+            Kind::Exam => "prova",
+            Kind::ExamAnswer => "resposta_prova",
+            Kind::ExamResult => "resultado_prova",
+            Kind::CertificationRequirement => "requisito_certificacao",
+            Kind::Certification => "certificacao",
+            Kind::TrainingFolder => "pasta_formacao",
         }
     }
 }
