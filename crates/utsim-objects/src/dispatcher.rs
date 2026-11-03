@@ -1,11 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
-use utsim_core::task::{MSG_IDLE, distance};
+use utsim_core::task::{MAINTENANCE_TAG, MSG_IDLE, distance};
 use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, State, TaskKind, TaskRequest, Time};
 
 use crate::transporter::{
-    MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z, MSG_PREEMPT, MSG_PREEMPT_REFUSED, MSG_PREEMPTED,
+    MSG_CASE_DONE, MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z, MSG_PREEMPT,
+    MSG_PREEMPT_REFUSED, MSG_PREEMPTED,
 };
 
 /// How a dispatcher chooses among free team members.
@@ -105,6 +106,13 @@ impl TaskPick {
 /// `f64::to_bits`) before `MSG_IDLE`; until the first report the dispatcher uses the
 /// member's block position. A member that is broken or off shift still counts as
 /// free: its task waits in its own queue until it is back.
+///
+/// **Multitasking members** ([`Dispatcher::open_limits`]). A member that may hold
+/// several cases also takes an operator job (not maintenance) while busy, as long as all
+/// its work is operator jobs and it holds fewer than its limit: when no member is free,
+/// the rule chooses among such members. On its idle report it takes the first waiting
+/// task and then, if that is an operator job, further waiting operator jobs up to its
+/// limit; when it reports a case done ([`MSG_CASE_DONE`]) it takes one more.
 pub struct Dispatcher {
     team: Vec<BlockId>,
     rule: DispatchRule,
@@ -144,6 +152,8 @@ pub struct Dispatcher {
     /// Where RoundRobin starts looking.
     next: usize,
     queue: VecDeque<TaskRequest>,
+    /// Cases each member may hold at once (1: one task at a time).
+    open_limit: Vec<usize>,
 }
 
 impl Dispatcher {
@@ -174,6 +184,42 @@ impl Dispatcher {
             capacity: vec![1; n],
             next: 0,
             queue: VecDeque::new(),
+            open_limit: vec![1; n],
+        }
+    }
+
+    /// Cases each member may hold at once, in team order (missing or 0: 1). See the
+    /// multitasking paragraph of [`Dispatcher`].
+    pub fn open_limits(mut self, limits: Vec<usize>) -> Self {
+        for (m, l) in limits.into_iter().enumerate().take(self.team.len()) {
+            self.open_limit[m] = l.max(1);
+        }
+        self
+    }
+
+    /// Whether `request` is an operator job a multitasking member may interleave.
+    fn is_case(request: &TaskRequest) -> bool {
+        matches!(request.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
+    }
+
+    /// Busy member `m` has room for one more case.
+    fn has_room(&self, m: usize) -> bool {
+        !self.free[m]
+            && self.assigned[m].len() < self.open_limit[m]
+            && self.assigned[m].iter().all(Self::is_case)
+    }
+
+    /// Hands member `m` waiting operator jobs while it has room for them.
+    fn fill_room(&mut self, cx: &mut Ctx, m: usize) {
+        while self.has_room(m) && !cx.away_on_finish(self.team[m]) {
+            let me = self.team[m];
+            let Some(i) = (0..self.queue.len())
+                .find(|&i| Self::is_case(&self.queue[i]) && cx.qualified(me, &self.queue[i]))
+            else {
+                return;
+            };
+            let request = self.queue.remove(i).expect("index in range");
+            self.assign(cx, m, request);
         }
     }
 
@@ -324,6 +370,31 @@ impl Dispatcher {
                     && cx.qualified(self.team[m], request)
             })
             .collect();
+        if let Some(m) = self.choose_among(cx, request, &open) {
+            return Some(m);
+        }
+        if !Self::is_case(request) {
+            return None;
+        }
+        // Nobody free: a multitasking member with room for one more case.
+        let room: Vec<bool> = (0..n)
+            .map(|m| {
+                self.has_room(m)
+                    && !cx.away_on_finish(self.team[m])
+                    && cx.qualified(self.team[m], request)
+            })
+            .collect();
+        self.choose_among(cx, request, &room)
+    }
+
+    /// Applies the rule to the members marked in `open`.
+    fn choose_among(
+        &mut self,
+        cx: &mut Ctx,
+        request: &TaskRequest,
+        open: &[bool],
+    ) -> Option<usize> {
+        let n = self.team.len();
         match self.rule {
             DispatchRule::FirstAvailable => open.iter().position(|&f| f),
             DispatchRule::RoundRobin => {
@@ -335,10 +406,10 @@ impl Dispatcher {
             }
             DispatchRule::Nearest => {
                 let start = Self::start_of(cx, request);
-                Self::smallest(&open, |m| distance(self.positions[m], start))
+                Self::smallest(open, |m| distance(self.positions[m], start))
             }
-            DispatchRule::LeastBusy => Self::smallest(&open, |m| self.busy[m]),
-            DispatchRule::LongestIdle => Self::smallest(&open, |m| self.idle_since[m]),
+            DispatchRule::LeastBusy => Self::smallest(open, |m| self.busy[m]),
+            DispatchRule::LongestIdle => Self::smallest(open, |m| self.idle_since[m]),
             DispatchRule::Random => {
                 let candidates: Vec<usize> = (0..n).filter(|&m| open[m]).collect();
                 match candidates.len() {
@@ -470,6 +541,12 @@ impl Behavior for Dispatcher {
                     }
                 }
             }
+            MSG_CASE_DONE => {
+                if let Some(i) = self.assigned[member].iter().position(|r| r.id.0 == payload) {
+                    self.assigned[member].remove(i);
+                    self.fill_room(cx, member);
+                }
+            }
             MSG_PREEMPT_REFUSED => {
                 if self.asking == Some(member) {
                     self.asking = None;
@@ -520,6 +597,7 @@ impl Behavior for Dispatcher {
                             }
                         }
                     }
+                    self.fill_room(cx, member);
                 }
                 self.try_preempt(cx);
             }

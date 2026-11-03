@@ -899,6 +899,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             home_object: None,
             break_at: None,
             break_object: None,
+            multitask: None,
         },
         "Conveyor" => ObjectKind::Conveyor {
             length: 5.0,

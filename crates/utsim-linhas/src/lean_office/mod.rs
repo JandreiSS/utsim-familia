@@ -92,6 +92,8 @@ fn cause(role: Role) -> Option<usize> {
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 pub struct Ocupacao {
     pub trabalhando: f64,
+    /// Turning from one case to another (multitasking).
+    pub trocando: f64,
     pub andando: f64,
     pub ocioso: f64,
     pub fora: f64,
@@ -276,6 +278,7 @@ pub fn replicacao(
                 b.name.clone(),
                 Ocupacao {
                     trabalhando,
+                    trocando: f("setup"),
                     andando: f("travel_empty") + f("travel_loaded"),
                     ocioso: f("idle") + f("resting"),
                     fora,

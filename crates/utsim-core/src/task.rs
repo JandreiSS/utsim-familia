@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 use crate::block::BlockId;
 use crate::item::{Item, ItemId};
 
+/// `tag` of the [`TaskKind::Operate`] requests the kernel makes for maintenance
+/// technicians (never interleaved with other work by a multitasking person).
+pub const MAINTENANCE_TAG: u32 = u32::MAX;
+
 /// Identifies one task request for its whole life.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
@@ -71,6 +75,11 @@ pub const MSG_ITEM_EXITED: u32 = 6;
 pub const MSG_DECISION: u32 = 7;
 /// A `try_inject_item` was refused (target full or stopped); payload: the target block index.
 pub const MSG_INJECT_REFUSED: u32 = 8;
+/// An operator that works on several cases at once (multitasking) turns away from this
+/// station's job for a while (payload: request id): the station pauses the job's work.
+pub const MSG_SUSPEND: u32 = 9;
+/// The operator is back on the job it suspended (payload: request id): its work resumes.
+pub const MSG_RESUME_WORK: u32 = 10;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path
