@@ -606,7 +606,11 @@ impl AutoFit {
             let row = [
                 (pos + 1).to_string(),
                 c.family.clone(),
-                params_text(c),
+                c.params
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
                 c.n_params.to_string(),
                 opt_num(fitted.then_some(c.log_likelihood)),
                 opt_num(fitted.then_some(c.aic)),
