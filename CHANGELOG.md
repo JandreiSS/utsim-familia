@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Em desenvolvimento
+- Interface Godot, fase G5 (empacotamento): `godot/export_presets.cfg` (Windows e Linux; `utsim-3d`, `.pck` com os `.glb`, biblioteca da ponte em release ao lado do executável, ícone do UTSim) e `scripts/godot_exportar.sh` (compila a ponte em release, importa, exporta sem janela para `target/godot-export/<plataforma>/` e gera `AVISOS-TERCEIROS.txt` com o copyright e as licenças do motor Godot; `--instalar-modelos` baixa os modelos de exportação com o SHA512 conferido). O instalador do Windows, o `.deb`, o `.tar.gz` e o `.zip` ganham o componente opcional "UTSim 3D (prévia)", com atalho próprio, sem substituir o `utsim-view`. CI: job opcional `godot-exportar` (só ao disparar à mão) e `scripts/godot_instalar_ci.sh`; `release.yml` aceita `incluir_3d`.
 - Interface Godot, fase G1 (`godot/`, ponte `crates/utsim-godot` com o godot-rust gdext): abre e valida um modelo, roda as replicações no Rust e reproduz a replicação 0 com os modelos da biblioteca (empilhadeira com garfos, AGV com luz, rodas, porta-paletes e esteira do tamanho do modelo), pessoas animadas por esqueleto e cargas nos garfos e nas mãos. `scripts/godot.sh`, teste sem janela `scripts/godot_teste.sh`, capturas roteirizadas e passo opcional `UTSIM_GODOT=1` no `verificar.sh`. Plano das fases G2 a G5 em `docs/plano_godot.md`.
 
 ## [0.1.0] - 2026-11-02
