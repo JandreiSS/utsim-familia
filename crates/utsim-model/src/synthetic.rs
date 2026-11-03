@@ -84,6 +84,7 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         labels: BTreeMap::new(),
         on_blocked: OnBlocked::default(),
         schedule: None,
+        table: None,
     }
 }
 

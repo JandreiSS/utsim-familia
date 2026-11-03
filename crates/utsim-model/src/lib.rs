@@ -2,6 +2,7 @@
 
 mod aisles;
 pub mod analysis;
+mod arrivals;
 pub mod csv;
 pub mod dados;
 pub mod experiment;
@@ -48,7 +49,10 @@ use utsim_objects::{
 
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
-pub use utsim_objects::{ArrivalPeriod, ArrivalSchedule, PeriodArrivals};
+pub use utsim_objects::{
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, TableMode,
+    TableRepeat,
+};
 
 /// Reads only the `format` field; every other field is ignored.
 #[derive(Deserialize)]
@@ -275,6 +279,10 @@ pub enum ObjectKind {
         /// Arrivals by period of a repeating cycle (absent: `interarrival` all the time).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         schedule: Option<ArrivalSchedule>,
+        /// Arrival table: fixed instants (`Times`) or an ordered sequence (`Sequence`),
+        /// each row with a count and labels. Not together with `schedule`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        table: Option<ArrivalTable>,
     },
     Queue {
         #[serde(default)]
@@ -527,8 +535,15 @@ impl Model {
                     interarrival,
                     labels,
                     schedule,
+                    table,
                     ..
                 } => {
+                    errors.extend(arrivals::validate_source(
+                        &obj.name,
+                        interarrival,
+                        schedule,
+                        table,
+                    ));
                     dists.push(("interarrival".into(), interarrival));
                     dists.extend(labels.iter().map(|(k, d)| (format!("labels.{k}"), d)));
                     if let Some(s) = schedule {
@@ -778,17 +793,19 @@ impl Model {
                     interarrival,
                     max_arrivals,
                     schedule,
+                    table,
                     ..
                 },
             ) = (dists_ok, &obj.kind)
             {
-                let mean = match schedule {
+                let mean = match (table, schedule) {
+                    (Some(t), _) => arrivals::mean_gap(t, interarrival),
                     // Mean time between arrivals over a whole cycle.
-                    Some(s) if s.validate().is_empty() => {
+                    (None, Some(s)) if s.validate().is_empty() => {
                         s.cycle / s.expected_per_cycle(interarrival)
                     }
-                    Some(_) => f64::NAN,
-                    None => interarrival.mean(),
+                    (None, Some(_)) => f64::NAN,
+                    (None, None) => interarrival.mean(),
                 };
                 let limit = max_arrivals.map_or(f64::INFINITY, |n| n as f64);
                 if mean.is_finite() && run.stop_time.is_finite() {
@@ -1050,12 +1067,14 @@ impl Model {
                     labels,
                     on_blocked,
                     schedule,
+                    table,
                 } => {
                     let source = Source::new(interarrival.clone())
                         .on_blocked(*on_blocked)
                         .first_at_zero(*first_at_zero)
                         .max_arrivals(*max_arrivals)
-                        .schedule(schedule.clone());
+                        .schedule(schedule.clone())
+                        .table(table.clone());
                     Box::new(
                         labels
                             .iter()

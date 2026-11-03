@@ -23,6 +23,9 @@ pub use queue::{Batch, Discipline, Queue};
 pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
 pub use sink::Sink;
-pub use source::{ArrivalPeriod, ArrivalSchedule, OnBlocked, PeriodArrivals, Source};
+pub use source::{
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, OnBlocked, PeriodArrivals, Source,
+    TableMode, TableRepeat,
+};
 pub use span::Span;
 pub use transporter::Transporter;

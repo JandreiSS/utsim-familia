@@ -846,6 +846,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             labels: Default::default(),
             on_blocked: Default::default(),
             schedule: None,
+            table: None,
         },
         "Queue" => ObjectKind::Queue {
             capacity: None,

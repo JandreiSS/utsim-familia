@@ -346,6 +346,12 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "schedule[n].rate",
                 "schedule[n].interarrival",
                 "schedule[n].labels",
+                "table",
+                "table.rows[n]",
+                "table.rows[n].at",
+                "table.rows[n].count",
+                "table.rows[n].labels",
+                "table.rows[n].labels.<nome>",
             ],
         ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
@@ -394,6 +400,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Source { schedule, .. }, "schedule") => set!(*schedule),
         (ObjectKind::Source { schedule, .. }, f) if f.starts_with("schedule") => {
             return patch_schedule(schedule, key, &f["schedule".len()..], text);
+        }
+        (ObjectKind::Source { table, .. }, "table") => set!(*table),
+        (ObjectKind::Source { table, .. }, f) if f.starts_with("table.rows[") => {
+            return patch_table(table, key, &f["table.rows".len()..], text);
         }
         (ObjectKind::Queue { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Queue { discipline, .. }, "discipline") => set!(*discipline),
@@ -500,6 +510,50 @@ fn patch_schedule(
             period.arrivals = PeriodArrivals::Interarrival(parse_value(key, text)?);
         }
         ".labels" => period.labels = parse_value(key, text)?,
+        _ => return Err(bad()),
+    }
+    Ok(())
+}
+
+/// Sets part of a source's arrival `table`. `rest` is what follows `table.rows` in the
+/// key: `[n]` (a whole row, numbered from 1) or `[n].<field>` with `at`, `count`,
+/// `labels` and `labels.<name>` (one constant label).
+fn patch_table(
+    table: &mut Option<utsim_objects::ArrivalTable>,
+    key: &str,
+    rest: &str,
+    text: &str,
+) -> Result<(), ModelError> {
+    let Some(t) = table.as_mut() else {
+        return Err(invalid(format!(
+            "'{key}': a fonte não tem `table`; defina a tabela de chegadas primeiro"
+        )));
+    };
+    let bad = || {
+        invalid(format!(
+            "'{key}': use table.rows[n] ou table.rows[n].<campo> (at, count, labels, \
+             labels.<nome>), com n a partir de 1"
+        ))
+    };
+    let inner = rest.strip_prefix('[').ok_or_else(bad)?;
+    let (index, after) = inner.split_once(']').ok_or_else(bad)?;
+    let n: usize = index.trim().parse().map_err(|_| bad())?;
+    let count = t.rows.len();
+    if n == 0 || n > count {
+        return Err(invalid(format!(
+            "'{key}': linha {n} não existe; a tabela tem {count} linha(s), numeradas de 1 a {count}"
+        )));
+    }
+    let row = &mut t.rows[n - 1];
+    match after {
+        "" => row.clone_from(&parse_value(key, text)?),
+        ".at" => row.at = parse_value(key, text)?,
+        ".count" => row.count = parse_value(key, text)?,
+        ".labels" => row.labels = parse_value(key, text)?,
+        f if f.starts_with(".labels.") && f.len() > ".labels.".len() => {
+            row.labels
+                .insert(f[".labels.".len()..].to_string(), parse_value(key, text)?);
+        }
         _ => return Err(bad()),
     }
     Ok(())
