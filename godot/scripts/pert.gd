@@ -43,6 +43,26 @@ var _text: TextEdit
 var _file: LineEdit
 
 
+
+## `mean ± half_width` with about four significant digits.
+static func mh(s: Variant) -> String:
+	if s == null or not (s is Dictionary) or s.get("mean") == null:
+		return "-"
+	var h = s.get("half_width")
+	if h == null:
+		return num(float(s["mean"]))
+	return "%s ± %s" % [num(float(s["mean"])), num(float(h))]
+
+
+static func num(x: float) -> String:
+	if is_nan(x) or is_inf(x):
+		return "-"
+	if x == 0.0:
+		return "0"
+	var digits := clampi(3 - int(floor(log(absf(x)) / log(10.0))), 0, 6)
+	return String.num(x, digits)
+
+
 func build(owner_main: Node) -> void:
 	main = owner_main
 	name = "PainelPert"
@@ -212,19 +232,19 @@ func show_pert(p: Object) -> void:
 	var units = t.get("units")
 	var spread := ""
 	if t.get("sd") != null:
-		spread = ", desvio %s" % PainelResultados.num(float(t["sd"]))
+		spread = ", desvio %s" % PainelPert.num(float(t["sd"]))
 	lines.append("Tempo total: [b]%s[/b]%s%s. CPM nas médias: %s." % [
-		PainelResultados.mh(t), spread, (" (%s unidades/sorteios)" % str(units)) if units != null else "",
-		PainelResultados.num(float(data["project"]))])
+		PainelPert.mh(t), spread, (" (%s unidades/sorteios)" % str(units)) if units != null else "",
+		PainelPert.num(float(data["project"]))])
 	var dl = t.get("deadline")
 	if dl != null:
-		var p_text := "%s%%" % PainelResultados.num(float(dl["probability"]) * 100.0)
+		var p_text := "%s%%" % PainelPert.num(float(dl["probability"]) * 100.0)
 		if dl.get("low") != null and dl.get("high") != null:
-			p_text += " (IC %s%% a %s%%)" % [PainelResultados.num(float(dl["low"]) * 100.0), PainelResultados.num(float(dl["high"]) * 100.0)]
-		lines.append("P(T ≤ %s) = [b]%s[/b]" % [PainelResultados.num(float(dl["deadline"])), p_text])
+			p_text += " (IC %s%% a %s%%)" % [PainelPert.num(float(dl["low"]) * 100.0), PainelPert.num(float(dl["high"]) * 100.0)]
+		lines.append("P(T ≤ %s) = [b]%s[/b]" % [PainelPert.num(float(dl["deadline"])), p_text])
 	var paths: Array = data.get("paths", [])
 	if not paths.is_empty():
-		lines.append("Caminho crítico: [color=#ff6b4d]%s[/color] (%s%%)" % [" → ".join(paths[0]["names"]), PainelResultados.num(float(paths[0]["index"]) * 100.0)])
+		lines.append("Caminho crítico: [color=#ff6b4d]%s[/color] (%s%%)" % [" → ".join(paths[0]["names"]), PainelPert.num(float(paths[0]["index"]) * 100.0)])
 	for w in data.get("warnings", []):
 		lines.append("[color=#fac859]aviso: %s[/color]" % w)
 	_info.text = "\n".join(lines)
@@ -245,8 +265,8 @@ func show_pert(p: Object) -> void:
 			name = "[color=#ff6b4d]%s[/color]" % name
 		tb.append("[cell]%s  [/cell]" % name)
 		for k in ["mean", "es", "ef", "ls", "lf", "total_float", "free_float"]:
-			tb.append("[cell]%s  [/cell]" % (PainelResultados.num(float(a[k])) if a[k] != null else "-"))
-		tb.append("[cell]%s%%[/cell]" % PainelResultados.num(float(a["criticality"]) * 100.0) if a["criticality"] != null else "[cell]-[/cell]")
+			tb.append("[cell]%s  [/cell]" % (PainelPert.num(float(a[k])) if a[k] != null else "-"))
+		tb.append("[cell]%s%%[/cell]" % PainelPert.num(float(a["criticality"]) * 100.0) if a["criticality"] != null else "[cell]-[/cell]")
 	tb.append("[/table]")
 	for h in data.get("assumptions", []):
 		tb.append("\n[color=#aab2be]hipótese: %s[/color]" % h)
@@ -257,7 +277,7 @@ func show_pert(p: Object) -> void:
 		_file.text = base + "_pert.html"
 	if main.editor != null:
 		main.editor.critical = Array(data.get("critical_objects", []))
-	main.set_status("PERT/CPM (%s): tempo total %s." % [mode, PainelResultados.mh(t)])
+	main.set_status("PERT/CPM (%s): tempo total %s." % [mode, PainelPert.mh(t)])
 
 
 func _export_html() -> void:
@@ -315,7 +335,7 @@ class Diagrama extends Control:
 			if b["milestone"]:
 				continue
 			var f := func(k: String) -> String:
-				return PainelResultados.num(float(b[k])) if b[k] != null else "-"
+				return PainelPert.num(float(b[k])) if b[k] != null else "-"
 			draw_string(font, r.position + Vector2(6, 34), "ES %s  EF %s" % [f.call("es"), f.call("ef")], HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, 11, PainelPert.LINE)
 			draw_string(font, r.position + Vector2(6, 48), "LS %s  LF %s" % [f.call("ls"), f.call("lf")], HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, 11, PainelPert.LINE)
 			var crit := float(b["criticality"]) if b["criticality"] != null else 0.0
@@ -354,4 +374,4 @@ class Gantt extends Control:
 		draw_line(Vector2(LEFT, base), Vector2(LEFT + w, base), PainelPert.LINE)
 		for j in 5:
 			var x := LEFT + w * j / 4.0
-			draw_string(font, Vector2(x - 16, base + 16), PainelResultados.num(project * j / 4.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, PainelPert.LINE)
+			draw_string(font, Vector2(x - 16, base + 16), PainelPert.num(project * j / 4.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, PainelPert.LINE)
