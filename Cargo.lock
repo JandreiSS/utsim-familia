@@ -7782,6 +7782,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-quality"
+version = "0.1.0"
+dependencies = [
+ "rand 0.9.5",
+ "rand_distr 0.5.1",
+ "rand_pcg",
+ "serde",
+ "utsim-stats",
+]
+
+[[package]]
 name = "utsim-scene"
 version = "0.1.0"
 dependencies = [

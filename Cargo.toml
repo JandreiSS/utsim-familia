@@ -21,6 +21,7 @@ default-members = [
     "crates/utsim-objects",
     "crates/utsim-opt",
     "crates/utsim-pert",
+    "crates/utsim-quality",
     "crates/utsim-scene",
     "crates/utsim-script",
     "crates/utsim-stats",
@@ -39,6 +40,7 @@ utsim-objects = { path = "crates/utsim-objects" }
 utsim-model = { path = "crates/utsim-model" }
 utsim-fit = { path = "crates/utsim-fit" }
 utsim-stats = { path = "crates/utsim-stats" }
+utsim-quality = { path = "crates/utsim-quality" }
 utsim-edit = { path = "crates/utsim-edit" }
 utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
@@ -76,6 +78,9 @@ opt-level = 2
 opt-level = 2
 
 [profile.dev.package.utsim-stats]
+opt-level = 2
+
+[profile.dev.package.utsim-quality]
 opt-level = 2
 
 [profile.release]
