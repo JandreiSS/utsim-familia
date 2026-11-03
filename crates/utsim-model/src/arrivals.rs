@@ -1,10 +1,35 @@
 //! Checks and `utsim check` lines for arrival tables, batches and item types
 //! (`docs/plano_chegadas_e_equipes_3d.md`, C1 to C3).
 
-use utsim_core::Dist;
-use utsim_objects::{ArrivalSchedule, ArrivalTable, TableMode, TableRepeat};
+use std::collections::{BTreeMap, HashSet};
+
+use serde::{Deserialize, Serialize};
+use utsim_core::{Dist, ITEM_TYPE_LABEL};
+use utsim_objects::{ArrivalSchedule, ArrivalTable, ItemTypeSpec, TableMode, TableRepeat};
 
 use crate::{Model, ObjectKind};
+
+/// One item type of the model (`item_types`): what it is called, how it looks in 3D and
+/// the constant labels its items start with.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ItemTypeDef {
+    pub name: String,
+    /// Colour of its items in 3D, "#rrggbb".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Look of its items in 3D: an asset of the built-in library or a `.glb` file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
+    /// Labels every item of the type starts with (the source's and the table row's
+    /// labels of the same name win).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, f64>,
+}
+
+/// Whether `s` is a "#rrggbb" colour.
+fn is_hex_color(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
 
 /// Errors of a source's `table` (and of `table` together with `schedule`).
 pub(crate) fn validate_source(
@@ -61,6 +86,119 @@ fn num(v: f64) -> String {
 }
 
 impl Model {
+    /// The item types as the sources apply them.
+    pub(crate) fn item_type_specs(&self) -> Vec<ItemTypeSpec> {
+        self.item_types
+            .iter()
+            .map(|t| ItemTypeSpec {
+                name: t.name.clone(),
+                labels: t.labels.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+            })
+            .collect()
+    }
+
+    /// `item_types` and every reference to them (sources, table rows).
+    pub(crate) fn validate_item_types(&self, errors: &mut Vec<String>) {
+        let mut names = HashSet::new();
+        for (k, t) in self.item_types.iter().enumerate() {
+            let n = k + 1;
+            if t.name.trim().is_empty() {
+                errors.push(format!("item_types[{n}]: o tipo precisa de um nome"));
+            } else if !names.insert(t.name.as_str()) {
+                errors.push(format!("item_types: tipo '{}' repetido", t.name));
+            }
+            if t.color.as_deref().is_some_and(|c| !is_hex_color(c)) {
+                errors.push(format!(
+                    "item_types '{}': color deve ser \"#rrggbb\"",
+                    t.name
+                ));
+            }
+            if t.labels.contains_key(ITEM_TYPE_LABEL) {
+                errors.push(format!(
+                    "item_types '{}': o rótulo '{ITEM_TYPE_LABEL}' é reservado ao tipo",
+                    t.name
+                ));
+            }
+            if t.labels.values().any(|v| !v.is_finite()) {
+                errors.push(format!(
+                    "item_types '{}': os rótulos devem ser finitos",
+                    t.name
+                ));
+            }
+        }
+        let known = |name: &str| self.item_types.iter().any(|t| t.name == name);
+        let unknown = |what: String, name: &str| {
+            let list: Vec<&str> = self.item_types.iter().map(|t| t.name.as_str()).collect();
+            format!(
+                "{what}: o tipo '{name}' não existe ({})",
+                if list.is_empty() {
+                    "o modelo não tem item_types".to_string()
+                } else {
+                    format!("tipos: {}", list.join(", "))
+                }
+            )
+        };
+        for obj in &self.objects {
+            let ObjectKind::Source {
+                item_type,
+                item_type_mix,
+                table,
+                labels,
+                ..
+            } = &obj.kind
+            else {
+                continue;
+            };
+            let name = &obj.name;
+            if let Some(t) = item_type.as_deref().filter(|t| !known(t)) {
+                errors.push(unknown(format!("{name}.item_type"), t));
+            }
+            for (t, w) in item_type_mix {
+                if !known(t) {
+                    errors.push(unknown(format!("{name}.item_type_mix"), t));
+                }
+                if !(w.is_finite() && *w >= 0.0) {
+                    errors.push(format!(
+                        "{name}.item_type_mix: o peso de '{t}' deve ser finito e >= 0"
+                    ));
+                }
+            }
+            if !item_type_mix.is_empty() && !item_type_mix.iter().any(|(_, w)| *w > 0.0) {
+                errors.push(format!(
+                    "{name}.item_type_mix: ao menos um peso precisa ser > 0"
+                ));
+            }
+            if item_type.is_some() && !item_type_mix.is_empty() {
+                errors.push(format!(
+                    "{name}: use item_type (um tipo) ou item_type_mix (sorteio), não os dois"
+                ));
+            }
+            let rows = table.as_ref().map_or(&[][..], |t| t.rows.as_slice());
+            for (k, row) in rows.iter().enumerate() {
+                if let Some(t) = row.item_type.as_deref().filter(|t| !known(t)) {
+                    errors.push(unknown(
+                        format!("{name}: table.rows[{}].item_type", k + 1),
+                        t,
+                    ));
+                }
+                if row.labels.contains_key(ITEM_TYPE_LABEL) {
+                    errors.push(format!(
+                        "{name}: table.rows[{}]: o rótulo '{ITEM_TYPE_LABEL}' é reservado; use item_type",
+                        k + 1
+                    ));
+                }
+            }
+            let typed = item_type.is_some()
+                || !item_type_mix.is_empty()
+                || rows.iter().any(|r| r.item_type.is_some());
+            if typed && labels.contains_key(ITEM_TYPE_LABEL) {
+                errors.push(format!(
+                    "{name}: o rótulo '{ITEM_TYPE_LABEL}' é reservado ao tipo do item; tire-o de labels"
+                ));
+            }
+        }
+    }
+
     /// One line per source with an arrival table, for `utsim check`.
     pub fn arrival_lines(&self) -> Vec<String> {
         let mut out = Vec::new();
@@ -102,6 +240,28 @@ impl Model {
                 ),
             };
             out.push(line);
+        }
+        if !self.item_types.is_empty() {
+            let types: Vec<String> = self
+                .item_types
+                .iter()
+                .enumerate()
+                .map(|(k, t)| {
+                    let look: Vec<&str> = [t.color.as_deref(), t.asset.as_deref()]
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                    if look.is_empty() {
+                        format!("{} = {}", t.name, k + 1)
+                    } else {
+                        format!("{} = {} ({})", t.name, k + 1, look.join(", "))
+                    }
+                })
+                .collect();
+            out.push(format!(
+                "tipos de item (rótulo '{ITEM_TYPE_LABEL}'): {}",
+                types.join("; ")
+            ));
         }
         out
     }

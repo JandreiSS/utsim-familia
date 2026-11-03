@@ -448,3 +448,130 @@ fn batch_is_validated() {
     .to_string();
     assert!(e.contains("src.batch"), "{e}");
 }
+
+// ---------------------------------------------------------------- C3 item types
+
+/// Two types and a source with `source` fields routing by `label` to sinks s1 and s2.
+fn typed_model(source: &str, label: &str) -> String {
+    format!(
+        r##"Model(
+            format: 2,
+            name: "tipos",
+            run: (stop_time: 1000.0, seed: 7),
+            item_types: [
+                (name: "A", color: "#3b82f6", asset: "caixa_pequena", labels: {{"peso": 8.0, "rota": 2.0}}),
+                (name: "B", color: "#f59e0b", labels: {{"rota": 1.0}}),
+            ],
+            objects: [
+                (name: "src", kind: Source(interarrival: Exp(mean: 2.0), {source}), output: ByLabel("{label}")),
+                (name: "s1", kind: Sink),
+                (name: "s2", kind: Sink),
+            ],
+            connections: [("src", "s1"), ("src", "s2")],
+        )"##
+    )
+}
+
+#[test]
+fn reserved_type_label_routes_by_type() {
+    // Type A = 1 goes to port 1 (s1), B = 2 to s2; the mix draws about 1:3.
+    let r = run(&typed_model(
+        r#"item_type_mix: [("A", 1.0), ("B", 3.0)]"#,
+        "type",
+    ));
+    let (s1, s2) = (r.block("s1").unwrap(), r.block("s2").unwrap());
+    assert!(s1.input > 0 && s2.input > 0);
+    let share = s2.input as f64 / (s1.input + s2.input) as f64;
+    assert!((share - 0.75).abs() < 0.05, "{share}");
+    // Per-type report at the sinks: each sink got one type only, and the counts add up.
+    assert_eq!(s1.extra["time_in_system.A"].count, s1.input);
+    assert!(!s1.extra.contains_key("time_in_system.B"));
+    assert_eq!(s2.extra["time_in_system.B"].count, s2.input);
+    assert_eq!(s1.extra["time_in_system"].count, s1.input);
+}
+
+#[test]
+fn type_labels_are_defaults_the_source_can_override() {
+    // A's `rota` is 2: every A goes to s2.
+    let r = run(&typed_model(r#"item_type: "A""#, "rota"));
+    assert_eq!(r.block("s1").unwrap().input, 0);
+    assert!(r.block("s2").unwrap().input > 0);
+    // The source's own `rota` wins over the type's.
+    let r = run(&typed_model(
+        r#"item_type: "A", labels: {"rota": Const(1.0)}"#,
+        "rota",
+    ));
+    assert_eq!(r.block("s2").unwrap().input, 0);
+    assert!(r.block("s1").unwrap().input > 0);
+}
+
+#[test]
+fn table_rows_set_the_type_and_the_same_seed_repeats() {
+    let src = r#"table: (mode: Sequence, repeat: Loop, rows: [
+        (count: 2, item_type: "B"), (count: 1, item_type: "A"),
+    ]), first_at_zero: true"#;
+    let text = typed_model(src, "type");
+    let (trace, names) = traced(&text);
+    let order = deliveries(&trace, &names, &["s1", "s2"]);
+    assert_eq!(order[..6], ["s2", "s2", "s1", "s2", "s2", "s1"]);
+    // The trace says which type each new item got.
+    let types: Vec<u32> = trace
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::ItemType { item_type, .. } => Some(item_type),
+            _ => None,
+        })
+        .take(3)
+        .collect();
+    assert_eq!(types, [2, 2, 1]);
+    // Determinism: same seed, same report.
+    let a = run(&typed_model(
+        r#"item_type_mix: [("A", 1.0), ("B", 1.0)]"#,
+        "type",
+    ));
+    let b = run(&typed_model(
+        r#"item_type_mix: [("A", 1.0), ("B", 1.0)]"#,
+        "type",
+    ));
+    assert_eq!(
+        serde_json::to_string(&a.blocks).unwrap(),
+        serde_json::to_string(&b.blocks).unwrap()
+    );
+}
+
+#[test]
+fn item_types_are_validated() {
+    let err = |src: &str| {
+        Model::parse(&typed_model(src, "type"))
+            .unwrap()
+            .validate()
+            .unwrap_err()
+            .to_string()
+    };
+    let e = err(r#"item_type: "C""#);
+    assert!(e.contains("o tipo 'C' não existe (tipos: A, B)"), "{e}");
+    let e = err(r#"item_type_mix: [("A", 0.0)]"#);
+    assert!(e.contains("ao menos um peso"), "{e}");
+    let e = err(r#"item_type: "A", item_type_mix: [("B", 1.0)]"#);
+    assert!(e.contains("não os dois"), "{e}");
+    let e = err(r#"item_type: "A", labels: {"type": Const(1.0)}"#);
+    assert!(e.contains("reservado"), "{e}");
+    let e = err(r#"table: (rows: [(at: 1.0, item_type: "Z")])"#);
+    assert!(e.contains("table.rows[1].item_type"), "{e}");
+    let bad = typed_model(r#"item_type: "A""#, "type").replace("#3b82f6", "azul");
+    let e = Model::parse(&bad)
+        .unwrap()
+        .validate()
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("#rrggbb"), "{e}");
+}
+
+#[test]
+fn check_lists_the_item_types() {
+    let m = model(&typed_model(r#"item_type: "A""#, "type"));
+    assert_eq!(
+        m.arrival_lines(),
+        ["tipos de item (rótulo 'type'): A = 1 (#3b82f6, caixa_pequena); B = 2 (#f59e0b)"]
+    );
+}

@@ -44,9 +44,10 @@ use utsim_objects::traffic::Traffic;
 use utsim_objects::{
     Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, OnBlocked,
     OperatorUse, Processor, Queue, Rack, RackPlacement, SeparateMode, Separator, Sink, Source,
-    Transporter,
+    Transporter, TypedSink,
 };
 
+pub use arrivals::ItemTypeDef;
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
@@ -125,6 +126,10 @@ pub struct Model {
     /// Named shift tables that objects reference with `shifts: Calendar("name")`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub calendars: BTreeMap<String, ShiftTable>,
+    /// Item types (name, colour, 3D look, default labels). An item of type `k` (1-based,
+    /// in this order) carries the reserved label `type = k`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_types: Vec<ItemTypeDef>,
     pub objects: Vec<ObjectDef>,
     /// `(from, to)` pairs. Order defines port numbers and pull priority.
     #[serde(default)]
@@ -290,6 +295,12 @@ pub enum ObjectKind {
         /// `OneByOne(Dist)`.
         #[serde(default, skip_serializing_if = "Release::is_together")]
         release: Release,
+        /// Item type of every item (a name of the model's `item_types`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_type: Option<String>,
+        /// Item types drawn for each item, `(name, weight)`; not with `item_type`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        item_type_mix: Vec<(String, f64)>,
     },
     Queue {
         #[serde(default)]
@@ -863,6 +874,7 @@ impl Model {
             .iter()
             .map(|o| (o.name.as_str(), &o.kind))
             .collect();
+        self.validate_item_types(&mut errors);
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_movement(&mut errors);
         self.validate_aisles(&mut errors);
@@ -1099,6 +1111,8 @@ impl Model {
                     table,
                     batch,
                     release,
+                    item_type,
+                    item_type_mix,
                 } => {
                     let source = Source::new(interarrival.clone())
                         .batch(batch.clone())
@@ -1108,6 +1122,15 @@ impl Model {
                         .max_arrivals(*max_arrivals)
                         .schedule(schedule.clone())
                         .table(table.clone());
+                    let source = if self.item_types.is_empty() {
+                        source
+                    } else {
+                        source.item_types(
+                            self.item_type_specs(),
+                            item_type.as_deref(),
+                            item_type_mix,
+                        )
+                    };
                     Box::new(
                         labels
                             .iter()
@@ -1145,6 +1168,9 @@ impl Model {
                                 .map(|op| (ids[op.team.as_str()], op.clone())),
                         ),
                 ),
+                ObjectKind::Sink if !self.item_types.is_empty() => Box::new(TypedSink::new(
+                    self.item_types.iter().map(|t| t.name.clone()).collect(),
+                )),
                 ObjectKind::Sink => Box::new(Sink),
                 ObjectKind::Transporter {
                     speed,

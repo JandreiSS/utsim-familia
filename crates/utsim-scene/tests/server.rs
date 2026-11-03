@@ -36,6 +36,7 @@ fn frame(t: f64, poses: usize) -> Frame {
                 parent: None,
                 state: None,
                 fill: None,
+                item_type: None,
             })
             .collect(),
     }

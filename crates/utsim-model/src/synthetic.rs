@@ -87,6 +87,8 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         table: None,
         batch: None,
         release: Default::default(),
+        item_type: None,
+        item_type_mix: Vec::new(),
     }
 }
 
@@ -225,6 +227,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
             movement: None,
         },
         calendars: BTreeMap::new(),
+        item_types: Vec::new(),
         objects: objs,
         connections,
         network: None,

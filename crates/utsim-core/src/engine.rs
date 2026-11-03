@@ -505,6 +505,16 @@ impl Ctx<'_> {
         &mut self.core.items[id]
     }
 
+    /// Gives `id` item type `index` (1-based): sets the reserved [`ITEM_TYPE_LABEL`] and
+    /// records it in the trace (the 3D scene colours the item by type).
+    pub fn set_item_type(&mut self, id: ItemId, index: u32) {
+        self.core.items[id].set_label(crate::item::ITEM_TYPE_LABEL, index as f64);
+        self.core.emit(TraceEvent::ItemType {
+            item: item_key(id),
+            item_type: index,
+        });
+    }
+
     /// Creates a new item inside this block.
     pub fn spawn_item(&mut self) -> ItemId {
         let now = self.core.now;

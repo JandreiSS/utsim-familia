@@ -78,8 +78,8 @@ use crate::style::{self, Shape};
 use crate::timeline::{FluidSample, ItemPos, Timeline, TransitSetting, TravelLeg};
 use crate::turning::{self, Neighbour};
 use crate::{
-    EntityId, EntityKind, Frame, Header, MobileRole, Motion, PROTOCOL, Pose, Segment, StaticEntity,
-    StaticScene,
+    EntityId, EntityKind, Frame, Header, ItemTypeStyle, MobileRole, Motion, PROTOCOL, Pose,
+    Segment, StaticEntity, StaticScene,
 };
 
 /// Edge of the default item cube, metres.
@@ -240,6 +240,8 @@ pub struct Scene {
     pub fork_scale: f32,
     model: String,
     blocks: Vec<BlockInfo>,
+    /// Item types of the model (empty without a model or without types).
+    item_types: Vec<ItemTypeStyle>,
 }
 
 impl Scene {
@@ -405,7 +407,24 @@ impl Scene {
             end,
             model: replay.model.clone(),
             blocks,
+            item_types: opts.model.map_or(Vec::new(), |m| {
+                m.item_types
+                    .iter()
+                    .enumerate()
+                    .map(|(k, t)| ItemTypeStyle {
+                        index: k as u32 + 1,
+                        name: t.name.clone(),
+                        color: t.color.clone(),
+                        asset: t.asset.clone(),
+                    })
+                    .collect()
+            }),
         }
+    }
+
+    /// Item types of the model (see [`StaticScene::item_types`]).
+    pub fn item_types(&self) -> &[ItemTypeStyle] {
+        &self.item_types
     }
 
     /// Whether replay block `b` is not drawn as an object (token flow or fluid network).
@@ -954,6 +973,7 @@ impl Scene {
             entities,
             network,
             bounds: (min, max),
+            item_types: self.item_types.clone(),
         }
     }
 
@@ -989,6 +1009,7 @@ impl Scene {
                     parent: None,
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
+                    item_type: None,
                 },
                 None => Pose {
                     id: EntityId::Block(b as u32),
@@ -999,6 +1020,7 @@ impl Scene {
                     parent: None,
                     state: state.map(|s| s.name().to_string()),
                     fill: None,
+                    item_type: None,
                 },
             };
             poses.push(pose);
@@ -1020,6 +1042,7 @@ impl Scene {
                 parent: None,
                 state: None,
                 fill: tank.then(|| fluids::fill_fraction(sample.level, node.capacity)),
+                item_type: None,
             });
         }
         for p in self.items_at(t) {
@@ -1034,6 +1057,7 @@ impl Scene {
                 parent: p.parent,
                 state: None,
                 fill: None,
+                item_type: self.timeline.item_type(p.item),
             });
         }
         Frame { time: t, poses }

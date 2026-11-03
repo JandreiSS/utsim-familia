@@ -12,6 +12,10 @@ slotmap::new_key_type! {
     pub struct ItemId;
 }
 
+/// Reserved label holding an item's type: the 1-based index of the type in the model's
+/// `item_types`, so `OutputRule::ByLabel("type")` sends type `k` to output port `k`.
+pub const ITEM_TYPE_LABEL: &str = "type";
+
 /// A label value.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]

@@ -849,6 +849,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             table: None,
             batch: None,
             release: Default::default(),
+            item_type: None,
+            item_type_mix: Vec::new(),
         },
         "Queue" => ObjectKind::Queue {
             capacity: None,

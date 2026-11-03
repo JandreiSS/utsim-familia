@@ -22,10 +22,10 @@ pub use processor::{OperatorUse, Processor};
 pub use queue::{Batch, Discipline, Queue};
 pub use rack::{Rack, RackPlacement};
 pub use separator::{SeparateMode, Separator};
-pub use sink::Sink;
+pub use sink::{Sink, TypedSink};
 pub use source::{
-    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, OnBlocked, PeriodArrivals, Release,
-    Source, TableMode, TableRepeat,
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, ItemTypeSpec, OnBlocked,
+    PeriodArrivals, Release, Source, TableMode, TableRepeat,
 };
 pub use span::Span;
 pub use transporter::Transporter;

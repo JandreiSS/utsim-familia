@@ -77,6 +77,9 @@ pub struct ArrivalRow {
     /// Items the row creates at once (0 is allowed: the row creates nothing).
     #[serde(default = "one_u64")]
     pub count: u64,
+    /// Item type of the row's items (a name of the model's `item_types`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_type: Option<String>,
     /// Constant labels of the row's items; they replace the source's labels of the same
     /// name (labels the source does not have are added).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -421,6 +424,21 @@ pub struct Source {
     /// Pending `SPAWN_NEXT` and its due time; time left while stopped.
     spawn_next: Option<(EventId, Time)>,
     spawn_paused: Option<Time>,
+    /// Item types of the model (see [`ItemTypeSpec`]); empty without types.
+    types: Vec<ItemTypeSpec>,
+    /// Type of every item (1-based), or drawn from `mix`, unless the table row sets one.
+    fixed_type: Option<u32>,
+    mix: Option<Dist>,
+    /// Type of each table row (1-based), when it sets one.
+    row_types: Vec<Option<u32>>,
+}
+
+/// An item type as a source applies it: its name and the constant labels its items get
+/// (the source's and the row's labels of the same name win).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemTypeSpec {
+    pub name: String,
+    pub labels: Vec<(String, f64)>,
 }
 
 impl Source {
@@ -452,7 +470,54 @@ impl Source {
             burst: VecDeque::new(),
             spawn_next: None,
             spawn_paused: None,
+            types: Vec::new(),
+            fixed_type: None,
+            mix: None,
+            row_types: Vec::new(),
         }
+    }
+
+    /// Item types (call after [`Source::table`]): the model's types, the type of every
+    /// item (`fixed`) or the weighted mix to draw it from, by name. Table rows with an
+    /// `item_type` use theirs. Names must exist (validate the model first); unknown
+    /// names are ignored.
+    pub fn item_types(
+        mut self,
+        types: Vec<ItemTypeSpec>,
+        fixed: Option<&str>,
+        mix: &[(String, f64)],
+    ) -> Self {
+        let index = |name: &str| {
+            types
+                .iter()
+                .position(|t| t.name == name)
+                .map(|k| k as u32 + 1)
+        };
+        self.fixed_type = fixed.and_then(index);
+        let table: Vec<(f64, f64)> = mix
+            .iter()
+            .filter_map(|(name, w)| Some((index(name)? as f64, *w)))
+            .collect();
+        self.mix = (!table.is_empty()).then_some(Dist::Discrete(table));
+        self.row_types = self.table.as_ref().map_or(Vec::new(), |t| {
+            t.rows
+                .iter()
+                .map(|r| r.item_type.as_deref().and_then(index))
+                .collect()
+        });
+        self.types = types;
+        self
+    }
+
+    /// The type of a new item of `row` (1-based), drawing from the mix when needed.
+    fn type_of(&self, cx: &mut Ctx, row: Option<usize>) -> Option<u32> {
+        if let Some(t) = row.and_then(|r| self.row_types.get(r).copied().flatten()) {
+            return Some(t);
+        }
+        if self.fixed_type.is_some() {
+            return self.fixed_type;
+        }
+        self.mix.as_ref().map(|d| cx.sample(d) as u32)
     }
 
     /// Items created per arrival (rounded, at least 0) when there is no table; absent:
@@ -561,6 +626,14 @@ impl Source {
     /// Creates and releases one item of an arrival.
     fn spawn_one(&mut self, cx: &mut Ctx, row: Option<usize>) {
         let id = cx.spawn_item();
+        if let Some(k) = self.type_of(cx, row) {
+            cx.set_item_type(id, k);
+            if let Some(spec) = self.types.get(k as usize - 1) {
+                for (name, v) in &spec.labels {
+                    cx.item_mut(id).set_label(name.clone(), *v);
+                }
+            }
+        }
         self.label_item(cx, id);
         if let Some(r) = row {
             let labels = &self.table.as_ref().expect("row of a table").rows[r].labels;

@@ -65,6 +65,10 @@ pub enum TraceEvent {
         path: Vec<[f64; 3]>,
         duration: f64,
     },
+    /// The item was given item type `item_type` (1-based index in the model's
+    /// `item_types`, also its `type` label), right after `Created`. Only models that
+    /// declare item types emit it.
+    ItemType { item: u64, item_type: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

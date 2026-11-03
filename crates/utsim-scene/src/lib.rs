@@ -139,6 +139,10 @@ pub struct Pose {
     pub state: Option<String>,
     /// Fill fraction 0..1 for tanks; `None` otherwise.
     pub fill: Option<f32>,
+    /// Item type of an item (1-based index into [`StaticScene::item_types`]), when the
+    /// model declares types. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_type: Option<u32>,
 }
 
 /// Everything that moves or changes, at time `time`. Entities absent from a frame
@@ -179,6 +183,22 @@ pub struct StaticScene {
     pub network: Vec<Segment>,
     /// Axis-aligned bounds `(min, max)` of everything, metres.
     pub bounds: ([f32; 3], [f32; 3]),
+    /// Item types of the model: the colour and the look of the items whose
+    /// [`Pose::item_type`] points here. Empty (and absent from the JSON) without types.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub item_types: Vec<ItemTypeStyle>,
+}
+
+/// How the items of one item type look (the model's `item_types`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ItemTypeStyle {
+    /// 1-based index, the value of the item's `type` label and of [`Pose::item_type`].
+    pub index: u32,
+    pub name: String,
+    /// "#rrggbb", when the type sets one.
+    pub color: Option<String>,
+    /// Asset id of the built-in library or a `.glb` file, when the type sets one.
+    pub asset: Option<String>,
 }
 
 /// First line of a scene stream.
