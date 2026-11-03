@@ -914,6 +914,9 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         visual: None,
         access: None,
         person: None,
+        preset: None,
+        area: None,
+        symbol: None,
     })
 }
 
