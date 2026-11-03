@@ -9,10 +9,13 @@
 pub mod block;
 pub mod dist;
 pub mod engine;
+pub mod init;
 pub mod item;
 pub mod report;
+mod residual;
 pub mod rng;
 pub mod script;
+mod special;
 pub mod stats;
 pub mod task;
 pub mod trace;
@@ -26,6 +29,7 @@ pub use block::{
 };
 pub use dist::Dist;
 pub use engine::{Ctx, Decision, EventId, RunConfig, SimError, Simulation, Step};
+pub use init::{BlockState, ItemState, StartState, WorkPhase};
 pub use item::{Item, ItemId, Value};
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, Utilization, summarize};
 pub use stats::Histogram;
