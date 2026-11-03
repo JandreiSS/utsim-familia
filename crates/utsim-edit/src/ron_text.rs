@@ -57,6 +57,21 @@ pub fn operators_requiring(
     }
 }
 
+/// A processor's whole `operators` section, with the optional skill and request
+/// priority fields (left out when absent, as the model writes them).
+pub fn operator_use(o: &utsim_objects::OperatorUse) -> String {
+    let mut text = operators_requiring(&o.team, o.count, o.setup, o.process, o.requires.as_deref());
+    text.pop();
+    if let Some(p) = o.priority {
+        text.push_str(&format!(", priority: {p}"));
+    }
+    if let Some(label) = &o.priority_label {
+        text.push_str(&format!(", priority_label: {}", string(label)));
+    }
+    text.push(')');
+    text
+}
+
 pub fn string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
