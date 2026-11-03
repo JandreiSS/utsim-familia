@@ -528,7 +528,16 @@ impl Scene {
         let mut position = self.travel_base(b, t);
         let mut yaw = self.yaw_at(b, t);
         let motion = match (state, leg) {
-            (Some(State::Down | State::OffShift | State::Stopped), _) => Motion::Stopped,
+            (
+                Some(
+                    State::Down
+                    | State::OffShift
+                    | State::Stopped
+                    | State::WaitingRepair
+                    | State::Maintenance,
+                ),
+                _,
+            ) => Motion::Stopped,
             (_, Some(leg)) => {
                 let length = leg.length();
                 let mean = length / leg.duration;
@@ -1093,7 +1102,13 @@ fn block_motion(state: Option<State>) -> Motion {
     match state {
         Some(State::Processing | State::Setup) => Motion::Working,
         Some(State::Blocked) => Motion::Blocked,
-        Some(State::Down | State::OffShift | State::Stopped) => Motion::Stopped,
+        Some(
+            State::Down
+            | State::OffShift
+            | State::Stopped
+            | State::WaitingRepair
+            | State::Maintenance,
+        ) => Motion::Stopped,
         _ => Motion::Idle,
     }
 }

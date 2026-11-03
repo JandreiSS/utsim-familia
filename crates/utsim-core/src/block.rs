@@ -36,6 +36,11 @@ pub enum State {
     Utilize,
     /// Stopped from outside the model (emulation, operator command).
     Stopped,
+    /// Broken (or due for preventive maintenance) and waiting for the technician
+    /// ([`crate::maintenance`]).
+    WaitingRepair,
+    /// In preventive maintenance ([`crate::maintenance`]).
+    Maintenance,
 }
 
 impl State {
@@ -59,6 +64,8 @@ impl State {
             State::Unloading => "unloading",
             State::Utilize => "utilize",
             State::Stopped => "stopped",
+            State::WaitingRepair => "waiting_repair",
+            State::Maintenance => "maintenance",
         }
     }
 }

@@ -10,6 +10,8 @@ pub fn state_color(state: Option<State>) -> [f32; 3] {
         Some(State::Blocked) => [0.98, 0.55, 0.10],
         Some(State::Down) => [0.85, 0.15, 0.15],
         Some(State::OffShift) => [0.25, 0.45, 0.90],
+        Some(State::WaitingRepair) => [0.93, 0.35, 0.25],
+        Some(State::Maintenance) => [0.55, 0.35, 0.80],
         Some(State::WaitingOperator | State::WaitingTransport) => [0.70, 0.45, 0.80],
         Some(State::Idle) => [0.55, 0.55, 0.58],
         Some(State::TravelEmpty | State::TravelLoaded) => [0.20, 0.60, 0.85],
@@ -41,6 +43,8 @@ pub fn state_label(state: Option<State>) -> &'static str {
         Some(State::Unloading) => "descarregando",
         Some(State::Utilize) => "trabalhando no posto",
         Some(State::Stopped) => "parado (comando externo)",
+        Some(State::WaitingRepair) => "aguardando técnico",
+        Some(State::Maintenance) => "em manutenção preventiva",
     }
 }
 

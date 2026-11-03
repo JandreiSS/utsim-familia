@@ -49,6 +49,15 @@ pub struct BlockState {
     /// from `mtbf`). Without it the time to the first failure is an ordinary draw.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub up: Option<Time>,
+    /// Machine with maintenance: its age (in the units of its age basis, see
+    /// [`crate::maintenance`]). Without it the machine starts new (age 0).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub age: Option<f64>,
+    /// Machine with maintenance: how much is left until each preventive plan is due, in
+    /// the plan's own unit (working time, items or clock time; `None` for a calendar
+    /// plan, which follows the clock). Without it every plan starts from zero.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub preventive: Vec<Option<f64>>,
     /// A check only: whether the block is off shift at `t = 0`. The shift table and the
     /// clock decide; a mismatch is an error.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,6 +215,7 @@ pub(crate) fn check_times(state: &BlockState) -> Result<(), String> {
         ("down", state.down),
         ("up", state.up),
         ("elapsed", state.elapsed),
+        ("age", state.age),
     ] {
         if let Some(x) = v {
             if bad(x) {
@@ -214,6 +224,11 @@ pub(crate) fn check_times(state: &BlockState) -> Result<(), String> {
                 ));
             }
         }
+    }
+    if let Some(x) = state.preventive.iter().flatten().find(|x| bad(**x)) {
+        return Err(format!(
+            "'preventive' deve ter números finitos >= 0 (está {x})"
+        ));
     }
     if state.count.is_some() && !state.items.is_empty() {
         return Err("use 'count' ou 'items', não os dois".into());

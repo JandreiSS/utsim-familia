@@ -7,6 +7,7 @@ pub mod dados;
 pub mod experiment;
 mod format2;
 pub mod html;
+mod maintenance;
 mod movement;
 pub mod replay;
 mod shifts;
@@ -15,6 +16,7 @@ pub mod state;
 pub mod synthetic;
 mod warnings;
 
+pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
 pub use movement::{Movement, NavSet};
 pub use spans::SpanDef;
 pub use state::InitialState;
@@ -30,8 +32,8 @@ use std::sync::{Arc, Mutex};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use utsim_core::{
-    Behavior, BlockId, Dist, Downtime, OutputRule, RunConfig, RunReport, ShiftTable, SimError,
-    Simulation, TransferDef, TransferPath,
+    Behavior, BlockId, Dist, OutputRule, RunConfig, RunReport, ShiftTable, SimError, Simulation,
+    TransferDef, TransferPath,
 };
 use utsim_flow::{Flow, FlowDef};
 use utsim_fluid::{FluidDef, FluidNet};
@@ -193,9 +195,10 @@ pub struct ObjectDef {
     /// Layout position (x, y, z), used by the 3D view from phase 2 on.
     #[serde(default)]
     pub position: [f64; 3],
-    /// Random breakdowns (MTBF/MTTR on the clock).
+    /// Random breakdowns (MTBF/MTTR on the clock) and, optionally, maintenance (repair
+    /// crew, wear, preventive plans, costs, OEE).
     #[serde(default)]
-    pub downtime: Option<Downtime>,
+    pub downtime: Option<DowntimeDef>,
     /// Scheduled off-shift windows, repeating every `period`: inline or one of the
     /// model's `calendars`.
     #[serde(default)]
@@ -805,6 +808,7 @@ impl Model {
         self.validate_aisles(&mut errors);
         self.validate_logic(&mut errors);
         self.validate_spans(&mut errors);
+        self.validate_maintenance(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -1104,7 +1108,10 @@ impl Model {
                 }
             }
             if let Some(dt) = &obj.downtime {
-                sim.set_downtime(id, dt.clone());
+                sim.set_downtime(id, dt.downtime());
+            }
+            if let Some(m) = self.maintenance_of(obj, &ids) {
+                sim.set_maintenance(id, m);
             }
             if let Some(table) = self.shift_table(obj) {
                 sim.set_shifts(id, table);

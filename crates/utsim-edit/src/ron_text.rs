@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use utsim_core::{Dist, Downtime, OutputRule, ShiftTable};
-use utsim_model::{ArrivalSchedule, PeriodArrivals, ShiftSpec};
+use utsim_model::{ArrivalSchedule, DowntimeDef, PeriodArrivals, ShiftSpec};
 
 pub fn float(v: f64) -> String {
     format!("{v:?}")
@@ -136,8 +136,30 @@ pub fn output(rule: &OutputRule) -> String {
     }
 }
 
-pub fn downtime(d: &Downtime) -> String {
-    format!("(mtbf: {}, mttr: {})", dist(&d.mtbf), dist(&d.mttr))
+/// Breakdowns as the `downtime` field writes them: the kernel's [`Downtime`] or the
+/// model's [`DowntimeDef`] (whose maintenance fields are kept).
+pub trait DowntimeText {
+    fn downtime_text(&self) -> String;
+}
+
+impl DowntimeText for Downtime {
+    fn downtime_text(&self) -> String {
+        format!("(mtbf: {}, mttr: {})", dist(&self.mtbf), dist(&self.mttr))
+    }
+}
+
+impl DowntimeText for DowntimeDef {
+    fn downtime_text(&self) -> String {
+        if self.has_maintenance() {
+            ron::to_string(self).expect("downtime serializes")
+        } else {
+            self.downtime().downtime_text()
+        }
+    }
+}
+
+pub fn downtime<D: DowntimeText>(d: &D) -> String {
+    d.downtime_text()
 }
 
 pub fn transfer(t: &utsim_core::TransferDef) -> String {

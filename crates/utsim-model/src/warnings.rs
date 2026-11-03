@@ -39,6 +39,12 @@ impl Model {
                     served.entry(t.as_str()).or_default().insert(to.as_str());
                 }
             }
+            if let Some(team) = o.downtime.as_ref().and_then(|d| d.repair_crew.as_ref()) {
+                served
+                    .entry(team.as_str())
+                    .or_default()
+                    .insert(o.name.as_str());
+            }
             if let ObjectKind::Processor {
                 operators: Some(op),
                 ..
@@ -145,6 +151,7 @@ impl Model {
             }
         }
         out.extend(crate::dados::warnings(self));
+        self.maintenance_warnings(&mut out);
         // Free and network movement: access points, paths, network edges over obstacles.
         if !(uses_mobile && all_at_origin) {
             self.movement_warnings(&mut out);

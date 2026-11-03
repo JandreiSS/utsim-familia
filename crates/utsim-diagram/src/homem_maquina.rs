@@ -69,7 +69,11 @@ pub fn categoria(s: State) -> Cat {
         | State::Collecting
         | State::Releasing => Cat::Esperando,
         State::Idle | State::Empty => Cat::Ocioso,
-        State::Down | State::OffShift | State::Stopped => Cat::Parado,
+        State::Down
+        | State::OffShift
+        | State::Stopped
+        | State::WaitingRepair
+        | State::Maintenance => Cat::Parado,
     }
 }
 
