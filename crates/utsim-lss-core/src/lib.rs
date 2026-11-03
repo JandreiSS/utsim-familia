@@ -13,7 +13,9 @@
 //! - [`domain`]: typed views (project, phase, action, risk, meeting, saving, person, role);
 //! - [`kanban`]: the action board; [`overview`]: the project overview;
 //! - [`presence`]: who has the project open and what they are editing;
-//! - [`date`]: calendar dates.
+//! - [`date`]: calendar dates;
+//! - [`tools`]: the qualitative tools of the phases (VOC/CTQ, SIPOC, Ishikawa, five whys,
+//!   C&E matrix, Pareto, FMEA with the action priority table, plans, A3).
 
 pub mod date;
 pub mod domain;
@@ -25,6 +27,7 @@ pub mod op;
 pub mod overview;
 pub mod presence;
 pub mod state;
+pub mod tools;
 
 // Stage L1, project management (`docs/plano_lean_seis_sigma.md`, 1.1 to 1.10).
 pub mod board;

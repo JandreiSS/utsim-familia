@@ -7683,6 +7683,7 @@ dependencies = [
 name = "utsim-diagram"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "utsim-core",
  "utsim-model",
  "utsim-objects",
@@ -7829,6 +7830,7 @@ name = "utsim-lss-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "egui_plot",
  "serde",
  "serde_json",
  "tempfile",

@@ -75,10 +75,13 @@ pub enum Kind {
     Holiday,
     #[serde(rename = "lancamento_ganho")]
     SavingEntry,
+    /// A row or node of a tool deliverable (an FMEA row, an Ishikawa cause, a CTQ...).
+    #[serde(rename = "item_ferramenta")]
+    ToolItem,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 30] = [
+    pub const ALL: [Kind; 31] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -109,6 +112,7 @@ impl Kind {
         Kind::Task,
         Kind::Holiday,
         Kind::SavingEntry,
+        Kind::ToolItem,
     ];
 
     /// The key used in the files (`acao`, `projeto`...).
@@ -144,6 +148,7 @@ impl Kind {
             Kind::Task => "tarefa",
             Kind::Holiday => "feriado",
             Kind::SavingEntry => "lancamento_ganho",
+            Kind::ToolItem => "item_ferramenta",
         }
     }
 }

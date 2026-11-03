@@ -262,7 +262,15 @@ pub fn verify(state: &State, project: Id, phase: Id, check: &Check) -> bool {
     }
 }
 
+/// A deliverable of the tool (stage L2, `crate::tools`) with at least one row or node, in
+/// any phase of the project (the FMEA of Analisar is the one revised in Melhorar). A key
+/// that is not an L2 tool falls back to any entity whose kind key starts with it.
 fn deliverable_exists(state: &State, project: Id, tool: &str) -> bool {
+    if let Ok(t) = serde_json::from_value::<crate::tools::Tool>(Value::from(tool)) {
+        return crate::tools::of_tool(state, project, t)
+            .iter()
+            .any(|d| !crate::tools::all_items(state, d.id).is_empty());
+    }
     let key = project.to_string();
     let phase_ids: BTreeSet<String> = phases(state, project)
         .iter()
@@ -414,7 +422,7 @@ fn dmaic_define() -> Vec<Template> {
         (
             "VOC e árvore CTQ",
             false,
-            Some(Check::DeliverableExists("voc".into())),
+            Some(Check::DeliverableExists("voc_ctq".into())),
         ),
         (
             "SIPOC do processo",
@@ -707,7 +715,7 @@ pub enum TollgateError {
 /// the checklist items' text, mark and evidence. Deleted entities count (their
 /// `excluido`), so removing a deliverable is a change too.
 pub fn content(state: &State, tollgate: &Tollgate) -> BTreeMap<String, Value> {
-    const NOT_DELIVERABLES: [Kind; 29] = [
+    const NOT_DELIVERABLES: [Kind; 30] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -737,10 +745,26 @@ pub fn content(state: &State, tollgate: &Tollgate) -> BTreeMap<String, Value> {
         Kind::Task,
         Kind::Holiday,
         Kind::SavingEntry,
+        Kind::ToolItem,
     ];
     let phase = tollgate.phase.to_string();
+    // Deliverables of this phase, whose rows and nodes (stage L2) count too.
+    let of_phase: BTreeSet<String> = state
+        .entities
+        .iter()
+        .filter(|(_, e)| e.kind == Kind::Deliverable && e.text("fase") == phase)
+        .map(|(id, _)| id.to_string())
+        .collect();
     let mut out = BTreeMap::new();
     for (id, e) in &state.entities {
+        if e.kind == Kind::ToolItem
+            && of_phase.contains(&e.text(crate::tools::fields::item::DELIVERABLE))
+        {
+            for (f, v) in &e.fields {
+                out.insert(format!("{}/{id}/{f}", e.kind.key()), v.value.clone());
+            }
+            continue;
+        }
         let item_of_this = e.kind == Kind::ChecklistItem
             && e.id(dfields::checklist_item::TOLLGATE) == Some(tollgate.id);
         if item_of_this {
@@ -1294,13 +1318,47 @@ mod tests {
                 .unwrap()
         };
         assert!(!fmea_item(&t).ok);
-        // A FMEA deliverable of the phase makes it pass.
-        let d = EntityRef::new(Kind::Deliverable, t.id());
-        t.commit(vec![
-            Edit::new(d, df::deliverable::PHASE, tg.phase.to_string()),
-            Edit::new(d, df::deliverable::TOOL, "fmea"),
-        ]);
+        // An L2 FMEA deliverable passes only once it has a row; a bare deliverable of
+        // another tool does not count.
+        use crate::tools::{self, Tool};
+        let (sid, fid) = (t.id(), t.id());
+        t.commit(tools::Deliverable::create(
+            t.p,
+            Some(tg.phase),
+            Tool::Sipoc,
+            sid,
+            "SIPOC",
+        ));
+        t.commit(tools::Deliverable::create(
+            t.p,
+            Some(tg.phase),
+            Tool::Fmea,
+            fid,
+            "FMEA do processo",
+        ));
+        assert!(!fmea_item(&t).ok, "FMEA without rows");
+        let row = t.id();
+        let e = tools::new_item(&t.s, t.p, fid, tools::fmea::ITEM, row, None, vec![]);
+        t.commit(e);
         assert!(fmea_item(&t).ok);
+        assert!(verify(
+            &t.s,
+            t.p,
+            tg.phase,
+            &Check::DeliverableExists("fmea".into())
+        ));
+        assert!(!verify(
+            &t.s,
+            t.p,
+            tg.phase,
+            &Check::DeliverableExists("ishikawa".into())
+        ));
+        // The rows of the phase's deliverables are part of the frozen content.
+        assert!(
+            content(&t.s, &tg)
+                .keys()
+                .any(|k| k.starts_with("item_ferramenta/"))
+        );
         // Blocked submission while required items are missing.
         assert!(matches!(
             submit(&t.s, t.p, tg.id, today()),
@@ -1595,5 +1653,43 @@ mod tests {
                 with_reservations: false
             }
         );
+    }
+
+    #[test]
+    fn analisar_passes_its_verified_items_with_l2_fmea_and_ishikawa() {
+        use crate::tools::{self, Tool};
+        let mut t = T::new(Approach::Dmaic);
+        let tg = t.tollgate(2);
+        let verified_ok = |t: &T| {
+            evaluate(&t.s, t.p, &tg)
+                .into_iter()
+                .filter(|r| r.item.item_type == ItemType::Verified)
+                .all(|r| r.ok)
+        };
+        assert!(!verified_ok(&t));
+        for (tool, kind, name) in [
+            (Tool::Fmea, tools::fmea::ITEM, "FMEA do processo atual"),
+            (Tool::Ishikawa, tools::ishikawa::ITEM, "Ishikawa do refugo"),
+        ] {
+            let d = t.id();
+            let e = tools::Deliverable::create(
+                t.p,
+                tools::default_phase(&t.s, t.p, tool),
+                tool,
+                d,
+                name,
+            );
+            t.commit(e);
+            let row = t.id();
+            let e = tools::new_item(&t.s, t.p, d, kind, row, None, vec![]);
+            t.commit(e);
+        }
+        assert!(
+            verified_ok(&t),
+            "the L2 FMEA and Ishikawa satisfy the Analisar checks"
+        );
+        // With the manual items marked, the tollgate can be submitted.
+        t.mark_all_manual(tg.id);
+        assert!(submit(&t.s, t.p, tg.id, today()).is_ok());
     }
 }
