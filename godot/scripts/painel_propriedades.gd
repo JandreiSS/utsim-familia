@@ -32,6 +32,8 @@ signal data_apply(path: String, draft: Dictionary)
 signal data_analyze(path: String, draft: Dictionary)
 signal data_to_dist(path: String)
 signal data_report
+## "Mostrar motorista" of a forklift (a preference of the viewer, not stored in the model).
+signal driver_toggled(name: String, on: bool)
 signal data_pick_file(path: String)
 
 const RED := Color(1.0, 0.45, 0.42)
@@ -53,6 +55,9 @@ var _requested := {}
 ## `func(asset: String) -> UtsimPlayback` (or null): the scene of the selected object
 ## drawn with `asset`, for the miniature.
 var look_provider := Callable()
+## `func(name: String) -> int`: -1 when the vehicle has no driver to show, 0 when it is
+## hidden, 1 when it is shown. The look section then gets the "Mostrar motorista" box.
+var driver_provider := Callable()
 var _mini_view: SubViewport
 var _mini_scene: CenaUtsim
 var _mini_camera: Camera3D
@@ -109,9 +114,28 @@ func show_properties(props: Dictionary, extra := "") -> void:
 		if _closed.get(section, false):
 			continue
 		_field(field)
+		if field["path"] == "visual.reset":
+			_driver_row(String(props.get("name", "")))
 		# The port order goes right after the output rule (mobile resources have none).
 		if field["path"] == "output":
 			_outputs(props)
+
+
+## The "Mostrar motorista" check box of a forklift that has a seated driver.
+func _driver_row(object: String) -> void:
+	if not driver_provider.is_valid():
+		return
+	var state: int = driver_provider.call(object)
+	if state < 0:
+		return
+	var box := CheckBox.new()
+	box.name = "Prop_visual_motorista"
+	box.text = "Mostrar motorista"
+	box.tooltip_text = "Desenha o operador sentado e animado na empilhadeira. Só a aparência: não muda a simulação nem é gravado no modelo."
+	box.button_pressed = state == 1
+	box.focus_mode = Control.FOCUS_NONE
+	box.toggled.connect(func(on: bool): driver_toggled.emit(object, on))
+	add_child(box)
 
 
 ## Align and distribute the selection (shown when several objects are selected).
