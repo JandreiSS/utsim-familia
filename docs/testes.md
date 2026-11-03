@@ -90,7 +90,10 @@ Os dois scripts rodam, nesta ordem, e param no primeiro passo que falhar:
 5. `utsim check` em cada `examples/*.ron` (arquivos `experimento*` são ignorados)
 6. com `UTSIM_VIEWER=1`: clippy e testes do `utsim-viewer`
 7. com `UTSIM_GODOT=1`: clippy e testes da ponte `utsim-godot` e o teste sem janela no Godot
-   (`scripts/godot_teste.sh`, precisa do Godot 4.7; ver `docs/arquitetura.md`, seção 4r)
+   (`scripts/godot_teste.sh`, precisa do Godot 4.7; ver `docs/arquitetura.md`, seção 4r): os
+   três exemplos reproduzidos até o fim e os roteiros da interface `godot/roteiros/g2_*.json`
+   com `--headless` (o `g2_tutorial_01.json` monta o tutorial 1 pela interface e compara o
+   `.ron` salvo com `examples/tutorial_01_caixa.ron`)
 
 ## CI
 
@@ -102,7 +105,8 @@ O workflow `.github/workflows/ci.yml` roda em push e pull request:
 - **viewer (ubuntu-latest):** instala as bibliotecas do Bevy e roda clippy e `cargo test -p utsim-viewer`
   (índice da linha do tempo contra `RunReport.series`, layout, carregamento). Localmente: `UTSIM_VIEWER=1 bash scripts/verificar.sh`.
 - **godot (ubuntu-latest):** clippy e `cargo test -p utsim-godot` (conversão de coordenadas, escolha
-  dos modelos, empacotamento dos quadros), sem o Godot. O teste no Godot roda localmente:
+  dos modelos, empacotamento dos quadros, esquema das propriedades, edição e o tutorial 1 montado
+  pelas chamadas da interface), sem o Godot. O teste no Godot roda localmente:
   `UTSIM_GODOT=1 bash scripts/verificar.sh` ou `bash scripts/godot_teste.sh`.
 
 ## Testes roteirizados da interface

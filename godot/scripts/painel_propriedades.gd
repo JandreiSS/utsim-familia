@@ -245,6 +245,10 @@ func _field(field: Dictionary) -> void:
 			row.add_child(o)
 		"ron":
 			var row := _row(field)
+			if field["optional"]:
+				_toggle(row, field)
+			if field["value"] == null:
+				return
 			var e := _line(path, str(field["value"]))
 			e.tooltip_text = field["help"]
 			e.add_theme_font_override("font", _mono())

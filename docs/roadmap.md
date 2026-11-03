@@ -101,7 +101,7 @@ justifica a escolha com métricas estatísticas.
 - [x] A3D-2: modelos articulados gerados por código (empilhadeira, AGV, porta-paletes...) e carga de glTF
 - [ ] A3D-3: pessoas animadas, itens presos às mãos e aos garfos, garfos até o nível, giro suave
 - [x] A3D-4: câmeras de seguir, de primeira pessoa e do recurso; níveis de detalhe e limite de rótulos para modelos grandes
-- [ ] A3D-5: cliente Godot (3D, realidade virtual e aumentada pelo OpenXR), plano em `docs/plano_godot.md`; G1 (ponte `utsim-godot` e reprodução) feita
+- [ ] A3D-5: cliente Godot (3D, realidade virtual e aumentada pelo OpenXR), plano em `docs/plano_godot.md`; G1 (ponte `utsim-godot` e reprodução) e G2 (edição do fluxo, com a crate `utsim-look` de aparência comum ao Bevy) feitas
 - [x] A3D-6: cena ao vivo por socket a partir da emulação (`--cena-porta`, `utsim cena --servir`)
 
 ## Melhorias anotadas (dos relatórios das frentes)
