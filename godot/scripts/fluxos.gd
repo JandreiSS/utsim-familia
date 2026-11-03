@@ -32,7 +32,7 @@ func build(owner_main: Node) -> void:
 	root.add_child(head)
 	var title := Label.new()
 	title.text = "Fluxos de tokens"
-	title.add_theme_font_size_override("font_size", 18)
+	title.theme_type_variation = &"TituloPainel"
 	head.add_child(title)
 	_pick = OptionButton.new()
 	_pick.name = "Fluxos_Escolha"
@@ -50,13 +50,13 @@ func build(owner_main: Node) -> void:
 	head.add_child(close)
 	_note = Label.new()
 	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_note.add_theme_color_override("font_color", Color(0.70, 0.74, 0.80))
+	_note.theme_type_variation = &"Ajuda"
 	root.add_child(_note)
 	var zoom_row := HBoxContainer.new()
 	root.add_child(zoom_row)
 	var hint := Label.new()
 	hint.text = "Zoom (Ctrl + roda no grafo):"
-	hint.add_theme_color_override("font_color", Color(0.70, 0.74, 0.80))
+	hint.theme_type_variation = &"Ajuda"
 	zoom_row.add_child(hint)
 	for z in [["Fluxos_ZoomMenos", "−", 1.0 / 1.25], ["Fluxos_ZoomMais", "+", 1.25], ["Fluxos_Ajustar", "Ajustar", 0.0]]:
 		var b := Button.new()

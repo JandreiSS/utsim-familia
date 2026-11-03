@@ -21,13 +21,12 @@ func build(palette: Array, categories: PackedStringArray) -> void:
 	_buttons.clear()
 	var title := Label.new()
 	title.text = "Biblioteca"
-	title.add_theme_font_size_override("font_size", 16)
+	title.theme_type_variation = &"TituloPainel"
 	add_child(title)
 	for cat in categories:
 		var head := Label.new()
 		head.text = cat
-		head.add_theme_color_override("font_color", Color(0.65, 0.70, 0.78))
-		head.add_theme_font_size_override("font_size", 12)
+		head.theme_type_variation = &"RotuloSecao"
 		add_child(head)
 		var grid := GridContainer.new()
 		grid.columns = 2

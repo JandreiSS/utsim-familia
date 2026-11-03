@@ -70,7 +70,7 @@ func build(owner_main: Node) -> void:
 	root.add_child(head)
 	var title := Label.new()
 	title.text = "Resultados"
-	title.add_theme_font_size_override("font_size", 18)
+	title.theme_type_variation = &"TituloPainel"
 	head.add_child(title)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -132,8 +132,8 @@ func _rich(id: String, height := 0.0) -> RichTextLabel:
 func _heading(parent: Node, text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 16)
-	l.add_theme_color_override("font_color", Color(0.62, 0.76, 0.98))
+	l.theme_type_variation = &"RotuloSecao"
+	l.add_theme_font_size_override("font_size", 15)
 	parent.add_child(l)
 
 
@@ -141,7 +141,7 @@ func _explain(parent: Node, text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_color_override("font_color", Color(0.70, 0.74, 0.80))
+	l.theme_type_variation = &"Ajuda"
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(l)
 	return l

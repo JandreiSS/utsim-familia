@@ -26,7 +26,8 @@ signal action(path: String)
 
 const RED := Color(1.0, 0.45, 0.42)
 const YELLOW := Color(0.98, 0.80, 0.35)
-const SECTION := Color(0.62, 0.76, 0.98)
+## Grey of the short help lines (the theme's "Ajuda").
+const HELP := Color(0.65, 0.70, 0.78)
 const LABEL_WIDTH := 170
 
 var families := PackedStringArray()
@@ -41,6 +42,8 @@ var _as_text := {}
 var _asset_filter := ""
 var _props: Dictionary = {}
 var _extra := ""
+## Sections the user closed (by title); they stay closed for every object.
+var _closed := {}
 
 
 static func widget_name(path: String) -> String:
@@ -63,14 +66,14 @@ func show_properties(props: Dictionary, extra := "") -> void:
 	clear()
 	var title := Label.new()
 	title.name = "Titulo"
-	title.add_theme_font_size_override("font_size", 16)
+	title.theme_type_variation = &"TituloPainel"
 	title.text = "Propriedades: %s" % props.get("name", "")
 	if props.get("kind", "") == "run":
 		title.text = "Modelo (nada selecionado)"
 	add_child(title)
 	var sub := Label.new()
 	sub.text = props.get("kind_label", "")
-	sub.add_theme_color_override("font_color", Color(0.65, 0.70, 0.78))
+	sub.theme_type_variation = &"Subtitulo"
 	add_child(sub)
 	if extra != "":
 		var e := _note(extra, YELLOW)
@@ -84,6 +87,8 @@ func show_properties(props: Dictionary, extra := "") -> void:
 		if field["section"] != section:
 			section = field["section"]
 			_section(section)
+		if _closed.get(section, false):
+			continue
 		_field(field)
 		# The port order goes right after the output rule (mobile resources have none).
 		if field["path"] == "output":
@@ -119,7 +124,10 @@ func _note(text: String, color: Color) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_color_override("font_color", color)
+	if color == HELP:
+		l.theme_type_variation = &"Ajuda"
+	else:
+		l.add_theme_color_override("font_color", color)
 	l.custom_minimum_size = Vector2(300, 0)
 	return l
 
@@ -132,20 +140,28 @@ func _issues(title: String, list: PackedStringArray, color: Color, node_name: St
 	var head := Label.new()
 	head.text = "%s (%d)" % [title, list.size()]
 	head.add_theme_color_override("font_color", color)
-	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_font_size_override("font_size", 15)
 	box.add_child(head)
 	for m in list:
 		box.add_child(_note("• " + m, color))
 	add_child(box)
 
 
+## A section title that opens and closes the section (▾ open, ▸ closed).
 func _section(text: String) -> void:
 	add_child(HSeparator.new())
-	var l := Label.new()
-	l.text = text
-	l.add_theme_color_override("font_color", SECTION)
-	l.add_theme_font_size_override("font_size", 14)
-	add_child(l)
+	var b := Button.new()
+	b.name = "Secao_" + text.replace(" ", "_")
+	b.theme_type_variation = &"TituloSecao"
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.focus_mode = Control.FOCUS_NONE
+	var closed: bool = _closed.get(text, false)
+	b.text = ("▸  " if closed else "▾  ") + text
+	b.tooltip_text = ("Abre" if closed else "Fecha") + " a seção " + text
+	b.pressed.connect(func():
+		_closed[text] = not _closed.get(text, false)
+		(func(): show_properties(_props, _extra)).call_deferred())
+	add_child(b)
 
 
 func _row(field: Dictionary) -> HBoxContainer:
@@ -211,6 +227,9 @@ func _field(field: Dictionary) -> void:
 			t.text = str(field["value"])
 			t.custom_minimum_size = Vector2(0, 64)
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			# Long text wraps inside the panel instead of scrolling sideways.
+			t.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+			t.scroll_fit_content_height = true
 			add_child(t)
 			var apply := Button.new()
 			apply.name = widget_name(path) + "_aplicar"
@@ -239,6 +258,7 @@ func _field(field: Dictionary) -> void:
 			o.name = widget_name(path)
 			o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			o.clip_text = true
+			o.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			o.tooltip_text = field["help"]
 			var values := []
 			for c in field["choices"]:
@@ -277,7 +297,7 @@ func _field(field: Dictionary) -> void:
 				cb.toggled.connect(func(on): edited.emit(path + "." + member, on))
 				box.add_child(cb)
 			if field["choices"].is_empty():
-				box.add_child(_note("Nenhum transportador no modelo.", Color(0.65, 0.70, 0.78)))
+				box.add_child(_note("Nenhum transportador no modelo.", HELP))
 			row.add_child(box)
 		"dist":
 			_dist(field)
@@ -420,8 +440,7 @@ func _dist(field: Dictionary) -> void:
 			box.add_child(h)
 	var mean := Label.new()
 	mean.text = "média %s" % _num(float(view["mean"]))
-	mean.add_theme_color_override("font_color", Color(0.65, 0.70, 0.78))
-	mean.add_theme_font_size_override("font_size", 12)
+	mean.theme_type_variation = &"Ajuda"
 	var mh := HBoxContainer.new()
 	var mpad := Control.new()
 	mpad.custom_minimum_size = Vector2(indent, 0)
@@ -482,7 +501,7 @@ func _asset(field: Dictionary) -> void:
 	search_row.add_child(search)
 	add_child(search_row)
 	if field["help"] != "":
-		add_child(_note(field["help"], Color(0.65, 0.70, 0.78)))
+		add_child(_note(field["help"], HELP))
 	_miniature(path)
 	_show_miniature(current)
 
@@ -556,7 +575,7 @@ func _outputs(props: Dictionary) -> void:
 	head.add_theme_color_override("font_color", Color(0.85, 0.88, 0.94))
 	add_child(head)
 	if outs.is_empty():
-		add_child(_note("Nenhuma. Use a ferramenta Ligar (L).", Color(0.65, 0.70, 0.78)))
+		add_child(_note("Nenhuma. Use a ferramenta Ligar (L).", HELP))
 	for k in outs.size():
 		var row := HBoxContainer.new()
 		row.name = "Saida_%d" % (k + 1)
@@ -588,7 +607,7 @@ func _outputs(props: Dictionary) -> void:
 		row.add_child(rm)
 		add_child(row)
 	if not ins.is_empty():
-		add_child(_note("Entradas: " + ", ".join(ins), Color(0.65, 0.70, 0.78)))
+		add_child(_note("Entradas: " + ", ".join(ins), HELP))
 
 
 static func _num(x: float) -> String:
