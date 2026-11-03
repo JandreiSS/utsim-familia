@@ -7153,6 +7153,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-pert"
+version = "0.1.0"
+dependencies = [
+ "rayon",
+ "serde",
+ "thiserror 2.0.21",
+ "utsim-core",
+ "utsim-model",
+ "utsim-objects",
+ "utsim-scene",
+]
+
+[[package]]
 name = "utsim-scene"
 version = "0.1.0"
 dependencies = [
