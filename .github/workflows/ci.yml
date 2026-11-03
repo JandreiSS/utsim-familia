@@ -88,3 +88,35 @@ jobs:
         run: cargo clippy -p utsim-godot --all-targets -- -D warnings
       - name: Testes do utsim-godot
         run: cargo test -p utsim-godot
+
+  # Opcional: só roda ao disparar o CI à mão (Actions > CI > Run workflow). Baixa o Godot do
+  # console e os modelos de exportação (~1 GB, em cache), com o SHA512 conferido, roda o teste sem
+  # janela e exporta o UTSim 3D (prévia) para o Linux.
+  godot-exportar:
+    name: UTSim 3D (Godot, teste sem janela e exportação)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dependências do Godot sem janela
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1 libxcursor1 libxi6 libxinerama1 libxrandr2 libgl1
+      - name: Godot 4.7.2 (console, com SHA512 conferido)
+        run: bash scripts/godot_instalar_ci.sh linux "$RUNNER_TEMP/godot"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-export-templates-4.7.2
+      - name: Teste sem janela
+        run: bash scripts/godot_teste.sh
+      - name: Exportar (instala os modelos de exportação se faltarem)
+        run: bash scripts/godot_exportar.sh --instalar-modelos
+      - name: Tamanho dos arquivos exportados
+        run: ls -l target/godot-export/linux
+      - name: Execução sem janela do programa exportado
+        run: ./target/godot-export/linux/utsim-3d.x86_64 --headless --quit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: utsim-3d-linux
+          path: target/godot-export/linux

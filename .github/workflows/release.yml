@@ -11,12 +11,20 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      incluir_3d:
+        description: "Incluir o UTSim 3D (prévia, em Godot) nos pacotes (baixa ~1 GB de modelos de exportação)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  # O UTSim 3D (prévia) entra nos pacotes ao disparar à mão com "incluir_3d", ou sempre se a
+  # variável do repositório UTSIM_INCLUIR_3D for "true" (Settings > Variables).
+  INCLUIR_3D: ${{ inputs.incluir_3d == true || vars.UTSIM_INCLUIR_3D == 'true' }}
 
 jobs:
   versao:
@@ -65,6 +73,12 @@ jobs:
       - name: Manual em HTML (se falhar, o pacote leva o Markdown)
         continue-on-error: true
         run: mdbook build docs/manual
+      - name: UTSim 3D (prévia), exportação do Godot para o Linux
+        if: env.INCLUIR_3D == 'true'
+        run: |
+          sudo apt-get install -y libfontconfig1 libxcursor1 libxi6 libxinerama1 libxrandr2 libgl1
+          bash scripts/godot_instalar_ci.sh linux "$RUNNER_TEMP/godot"
+          bash scripts/godot_exportar.sh --instalar-modelos
       - name: Empacotar (.tar.gz e .deb)
         run: bash scripts/pacotes-linux.sh "${{ needs.versao.outputs.rotulo }}" dist
       - name: Conferir o conteúdo do .deb
@@ -95,6 +109,12 @@ jobs:
         continue-on-error: true
         shell: bash
         run: mdbook build docs/manual
+      - name: UTSim 3D (prévia), exportação do Godot para o Windows
+        if: env.INCLUIR_3D == 'true'
+        shell: bash
+        run: |
+          bash scripts/godot_instalar_ci.sh windows "$RUNNER_TEMP/godot"
+          bash scripts/godot_exportar.sh --instalar-modelos
       - name: NSIS
         shell: powershell
         run: |
@@ -108,7 +128,7 @@ jobs:
         shell: bash
         run: |
           nome=utsim-${{ needs.versao.outputs.rotulo }}-windows-x64
-          bash scripts/preparar-pacote.sh "pacote/$nome" target/release
+          bash scripts/preparar-pacote.sh "pacote/$nome" target/release target/godot-export/windows
           (cd pacote && 7z a "../dist/$nome.zip" "$nome")
       - name: Conteúdo do instalador (lista dos arquivos)
         shell: bash
