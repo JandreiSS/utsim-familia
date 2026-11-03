@@ -254,3 +254,21 @@ fn check_lists_the_mode_of_every_resource() {
         ]
     );
 }
+
+#[test]
+fn agvs_with_a_network_keep_traffic_control_in_any_mode() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/agvs.ron");
+    let text = std::fs::read_to_string(path).unwrap();
+    let legacy = model(&text);
+    let free = model(&text.replacen("Model(", "Model(format: 2, ", 1));
+    assert!(free.nav_set().router("agv_1").is_none());
+    let lines = free.movement_lines();
+    assert!(
+        lines
+            .iter()
+            .all(|l| !l.starts_with("agv_") || l.contains("AGV pela rede")),
+        "{lines:?}"
+    );
+    let json = |m: &Model| serde_json::to_string(&m.run_replications().unwrap()).unwrap();
+    assert_eq!(json(&legacy), json(&free));
+}

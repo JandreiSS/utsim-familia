@@ -280,12 +280,9 @@ impl Model {
             .map(|def| Arc::new(NetworkRouter::new(def)));
         let mut set = NavSet::default();
         for o in &self.objects {
-            let Some(mode) = self.movement_of(o) else {
+            let Some(mode) = self.routed_mode(o) else {
                 continue;
             };
-            if !matches!(mode, Movement::Free | Movement::Network) {
-                continue;
-            }
             let c = self.clearance_of(o);
             let fr = free
                 .entry(c.to_bits())
@@ -334,24 +331,39 @@ impl Model {
         utsim_nav::generate_network(&self.nav_grid(c), &points)
     }
 
+    /// Um AGV com rede segue a rede aresta por aresta sob controle de tráfego, qualquer
+    /// que seja o modo.
+    fn traffic_agv(&self, obj: &ObjectDef) -> bool {
+        matches!(obj.kind, ObjectKind::Transporter { agv: true, .. }) && self.network.is_some()
+    }
+
+    /// Modo do recurso quando ele usa um roteador próprio (`Free` ou `Network`).
+    fn routed_mode(&self, obj: &ObjectDef) -> Option<Movement> {
+        self.movement_of(obj)
+            .filter(|m| matches!(m, Movement::Free | Movement::Network))
+            .filter(|_| !self.traffic_agv(obj))
+    }
+
     /// Uma linha por recurso móvel: `nome: modo (papel, folga)`.
     pub fn movement_lines(&self) -> Vec<String> {
         self.objects
             .iter()
             .filter_map(|o| {
                 let mode = self.movement_of(o)?;
+                if self.traffic_agv(o) {
+                    return Some(format!(
+                        "{}: AGV pela rede, aresta por aresta, com controle de tráfego \
+                         (o modo de movimentação não se aplica)",
+                        o.name
+                    ));
+                }
                 let mut line = format!("{}: {}", o.name, mode.label());
-                if matches!(mode, Movement::Free | Movement::Network) {
+                if self.routed_mode(o).is_some() {
                     line.push_str(&format!(
                         " ({}, folga {} m)",
                         role_name(self.role_of(o)),
                         fmt_m(self.clearance_of(o))
                     ));
-                }
-                if matches!(o.kind, ObjectKind::Transporter { agv: true, .. })
-                    && self.network.is_some()
-                {
-                    line.push_str("; AGV: segue a rede aresta por aresta");
                 }
                 Some(line)
             })
@@ -411,12 +423,9 @@ impl Model {
         let mut grids: BTreeMap<u64, NavGrid> = BTreeMap::new();
         let mut uses_network = false;
         for t in &self.objects {
-            let Some(mode) = self.movement_of(t) else {
+            let Some(mode) = self.routed_mode(t) else {
                 continue;
             };
-            if !matches!(mode, Movement::Free | Movement::Network) {
-                continue;
-            }
             uses_network |= mode == Movement::Network;
             let c = self.clearance_of(t);
             let grid = grids.entry(c.to_bits()).or_insert_with(|| self.nav_grid(c));
