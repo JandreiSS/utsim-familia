@@ -73,7 +73,8 @@ pub fn categoria(s: State) -> Cat {
         | State::OffShift
         | State::Stopped
         | State::WaitingRepair
-        | State::Maintenance => Cat::Parado,
+        | State::Maintenance
+        | State::Resting => Cat::Parado,
     }
 }
 

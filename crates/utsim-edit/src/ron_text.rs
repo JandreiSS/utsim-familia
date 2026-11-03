@@ -38,6 +38,25 @@ pub fn operators(team: &str, count: usize, setup: bool, process: bool) -> String
     )
 }
 
+/// Like [`operators`], with the skill the operators must have (`requires`), if any.
+pub fn operators_requiring(
+    team: &str,
+    count: usize,
+    setup: bool,
+    process: bool,
+    requires: Option<&str>,
+) -> String {
+    let base = operators(team, count, setup, process);
+    match requires {
+        None => base,
+        Some(skill) => format!(
+            "{}, requires: {})",
+            base.trim_end_matches(')'),
+            string(skill)
+        ),
+    }
+}
+
 pub fn string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {

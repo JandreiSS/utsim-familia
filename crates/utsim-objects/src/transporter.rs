@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use utsim_core::init::Accepts;
+use utsim_core::person::{TASK_LOAD, TASK_UNLOAD};
 use utsim_core::task::{
     MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_USER, distance, path_length, travel_time,
 };
@@ -32,6 +33,8 @@ const ARRIVED_STATION: u32 = 4;
 const ARRIVED_HOME: u32 = 5;
 /// An AGV finished one piece of its route and starts the next.
 const AGV_STEP: u32 = 6;
+/// A person finished a pause to recover from fatigue.
+const RESTED: u32 = 7;
 
 /// One piece of an AGV route: a controlled/free network edge or a connector between
 /// a point off the network and its node.
@@ -149,8 +152,16 @@ fn point_along(path: &[[f64; 3]], fraction: f64) -> ([f64; 3], Vec<[f64; 3]>) {
 /// **Dispatcher protocol.** When free, it sends its position (`MSG_POSITION_X/Y/Z`)
 /// and then `MSG_IDLE` with its capacity as payload. After arriving home it sends
 /// the position again so `Nearest` stays accurate.
+///
+/// **People** ([`utsim_core::person`]). With a person profile the speed of each travel
+/// comes from [`Ctx::walk_speed`] (load carried, fatigue, individual pace) and the load
+/// and unload times from [`Ctx::person_time`]; when its fatigue reached the limit, the
+/// person pauses (state `Resting`) after finishing a task and only then takes the next
+/// one or reports idle. Without a profile nothing of this happens.
 pub struct Transporter {
     speed: f64,
+    /// Speed of the travel in progress (the person's walking speed, or `speed`).
+    cur_speed: f64,
     acceleration: Option<f64>,
     deceleration: Option<f64>,
     load_time: Dist,
@@ -185,6 +196,7 @@ impl Transporter {
     pub fn new(speed: f64) -> Self {
         Transporter {
             speed,
+            cur_speed: speed,
             acceleration: None,
             deceleration: None,
             load_time: Dist::Const(0.0),
@@ -294,7 +306,12 @@ impl Transporter {
         points.push(target);
         edges.push(None);
         let lengths: Vec<f64> = points.windows(2).map(|w| distance(w[0], w[1])).collect();
-        let durs = segment_durations(&lengths, self.speed, self.acceleration, self.deceleration);
+        let durs = segment_durations(
+            &lengths,
+            self.cur_speed,
+            self.acceleration,
+            self.deceleration,
+        );
         let mut segs = Vec::new();
         for (k, w) in points.windows(2).enumerate() {
             // Zero-length connectors (point exactly on a node) are dropped.
@@ -315,6 +332,12 @@ impl Transporter {
 
     /// Starts moving to `target` in travel state `state`; `tag` fires on arrival.
     fn travel(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
+        let load = if state == State::TravelLoaded {
+            self.load_kg(cx)
+        } else {
+            0.0
+        };
+        self.cur_speed = cx.walk_speed(self.speed, load);
         cx.set_state(state);
         if let Some(traffic) = self.traffic.clone() {
             let plan = self.plan_route(&Self::lock(&traffic), target);
@@ -339,7 +362,7 @@ impl Transporter {
                 &path,
                 &board.lock().unwrap_or_else(|e| e.into_inner()),
                 vehicle,
-                self.speed,
+                self.cur_speed,
                 self.acceleration,
                 self.deceleration,
             );
@@ -368,7 +391,7 @@ impl Transporter {
         }
         let t = travel_time(
             path_length(&path),
-            self.speed,
+            self.cur_speed,
             self.acceleration,
             self.deceleration,
         );
@@ -621,6 +644,22 @@ impl Transporter {
             cx.set_state(State::Idle);
             return;
         }
+        if let Some(rest) = cx.take_rest() {
+            // A tired person pauses before the next task (the dispatcher waits for it).
+            cx.set_state(State::Resting);
+            self.arm(cx, rest, RESTED, None);
+            return;
+        }
+        self.next_task(cx);
+    }
+
+    /// Free after a task (or a pause): the next trip, or idle.
+    fn next_task(&mut self, cx: &mut Ctx) {
+        if cx.is_closing() {
+            self.announce_on_resume = true;
+            cx.set_state(State::Idle);
+            return;
+        }
         if self.queue.is_empty() {
             self.go_idle(cx, true);
         } else if !cx.is_down() {
@@ -662,6 +701,26 @@ impl Transporter {
             self.position = Self::progress(leg, cx.now()).0;
         }
         self.timer = None;
+    }
+
+    /// Weight (kg) of the items still carried (from `self.k` on), for a person.
+    fn load_kg(&self, cx: &Ctx) -> f64 {
+        if !cx.is_person() {
+            return 0.0;
+        }
+        self.trip[self.k.min(self.trip.len())..]
+            .iter()
+            .filter_map(|r| match r.kind {
+                TaskKind::Transport { item, .. } => Some(cx.person_weight(item)),
+                TaskKind::Operate { .. } => None,
+            })
+            .sum()
+    }
+
+    /// Duration of a load or unload of standard time `t` (pace of a person).
+    fn handling_time(cx: &mut Ctx, task: &str, t: Time) -> Time {
+        let me = cx.me();
+        cx.person_time(&[me], task, t)
     }
 
     /// Drives to the destination of the item at `self.k`.
@@ -777,6 +836,10 @@ impl Behavior for Transporter {
             self.report_position(cx);
             return;
         }
+        if tag == RESTED {
+            self.next_task(cx);
+            return;
+        }
         let Some(&task) = self.trip.get(self.k) else {
             return;
         };
@@ -784,6 +847,7 @@ impl Behavior for Transporter {
             (ARRIVED_PICKUP, TaskKind::Transport { .. }) => {
                 cx.set_state(State::Loading);
                 let t = cx.sample_duration(&self.load_time);
+                let t = Self::handling_time(cx, TASK_LOAD, t);
                 self.arm(cx, t, LOADED, None);
             }
             (LOADED, TaskKind::Transport { item, .. }) => {
@@ -791,6 +855,7 @@ impl Behavior for Transporter {
                 if self.k + 1 < self.trip.len() {
                     self.k += 1;
                     let t = cx.sample_duration(&self.load_time);
+                    let t = Self::handling_time(cx, TASK_LOAD, t);
                     self.arm(cx, t, LOADED, None);
                 } else {
                     self.k = 0;
@@ -800,6 +865,7 @@ impl Behavior for Transporter {
             (ARRIVED_DROP, TaskKind::Transport { .. }) => {
                 cx.set_state(State::Unloading);
                 let t = cx.sample_duration(&self.unload_time);
+                let t = Self::handling_time(cx, TASK_UNLOAD, t);
                 self.arm(cx, t, UNLOADED, None);
             }
             (UNLOADED, TaskKind::Transport { item, to, port, .. }) => {
@@ -842,9 +908,11 @@ impl Behavior for Transporter {
 
     fn on_resume(&mut self, cx: &mut Ctx) {
         let now = cx.now();
+        let resting = self.timer.as_ref().is_some_and(|t| t.tag == RESTED);
         if std::mem::take(&mut self.announce_on_resume)
             && self.trip.is_empty()
             && self.queue.is_empty()
+            && !resting
             && let Some(d) = self.dispatcher
         {
             // Back from a shift that ended with `Finish`: free for the dispatcher again.

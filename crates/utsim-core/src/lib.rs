@@ -12,6 +12,7 @@ pub mod engine;
 pub mod init;
 pub mod item;
 pub mod maintenance;
+pub mod person;
 pub mod report;
 mod residual;
 pub mod rng;
@@ -35,6 +36,7 @@ pub use item::{Item, ItemId, Value};
 pub use maintenance::{
     AgeBasis, Maintenance, MaintenanceCost, Preventive, RepairEffect, Trigger, Wear,
 };
+pub use person::{Fatigue, Learning, Lift, LoadedWalk, Person, Variation};
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, Utilization, summarize};
 pub use stats::Histogram;
 pub use task::{RequestId, Router, TaskKind, TaskRequest};

@@ -58,6 +58,14 @@ pub struct BlockState {
     /// plan, which follows the clock). Without it every plan starts from zero.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub preventive: Vec<Option<f64>>,
+    /// Person with dynamic fatigue: its fatigue level in `[0, 1)` (see [`crate::person`]).
+    /// Without it the person starts rested (0).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fatigue: Option<f64>,
+    /// Person with a learning curve: repetitions already done of each task (the station
+    /// name, `station:setup`, `carga`, `descarga`). Without it the person starts new.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub experience: BTreeMap<String, u64>,
     /// A check only: whether the block is off shift at `t = 0`. The shift table and the
     /// clock decide; a mismatch is an error.
     #[serde(skip_serializing_if = "Option::is_none")]

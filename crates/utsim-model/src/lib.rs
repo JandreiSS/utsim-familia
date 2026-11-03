@@ -9,6 +9,7 @@ mod format2;
 pub mod html;
 mod maintenance;
 mod movement;
+mod person;
 pub mod replay;
 mod shifts;
 mod spans;
@@ -224,6 +225,11 @@ pub struct ObjectDef {
     /// clear of its area by the resource's clearance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<[f64; 2]>,
+    /// Transporter used as a person: fatigue, learning curve, skills, walking speed with
+    /// a load, individual pace and manual lifting check ([`utsim_core::person`]). Absent:
+    /// none of these effects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person: Option<Box<utsim_core::Person>>,
 }
 
 /// Look of an object in 3D. Every field is optional; the viewer falls back to the
@@ -809,6 +815,7 @@ impl Model {
         self.validate_logic(&mut errors);
         self.validate_spans(&mut errors);
         self.validate_maintenance(&mut errors);
+        self.validate_people(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
         for (from, to) in &self.connections {
@@ -1112,6 +1119,9 @@ impl Model {
             }
             if let Some(m) = self.maintenance_of(obj, &ids) {
                 sim.set_maintenance(id, m);
+            }
+            if let Some(p) = &obj.person {
+                sim.set_person(id, (**p).clone());
             }
             if let Some(table) = self.shift_table(obj) {
                 sim.set_shifts(id, table);
