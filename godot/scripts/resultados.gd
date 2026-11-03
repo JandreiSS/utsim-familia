@@ -32,6 +32,7 @@ var _chart_object: OptionButton
 var _chart_extra: OptionButton
 var _chart: Grafico
 var _chart_note: Label
+var _chart_enable: Button
 var _warm_series: LineEdit
 var _warm_window: SpinBox
 var _warm_chart: Grafico
@@ -320,6 +321,8 @@ func _build_charts() -> void:
 	_chart_extra = _option(h, "Res_DetalheGrafico", ["trabalho", "turno", "bloqueio"])
 	_chart_extra.item_selected.connect(func(_k): _update_chart())
 	_chart_note = _explain(v, "")
+	_chart_enable = _button(_row(v), "Res_LigarAmostras", "Ligar e rodar de novo", "Liga no modelo a série do conteúdo (run.sample_interval, pelo tempo de simulação) e os histogramas (run.histogram_bins = 20), num passo que se desfaz com Ctrl+Z, e roda as replicações de novo", func(): main.enable_samples_and_rerun())
+	_chart_enable.visible = false
 	_chart = _chart_box(v, "Res_Grafico", 320)
 
 
@@ -389,6 +392,10 @@ func _update_chart(object_changed := false) -> void:
 			_chart.empty_text = "sem histograma: ligue run.histogram_bins no modelo"
 			_chart.histogram(results.histogram(object, tally))
 			_chart_note.text = "Histograma de %s.%s, juntando todas as replicações." % [object, tally]
+	# Series and histograms are only recorded when the model asks for them: offer to.
+	_chart_enable.visible = kind >= 2 and _chart.count() == 0 and not main.playing_replay
+	if _chart_enable.visible:
+		_chart_note.text += " O modelo não grava %s: \"Ligar e rodar de novo\" liga e simula outra vez." % ("a série do conteúdo" if kind == 2 else "os histogramas")
 
 
 static func _pct(x: Variant) -> Variant:
