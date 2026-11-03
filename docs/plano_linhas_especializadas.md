@@ -358,6 +358,8 @@ aprovado.
 
 ## 6. Decisões do dono
 
+**Decididas em 2026-11-03:** o dono aceitou todas as propostas de L1 a L9. Em L3, como a linha é um pacote do mesmo programa (L1), o nome exibido é "Lean Office" dentro do UTSim.
+
 1. **L1 Linha como pacote no mesmo programa** (proposta) ou como edição separada com binário
    próprio. A proposta mantém um só núcleo e uma só instalação, com entrada própria no launcher.
 2. **L2 Campos `preset`, `area` e `symbol`.** Decidir juntos: `preset` (origem na biblioteca),
