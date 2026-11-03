@@ -223,6 +223,8 @@ pub struct Core {
     cancelled: HashSet<u64>,
     /// Whether tallies keep raw observations (histograms on).
     keep_raw: bool,
+    /// `(block, tally)` whose observations keep their instant ([`Simulation::keep_timed`]).
+    timed: Vec<(usize, String)>,
     /// Number of samples taken so far; sample `k` happens at `warmup + k * interval`.
     samples_taken: u64,
     /// Recorded trace, when enabled with [`Simulation::enable_trace`].
@@ -255,22 +257,28 @@ impl Core {
     /// Adds an observation to the named tally of `block`.
     fn record_extra(&mut self, block: BlockId, name: &str, value: f64) {
         let keep_raw = self.keep_raw;
+        let now = self.now;
+        let timed_list = &self.timed;
         let extra = &mut self.blocks[block.0].stats.extra;
         // Hot path (a sink records once per item): look up first, allocate the key once.
         if let Some(tally) = extra.get_mut(name) {
-            tally.record(value);
+            tally.record_at(now, value);
             return;
         }
         extra
             .entry(name.to_string())
             .or_insert_with(|| {
-                if keep_raw {
+                let mut tally = if keep_raw {
                     Tally::with_raw()
                 } else {
                     Tally::default()
+                };
+                if timed_list.iter().any(|(b, n)| *b == block.0 && n == name) {
+                    tally.keep_timed();
                 }
+                tally
             })
-            .record(value);
+            .record_at(now, value);
     }
 
     fn schedule_at(&mut self, time: Time, kind: EventKind) -> EventId {
@@ -878,6 +886,7 @@ impl Simulation {
                 same_instant: 0,
                 cancelled: HashSet::new(),
                 keep_raw: config.histogram_bins.is_some_and(|b| b > 0),
+                timed: Vec::new(),
                 samples_taken: 0,
                 trace: None,
                 observer: None,
@@ -1017,6 +1026,29 @@ impl Simulation {
 
     pub fn take_trace(&mut self) -> Vec<TraceRecord> {
         self.core.trace.take().unwrap_or_default()
+    }
+
+    /// Keeps the instant of every observation of tally `measure` of `block`
+    /// (`"staytime"` or one of the block's own tallies, e.g. `"time_in_system"`): the
+    /// report then carries them in [`crate::TallySummary::observations`]. Off by
+    /// default; it only adds memory and never changes any statistic. Call it before
+    /// the run starts.
+    pub fn keep_timed(&mut self, block: BlockId, measure: &str) {
+        let Some(rt) = self.core.blocks.get_mut(block.0) else {
+            return;
+        };
+        if measure == "staytime" {
+            rt.stats.staytime.keep_timed();
+        } else if let Some(tally) = rt.stats.extra.get_mut(measure) {
+            tally.keep_timed();
+        } else if !self
+            .core
+            .timed
+            .iter()
+            .any(|(b, n)| *b == block.0 && n == measure)
+        {
+            self.core.timed.push((block.0, measure.to_string()));
+        }
     }
 
     /// Streams every [`TraceEvent`] to `observer` while the run progresses.
@@ -1698,7 +1730,7 @@ impl Simulation {
         }
         let stats = &mut self.core.blocks[from.0].stats;
         stats.output += 1;
-        stats.staytime.record(now - entered);
+        stats.staytime.record_at(now, now - entered);
         {
             let Simulation {
                 core, behaviors, ..

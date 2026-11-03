@@ -1,4 +1,5 @@
-//! Special functions and root finding needed by the maximum-likelihood fits.
+//! Special functions and root finding: the maximum-likelihood fits of `utsim-fit` and
+//! the output analysis of this crate (Student-t quantiles for any confidence level).
 //!
 //! Self-contained (no external numerics crate). Accuracy is about 1e-13 relative,
 //! which is far below the statistical noise of any fit.
@@ -396,6 +397,42 @@ pub fn golden_min(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64, iterations: us
     0.5 * (a + b)
 }
 
+/// Student-t CDF with `df > 0` degrees of freedom:
+/// `F(t) = 1 - I_{df/(df+t²)}(df/2, 1/2) / 2` for `t >= 0`, symmetric below zero.
+pub fn t_cdf(t: f64, df: f64) -> f64 {
+    if t.is_nan() || df.is_nan() || df <= 0.0 {
+        return f64::NAN;
+    }
+    if t.is_infinite() {
+        return if t > 0.0 { 1.0 } else { 0.0 };
+    }
+    let tail = 0.5 * beta_inc(0.5 * df, 0.5, df / (df + t * t));
+    if t >= 0.0 { 1.0 - tail } else { tail }
+}
+
+/// Student-t quantile: the `t` with `t_cdf(t, df) = p`, for `0 < p < 1` and `df > 0`
+/// (NaN outside). Found by Brent's method on the CDF, after bracketing.
+pub fn t_ppf(p: f64, df: f64) -> f64 {
+    if !(p > 0.0 && p < 1.0) || df.is_nan() || df <= 0.0 {
+        return f64::NAN;
+    }
+    if p == 0.5 {
+        return 0.0;
+    }
+    if p < 0.5 {
+        return -t_ppf(1.0 - p, df);
+    }
+    // The t quantile is above the normal one; double the bracket until it holds `p`.
+    let mut hi = norm_ppf(p).max(1.0);
+    while t_cdf(hi, df) < p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    brent(|t| t_cdf(t, df) - p, 0.0, hi, 1e-14 * hi).unwrap_or(f64::NAN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +479,37 @@ mod tests {
         for p in [1e-9, 0.01, 0.2, 0.5, 0.9, 0.999] {
             close(norm_cdf(norm_ppf(p)), p, 1e-12);
         }
+    }
+
+    #[test]
+    fn student_t_against_published_tables() {
+        // One-sided 0.975, 0.995 and 0.95 quantiles from the standard t table.
+        for (df, t975, t995, t95) in [
+            (1.0, 12.706, 63.657, 6.314),
+            (2.0, 4.303, 9.925, 2.920),
+            (5.0, 2.571, 4.032, 2.015),
+            (10.0, 2.228, 3.169, 1.812),
+            (30.0, 2.042, 2.750, 1.697),
+            (120.0, 1.980, 2.617, 1.658),
+        ] {
+            assert!((t_ppf(0.975, df) - t975).abs() < 5e-4, "df {df}");
+            assert!((t_ppf(0.995, df) - t995).abs() < 5e-4, "df {df}");
+            assert!((t_ppf(0.95, df) - t95).abs() < 5e-4, "df {df}");
+        }
+        // Closed forms: df = 1 is Cauchy; df = 2 has t = a·sqrt(2 / (1 - a²)), a = 2p - 1.
+        close(t_ppf(0.9, 1.0), (PI * 0.4).tan(), 1e-12);
+        let a: f64 = 2.0 * 0.8 - 1.0;
+        close(t_ppf(0.8, 2.0), a * (2.0 / (1.0 - a * a)).sqrt(), 1e-12);
+        close(t_ppf(0.025, 7.0), -t_ppf(0.975, 7.0), 1e-14);
+        assert_eq!(t_ppf(0.5, 3.0), 0.0);
+        // Large df tends to the normal quantile.
+        close(t_ppf(0.975, 1e7), norm_ppf(0.975), 1e-6);
+        for df in [1.0, 3.0, 12.0, 80.0] {
+            for p in [0.6, 0.9, 0.99, 0.9999] {
+                close(t_cdf(t_ppf(p, df), df), p, 1e-12);
+            }
+        }
+        assert!(t_ppf(0.0, 3.0).is_nan() && t_ppf(0.5, 0.0).is_nan());
     }
 
     #[test]

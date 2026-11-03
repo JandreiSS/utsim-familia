@@ -15,7 +15,9 @@ pub mod gof;
 pub mod plots;
 pub mod rank;
 pub mod report;
-pub mod special;
+/// Special functions, now in `utsim-stats` (shared with the output analysis); the path
+/// `utsim_fit::special` keeps working.
+pub use utsim_stats::special;
 
 pub use family::{Family, Fitted, FittedModel};
 pub use rank::{CandidateResult, Ranking};
