@@ -18,6 +18,7 @@ default-members = [
     "crates/utsim-fit",
     "crates/utsim-flow",
     "crates/utsim-fluid",
+    "crates/utsim-linhas",
     "crates/utsim-look",
     "crates/utsim-lss-core",
     "crates/utsim-lss-store",
@@ -66,6 +67,7 @@ utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }
 utsim-twin = { path = "crates/utsim-twin" }
 utsim-ui-tema = { path = "crates/utsim-ui-tema" }
+utsim-linhas = { path = "crates/utsim-linhas" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }

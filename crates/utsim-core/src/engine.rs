@@ -14,6 +14,7 @@ use crate::block::{
 use crate::dist::Dist;
 use crate::init::{self, BlockState, ItemState, StartState};
 use crate::item::{Item, ItemId, Value};
+use crate::item_log::{ItemLog, ItemRecord};
 use crate::report::{BlockReport, RunReport, SeriesPoint, TallySummary};
 use crate::rng::{self, SimRng};
 use crate::script::{ItemScript, PortScript, ScriptEnv};
@@ -266,6 +267,8 @@ pub struct Core {
     draining: Vec<BlockId>,
     /// Skill each open request needs ([`Ctx::request_task_requiring`]), by request id.
     required: BTreeMap<u64, String>,
+    /// Per-item metrics, when enabled with [`Simulation::enable_item_log`].
+    item_log: Option<Box<ItemLog>>,
 }
 
 /// Measures, per item, the time from leaving `from` to entering `to`; each measurement
@@ -316,6 +319,7 @@ impl Core {
     }
 
     fn take_item_from(&mut self, b: BlockId, item: ItemId) {
+        self.log_leave(b, item);
         let rt = &mut self.blocks[b.0];
         if let Some(pos) = rt.contents.iter().position(|&x| x == item) {
             rt.contents.remove(pos);
@@ -332,6 +336,44 @@ impl Core {
         it.entered_at = now;
         self.blocks[b.0].contents.push(item);
         self.update_content(b);
+        self.log_enter(b, item);
+    }
+
+    /// Item log: one more visit of `item` to `b`.
+    fn log_enter(&mut self, b: BlockId, item: ItemId) {
+        if let (Some(log), Some(it)) = (self.item_log.as_deref_mut(), self.items.get(item)) {
+            *log.record(item, it.created_at)
+                .visits
+                .entry(b.0)
+                .or_default() += 1;
+        }
+    }
+
+    /// Item log: `item` leaves `b` (call before its location changes).
+    fn log_leave(&mut self, b: BlockId, item: ItemId) {
+        if let (Some(log), Some(it)) = (self.item_log.as_deref_mut(), self.items.get(item)) {
+            let stay = self.now - it.entered_at;
+            *log.record(item, it.created_at).stay.entry(b.0).or_default() += stay;
+        }
+    }
+
+    /// Item log: `item` leaves the model (call before it is removed).
+    fn log_end(&mut self, item: ItemId) {
+        let now = self.now;
+        if let (Some(log), Some(it)) = (self.item_log.as_deref_mut(), self.items.get(item)) {
+            let mut rec = log.open.remove(&item).unwrap_or_else(|| ItemRecord {
+                key: item_key(item),
+                created_at: it.created_at,
+                ..ItemRecord::default()
+            });
+            if let Some(b) = it.location {
+                *rec.stay.entry(b.0).or_default() += now - it.entered_at;
+            }
+            rec.ended_at = Some(now);
+            rec.block = it.location.map(|b| b.0);
+            rec.labels = it.labels.clone();
+            log.done.push(rec);
+        }
     }
 
     fn emit(&mut self, event: TraceEvent) {
@@ -535,6 +577,7 @@ impl Ctx<'_> {
         });
         self.core.blocks[self.me.0].contents.push(id);
         self.core.update_content(self.me);
+        self.core.log_enter(self.me, id);
         let block = self.me.0;
         self.core.emit(TraceEvent::Created {
             item: item_key(id),
@@ -553,6 +596,14 @@ impl Ctx<'_> {
         let it = &mut self.core.items[copy];
         it.labels = labels;
         it.created_at = created_at;
+        if let Some(rec) = self
+            .core
+            .item_log
+            .as_deref_mut()
+            .and_then(|log| log.open.get_mut(&copy))
+        {
+            rec.created_at = created_at;
+        }
         copy
     }
 
@@ -605,6 +656,62 @@ impl Ctx<'_> {
         let pending = self.route_output(id);
         self.core.blocks[self.me.0].outbox.push_front(pending);
         self.core.mark_dirty(self.me);
+    }
+
+    /// Marks the item as ready to leave, ahead of the released items it outranks by the
+    /// numeric label `label`: smallest value first, or largest first with `descending`.
+    /// Ties keep the order of release; an item without the label (or with a text value)
+    /// ranks after every item that has it.
+    pub fn release_ordered(&mut self, id: ItemId, label: &str, descending: bool) {
+        let worst = if descending {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+        let items = &self.core.items;
+        let key = |it: ItemId| {
+            items
+                .get(it)
+                .and_then(|i| i.label(label))
+                .and_then(Value::as_num)
+                .filter(|v| !v.is_nan())
+                .unwrap_or(worst)
+        };
+        let mine = key(id);
+        let outranks = |other: f64| {
+            if descending {
+                mine > other
+            } else {
+                mine < other
+            }
+        };
+        let at = self.core.blocks[self.me.0]
+            .outbox
+            .iter()
+            .position(|p| outranks(key(p.item)));
+        let pending = self.route_output(id);
+        let outbox = &mut self.core.blocks[self.me.0].outbox;
+        match at {
+            Some(at) => outbox.insert(at, pending),
+            None => outbox.push_back(pending),
+        }
+        self.core.mark_dirty(self.me);
+    }
+
+    /// Item log ([`Simulation::enable_item_log`]): `duration` of work (setup or
+    /// processing) done on `item` in this block, by people when `by_people`. Does nothing
+    /// while the log is off.
+    pub fn log_work(&mut self, item: ItemId, duration: Time, by_people: bool) {
+        let me = self.me.0;
+        if let (Some(log), Some(it)) =
+            (self.core.item_log.as_deref_mut(), self.core.items.get(item))
+        {
+            let rec = log.record(item, it.created_at);
+            *rec.work.entry(me).or_default() += duration;
+            if by_people {
+                *rec.touch.entry(me).or_default() += duration;
+            }
+        }
     }
 
     /// Adds an observation to a named per-block tally (shown in the report).
@@ -970,6 +1077,7 @@ impl Simulation {
                 calendar: 0.0,
                 draining: Vec::new(),
                 required: BTreeMap::new(),
+                item_log: None,
             },
             behaviors: Vec::new(),
             config,
@@ -1111,6 +1219,41 @@ impl Simulation {
 
     pub fn take_trace(&mut self) -> Vec<TraceRecord> {
         self.core.trace.take().unwrap_or_default()
+    }
+
+    /// Keeps per-item metrics (visits, stays, work and touch time by block; see
+    /// [`crate::item_log`]). Off by default; it never changes the run or its report.
+    /// Call it before the run starts.
+    pub fn enable_item_log(&mut self) {
+        self.core.item_log.get_or_insert_with(Box::default);
+    }
+
+    /// The per-item metrics of every item created so far, in creation order: the items
+    /// that left the model and, with `ended_at: None`, those still inside. Empty when the
+    /// log was not enabled. The log stops.
+    pub fn take_item_log(&mut self) -> Vec<ItemRecord> {
+        let Some(log) = self.core.item_log.take() else {
+            return Vec::new();
+        };
+        let now = self.core.now;
+        let mut out = log.done;
+        for (id, mut rec) in log.open {
+            let Some(it) = self.core.items.get(id) else {
+                continue;
+            };
+            if let Some(b) = it.location {
+                *rec.stay.entry(b.0).or_default() += now - it.entered_at;
+            }
+            rec.block = it.location.map(|b| b.0);
+            rec.labels = it.labels.clone();
+            out.push(rec);
+        }
+        out.sort_by(|a, b| {
+            a.created_at
+                .total_cmp(&b.created_at)
+                .then(a.key.cmp(&b.key))
+        });
+        out
     }
 
     /// Keeps the instant of every observation of tally `measure` of `block`
@@ -2213,6 +2356,7 @@ impl Simulation {
 
     fn flush_doomed(&mut self) {
         while let Some(id) = self.core.doomed.pop() {
+            self.core.log_end(id);
             let Some(item) = self.core.items.remove(id) else {
                 continue;
             };

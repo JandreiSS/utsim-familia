@@ -17,7 +17,7 @@ pub mod layout;
 mod mapa;
 pub mod mermaid;
 mod operacoes;
-mod raias;
+pub mod raias;
 pub mod rastro;
 mod sipoc;
 pub mod svg;
@@ -46,6 +46,18 @@ pub fn flowchart(model: &Model, options: &Options) -> FlowGraph {
     let mut g = graph::build(model, options);
     layout::apply(&mut g);
     g
+}
+
+/// Lane of each object in the swimlane chart: the objects' `department` fields, replaced by
+/// `chosen` (the `--raia` options).
+pub fn areas(model: &Model, chosen: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let mut out: BTreeMap<String, String> = model
+        .objects
+        .iter()
+        .filter_map(|o| o.department.clone().map(|a| (o.name.clone(), a)))
+        .collect();
+    out.extend(chosen.iter().map(|(k, v)| (k.clone(), v.clone())));
+    out
 }
 
 /// The process chart of the main path, as CSV.

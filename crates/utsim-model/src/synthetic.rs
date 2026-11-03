@@ -56,6 +56,9 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         visual: None,
         access: None,
         person: None,
+        preset: None,
+        department: None,
+        symbol: None,
     }
 }
 
@@ -64,6 +67,7 @@ fn queue() -> ObjectKind {
         capacity: None,
         discipline: Discipline::Fifo,
         batch: None,
+        order: None,
     }
 }
 
@@ -240,6 +244,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         obstacles: Vec::new(),
         aisles: Vec::new(),
         floor_marking: None,
+        line: None,
     })
 }
 
