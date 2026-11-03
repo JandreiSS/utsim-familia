@@ -15,6 +15,9 @@ pub struct Tally {
     max: f64,
     /// Raw observations, kept only when histograms are requested.
     raw: Option<Vec<f64>>,
+    /// `(t, x)` of every observation, kept only when an output analysis asks for this
+    /// measure (warm-up detection, see [`Tally::keep_timed`]).
+    timed: Option<Vec<[f64; 2]>>,
 }
 
 impl Tally {
@@ -26,17 +29,37 @@ impl Tally {
         }
     }
 
-    /// An empty tally with the same raw-keeping setting as `self`.
+    /// An empty tally with the same raw-keeping and timed-keeping settings as `self`.
     pub fn cleared(&self) -> Self {
-        if self.raw.is_some() {
-            Tally::with_raw()
-        } else {
-            Tally::default()
+        Tally {
+            raw: self.raw.as_ref().map(|_| Vec::new()),
+            timed: self.timed.as_ref().map(|_| Vec::new()),
+            ..Tally::default()
         }
     }
 
     pub fn raw(&self) -> Option<&[f64]> {
         self.raw.as_deref()
+    }
+
+    /// From now on, also keep the instant of every observation (see [`Tally::record_at`]).
+    pub fn keep_timed(&mut self) {
+        self.timed.get_or_insert_with(Vec::new);
+    }
+
+    /// `(t, x)` of the observations recorded with [`Tally::record_at`] since
+    /// [`Tally::keep_timed`]; `None` when timed keeping is off.
+    pub fn timed(&self) -> Option<&[[f64; 2]]> {
+        self.timed.as_deref()
+    }
+
+    /// Records `x` observed at instant `t`. The instant is only stored when timed
+    /// keeping is on; otherwise this is exactly [`Tally::record`].
+    pub fn record_at(&mut self, t: Time, x: f64) {
+        if let Some(timed) = &mut self.timed {
+            timed.push([t, x]);
+        }
+        self.record(x);
     }
 
     pub fn record(&mut self, x: f64) {
@@ -246,8 +269,10 @@ impl Summary {
     }
 }
 
-/// Two-sided 95% Student-t quantile.
-fn t_975(df: usize) -> f64 {
+/// Two-sided 95% Student-t quantile, from the published table (exact to three decimals
+/// up to 30 degrees of freedom, then the table's coarse steps). Every 95% interval of
+/// UTSim uses it; `utsim-stats` keeps it for the default level so results never change.
+pub fn t_975(df: usize) -> f64 {
     const TABLE: [f64; 30] = [
         12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160,
         2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056,
@@ -309,6 +334,23 @@ mod tests {
         let mut plain = Tally::default();
         plain.record(1.0);
         assert!(plain.raw().is_none());
+    }
+
+    #[test]
+    fn tally_keeps_instants_only_on_request() {
+        let mut plain = Tally::default();
+        plain.record_at(1.0, 5.0);
+        assert!(plain.timed().is_none());
+        let mut t = Tally::with_raw();
+        t.keep_timed();
+        t.record_at(1.5, 2.0);
+        t.record_at(3.0, 4.0);
+        assert_eq!(t.timed(), Some(&[[1.5, 2.0], [3.0, 4.0]][..]));
+        assert_eq!((t.count(), t.mean()), (2, 3.0));
+        let c = t.cleared();
+        assert_eq!((c.timed(), c.raw()), (Some(&[][..]), Some(&[][..])));
+        // Same statistics with or without the instants.
+        assert_eq!(plain.mean(), 5.0);
     }
 
     #[test]
