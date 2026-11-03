@@ -134,5 +134,6 @@ pub fn package_entry(
         sha256: sealed.sha256.clone(),
         cipher: crypto::PACKAGE_CIPHER.to_string(),
         wraps,
+        open_key: None,
     }
 }

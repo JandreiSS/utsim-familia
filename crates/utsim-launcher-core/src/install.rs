@@ -152,22 +152,45 @@ pub fn verify_package(file: &Path, package: &Package) -> Result<()> {
     Ok(())
 }
 
+/// The content key of `package`: from the tester's wrap when `code` is listed in it, else
+/// the key published in the (signed) manifest for a package open to everyone.
+pub fn content_key(
+    product: &str,
+    release: &Release,
+    package: &Package,
+    code: Option<&AccessCode>,
+) -> Result<crypto::ContentKey> {
+    let ctx = crypto::package_context(product, &release.version, &package.platform);
+    if let Some(code) = code {
+        if package.wraps.iter().any(|w| w.id == code.id()) {
+            return crypto::unwrap_for(&package.wraps, code, &ctx);
+        }
+    }
+    match package.open_key.as_deref() {
+        Some(k) if !k.trim().is_empty() => crypto::ContentKey::from_base64(k.trim()),
+        _ => match code {
+            Some(code) => crypto::unwrap_for(&package.wraps, code, &ctx),
+            None => Err(Error::NoAccess),
+        },
+    }
+}
+
 /// Checks, decrypts and extracts a downloaded package into its version folder; returns the
-/// folder. Does not change the active version (see [`activate`]).
+/// folder. Does not change the active version (see [`activate`]). `code` may be `None` for a
+/// package published open to everyone.
 pub fn install(
     layout: &Layout,
     product: &str,
     release: &Release,
     package: &Package,
-    code: &AccessCode,
+    code: Option<&AccessCode>,
     encrypted: &Path,
 ) -> Result<PathBuf> {
     if !manifest::valid_id(product) || !manifest::valid_version(&release.version) {
         return Err(Error::Install("produto ou versão com nome inválido".into()));
     }
     verify_package(encrypted, package)?;
-    let ctx = crypto::package_context(product, &release.version, &package.platform);
-    let key = crypto::unwrap_for(&package.wraps, code, &ctx)?;
+    let key = content_key(product, release, package, code)?;
 
     let product_dir = layout.product(product);
     fs::create_dir_all(&product_dir)?;

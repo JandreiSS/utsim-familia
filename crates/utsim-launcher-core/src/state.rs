@@ -26,6 +26,56 @@ pub struct LauncherState {
     /// Create a desktop shortcut when installing.
     #[serde(default)]
     pub desktop_shortcuts: bool,
+    /// How the products are shown (cards or a table).
+    #[serde(default)]
+    pub view: ViewMode,
+    /// Order of the products.
+    #[serde(default)]
+    pub sort: SortOrder,
+    /// Unix time of the last manifest fetched from the network (0: never).
+    #[serde(default)]
+    pub checked_at: u64,
+    /// Do not play the opening animation.
+    #[serde(default)]
+    pub skip_intro: bool,
+}
+
+/// Products as cards or as a table.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ViewMode {
+    #[default]
+    #[serde(rename = "grade")]
+    Grid,
+    #[serde(rename = "lista")]
+    List,
+}
+
+/// Order of the products in the launcher.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SortOrder {
+    /// By name, A to Z.
+    #[default]
+    #[serde(rename = "nome")]
+    Name,
+    /// Newest release first.
+    #[serde(rename = "recentes")]
+    Recent,
+    /// Products with an update first, then by name.
+    #[serde(rename = "atualizacao")]
+    Updates,
+}
+
+impl SortOrder {
+    pub const ALL: [SortOrder; 3] = [SortOrder::Name, SortOrder::Recent, SortOrder::Updates];
+
+    /// Label in the launcher.
+    pub fn label(self) -> &'static str {
+        match self {
+            SortOrder::Name => "Nome (A–Z)",
+            SortOrder::Recent => "Mais recentes",
+            SortOrder::Updates => "Com atualização",
+        }
+    }
 }
 
 impl LauncherState {
@@ -85,7 +135,8 @@ fn civil(secs: u64) -> (i64, u32, u32, u32, u32, u32) {
     )
 }
 
-fn now_secs() -> u64 {
+/// Seconds since the Unix epoch, now.
+pub fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -134,5 +185,28 @@ mod tests {
         assert_eq!(back.last_sequence, 5);
         assert_eq!(back.channel("utsim"), "testes");
         assert_eq!(back.channel("outro"), "estavel");
+    }
+
+    #[test]
+    fn view_and_sort_are_remembered_and_old_files_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("estado.json");
+        // A file written by the first launcher.
+        std::fs::write(&path, r#"{"code": null, "last_sequence": 3}"#).unwrap();
+        let mut s = LauncherState::load(&path);
+        assert_eq!(
+            (s.view, s.sort, s.last_sequence),
+            (ViewMode::Grid, SortOrder::Name, 3)
+        );
+        s.view = ViewMode::List;
+        s.sort = SortOrder::Updates;
+        s.save(&path).unwrap();
+        let back = LauncherState::load(&path);
+        assert_eq!((back.view, back.sort), (ViewMode::List, SortOrder::Updates));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("\"lista\"") && text.contains("\"atualizacao\""),
+            "{text}"
+        );
     }
 }
