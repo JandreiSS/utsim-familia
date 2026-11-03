@@ -909,6 +909,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         downtime: None,
         shifts: None,
         transport: None,
+        transport_priority: None,
+        transport_priority_label: None,
         transfer: None,
         on_entry: None,
         visual: None,

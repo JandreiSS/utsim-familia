@@ -49,6 +49,8 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         downtime: None,
         shifts: None,
         transport: None,
+        transport_priority: None,
+        transport_priority_label: None,
         transfer: None,
         on_entry: None,
         visual: None,

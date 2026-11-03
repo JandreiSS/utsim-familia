@@ -171,6 +171,9 @@ struct BlockRuntime {
     position: [f64; 3],
     /// Mobile resource (or dispatcher) that carries this block's items out.
     transport: Option<BlockId>,
+    /// Priority of the transport requests for this block's items: fixed value and the
+    /// item label that overrides it ([`crate::task::request_priority`]).
+    transport_priority: (i32, Option<String>),
     /// Items on their way here (room reserved by a transport request or a timed transfer).
     incoming: usize,
     /// Travel time of items leaving through direct connections (None = instantaneous).
@@ -1002,6 +1005,7 @@ impl Simulation {
             dirty: false,
             position: [0.0; 3],
             transport: None,
+            transport_priority: (0, None),
             incoming: 0,
             transfer: None,
             subscribers: Vec::new(),
@@ -1035,6 +1039,12 @@ impl Simulation {
     /// Items leaving `block` are carried by `carrier` (a mobile resource or dispatcher).
     pub fn set_transport(&mut self, block: BlockId, carrier: BlockId) {
         self.core.blocks[block.0].transport = Some(carrier);
+    }
+
+    /// Priority of the transport requests for items leaving `block` (default 0): the
+    /// item's `label` when it has a numeric one, else `priority`. Higher goes first.
+    pub fn set_transport_priority(&mut self, block: BlockId, priority: i32, label: Option<String>) {
+        self.core.blocks[block.0].transport_priority = (priority, label);
     }
 
     /// Items leaving `block` through direct connections take `delay + distance / speed`
@@ -2063,6 +2073,9 @@ impl Simulation {
     ) {
         self.core.blocks[to.0].incoming += 1;
         self.core.items[item].awaiting_transport = true;
+        let (fixed, label) = &self.core.blocks[from.0].transport_priority;
+        let priority =
+            crate::task::request_priority(&self.core.items[item], *fixed, label.as_deref());
         let cx = &mut Ctx {
             core: &mut self.core,
             me: from,
@@ -2075,7 +2088,7 @@ impl Simulation {
                 to,
                 port,
             },
-            0,
+            priority,
         );
         cx.send(from, MSG_TRANSPORT_RESERVED, item_key(item));
     }

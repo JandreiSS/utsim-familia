@@ -208,6 +208,14 @@ pub struct ObjectDef {
     /// (instead of handing them over instantly).
     #[serde(default)]
     pub transport: Option<String>,
+    /// Priority of this object's transport requests at the dispatcher (higher goes first,
+    /// FIFO among equals). Absent: 0, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_priority: Option<i32>,
+    /// Item label whose value, when the item has it, replaces `transport_priority`
+    /// (e.g. an urgent order created with `"prioridade": 9` goes ahead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_priority_label: Option<String>,
     /// Travel time of items leaving this object through direct connections:
     /// `delay + distance / speed`, with room reserved at the destination meanwhile.
     /// Absent means instantaneous (unless `run.transfer` is set).
@@ -882,6 +890,24 @@ impl Model {
         let mobile = |name: &str| kind_of.get(name).is_some_and(|k| is_mobile(k));
         let mut in_team: HashMap<&str, &str> = HashMap::new();
         for obj in &self.objects {
+            if obj.transport.is_none()
+                && (obj.transport_priority.is_some() || obj.transport_priority_label.is_some())
+            {
+                errors.push(format!(
+                    "{}: transport_priority e transport_priority_label só valem com `transport`",
+                    obj.name
+                ));
+            }
+            if obj
+                .transport_priority_label
+                .as_deref()
+                .is_some_and(|l| l.trim().is_empty())
+            {
+                errors.push(format!(
+                    "{}: transport_priority_label precisa do nome de um rótulo",
+                    obj.name
+                ));
+            }
             if let Some(t) = &obj.transport {
                 if !mobile(t) {
                     errors.push(format!(
@@ -898,6 +924,16 @@ impl Model {
                 ..
             } = &obj.kind
             {
+                if op
+                    .priority_label
+                    .as_deref()
+                    .is_some_and(|l| l.trim().is_empty())
+                {
+                    errors.push(format!(
+                        "{}: operators.priority_label precisa do nome de um rótulo",
+                        obj.name
+                    ));
+                }
                 if !mobile(&op.team) {
                     errors.push(format!(
                         "{}: operators.team '{}' precisa ser um Transporter ou Dispatcher",
@@ -1101,6 +1137,13 @@ impl Model {
             sim.set_position(id, obj.position);
             if let Some(t) = &obj.transport {
                 sim.set_transport(id, ids[t.as_str()]);
+                if obj.transport_priority.is_some() || obj.transport_priority_label.is_some() {
+                    sim.set_transport_priority(
+                        id,
+                        obj.transport_priority.unwrap_or(0),
+                        obj.transport_priority_label.clone(),
+                    );
+                }
             }
             if let Some(script) = obj
                 .on_entry
