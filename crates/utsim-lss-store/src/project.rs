@@ -26,6 +26,10 @@ pub const OPS: &str = "ops";
 pub const DATA: &str = "dados";
 pub const ATTACHMENTS: &str = "anexos";
 pub const MODELS: &str = "modelos";
+/// Reports printed by the program (made again at any time; not in the journal).
+pub const REPORTS: &str = "relatorios";
+/// The company's template of the reports, in a `modelos/` folder.
+pub const REPORT_TEMPLATE: &str = "relatorio.json";
 pub const PRESENCE: &str = "presenca";
 
 /// A snapshot is written when this many operations are held outside one.
@@ -692,6 +696,47 @@ impl ProjectFolder {
         } else {
             self.root.join(p)
         }
+    }
+
+    /// Writes a report into `relatorios/` (replacing an older print of the same name);
+    /// returns its path. Reports are made again at any time and are not in the journal.
+    pub fn write_report(&self, name: &str, bytes: &[u8]) -> Result<PathBuf> {
+        if name.contains(['/', '\\']) || name.contains("..") || name.is_empty() {
+            return Err(Error::Invalid(format!("nome de arquivo inválido: {name}")));
+        }
+        let dir = self.root.join(REPORTS);
+        fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+        let target = dir.join(name);
+        fsio::write_replace(&target, bytes)?;
+        Ok(target)
+    }
+
+    /// The text of the company's template of the reports: the project's own
+    /// `modelos/relatorio.json`, else the one in the `modelos/` folder next to the projects.
+    pub fn report_template(&self) -> Option<String> {
+        let own = self.root.join(MODELS).join(REPORT_TEMPLATE);
+        let shared = self
+            .root
+            .parent()
+            .map(|p| p.join(MODELS).join(REPORT_TEMPLATE));
+        [Some(own), shared]
+            .into_iter()
+            .flatten()
+            .find(|p| p.is_file())
+            .and_then(|p| fsio::read_text(&p).ok())
+    }
+
+    /// Saves the company's template next to the projects (`../modelos/relatorio.json`), so
+    /// every project of the folder prints with it; returns the path.
+    pub fn save_report_template(&self, json: &str) -> Result<PathBuf> {
+        let dir = self
+            .root
+            .parent()
+            .map_or_else(|| self.root.join(MODELS), |p| p.join(MODELS));
+        fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+        let target = dir.join(REPORT_TEMPLATE);
+        fsio::write_replace(&target, json.as_bytes())?;
+        Ok(target)
     }
 
     /// Copies a file into `anexos/<sha256>.<ext>` (once per content) and returns its name.

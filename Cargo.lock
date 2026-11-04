@@ -7893,6 +7893,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "getrandom 0.2.17",
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "sha2",
