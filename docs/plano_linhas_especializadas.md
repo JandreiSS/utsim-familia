@@ -1,8 +1,8 @@
 # Plano: linhas especializadas do UTSim, começando pelo Lean Office
 
 Plano técnico, sem implementação, do pedido do dono: ter **linhas** do UTSim para
-simulações e estudos em domínios específicos, começando pelo **Lean Office** (escritórios e
-processos administrativos). O plano define o que é uma linha, como ela usa o núcleo que já
+simulações e estudos em domínios específicos, começando pelo **Lean Office** (processos
+administrativos de qualquer área; veja o escopo na seção 1.1). O plano define o que é uma linha, como ela usa o núcleo que já
 existe, o que o Lean Office precisa (objetos, vocabulário, modelos prontos, indicadores,
 relatórios, aparência 3D e 2D, integração com o UTSim Seis Sigma), lista outras linhas
 candidatas e propõe os primeiros passos com estimativa e modelo de IA. Os requisitos sugeridos
@@ -39,7 +39,7 @@ de eventos, os objetos, o formato `.ron`, as replicações, a estatística, os e
 | Indicadores e relatórios | conjunto de KPIs do domínio (cálculo em crate pura) e relatório próprio | crate `utsim-linhas` (módulo por linha) |
 | Aparência | modelos 3D e ícones 2D do domínio, cores, cenário padrão | `linhas/<linha>/visual/` e biblioteca de ativos |
 | Tutoriais e manual | capítulos do manual e tutoriais com o vocabulário da linha | `docs/manual/src/linhas/<linha>/` |
-| Modelos de projeto no Seis Sigma | modelos de projeto (kaizen de escritório, por exemplo) | app UTSim Seis Sigma |
+| Modelos de projeto no Seis Sigma | modelos de projeto (kaizen administrativo, por exemplo) | app UTSim Seis Sigma |
 
 ### 0.2 Como o modelo sabe a linha
 
@@ -68,7 +68,17 @@ para o fluxograma; a proposta é decidir os dois juntos (decisão L2).
 
 ## 1. Lean Office: o domínio
 
-### 1.1 O que se estuda num escritório
+### 1.1 O que se estuda num processo administrativo
+
+**Escopo (dono, 2026-11-03):** "Lembrando que o Lean Office é tudo ligado ao administrativo,
+não apenas à escritórios". A linha trata processos administrativos em geral, e o escritório
+não é o centro: o trabalho pode ser presencial, remoto, na caixa de e-mail ou dentro de um
+sistema. Áreas típicas: compras e suprimentos; financeiro (contas a pagar e a receber,
+faturamento); RH (admissão, folha); comercial (pedido ao faturamento, orçamentos);
+atendimento e pós-venda; jurídico e contratos; TI e chamados; planejamento e PCP
+administrativo; serviço público (protocolo, processos, licenças); secretaria acadêmica. O
+nome exibido continua "Lean Office", o termo consagrado, com o subtítulo "processos
+administrativos" (campo `subtitle` da biblioteca).
 
 Processos administrativos têm as mesmas perdas da fábrica, mas escondidas: o "estoque" é a
 pilha de casos nas caixas de entrada, o "transporte" é a passagem de um departamento a outro,
@@ -89,22 +99,22 @@ e o retrabalho vem de informação incompleta ou errada. Os estudos típicos res
 |---|---|---|
 | Caso, documento, solicitação, processo | item, com tipo (C3 do plano de chegadas) e rótulos (`prioridade`, `complexidade`, `prazo`, `erro`) | item e rótulos existem; tipo é novo |
 | Chegada de pedidos por hora do dia | `Source` com `schedule` (já existe) ou tabela de chegadas (C1) | parcial |
-| Caixa de entrada, pasta, fila do sistema | `Queue` com disciplina FIFO; nova disciplina por prioridade ou por prazo (`Discipline::ByLabel`) | FIFO existe; prioridade é nova |
-| Posto de trabalho, mesa | `Processor` com `operators` de uma equipe de pessoas; capacidade = mesas | existe |
+| Caixa de entrada, pasta, caixa de e-mail, lista de trabalho do sistema | `Queue` com disciplina FIFO; nova disciplina por prioridade ou por prazo (`Discipline::ByLabel`) | FIFO existe; prioridade é nova |
+| Posto de trabalho (mesa, balcão, tela do sistema) | `Processor` com `operators` de uma equipe de pessoas; capacidade = casos trabalhados ao mesmo tempo; no trabalho remoto ou em sistema o posto fica na posição da pessoa, que não anda | existe |
 | Pessoa (analista, aprovador) | `Transporter` com perfil `person` (habilidades, ritmo, aprendizado) dentro de uma equipe (`Dispatcher`) | existe |
 | Pessoa como recurso principal, não a mesa | `Processor` de capacidade grande com `operators.count: 1`: o limite real vira o número de pessoas | existe |
 | Aprovação com devolução | `Processor` com `OutputRule::Weighted([aprova, devolve])` e ligação de volta | existe |
 | Verificação que acha erro de etapa anterior | rótulo `erro` sorteado na etapa que erra (pelo %C&A dela) e `OutputRule::ByLabel` na verificação | existe com script; a predefinição esconde o detalhe |
 | Retrabalho (%C&A) | predefinição "Etapa com %C&A": sorteia o erro na saída; a etapa seguinte decide se percebe | novo como predefinição; núcleo existe |
-| Lote de papelada | `Queue.batch` (tamanho, espera máxima) | existe |
+| Lote (papelada, processamento diário no sistema, faturamento em lote) | `Queue.batch` (tamanho, espera máxima) | existe |
 | Passagem entre departamentos (malote, e-mail, sistema) | predefinição "Tramitação": `Processor` de capacidade ilimitada com tempo de espera | existe |
 | Espera por informação de fora (cliente, outro setor) | `Combiner` que junta o caso com a resposta que chega de outra `Source`, ou "Tramitação" com tempo sorteado | existe |
 | Horário de trabalho, almoço, feriados | `calendars` e `shifts` (feriados no backlog) | parcial |
 | Fila parada fora do horário | estado `off_shift` | existe |
-| Multitarefa (uma pessoa com vários casos abertos) | **novo**: limite de casos abertos por pessoa (WIP pessoal) e custo de troca entre casos | novo (seção 2.2) |
+| Multitarefa (uma pessoa com vários casos abertos) | `multitask` da pessoa: limite de casos abertos (WIP pessoal) e custo de troca entre casos | feito (passo 10) |
 | Interrupções (telefone, chat, urgência) | `Source` de interrupções com prioridade alta e preempção do operador (E2 e E4 do plano de chegadas) | depende de E2/E4 |
 | SLA, prazo | rótulo `prazo` na criação (C4 do plano de chegadas) e KPI "% dentro do prazo" | depende de C4 |
-| Departamento | campo de área por objeto, usado pelas raias (`raias.rs` já aceita áreas) e pelo 3D (zonas) | áreas existem só no comando do fluxograma |
+| Departamento | campo `department` por objeto, usado pelas raias e, para processos com lugar físico, pelo 3D (zonas) | feito (passo 1) |
 | Caso concluído, cancelado, arquivado | `Sink`, uma por desfecho | existe |
 
 Conclusão: **a maior parte do Lean Office cabe no núcleo atual com predefinições**. O que
@@ -182,7 +192,7 @@ linha, sem mudar o relatório dos modelos atuais.
 
 ### 1.6 Relatórios e diagramas
 
-- **VSM de escritório** (`utsim-diagram::vsm` com o vocabulário e campos da linha): caixa de
+- **VSM administrativo** (`utsim-diagram::vsm` com o vocabulário e campos da linha): caixa de
   processo com P/T, L/T da etapa, %C&A, pessoas e horário; caixas de entrada com casos parados
   (média) e tempo de espera; escada do lead time com touch time; no rodapé, lead time total,
   touch time total, razão de atividade e rolled %C&A. Gera o VSM atual e, com um cenário, o
@@ -191,16 +201,19 @@ linha, sem mudar o relatório dos modelos atuais.
   campo de área do objeto; as passagens entre raias são destacadas e contadas; as voltas de
   retrabalho aparecem com a cor própria que o desenho já tem.
 - **Carta de processo** com as esperas por causa.
-- **Espaguete do escritório**: deslocamentos das pessoas (impressora, arquivo, sala do
-  aprovador) sobre a planta.
+- **Espaguete**, para processos com lugar físico: deslocamentos das pessoas (impressora,
+  arquivo, sala do aprovador, balcão) sobre a planta. No trabalho remoto ou em sistema não há
+  deslocamento a mostrar.
 - **Relatório da linha** (HTML autocontido, como o `html.rs`): resumo dos KPIs da seção 1.5,
   gráfico de WIP de casos no tempo, histograma do lead time com a linha do SLA, Pareto das
   esperas por causa, ocupação das pessoas por hora do dia.
 
 ### 1.7 Aparência 3D e 2D
 
-- **2D primeiro.** No escritório, a vista de planta (de cima) com zonas por departamento,
-  mesas e pilhas de casos lê melhor que o 3D. A vista 2D usa a mesma cena com câmera
+- **Só quando há lugar físico.** Muitos processos administrativos acontecem em sistema e não
+  têm planta; para eles bastam o VSM, as raias e o relatório. Quando há lugar (escritório,
+  balcão de atendimento, protocolo, secretaria), a vista de planta (de cima) com zonas por
+  departamento, mesas e pilhas de casos lê melhor que o 3D. A vista 2D usa a mesma cena com câmera
   ortográfica de cima e ícones planos; vale também para as outras linhas.
 - **3D**: mesas, cadeiras, computador, armário de pastas, impressora, mesa de reunião,
   divisórias, bandejas de entrada. Pessoas sentadas trabalhando (a pose sentada já está
@@ -213,7 +226,7 @@ linha, sem mudar o relatório dos modelos atuais.
      de licença;
   2. **ativos livres CC0** para cadeira, computador e impressora, com o crédito e a
      conferência de licença do `visual-3d.md`;
-  3. **Tripo 3D e Blender** para peças com cara de escritório real, **só depois de perguntar
+  3. **Tripo 3D e Blender** para peças com cara de ambiente administrativo real, **só depois de perguntar
      ao dono e ele aprovar o gasto** de cada lote de gerações, com a lista do que gerar e a
      estimativa de créditos. Os arquivos gerados passam pela conferência automática de
      escala, eixos e níveis de detalhe proposta no backlog.
@@ -225,9 +238,9 @@ linha, sem mudar o relatório dos modelos atuais.
 O Lean Office é o caso mais natural para o app Seis Sigma, porque muitos projetos de melhoria
 em empresas são administrativos:
 
-- **Modelos de projeto** no app: "Kaizen de escritório" (5 dias) e "DMAIC transacional", com
-  os entregáveis e checklists ajustados (VSM de escritório, %C&A medido, mapa de raias).
-- **Importar o modelo da linha** gera o VSM de escritório, as raias e o SIPOC com o
+- **Modelos de projeto** no app: "Kaizen administrativo" (5 dias) e "DMAIC transacional",
+  com os entregáveis e checklists ajustados (VSM administrativo, %C&A medido, mapa de raias).
+- **Importar o modelo da linha** gera o VSM administrativo, as raias e o SIPOC com o
   vocabulário (seção 3.1 do plano Seis Sigma, sem novidade de formato).
 - **Medir**: os KPIs da seção 1.5 viram características do projeto, com dado real (exportado
   do sistema de chamados ou de fluxo de trabalho da empresa em CSV), simulado ou do gêmeo.
@@ -240,13 +253,17 @@ em empresas são administrativos:
 
 ### 1.9 Modelos prontos e exemplos
 
-| Modelo | O que mostra |
-|---|---|
-| Aprovação de compras | três níveis de aprovação por valor, devoluções, reunião semanal do comitê, efeito de alçadas maiores |
-| Contas a pagar | lote diário de notas, conferência com erro, espera por informação do fornecedor, horário e fechamento do mês |
-| Central de solicitações | chegadas por hora, triagem por tipo, níveis 1 e 2, SLA por prioridade, interrupções |
-| Admissão de funcionário | passagens entre RH, TI, financeiro e gestor; espera por documentos do candidato |
-| Tutorial "do mapa ao modelo" | montar o VSM de escritório de um processo de 5 etapas, rodar e comparar com o futuro |
+Os modelos prontos cobrem áreas diferentes, para mostrar que a linha não é só de escritório.
+
+| Modelo | Área | O que mostra | Situação |
+|---|---|---|---|
+| Aprovação de compras | compras e suprimentos | três níveis de aprovação por valor, devoluções, reunião semanal do comitê, efeito de alçadas maiores | feito |
+| Contas a pagar | financeiro | lote diário de notas, conferência com erro, espera por informação do fornecedor, horário e fechamento do mês | feito |
+| Central de solicitações | TI e atendimento | chegadas por hora, triagem por tipo, níveis 1 e 2, SLA por prioridade, atendentes em multitarefa (as interrupções esperam a preempção) | feito |
+| Admissão de funcionário | RH | passagens entre RH, TI, financeiro e gestor; espera por documentos do candidato | feito |
+| Pedido ao faturamento | comercial e fiscal | trabalho em sistema (ninguém anda), crédito com espera pelo cliente, faturamento em lote, conferência fiscal | feito |
+| Tutorial "do mapa ao modelo" | financeiro (reembolso) | montar o VSM administrativo de um processo de 5 etapas, rodar e comparar com o futuro | feito |
+| Próximos candidatos | jurídico, serviço público, secretaria acadêmica, contas a receber, pós-venda | contratos com revisão jurídica; protocolo e licença com prazos legais; matrícula e emissão de documentos com pico sazonal; cobrança; troca e garantia | a fazer |
 
 ---
 
@@ -308,13 +325,13 @@ infraestrutura do Lean Office, a multitarefa e a disciplina por rótulo), depois
 | 4 | Disciplina de fila por rótulo (prioridade, prazo) | 4–6 | Sonnet | nada |
 | 5 | Métricas por item: visitas e touch time (opcionais) | 6–8 | Opus | nada |
 | 6 | KPIs do Lean Office e relatório HTML da linha | 12–16 | Opus (definições) + Sonnet (relatório) | 3, 5 |
-| 7 | VSM de escritório e raias por área | 8–12 | Sonnet | 1, 6 |
+| 7 | VSM administrativo e raias por área | 8–12 | Sonnet | 1, 6 |
 | 8 | Comando `utsim linha` e `--linha` | 3–4 | Sonnet | 6 |
 | 9 | Mais três modelos prontos e o tutorial "do mapa ao modelo" | 8–10 | Sonnet | 3, 7 |
 | 10 | Multitarefa da pessoa com custo de troca (projeto e núcleo) | 18–26 | Opus | 5 |
 | 11 | Ativos gerados por código (mesa, armário, bandeja, pilha, divisória) e vista 2D de planta | 12–18 | Sonnet | entrega do outro agente em `godot/` |
 | 12 | Vocabulário e biblioteca da linha na interface Rust/egui | 8–12 | Sonnet | plano da interface Rust |
-| 13 | Modelos de projeto "Kaizen de escritório" e "DMAIC transacional" no app Seis Sigma | 6–8 | Sonnet | app Seis Sigma (L0 a L5) |
+| 13 | Modelos de projeto "Kaizen administrativo" e "DMAIC transacional" no app Seis Sigma | 6–8 | Sonnet | app Seis Sigma (L0 a L5) |
 | 14 | Manual da linha (capítulos com o vocabulário) | 6–8 | Sonnet | 3, 6 |
 | 15 | Conferir termos e links do manual da linha | 1–2 | Haiku | 14 |
 | 16 | Lote de ativos com Tripo 3D e Blender (cadeira, computador, impressora, pessoas sentadas) | 6–10 mais créditos | Sonnet | **aprovação do gasto pelo dono** |
@@ -323,10 +340,10 @@ infraestrutura do Lean Office, a multitarefa e a disciplina por rótulo), depois
 (primeira entrega útil). Campos `line`, `preset`, `department` e `symbol` no modelo; crate `utsim-linhas` com o leitor e a validação dos
 pacotes e `utsim_edit::preset`; pacote `linhas/lean_office/` com as 12 predefinições e o
 vocabulário; `order: Desc/Asc("rótulo")` na `Queue`; métricas opcionais por item no núcleo
-(`Simulation::enable_item_log`); indicadores e relatório HTML da linha; VSM de escritório e
+(`Simulation::enable_item_log`); indicadores e relatório HTML da linha; VSM administrativo e
 raias por departamento; `utsim linha` (módulo `crates/utsim-cli/src/linha.rs` com o seu
 próprio leitor de argumentos) e `utsim run --linha`; modelo pronto
-`examples/aprovacao_de_compras.ron`; capítulo `docs/manual/src/linhas/lean-office.md`.
+`examples/aprovacao_de_compras.ron`; capítulo do manual da linha.
 Próximos: passos 9 a 16 (a multitarefa, 10, na segunda entrega).
 
 **Passo 10 feito em 2026-11-03** (o dono pediu a multitarefa antes dos outros passos da
@@ -361,6 +378,35 @@ segunda entrega). Como ficou o projeto:
   29, 9 trocas), conservação do tempo da pessoa e dos casos, touch time igual ao trabalho,
   `max_open: 1` igual a nenhum, validação.
 
+**Passos 9, 14 e 15 feitos em 2026-11-03.** Com o 10, a segunda entrega fica completa no que
+não depende de outras frentes; os passos 11 (ativos e vista 2D, depois de `godot/`), 12
+(vocabulário e biblioteca na interface Rust) e 13 (modelos de projeto no app Seis Sigma)
+esperam as frentes deles, e o 16 espera a aprovação do gasto.
+
+- **Passo 9.** Três modelos prontos da seção 1.9, só com predefinições e com golden novos:
+  `examples/contas_a_pagar.ron` (lote diário, conferência, espera pelo fornecedor, pagamento
+  parado no fechamento do mês por um calendário de quatro semanas),
+  `examples/central_de_solicitacoes.ron` (chegadas por hora com `schedule`, triagem por tipo,
+  níveis 1 e 2, prazo por prioridade e atendentes do nível 1 em multitarefa; as interrupções
+  continuam à espera da preempção do plano de chegadas) e
+  `examples/admissao_de_funcionario.ron` (passagens entre RH, Candidato, TI, Financeiro e
+  Gestor, espera pelos documentos, lote de acessos). O tutorial "do mapa ao modelo" monta o
+  reembolso de despesas (cinco etapas) com `utsim linha lean_office colocar`, liga, roda e
+  compara com o estado futuro (`examples/reembolso_atual.ron` e `reembolso_futuro.ron`: lead
+  time de cerca de 9,4 h para menos de 1 h com o mesmo touch time). Todos entram na lista
+  `models` da biblioteca.
+- **Passo 14.** O capítulo único virou a pasta `docs/manual/src/linhas/lean-office/`, como
+  previa a seção 0.1: visão geral, biblioteca, multitarefa, indicadores e relatório, modelos
+  prontos, tutorial e pacote da linha, escritos com o vocabulário da linha.
+- **Passo 15.** Feito como teste automático, não como revisão única:
+  `crates/utsim-linhas/tests/manual_da_linha.rs` confere que nenhum termo geral do UTSim
+  (as chaves do vocabulário que são palavras, como "item" e "operador", e os nomes dos
+  objetos do núcleo em português) sobra no texto dos capítulos fora do código, que todo link
+  leva a um arquivo e a uma seção que existem e que todo capítulo está no sumário; e
+  `crates/utsim-cli/tests/linha.rs` roda os comandos do tutorial e confere que montam
+  exatamente `examples/reembolso_atual.ron`. O termo de "setup" no vocabulário passou a
+  "preparando ou trocando de caso", por causa da multitarefa.
+
 **Nome do campo de departamento.** O plano chamava o campo do objeto de `area`. Na integração
 com a fase 1, o modelo ganhou a lista `areas` (áreas de piso com posição e tamanho: sala de
 espera, local de pausa, casa do transportador), e `home_at` e `break_at` procuram nomes entre
@@ -369,9 +415,15 @@ então o campo passou a se chamar `department` (opção `--departamento` em `uts
 colocar`). Onde este plano diz "campo `area`" ou "área por objeto", leia `department`; as
 `areas` do modelo seguem sendo só lugares no piso.
 
+**Escopo administrativo (2026-11-03).** Junto com os passos 9, 14 e 15, a linha passou a
+tratar processos administrativos em geral (seção 1.1): subtítulo "processos administrativos"
+na biblioteca (`Library::title`), descrições das predefinições sem supor um lugar, relatório
+com o "mapa do fluxo de valor do processo administrativo", manual e plano reescritos, e o
+quinto modelo pronto, `examples/pedido_ao_faturamento.ron` (comercial e fiscal, em sistema).
+
 **Primeira entrega útil** (passos 1 a 8): o dono abre o modelo de aprovação de compras com o
 vocabulário, roda e recebe o relatório com lead time, touch time, razão de atividade, %C&A,
-FPY, WIP e SLA, mais o VSM de escritório e as raias. São 55–78 h, sem tocar em `godot/` nem em
+FPY, WIP e SLA, mais o VSM administrativo e as raias. São 55–78 h, sem tocar em `godot/` nem em
 `crates/utsim-godot`. A multitarefa (10) entra na segunda entrega, junto com as interrupções
 (E2 e E4 do plano de chegadas). Total dos passos 1 a 15: 114–162 h, mais o passo 16 se
 aprovado.
@@ -399,16 +451,18 @@ aprovado.
 | RF-270 | O modelo pode indicar a sua linha (`line`) e cada objeto a sua predefinição (`preset`) e a sua área (`area`), sem efeito na simulação |
 | RF-271 | A linha Lean Office representa casos, caixas de entrada, postos, aprovações, verificações, tramitações, esperas por informação, lotes, reuniões, equipes e pessoas por predefinições de objetos do núcleo |
 | RF-272 | A linha Lean Office calcula lead time, tempo de processamento, touch time, razão de atividade, %C&A por etapa, FPY, WIP de casos, % dentro do SLA, ocupação das pessoas e espera por causa, com intervalo de confiança |
-| RF-273 | A linha Lean Office gera o VSM de escritório (atual e futuro) e o fluxograma de raias por departamento a partir do modelo e da rodada |
+| RF-273 | A linha Lean Office gera o VSM administrativo (atual e futuro) e o fluxograma de raias por departamento a partir do modelo e da rodada |
 | RF-274 | As filas aceitam ordem por rótulo (prioridade ou prazo) |
 | RF-275 | Uma pessoa pode ter vários casos abertos ao mesmo tempo, com custo de troca entre eles (feito: `multitask` do `Transporter`) |
-| RF-276 | O UTSim Seis Sigma oferece modelos de projeto de Kaizen de escritório e DMAIC transacional ligados à linha Lean Office |
+| RF-276 | O UTSim Seis Sigma oferece modelos de projeto de Kaizen administrativo e DMAIC transacional ligados à linha Lean Office |
 
 ---
 
 ## 6. Decisões do dono
 
 **Decididas em 2026-11-03:** o dono aceitou todas as propostas de L1 a L9. Em L3, como a linha é um pacote do mesmo programa (L1), o nome exibido é "Lean Office" dentro do UTSim.
+
+**Escopo, 2026-11-03:** o Lean Office cobre processos administrativos em geral, não só escritórios (seção 1.1). O nome exibido continua "Lean Office", com o subtítulo "processos administrativos"; vocabulário, descrições e predefinições não supõem um lugar; os modelos prontos cobrem áreas diferentes.
 
 1. **L1 Linha como pacote no mesmo programa** (proposta) ou como edição separada com binário
    próprio. A proposta mantém um só núcleo e uma só instalação, com entrada própria no launcher.

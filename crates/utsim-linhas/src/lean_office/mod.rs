@@ -429,7 +429,7 @@ impl Indicadores {
             .collect();
         Ok(Indicadores {
             modelo: model.name.clone(),
-            linha: pack.map_or_else(|| "Lean Office".to_string(), |p| p.library.name.clone()),
+            linha: pack.map_or_else(|| "Lean Office".to_string(), |p| p.library.title()),
             stats_from: reports.first().map_or(0.0, |r| r.stats_from),
             end_time: reports.first().map_or(0.0, |r| r.end_time),
             reps,
