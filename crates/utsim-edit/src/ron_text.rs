@@ -7,7 +7,9 @@
 use std::collections::BTreeMap;
 
 use utsim_core::{Dist, Downtime, OutputRule, ShiftTable};
-use utsim_model::{ArrivalSchedule, DowntimeDef, PeriodArrivals, ShiftSpec};
+use utsim_model::{
+    ArrivalSchedule, ArrivalTable, DowntimeDef, PeriodArrivals, ShiftSpec, TableRepeat,
+};
 
 pub fn float(v: f64) -> String {
     format!("{v:?}")
@@ -258,6 +260,35 @@ pub fn schedule(s: &ArrivalSchedule) -> String {
     format!("(cycle: {}, periods: {periods})", float(s.cycle))
 }
 
+/// A source's `table` (defaults left out, as the model writes them).
+pub fn table(t: &ArrivalTable) -> String {
+    let rows = list(&t.rows, |r| {
+        let mut parts = Vec::new();
+        if let Some(at) = r.at {
+            parts.push(format!("at: {}", float(at)));
+        }
+        parts.push(format!("count: {}", r.count));
+        if let Some(ty) = &r.item_type {
+            parts.push(format!("item_type: {}", string(ty)));
+        }
+        if !r.labels.is_empty() {
+            let entries: Vec<String> = r
+                .labels
+                .iter()
+                .map(|(k, v)| format!("{}: {}", string(k), float(*v)))
+                .collect();
+            parts.push(format!("labels: {{{}}}", entries.join(", ")));
+        }
+        format!("({})", parts.join(", "))
+    });
+    let repeat = match t.repeat {
+        TableRepeat::Once => String::new(),
+        TableRepeat::Cycle(d) => format!(", repeat: Cycle({})", float(d)),
+        TableRepeat::Loop => ", repeat: Loop".into(),
+    };
+    format!("(mode: {:?}{repeat}, rows: {rows})", t.mode)
+}
+
 pub fn batch(size: usize, max_wait: f64, flush: bool) -> String {
     format!(
         "(size: {size}, max_wait: {}, flush: {flush})",
@@ -330,5 +361,53 @@ mod tests {
         assert_eq!(parse::<Vec<f64>>(&floats(&[1.0, 0.5])).unwrap(), [1.0, 0.5]);
         assert_eq!(parse::<String>(&string("a \"b\"")).unwrap(), "a \"b\"");
         assert!(parse::<Dist>("Exp(").is_err());
+    }
+
+    #[test]
+    fn arrival_tables_read_back_unchanged() {
+        use utsim_model::{ArrivalRow, TableMode};
+        let tables = [
+            ArrivalTable {
+                mode: TableMode::Times,
+                repeat: TableRepeat::Cycle(1440.0),
+                rows: vec![
+                    ArrivalRow {
+                        at: Some(480.0),
+                        count: 12,
+                        item_type: Some("caixa".into()),
+                        labels: BTreeMap::from([("prioridade".to_string(), 2.5)]),
+                    },
+                    ArrivalRow {
+                        at: Some(600.0),
+                        count: 0,
+                        item_type: None,
+                        labels: BTreeMap::new(),
+                    },
+                ],
+            },
+            ArrivalTable {
+                mode: TableMode::Sequence,
+                repeat: TableRepeat::Loop,
+                rows: vec![ArrivalRow {
+                    at: None,
+                    count: 3,
+                    item_type: None,
+                    labels: BTreeMap::new(),
+                }],
+            },
+            ArrivalTable {
+                mode: TableMode::Sequence,
+                repeat: TableRepeat::Once,
+                rows: Vec::new(),
+            },
+        ];
+        for t in tables {
+            assert_eq!(
+                parse::<ArrivalTable>(&table(&t)).unwrap(),
+                t,
+                "{}",
+                table(&t)
+            );
+        }
     }
 }

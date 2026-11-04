@@ -7777,6 +7777,7 @@ name = "utsim-godot"
 version = "0.1.0"
 dependencies = [
  "egui",
+ "egui_plot",
  "godot",
  "ron 0.8.1",
  "serde",
@@ -7861,8 +7862,12 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "utsim-core",
+ "utsim-diagram",
+ "utsim-launcher-core",
  "utsim-lss-core",
  "utsim-lss-store",
+ "utsim-model",
  "winresource",
 ]
 
@@ -7876,6 +7881,8 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "utsim-core",
+ "utsim-diagram",
+ "utsim-model",
  "utsim-pert",
  "utsim-quality",
  "utsim-stats",
