@@ -522,6 +522,10 @@ pub struct TollgateRecord {
     pub approved_on: Option<Date>,
     /// The verified checklist items and whether the app finds them satisfied.
     pub verified: Vec<(String, bool)>,
+    /// Hash of the deliverables frozen at the approval (empty when not approved).
+    pub frozen_hash: String,
+    /// Approved, but the deliverables changed since the approval.
+    pub changed_after_approval: bool,
 }
 
 /// A tool deliverable of a project.
@@ -553,6 +557,8 @@ pub struct ProjectRecord {
     pub belts: Vec<Id>,
     pub champions: Vec<Id>,
     pub sponsors: Vec<Id>,
+    /// Everyone with a role in the project (team members included).
+    pub members: Vec<Id>,
     pub opened_on: Option<Date>,
     pub closed_on: Option<Date>,
     pub totals: Totals,
@@ -634,6 +640,9 @@ pub fn record(
                 None
             },
             verified,
+            frozen_hash: tg.frozen_hash.clone(),
+            changed_after_approval: tollgate::changed_after_approval(state, &tg)
+                .is_some_and(|c| !c.is_empty()),
         });
     }
     tgs.sort_by_key(|t| (t.phase_index, t.id));
@@ -691,6 +700,15 @@ pub fn record(
         belts: sum.belts,
         champions: crate::roles::holders(state, project, RoleKind::Champion),
         sponsors: crate::roles::holders(state, project, RoleKind::Sponsor),
+        members: {
+            let mut m: Vec<Id> = crate::roles::roles(state, project)
+                .into_iter()
+                .filter_map(|r| r.person)
+                .collect();
+            m.sort();
+            m.dedup();
+            m
+        },
         opened_on: created,
         closed_on: e
             .opt_text(crate::closure::fields::CLOSED_ON)
@@ -1188,6 +1206,14 @@ pub enum AgendaLine {
         level: Option<BeltLevel>,
         target: f64,
         actual: f64,
+    },
+    /// A trainee of a green or black belt class who still needs a certification project
+    /// (stage L7, `crate::formacao::certification_requests`), with the candidate
+    /// opportunity of the nomination when there is one.
+    CertificationProject {
+        person: Id,
+        level: BeltLevel,
+        opportunity: Option<Id>,
     },
 }
 

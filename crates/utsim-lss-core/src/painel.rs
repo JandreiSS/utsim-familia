@@ -605,6 +605,8 @@ mod tests {
             submitted_on: None,
             approved_on: approved,
             verified: vec![],
+            frozen_hash: String::new(),
+            changed_after_approval: false,
         }
     }
 

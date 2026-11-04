@@ -189,6 +189,16 @@ pub enum Action {
     ViewScoreboard,
     ViewReviewQueue,
     Comment,
+    // Stage L7 (section 8.5).
+    /// Waves, classes, curriculum, nomination criteria, groups, instructors and the
+    /// certification requirements.
+    ManageTraining,
+    /// Selecting trainees and the waiting list (and the MBB's override of a manager).
+    SelectTrainees,
+    /// Sessions, attendance, exams, grading.
+    Teach,
+    /// Issuing, renewing and revoking certifications, the MBB's opinion.
+    Certify,
 }
 
 impl Action {
@@ -219,7 +229,7 @@ pub fn allowed(p: Profile, a: Action) -> bool {
         ),
         Profile::Belt => matches!(a, RecordCoaching | Comment),
         Profile::Controller => matches!(a, ValidateSavings | ViewScoreboard | Comment),
-        Profile::Instructor => matches!(a, RecordLearning | Comment),
+        Profile::Instructor => matches!(a, RecordLearning | Teach | Comment),
         Profile::Leadership => matches!(a, ViewLeadership | Comment),
         Profile::Student => matches!(a, Comment),
     }
@@ -361,6 +371,56 @@ pub fn required(
             }
         }
         Kind::TollgateReview => Action::ReviewTollgate,
+        Kind::Wave
+        | Kind::TrainingClass
+        | Kind::CurriculumModule
+        | Kind::NominationCriterion
+        | Kind::TrainingGroup
+        | Kind::Instructor
+        | Kind::CertificationRequirement => Action::ManageTraining,
+        Kind::ClassSession | Kind::Exam => Action::Teach,
+        Kind::Certification => Action::Certify,
+        Kind::Nomination => {
+            use crate::formacao::{NominationStatus, fields as nf};
+            let person = id_of(nf::PERSON);
+            let manager = id_of(nf::MANAGER);
+            if matches!(
+                field,
+                nf::MANAGER_APPROVAL | nf::MANAGER_ON | nf::MANAGER_REASON
+            ) {
+                // The manager decides (never the nominee); the MBB may override.
+                if manager == Some(author) && person != Some(author) {
+                    return None;
+                }
+                Action::SelectTrainees
+            } else if matches!(
+                field,
+                nf::STATUS
+                    | nf::CLASS
+                    | nf::POSITION
+                    | nf::STATUS_REASON
+                    | nf::DECIDED_BY
+                    | nf::DECIDED_ON
+            ) {
+                // The person may withdraw; the rest is the MBB's selection.
+                let withdrawing = lookup(entity, nf::STATUS)
+                    .and_then(|v| serde_json::from_value::<NominationStatus>(v).ok())
+                    == Some(NominationStatus::Withdrawn);
+                if person == Some(author)
+                    && withdrawing
+                    && matches!(field, nf::STATUS | nf::STATUS_REASON)
+                {
+                    return None;
+                }
+                Action::SelectTrainees
+            } else if id_of(nf::BY).is_some_and(|b| b != author) {
+                // A nomination is changed only by who made it (or the MBB).
+                Action::SelectTrainees
+            } else {
+                // Anyone nominates (the manager, the champion or the person).
+                return None;
+            }
+        }
         Kind::CoachingLog | Kind::CoachingSession | Kind::Commitment => Action::RecordCoaching,
         _ => Action::ManageProgram,
     };
@@ -488,6 +548,113 @@ pub fn check_coaching(author: Id, belt: Id, mbbs: &[Id], edits: &[Edit]) -> Resu
         has: Vec::new(),
         out_of_scope: true,
     })
+}
+
+/// A restricted folder of the training (section 8.9): the question bank, the grades or a
+/// class folder. The staff (MBBs and instructors) write in all of them; in a class folder
+/// each trainee writes only their own answers, until they hand the paper in.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TrainingWriters {
+    pub staff: Vec<Id>,
+    /// Trainees of the class (empty for the bank and the grades).
+    pub students: Vec<Id>,
+}
+
+impl TrainingWriters {
+    /// Whether an edit (entity, field, value) of `author` may be written given the state
+    /// so far.
+    fn may(
+        &self,
+        state: &State,
+        author: Id,
+        kind: Kind,
+        entity: Id,
+        field: &str,
+        value: &Value,
+    ) -> bool {
+        use crate::formacao::{exams::fields as xf, fields as tf};
+        if field.starts_with('$') || self.staff.contains(&author) {
+            return true;
+        }
+        if kind == Kind::Person && entity == author && SELF_FIELDS.contains(&field) {
+            return true;
+        }
+        if kind != Kind::ExamAnswer || !self.students.contains(&author) {
+            return false;
+        }
+        let me = Value::from(author.to_string());
+        let existing = state.entity(entity);
+        if existing.is_some_and(|e| e.get(xf::SUBMITTED_ON).is_some_and(|v| !v.is_null())) {
+            return false;
+        }
+        let owner_ok = existing
+            .and_then(|e| e.get(tf::PERSON))
+            .is_none_or(|p| *p == me);
+        owner_ok && (field != tf::PERSON || *value == me)
+    }
+}
+
+/// Rebuilds a training folder's state from its authorized operations.
+pub fn replay_training<'a>(
+    ops: impl IntoIterator<Item = &'a Op>,
+    w: &TrainingWriters,
+) -> Authorized {
+    let mut out = Authorized::default();
+    for op in sorted(ops).into_values() {
+        if !w.may(
+            &out.state,
+            op.author,
+            op.entity.kind,
+            op.entity.id,
+            &op.field,
+            &op.value,
+        ) {
+            out.unauthorized.push(Unauthorized {
+                op: op.id,
+                author: op.author,
+                at_ms: op.at_ms,
+                entity: op.entity,
+                field: op.field.clone(),
+                action: Action::Teach,
+            });
+            continue;
+        }
+        let _ = out.state.apply(op);
+    }
+    out
+}
+
+/// Checks a batch for a training folder, in order (an answer's person goes first).
+pub fn check_training(
+    state: &State,
+    author: Id,
+    w: &TrainingWriters,
+    edits: &[Edit],
+) -> Result<(), Denied> {
+    let mut st = state.clone();
+    for (i, e) in edits.iter().enumerate() {
+        if !w.may(&st, author, e.entity.kind, e.entity.id, &e.field, &e.value) {
+            return Err(Denied {
+                action: Action::Teach,
+                needed: vec![Profile::Mbb, Profile::Instructor],
+                has: Vec::new(),
+                out_of_scope: true,
+            });
+        }
+        // Apply in a scratch state so the next edits see the person just written.
+        let op = Op {
+            id: Id::from_bytes([0, 0, 0, 0, 0, 0, 0x70, 0, 0x80, 0, 0, 0, 0, 0, 0, i as u8]),
+            author,
+            at_ms: 0,
+            lamport: st.max_lamport() + 1,
+            entity: e.entity,
+            field: e.field.clone(),
+            value: e.value.clone(),
+            base: None,
+        };
+        let _ = st.apply(&op);
+    }
+    Ok(())
 }
 
 /// Whether the units of the program have a champion of their own (for the screen's

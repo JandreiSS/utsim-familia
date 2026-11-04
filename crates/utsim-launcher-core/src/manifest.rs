@@ -13,6 +13,7 @@
 //! unknown to this version are ignored, so additive changes keep the same number.
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -63,7 +64,37 @@ pub struct Product {
     pub description: String,
     #[serde(default)]
     pub releases: Vec<Release>,
+    /// Accent colour of the product in the launcher, `#RRGGBB` (optional).
+    #[serde(default, rename = "cor", skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// One line under the name ("Gerenciador de projetos Lean Seis Sigma").
+    #[serde(default, rename = "subtitulo", skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// Who makes it ("UTSim").
+    #[serde(default, rename = "autor", skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// Square icon, a PNG in base64 (at most [`ICON_MAX_BYTES`] bytes once decoded).
+    #[serde(default, rename = "icone", skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Access per channel; a channel not listed is [`Access::Code`].
+    #[serde(default, rename = "acesso", skip_serializing_if = "BTreeMap::is_empty")]
+    pub access: BTreeMap<String, Access>,
 }
+
+/// Who may install the releases of a product in a channel.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Access {
+    /// Only testers with an access code wrapped into the package (the default).
+    #[default]
+    #[serde(rename = "Codigo")]
+    Code,
+    /// Anyone with the manifest: the content key of each package is published in it.
+    #[serde(rename = "Aberto")]
+    Open,
+}
+
+/// Largest icon accepted in a manifest (decoded PNG bytes).
+pub const ICON_MAX_BYTES: usize = 256 * 1024;
 
 /// One version of a product in one channel.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -103,6 +134,14 @@ pub struct Package {
     /// The content key, wrapped for each tester allowed to install this package.
     #[serde(default)]
     pub wraps: Vec<WrappedKey>,
+    /// The content key itself, base64, when the package was published open to everyone
+    /// ([`Access::Open`]). Anyone who reads the manifest can then decrypt the package.
+    #[serde(
+        default,
+        rename = "chave_aberta",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub open_key: Option<String>,
 }
 
 impl Manifest {
@@ -170,6 +209,14 @@ impl Manifest {
                     p.id
                 )));
             }
+            if let Some(c) = &p.color {
+                if parse_color(c).is_none() {
+                    return Err(Error::Format(format!(
+                        "cor inválida '{c}' em {} (use #RRGGBB)",
+                        p.id
+                    )));
+                }
+            }
             for r in &p.releases {
                 if !valid_version(&r.version) {
                     return Err(Error::Format(format!(
@@ -201,6 +248,21 @@ impl Manifest {
 }
 
 impl Product {
+    /// Access of `channel` (default: with code).
+    pub fn access(&self, channel: &str) -> Access {
+        self.access.get(channel).copied().unwrap_or_default()
+    }
+
+    /// The icon's PNG bytes, if the manifest has one of an acceptable size.
+    pub fn icon_png(&self) -> Option<Vec<u8>> {
+        use base64::Engine as _;
+        let text = self.icon.as_deref()?.trim();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(text)
+            .ok()?;
+        (bytes.len() <= ICON_MAX_BYTES && bytes.starts_with(b"\x89PNG")).then_some(bytes)
+    }
+
     /// Releases a tester following `channel` sees, newest first. The stable channel is
     /// always included.
     pub fn visible(&self, channel: &str) -> Vec<&Release> {
@@ -241,6 +303,25 @@ impl Release {
     pub fn package(&self, platform: &str) -> Option<&Package> {
         self.packages.iter().find(|p| p.platform == platform)
     }
+}
+
+impl Package {
+    /// Published open to everyone (no code needed).
+    pub fn is_open(&self) -> bool {
+        self.open_key
+            .as_deref()
+            .is_some_and(|k| !k.trim().is_empty())
+    }
+}
+
+/// `#RRGGBB` (or `RRGGBB`) to its three bytes.
+pub fn parse_color(text: &str) -> Option<[u8; 3]> {
+    let h = text.trim().trim_start_matches('#');
+    if h.len() != 6 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some([byte(0)?, byte(2)?, byte(4)?])
 }
 
 fn check_format(found: u64, supported: u32) -> Result<()> {
@@ -404,6 +485,7 @@ mod tests {
                     ..Release::default()
                 },
             ],
+            ..Product::default()
         });
         m
     }
@@ -501,6 +583,125 @@ mod tests {
         );
         assert!(p.latest(STABLE, "linux-x64").is_none());
         assert_eq!(p.channels(), vec![STABLE.to_string(), TESTING.to_string()]);
+    }
+
+    /// A body written by the first launcher (no appearance, no access fields).
+    const OLD_BODY: &str = r#"{
+  "format": 1,
+  "sequence": 4,
+  "published_at": "2026-11-02T12:00:00Z",
+  "products": [
+    {
+      "id": "utsim",
+      "name": "UTSim",
+      "description": "Editor",
+      "releases": [
+        {
+          "version": "0.1.0",
+          "channel": "estavel",
+          "executable": "bin/utsim-view.exe",
+          "packages": [
+            {"platform": "windows-x64", "size": 10, "sha256": "00",
+             "cipher": "xchacha20poly1305-stream-v1", "wraps": []}
+          ]
+        }
+      ]
+    }
+  ]
+}"#;
+
+    fn envelope(sk: &SigningKey, body: &str) -> String {
+        serde_json::json!({
+            "envelope": 1,
+            "key_id": signature::key_id(&sk.verifying_key()),
+            "signature": signature::sign(sk, body.as_bytes()),
+            "body": body,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn old_manifests_still_parse_and_verify() {
+        let sk = signature::generate().unwrap();
+        let m = Manifest::from_signed(&envelope(&sk, OLD_BODY), &[sk.verifying_key()]).unwrap();
+        let p = m.product("utsim").unwrap();
+        assert_eq!(p.color, None);
+        assert_eq!(p.subtitle, None);
+        assert_eq!(p.icon_png(), None);
+        assert_eq!(p.access(STABLE), Access::Code);
+        assert!(!p.releases[0].packages[0].is_open());
+        // Re-signing it writes none of the new fields: an old launcher reads the same body.
+        let text = m.to_signed(&sk).unwrap();
+        let env: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let body = env["body"].as_str().unwrap();
+        for field in [
+            "cor",
+            "subtitulo",
+            "autor",
+            "icone",
+            "acesso",
+            "chave_aberta",
+        ] {
+            assert!(!body.contains(field), "{field} em {body}");
+        }
+    }
+
+    #[test]
+    fn new_fields_roundtrip_and_old_readers_ignore_them() {
+        use base64::Engine as _;
+        let sk = signature::generate().unwrap();
+        let mut m = sample();
+        let png = b"\x89PNG\r\n\x1a\nresto".to_vec();
+        {
+            let p = &mut m.products[0];
+            p.color = Some("#7FD1FF".into());
+            p.subtitle = Some("Simulação de processos".into());
+            p.author = Some("UTSim".into());
+            p.icon = Some(base64::engine::general_purpose::STANDARD.encode(&png));
+            p.access.insert(TESTING.into(), Access::Open);
+            p.releases[1].packages[0].open_key = Some("chave".into());
+        }
+        let text = m.to_signed(&sk).unwrap();
+        let back = Manifest::from_signed(&text, &[sk.verifying_key()]).unwrap();
+        assert_eq!(back, m);
+        let p = back.product("utsim").unwrap();
+        assert_eq!(p.icon_png(), Some(png));
+        assert_eq!(p.access(TESTING), Access::Open);
+        assert_eq!(p.access(STABLE), Access::Code);
+        assert!(p.releases[1].packages[0].is_open());
+        assert_eq!(
+            parse_color(p.color.as_deref().unwrap()),
+            Some([0x7f, 0xd1, 0xff])
+        );
+
+        // The first launcher's types (no new fields) still read the new body.
+        #[derive(Deserialize)]
+        struct OldProduct {
+            id: String,
+        }
+        #[derive(Deserialize)]
+        struct OldBody {
+            format: u32,
+            products: Vec<OldProduct>,
+        }
+        let env: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let old: OldBody = serde_json::from_str(env["body"].as_str().unwrap()).unwrap();
+        assert_eq!((old.format, old.products[0].id.as_str()), (1, "utsim"));
+    }
+
+    #[test]
+    fn bad_colours_and_icons_are_handled() {
+        let sk = signature::generate().unwrap();
+        let mut m = sample();
+        m.products[0].color = Some("azul".into());
+        assert!(m.to_signed(&sk).is_err());
+        assert_eq!(parse_color("#12345"), None);
+        assert_eq!(parse_color("3d8bfd"), Some([0x3d, 0x8b, 0xfd]));
+        // An icon that is not a PNG is ignored, not an error.
+        m.products[0].color = None;
+        m.products[0].icon = Some("bm90IGEgcG5n".into());
+        let back = Manifest::from_signed(&m.to_signed(&sk).unwrap(), &[sk.verifying_key()]);
+        assert_eq!(back.unwrap().products[0].icon_png(), None);
     }
 
     #[test]
