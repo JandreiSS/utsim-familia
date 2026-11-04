@@ -71,7 +71,7 @@ fn fetch_and_install(
         cancel: &stop,
     };
     download(t, &job, &mut |_| {})?;
-    install::install(layout, "utsim", release, pkg, code, &file)
+    install::install(layout, "utsim", release, pkg, Some(code), &file)
 }
 
 #[test]
