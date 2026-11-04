@@ -58,6 +58,10 @@ pub mod revisao;
 pub mod certificacao;
 pub mod formacao;
 
+// Stage L4, integration with the UTSim model (`docs/plano_lean_seis_sigma.md`, 3).
+pub mod dados;
+pub mod simulacao;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};
