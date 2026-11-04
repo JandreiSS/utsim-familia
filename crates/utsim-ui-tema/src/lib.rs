@@ -241,6 +241,12 @@ pub fn install_style(ctx: &Context) {
     ctx.set_style_of(egui::Theme::Light, s);
 }
 
+#[cfg(feature = "familia")]
+pub mod familia;
+
+#[cfg(feature = "captura")]
+pub mod captura;
+
 /// Widgets with the UTSim look that egui does not have.
 pub mod widgets {
     use egui::{Button, CornerRadius, Response, RichText, Stroke, Ui, Widget};
