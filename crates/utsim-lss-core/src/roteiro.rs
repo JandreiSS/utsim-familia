@@ -248,7 +248,7 @@ pub const PHASES: [Phase; 5] = [
                 purpose: "Comparar a solução com a situação atual no modelo, com repetições.",
                 tools: &[
                     t("Estudo de cenários", Screen("modelo")),
-                    t("Planejamento de experimentos", Soon),
+                    t("Planejamento de experimentos", Screen("experimentos")),
                 ],
                 check: None,
             },
@@ -401,6 +401,7 @@ mod tests {
             "msa_vies",
             "msa_linearidade",
             "msa_atributos",
+            "experimento_fatorial",
         ];
         for t in all_tools() {
             match t.target {

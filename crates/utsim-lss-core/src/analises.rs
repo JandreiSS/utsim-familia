@@ -18,6 +18,7 @@ use utsim_quality::charts::{self, ChartData, ChartKind};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
 use utsim_stats::descriptive::{self, QuantileMethod};
+use utsim_stats::doe;
 use utsim_stats::hypothesis::{self, Alternative};
 use utsim_stats::nonparametric::{self, RankMethod};
 
@@ -143,6 +144,14 @@ pub enum Recipe {
         response: usize,
         standard: Option<usize>,
     },
+    /// Two-level factorial experiment: the factor columns (coded `-1/0/+1` or actual
+    /// levels), the response and the highest order of the interactions in the model.
+    #[serde(rename = "experimento_fatorial")]
+    Factorial {
+        factors: Vec<usize>,
+        response: usize,
+        order: usize,
+    },
 }
 
 impl Recipe {
@@ -166,6 +175,7 @@ impl Recipe {
             Recipe::Bias { .. } => "MSA: viés",
             Recipe::Linearity { .. } => "MSA: linearidade",
             Recipe::Attribute { .. } => "MSA: concordância de atributos",
+            Recipe::Factorial { .. } => "Experimento fatorial 2^k",
         }
     }
 
@@ -196,6 +206,22 @@ pub struct Outcome {
     pub signals: Vec<usize>,
     #[serde(rename = "avisos", default)]
     pub notes: Vec<String>,
+    /// Further charts (effects of an experiment).
+    #[serde(rename = "graficos", default)]
+    pub plots: Vec<Plot>,
+}
+
+/// A chart of a result: bars (one series) or lines, over labelled points.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Plot {
+    #[serde(rename = "titulo")]
+    pub title: String,
+    #[serde(rename = "barras")]
+    pub bars: bool,
+    #[serde(rename = "rotulos")]
+    pub labels: Vec<String>,
+    #[serde(rename = "series")]
+    pub series: Vec<(String, Vec<f64>)>,
 }
 
 impl Outcome {
@@ -788,6 +814,168 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 None => "sem kappa: precisa de ao menos dois avaliadores ou repetições".to_string(),
             };
             o.notes = a.warnings.clone();
+        }
+        Recipe::Factorial {
+            factors,
+            response,
+            order,
+        } => {
+            if factors.len() < 2 {
+                return Err("escolha ao menos dois fatores".into());
+            }
+            let num = |r: &Vec<String>, c: usize| {
+                r.get(c)
+                    .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+            };
+            let mut cols: Vec<Vec<f64>> = vec![Vec::new(); factors.len()];
+            let mut y = Vec::new();
+            for r in &t.rows {
+                let (Some(v), Some(xs)) = (
+                    num(r, *response),
+                    factors
+                        .iter()
+                        .map(|c| num(r, *c))
+                        .collect::<Option<Vec<f64>>>(),
+                ) else {
+                    continue;
+                };
+                y.push(v);
+                for (c, x) in cols.iter_mut().zip(xs) {
+                    c.push(x);
+                }
+            }
+            if y.len() < 4 {
+                return Err(
+                    "o experimento precisa de ao menos 4 corridas com a resposta preenchida".into(),
+                );
+            }
+            for (i, c) in cols.iter_mut().enumerate() {
+                let coded = c.iter().all(|v| [-1.0, 0.0, 1.0].contains(v));
+                if !coded {
+                    *c = doe::code(c)
+                        .ok_or_else(|| format!("o fator {} tem um só nível", doe::letter(i)))?;
+                }
+            }
+            let x: Vec<Vec<f64>> = (0..y.len())
+                .map(|r| cols.iter().map(|c| c[r]).collect())
+                .collect();
+            let a = doe::analyze(&x, &y, (*order).max(1), LEVEL)?;
+            let k = factors.len();
+            let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+            let name = |i: usize| {
+                let h = header(factors[i]);
+                if h == doe::letter(i).to_string() {
+                    let real = header(factors[k - 1] + 1 + i);
+                    if !real.is_empty() {
+                        return real;
+                    }
+                }
+                h
+            };
+            o.notes.push(
+                (0..k)
+                    .map(|i| format!("{} = {}", doe::letter(i), name(i)))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            );
+            o.put("corridas", a.n as f64);
+            o.put("média", a.mean);
+            o.put("R²", a.r2);
+            for e in &a.effects {
+                let n = doe::term_name(e.term);
+                o.put(&format!("efeito {n}"), e.effect);
+                if let Some(p) = e.p_value {
+                    o.put(&format!("valor-p {n}"), p);
+                }
+            }
+            if let Some(c) = a.curvature {
+                o.put("curvatura", c);
+                if let Some(p) = a
+                    .anova
+                    .iter()
+                    .find(|l| l.source == "curvatura")
+                    .and_then(|l| l.p_value)
+                {
+                    o.put("valor-p curvatura", p);
+                }
+            }
+            if let Some(l) = &a.lenth {
+                o.put("PSE de Lenth", l.pse);
+                o.put("margem de erro de Lenth", l.me);
+                o.notes.push(
+                    "sem grau de liberdade para o erro: os valores-p vêm do pseudo erro padrão de Lenth"
+                        .into(),
+                );
+            }
+            for (m, f) in &a.confounded {
+                o.notes.push(if *f == 0 {
+                    format!("{} confundido com a média", doe::term_name(*m))
+                } else {
+                    format!(
+                        "{} confundido com {}",
+                        doe::term_name(*m),
+                        doe::term_name(*f)
+                    )
+                });
+            }
+            let active: Vec<String> = a
+                .effects
+                .iter()
+                .filter(|e| e.p_value.is_some_and(|p| p < ALPHA))
+                .map(|e| doe::term_name(e.term))
+                .collect();
+            o.verdict = if active.is_empty() {
+                "nenhum termo ativo a 5 %".to_string()
+            } else {
+                format!("termos ativos a 5 %: {}", active.join(", "))
+            };
+            if a.anova
+                .iter()
+                .any(|l| l.source == "curvatura" && l.p_value.is_some_and(|p| p < ALPHA))
+            {
+                o.verdict
+                    .push_str("; curvatura significativa: a resposta não é linear entre os níveis");
+            }
+            // Pareto of the effects, main effects and the interactions in the model.
+            let mut by: Vec<&doe::Effect> = a.effects.iter().collect();
+            by.sort_by(|p, q| q.effect.abs().total_cmp(&p.effect.abs()));
+            o.plots.push(Plot {
+                title: "Pareto dos efeitos (valor absoluto)".into(),
+                bars: true,
+                labels: by.iter().map(|e| doe::term_name(e.term)).collect(),
+                series: vec![(
+                    "|efeito|".into(),
+                    by.iter().map(|e| e.effect.abs()).collect(),
+                )],
+            });
+            o.plots.push(Plot {
+                title: "Efeitos principais".into(),
+                bars: false,
+                labels: vec!["baixo (−1)".into(), "alto (+1)".into()],
+                series: (0..k)
+                    .map(|i| {
+                        let (lo, hi) = doe::main_effect_means(&x, &y, i);
+                        (format!("{} {}", doe::letter(i), name(i)), vec![lo, hi])
+                    })
+                    .collect(),
+            });
+            for e in a.effects.iter().filter(|e| doe::order(e.term) == 2).take(6) {
+                let ij: Vec<usize> = (0..k).filter(|i| e.term & (1 << i) != 0).collect();
+                let (i, j) = (ij[0], ij[1]);
+                let m = doe::interaction_means(&x, &y, i, j);
+                o.plots.push(Plot {
+                    title: format!("Interação {} × {}", doe::letter(i), doe::letter(j)),
+                    bars: false,
+                    labels: vec![
+                        format!("{} baixo", doe::letter(i)),
+                        format!("{} alto", doe::letter(i)),
+                    ],
+                    series: vec![
+                        (format!("{} baixo", doe::letter(j)), m[0].to_vec()),
+                        (format!("{} alto", doe::letter(j)), m[1].to_vec()),
+                    ],
+                });
+            }
         }
     }
     Ok(o)

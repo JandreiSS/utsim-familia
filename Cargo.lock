@@ -7870,6 +7870,7 @@ dependencies = [
  "utsim-lss-store",
  "utsim-model",
  "utsim-quality",
+ "utsim-stats",
  "winresource",
 ]
 

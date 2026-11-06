@@ -19,6 +19,8 @@
 //! - [`hypothesis`]: t tests (one sample, Welch, pooled, paired), one-way ANOVA with
 //!   Tukey, χ² of independence and goodness of fit, Fisher's exact test, one and two
 //!   proportions;
+//! - [`doe`]: two-level factorial experiments, full and fractional, with aliases,
+//!   center points, Lenth's method and the data of the effects plots;
 //! - [`nonparametric`]: Mann-Whitney and Wilcoxon signed-rank tests, exact for small
 //!   samples without ties.
 //!
@@ -28,6 +30,7 @@
 pub mod compare;
 pub mod correlation;
 pub mod descriptive;
+pub mod doe;
 pub mod hypothesis;
 pub mod little;
 pub mod nonparametric;
