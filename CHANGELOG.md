@@ -7,6 +7,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim 3D, Selecionar como padrão: é a ferramenta ao abrir ou criar um modelo, depois de colocar um objeto e depois de uma ligação, e Esc nas outras volta a ela sem perder a seleção; um objeto pequeno na tela é pego clicando perto do centro, e os cantos da seleção ficaram mais visíveis. Um clique numa ligação não troca mais a ferramenta para o Ligar.
+- UTSim 3D, ligar o operador à máquina: transportadores e despachantes têm um nó laranja; arrastar dele até uma máquina faz o recurso operá-la (`operators`), até um despachante põe o transportador na equipe e até outro objeto leva os itens dele (`transport`). As linhas tracejadas se selecionam com um clique e saem pelo × ou pelo Del, com desfazer. A seção do processo no painel passou a se chamar "Operadores" ("Quem opera"). Manual com o passo a passo "Como ligar um operador a uma máquina". Roteiro `g4_operador.json`.
 - UTSim 3D, ligar pelos nós: cada objeto com fluxo mostra no Editar um nó de saída (verde) e um de entrada (azul) nos lados, a chegada só o de saída e a saída só o de entrada, e o nó sob o mouse cresce em destaque. Arrastar do nó de saída até o destino (ou do nó de entrada até a origem) liga, com uma seta de prévia; um clique no nó seleciona a ligação dele e o × no meio da ligação selecionada (ou o Del) a remove, com desfazer e refazer. A seleção é marcada só nos cantos e a moldura em volta do objeto que se liga saiu. O `.ron` não muda. Roteiro `g4_nos.json`.
 
 ### Corrigido
