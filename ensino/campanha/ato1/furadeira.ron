@@ -1,0 +1,55 @@
+Missao(
+    id: "ato1/furadeira",
+    formato: 1,
+    titulo: "A furadeira que segura a linha",
+    conceitos: ["gargalo", "utilizacao", "lead_time"],
+    modelo: "../modelos/linha3.ron",
+    texto: "furadeira.md",
+    variante: [
+        (chave: "chegada.interarrival", de: 3.9, ate: 4.1, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "Qual estação é o gargalo da linha?",
+            opcoes: [
+                (rotulo: "Corte", valor: [(chave: "corte.utilization")]),
+                (rotulo: "Furação", valor: [(chave: "furacao.utilization")]),
+                (rotulo: "Pintura", valor: [(chave: "pintura.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "corte", rotulo: "Máquinas no corte", chave: "corte.capacity", de: 1, ate: 2, custo_unitario: 60000),
+        Quantidade(id: "furacao", rotulo: "Máquinas na furação", chave: "furacao.capacity", de: 1, ate: 2, custo_unitario: 80000),
+        Quantidade(id: "pintura", rotulo: "Cabines de pintura", chave: "pintura.capacity", de: 1, ate: 2, custo_unitario: 50000),
+    ],
+    orcamento: 80000,
+    metricas: [
+        (
+            nome: "permanencia",
+            rotulo: "Permanência média da peça na linha",
+            unidade: "min",
+            valor: [(chave: "saida.time_in_system.mean")],
+            objetivo: Menor,
+            meta: 25.0,
+            tolerancia: Relativa(0.02),
+            casas: 1,
+        ),
+    ],
+    justificativa: [
+        (
+            pergunta: "Qual indicador mostrou onde comprar a máquina?",
+            opcoes: ["A utilização mais alta", "A fila mais curta", "O menor tempo de processo"],
+            certa: 0,
+        ),
+    ],
+    dicas: [
+        "Qual estação fica ocupada a maior parte do tempo?",
+        "Compare a utilização das três estações: tempo médio de processo dividido pelo intervalo entre chegadas.",
+        "A compra deve ir para a estação de maior utilização.",
+    ],
+    referencia: {"furacao": 2},
+    animacao: (duracao: 480, unidade: "min"),
+)

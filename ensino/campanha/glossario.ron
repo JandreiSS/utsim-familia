@@ -1,0 +1,11 @@
+// Glossário vivo da campanha. Textos próprios do UTSim.
+Glossario(termos: [
+    (id: "gargalo", nome: "Gargalo",
+     texto: "Recurso que limita a vazão do sistema. Costuma ser o de maior utilização. Melhorar outro recurso quase não muda a vazão.",
+     manual: "conceitos.md"),
+    (id: "utilizacao", nome: "Utilização",
+     texto: "Fração do tempo em que o recurso trabalha. Numa estação com uma máquina, é o tempo médio de processo dividido pelo intervalo médio entre chegadas.",
+     manual: "conceitos.md"),
+    (id: "lead_time", nome: "Lead time (permanência)",
+     texto: "Tempo que uma peça leva desde que entra até sair do sistema, somando filas, processos e transportes."),
+])

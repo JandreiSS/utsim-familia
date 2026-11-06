@@ -1,0 +1,364 @@
+//! The schematic 2D view: boxes for stations, queues as stacks of items, arrows of the
+//! flow, stations coloured by state (with the state written too, never colour alone),
+//! animated by the trace of a [`Replay`]: items moving, queues growing.
+
+use std::collections::{BTreeMap, VecDeque};
+
+use egui::{
+    Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2,
+};
+use utsim_core::{State, TraceEvent};
+use utsim_model::replay::Replay;
+
+/// Playback of one replay.
+pub struct Animacao {
+    pub replay: Replay,
+    /// Simulated time shown.
+    pub t: f64,
+    /// Simulated time units per second of the screen.
+    pub velocidade: f64,
+    pub pausado: bool,
+    pub unidade: String,
+    cursor: usize,
+    onde: BTreeMap<u64, usize>,
+    pub estados: Vec<State>,
+    pub conteudo: Vec<usize>,
+    /// Recent moves (from, to, instant), drawn as items on the arrows.
+    movimentos: VecDeque<(usize, usize, f64)>,
+    posicoes: Vec<Pos2>,
+}
+
+/// Blocks that are drawn (the team dispatchers and mobile resources are left out).
+fn desenhavel(kind: &str) -> bool {
+    !matches!(kind, "Dispatcher" | "Transporter")
+}
+
+impl Animacao {
+    pub fn new(replay: Replay, unidade: &str) -> Animacao {
+        let n = replay.blocks.len();
+        let posicoes = layout(&replay);
+        let mut a = Animacao {
+            replay,
+            t: 0.0,
+            velocidade: 5.0,
+            pausado: false,
+            unidade: unidade.to_string(),
+            cursor: 0,
+            onde: BTreeMap::new(),
+            estados: vec![State::Idle; n],
+            conteudo: vec![0; n],
+            movimentos: VecDeque::new(),
+            posicoes,
+        };
+        a.ir_para(0.0);
+        a
+    }
+
+    /// Moves the playback to `t` (backwards replays from the start).
+    pub fn ir_para(&mut self, t: f64) {
+        let t = t.clamp(0.0, self.replay.stop_time);
+        if t < self.t || self.cursor == 0 {
+            self.cursor = 0;
+            self.onde.clear();
+            self.estados.iter_mut().for_each(|s| *s = State::Idle);
+            self.conteudo.iter_mut().for_each(|c| *c = 0);
+            self.movimentos.clear();
+        }
+        while let Some(r) = self.replay.records.get(self.cursor) {
+            if r.t > t {
+                break;
+            }
+            match &r.event {
+                TraceEvent::Created { item, block } | TraceEvent::Unpacked { item, block } => {
+                    self.onde.insert(*item, *block);
+                    if let Some(c) = self.conteudo.get_mut(*block) {
+                        *c += 1;
+                    }
+                }
+                TraceEvent::Moved { item, from, to } => {
+                    if let Some(c) = self.conteudo.get_mut(*from) {
+                        *c = c.saturating_sub(1);
+                    }
+                    if let Some(c) = self.conteudo.get_mut(*to) {
+                        *c += 1;
+                    }
+                    self.onde.insert(*item, *to);
+                    self.movimentos.push_back((*from, *to, r.t));
+                }
+                TraceEvent::Packed { item, .. } | TraceEvent::Destroyed { item } => {
+                    if let Some(b) = self.onde.remove(item)
+                        && let Some(c) = self.conteudo.get_mut(b)
+                    {
+                        *c = c.saturating_sub(1);
+                    }
+                }
+                TraceEvent::State { block, state } => {
+                    if let Some(s) = self.estados.get_mut(*block) {
+                        *s = *state;
+                    }
+                }
+                _ => {}
+            }
+            self.cursor += 1;
+        }
+        self.t = t;
+        let janela = self.duracao_movimento();
+        while self.movimentos.front().is_some_and(|m| m.2 < t - janela) {
+            self.movimentos.pop_front();
+        }
+        while self.movimentos.len() > 200 {
+            self.movimentos.pop_front();
+        }
+    }
+
+    fn duracao_movimento(&self) -> f64 {
+        (self.velocidade * 0.5).max(1e-6)
+    }
+
+    /// Advances by `dt` seconds of screen time.
+    pub fn avancar(&mut self, dt: f64) {
+        if !self.pausado && self.t < self.replay.stop_time {
+            self.ir_para(self.t + dt * self.velocidade);
+        }
+    }
+
+    /// The controls and the drawing.
+    pub fn mostrar(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .button(if self.pausado {
+                    "▶ Continuar"
+                } else {
+                    "⏸ Pausar"
+                })
+                .clicked()
+            {
+                self.pausado = !self.pausado;
+            }
+            if ui.button("⟲ Do início").clicked() {
+                self.ir_para(0.0);
+                self.pausado = false;
+            }
+            ui.label("Velocidade:");
+            for v in [1.0, 5.0, 20.0, 60.0] {
+                if ui
+                    .selectable_label((self.velocidade - v).abs() < 1e-9, format!("{v}×"))
+                    .clicked()
+                {
+                    self.velocidade = v;
+                }
+            }
+            ui.label(format!(
+                "t = {:.1} {} de {:.0}",
+                self.t, self.unidade, self.replay.stop_time
+            ));
+        });
+        let dt = ui.input(|i| i.stable_dt).min(0.1) as f64;
+        self.avancar(dt);
+        if !self.pausado && self.t < self.replay.stop_time {
+            ui.ctx().request_repaint();
+        }
+        let largura = ui.available_width().max(300.0);
+        let (resp, painter) = ui.allocate_painter(vec2(largura, 260.0), Sense::hover());
+        let rect = resp.rect;
+        painter.rect_filled(rect, CornerRadius::same(4), ui.visuals().extreme_bg_color);
+        let pos = self.na_tela(rect);
+        let texto = ui.visuals().text_color();
+        let fraco = ui.visuals().weak_text_color();
+        for (a, b) in &self.replay.connections {
+            if !(self.desenha(*a) && self.desenha(*b)) {
+                continue;
+            }
+            let (pa, pb) = (pos[*a], pos[*b]);
+            let dir = (pb - pa).normalized();
+            painter.arrow(
+                pa + dir * 34.0,
+                (pb - pa) - dir * 68.0,
+                Stroke::new(1.5, fraco),
+            );
+        }
+        let dur = self.duracao_movimento();
+        for (a, b, t0) in &self.movimentos {
+            if !(self.desenha(*a) && self.desenha(*b)) {
+                continue;
+            }
+            let f = ((self.t - t0) / dur).clamp(0.0, 1.0) as f32;
+            let p = pos[*a] + (pos[*b] - pos[*a]) * f;
+            painter.circle_filled(p, 4.0, Color32::from_rgb(242, 163, 58));
+        }
+        for (i, b) in self.replay.blocks.iter().enumerate() {
+            if !desenhavel(&b.kind) {
+                continue;
+            }
+            let c = pos[i];
+            let r = Rect::from_center_size(c, vec2(64.0, 40.0));
+            let (cor, nome_estado) = cor_estado(&b.kind, self.estados[i], self.conteudo[i]);
+            painter.rect_filled(r, CornerRadius::same(4), cor);
+            painter.rect_stroke(
+                r,
+                CornerRadius::same(4),
+                Stroke::new(1.0, fraco),
+                StrokeKind::Inside,
+            );
+            painter.text(
+                r.center_top() + vec2(0.0, 2.0),
+                Align2::CENTER_TOP,
+                &b.name,
+                FontId::proportional(11.0),
+                Color32::WHITE,
+            );
+            painter.text(
+                r.center_bottom() - vec2(0.0, 3.0),
+                Align2::CENTER_BOTTOM,
+                nome_estado,
+                FontId::proportional(10.0),
+                Color32::WHITE,
+            );
+            if b.kind == "Queue" || b.kind == "Processor" || b.kind == "Conveyor" {
+                // The stack of items under the box.
+                let n = self.conteudo[i];
+                for k in 0..n.min(12) {
+                    let p = pos2(
+                        r.left() + 5.0 + (k % 6) as f32 * 9.0,
+                        r.bottom() + 6.0 + (k / 6) as f32 * 9.0,
+                    );
+                    painter.rect_filled(
+                        Rect::from_min_size(p, vec2(7.0, 7.0)),
+                        CornerRadius::same(1),
+                        Color32::from_rgb(242, 163, 58),
+                    );
+                }
+                painter.text(
+                    r.right_bottom() + vec2(4.0, 6.0),
+                    Align2::LEFT_TOP,
+                    format!("{n}"),
+                    FontId::proportional(11.0),
+                    texto,
+                );
+            }
+        }
+        ui.horizontal_wrapped(|ui| {
+            for (cor, nome) in [
+                (COR_TRABALHANDO, "trabalhando"),
+                (COR_OCIOSA, "ociosa"),
+                (COR_BLOQUEADA, "bloqueada"),
+                (COR_QUEBRADA, "parada ou quebrada"),
+                (COR_SETUP, "em setup"),
+            ] {
+                let (r, p) = ui.allocate_painter(vec2(12.0, 12.0), Sense::hover());
+                p.rect_filled(r.rect, CornerRadius::same(2), cor);
+                ui.label(nome);
+            }
+        });
+    }
+
+    fn desenha(&self, i: usize) -> bool {
+        self.replay
+            .blocks
+            .get(i)
+            .is_some_and(|b| desenhavel(&b.kind))
+    }
+
+    fn na_tela(&self, rect: Rect) -> Vec<Pos2> {
+        let pts: Vec<Pos2> = self
+            .posicoes
+            .iter()
+            .zip(&self.replay.blocks)
+            .filter(|(_, b)| desenhavel(&b.kind))
+            .map(|(p, _)| *p)
+            .collect();
+        if pts.is_empty() {
+            return self.posicoes.clone();
+        }
+        let (mut min, mut max) = (pts[0], pts[0]);
+        for p in &pts {
+            min = min.min(*p);
+            max = max.max(*p);
+        }
+        let area = rect.shrink2(vec2(48.0, 40.0));
+        let w = (max.x - min.x).max(1e-3);
+        let h = (max.y - min.y).max(1e-3);
+        let s = (area.width() / w).min(if h > 1e-2 {
+            area.height() / h
+        } else {
+            f32::INFINITY
+        });
+        let centro_mundo = pos2((min.x + max.x) / 2.0, (min.y + max.y) / 2.0);
+        self.posicoes
+            .iter()
+            .map(|p| {
+                let d = *p - centro_mundo;
+                area.center() + vec2(d.x * s, -d.y * s) - vec2(0.0, 10.0)
+            })
+            .collect()
+    }
+}
+
+pub const COR_TRABALHANDO: Color32 = Color32::from_rgb(46, 140, 80);
+pub const COR_OCIOSA: Color32 = Color32::from_rgb(88, 92, 100);
+pub const COR_BLOQUEADA: Color32 = Color32::from_rgb(196, 120, 30);
+pub const COR_QUEBRADA: Color32 = Color32::from_rgb(190, 60, 55);
+pub const COR_SETUP: Color32 = Color32::from_rgb(52, 110, 190);
+
+/// Colour and word of a block state.
+pub fn cor_estado(kind: &str, s: State, conteudo: usize) -> (Color32, &'static str) {
+    match kind {
+        "Queue" => {
+            if conteudo == 0 {
+                (COR_OCIOSA, "vazia")
+            } else {
+                (Color32::from_rgb(70, 76, 110), "fila")
+            }
+        }
+        "Source" => (Color32::from_rgb(60, 90, 120), "chegadas"),
+        "Sink" => (Color32::from_rgb(60, 90, 120), "saída"),
+        _ => match s {
+            State::Processing | State::Utilize => (COR_TRABALHANDO, "trabalhando"),
+            State::Setup => (COR_SETUP, "setup"),
+            State::Blocked | State::WaitingTransport => (COR_BLOQUEADA, "bloqueada"),
+            State::Down | State::WaitingRepair | State::Maintenance | State::Stopped => {
+                (COR_QUEBRADA, "parada")
+            }
+            State::OffShift => (Color32::from_rgb(40, 42, 48), "fora do turno"),
+            State::WaitingOperator => (Color32::from_rgb(120, 80, 150), "sem operador"),
+            _ => (COR_OCIOSA, "ociosa"),
+        },
+    }
+}
+
+/// Positions from the model; when every block is at the origin, a left-to-right layout
+/// by the order of the flow.
+fn layout(r: &Replay) -> Vec<Pos2> {
+    let pos: Vec<Pos2> = r
+        .blocks
+        .iter()
+        .map(|b| pos2(b.position[0] as f32, b.position[1] as f32))
+        .collect();
+    let distintos = pos
+        .iter()
+        .zip(&r.blocks)
+        .filter(|(_, b)| desenhavel(&b.kind))
+        .any(|(p, _)| p.x.abs() > 1e-6 || p.y.abs() > 1e-6);
+    if distintos {
+        return pos;
+    }
+    // Depth of each block from the sources.
+    let n = r.blocks.len();
+    let mut nivel = vec![0usize; n];
+    for _ in 0..n {
+        for (a, b) in &r.connections {
+            if nivel[*b] < nivel[*a] + 1 && nivel[*a] + 1 < n {
+                nivel[*b] = nivel[*a] + 1;
+            }
+        }
+    }
+    let mut linha: BTreeMap<usize, f32> = BTreeMap::new();
+    (0..n)
+        .map(|i| {
+            let y = linha.entry(nivel[i]).or_insert(0.0);
+            let p = pos2(nivel[i] as f32 * 4.0, -*y);
+            *y += 4.0;
+            p
+        })
+        .collect()
+}

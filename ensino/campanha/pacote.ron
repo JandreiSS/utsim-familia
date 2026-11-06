@@ -1,0 +1,16 @@
+// Campanha do UTSim Ensino: atos 1 a 3 (gargalo e fluxo, filas, capacidade).
+Pacote(
+    id: "campanha",
+    formato: 1,
+    titulo: "Campanha UTSim Ensino",
+    versao: "0.1.0",
+    autor: "UTSim",
+    descricao: "Do gargalo à capacidade: decisões numa fábrica simulada, com previsão, alavancas e nota pela simulação.",
+    requer: ["nucleo >= 0.1"],
+    glossario: "glossario.ron",
+    atos: [
+        (numero: 1, titulo: "Gargalo e fluxo", missoes: [
+            "ato1/furadeira.ron",
+        ]),
+    ],
+)

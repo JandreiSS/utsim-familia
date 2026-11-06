@@ -1,0 +1,21 @@
+[package]
+name = "utsim-ensino-ui"
+description = "UTSim Ensino screens in egui, without a backend: campaign map, mission, 2D view, results, sandbox, class and teacher panel"
+version.workspace = true
+edition.workspace = true
+# egui 0.36 needs Rust 1.95.
+rust-version = "1.95"
+
+[dependencies]
+utsim-ensino-core = { path = "../utsim-ensino-core" }
+utsim-ensino-store = { path = "../utsim-ensino-store" }
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-ui-tema.workspace = true
+ron.workspace = true
+# The workspace's single egui, no backend: the host (the eframe app now, the Godot bridge
+# later) gives the window and a task executor.
+egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
