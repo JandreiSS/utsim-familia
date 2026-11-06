@@ -1,0 +1,77 @@
+// Biblioteca do pacote transversal Segurança do trabalho: predefinições de posto com EPI
+// (campo `ppe` do objeto). Soma-se a qualquer linha pelo campo `packs` do modelo
+// (docs/plano_qualidade_e_seguranca.md, seções 3.2 e 7.3; formato em
+// docs/formato_qualidade_seguranca.md).
+//
+// Uma predefinição só cria objetos. A zona de risco não é um objeto, é do modelo
+// (campo `zones`), por isso não há predefinição de zona: use `utsim linha seguranca zona`
+// ou o comando AddZone do editor. O modelo continua legível sem o pacote.
+//
+// Os nomes de EPI que o 3D sabe vestir: capacete, oculos, protetor_auricular, luvas,
+// botina, colete, mascara e avental.
+Library(
+    line: "seguranca",
+    name: "Segurança",
+    subtitle: "pacote transversal",
+    description: "Postos com EPI exigido, para a exposição a riscos e o 3D. As zonas de risco são do modelo (campo zones). Combina com qualquer linha pelo campo packs.",
+    transversal: true,
+    models: [
+        (
+            file: "examples/cruzamento_empilhadeira.ron",
+            name: "Cruzamento com empilhadeira",
+            description: "Operador a pé cruzando o corredor da empilhadeira, com zonas de risco e EPI por posto.",
+        ),
+    ],
+    presets: [
+        (
+            id: "posto_epi",
+            name: "Posto com EPI",
+            icon: "mesa",
+            role: Work,
+            description: "Posto de trabalho com a lista de EPI exigida de quem trabalha nele.",
+            name_base: "posto",
+            fields: [
+                (key: "tempo", label: "Tempo de trabalho", default: "Exp(mean: 20.0)"),
+                (key: "epi", label: "EPI exigido", default: "[\"oculos\", \"luvas\"]"),
+            ],
+            objects: [r#"(name: "${name}", kind: Processor(process: ${tempo}), ppe: ${epi})"#],
+        ),
+        (
+            id: "posto_ruidoso",
+            name: "Posto ruidoso",
+            icon: "prensa",
+            role: Work,
+            description: "Prensa, serra ou outro posto com ruído: óculos, luvas e protetor auricular.",
+            name_base: "prensa",
+            fields: [
+                (key: "tempo", label: "Tempo de trabalho", default: "Exp(mean: 25.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), ppe: ["oculos", "luvas", "protetor_auricular"])"#,
+            ],
+        ),
+        (
+            id: "posto_solda",
+            name: "Posto de solda",
+            icon: "solda",
+            role: Work,
+            description: "Solda ou corte a quente: máscara, luvas, avental e óculos.",
+            name_base: "solda",
+            fields: [
+                (key: "tempo", label: "Tempo de trabalho", default: "Exp(mean: 30.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), ppe: ["mascara", "luvas", "avental", "oculos"])"#,
+            ],
+        ),
+        (
+            id: "doca_carga",
+            name: "Doca de carga",
+            icon: "doca",
+            role: Inbox,
+            description: "Área de carga e descarga com veículo: capacete, botina e colete.",
+            name_base: "doca",
+            objects: [r#"(name: "${name}", kind: Queue(), ppe: ["capacete", "botina", "colete"])"#],
+        ),
+    ],
+)

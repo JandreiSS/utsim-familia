@@ -1,0 +1,12 @@
+// Vocabulário do pacote Segurança: termo do núcleo -> termo da segurança do trabalho.
+Vocabulary(
+    line: "seguranca",
+    terms: {
+        "Processor": "posto de trabalho",
+        "Queue": "área de espera",
+        "Transporter": "pessoa ou veículo",
+        "ppe": "EPI",
+        "zones": "zonas de risco",
+        "exposure": "exposição",
+    },
+)
