@@ -314,4 +314,60 @@
             ("agvs", 3.0),
         ],
     ),
+    (
+        missao: "ato6/maquinas_por_operador",
+        referencia: {
+            "maquinas": 3.0,
+        },
+        base: [
+            ("custo_peca", 1.0507084803402658),
+        ],
+        ref_valores: [
+            ("custo_peca", 1.0369623233009486),
+        ],
+    ),
+    (
+        missao: "ato6/trabalho_externo",
+        referencia: {
+            "metodo": 2.0,
+        },
+        base: [
+            ("vazao", 109.45),
+        ],
+        ref_valores: [
+            ("vazao", 125.67999999999999),
+        ],
+    ),
+    (
+        missao: "ato6/celula",
+        referencia: {
+            "operadores": 1.0,
+        },
+        base: [
+            ("lead_time", 2981.0490097342745),
+            ("operadores", 1.0),
+        ],
+        ref_valores: [
+            ("lead_time", 369.9206071209223),
+            ("operadores", 2.0),
+        ],
+    ),
+    (
+        missao: "ato6/cronometragem",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
+    (
+        missao: "ato7/linha_retrabalho",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
+    (
+        missao: "ato7/padaria",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
 ]

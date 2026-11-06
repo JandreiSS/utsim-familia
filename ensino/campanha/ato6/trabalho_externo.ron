@@ -1,0 +1,42 @@
+Missao(
+    id: "ato6/trabalho_externo",
+    titulo: "Trabalho externo",
+    conceitos: ["trabalho_externo", "ciclo", "relacao_homem_maquina"],
+    modelo: "../modelos/operadora.ron",
+    texto: "trabalho_externo.md",
+    previsao: [
+        Escolha(
+            id: "ritmo",
+            pergunta: "Com três máquinas, quem dita o ritmo hoje: as máquinas ou a operadora?",
+            opcoes: [
+                (rotulo: "As máquinas (a operadora tem folga)"),
+                (rotulo: "A operadora (as máquinas esperam)"),
+            ],
+            resposta: Fixa(0),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "metodo", rotulo: "Método de preparação", opcoes: [
+            (rotulo: "Atual: tudo com a máquina parada (cerca de 20 s)", ajustes: {"maq1.setup": "Some(Triangular(min: 18.0, mode: 20.0, max: 24.0))", "maq2.setup": "Some(Triangular(min: 18.0, mode: 20.0, max: 24.0))", "maq3.setup": "Some(Triangular(min: 18.0, mode: 20.0, max: 24.0))"}),
+            (rotulo: "Separar o material antes, com a máquina rodando (cerca de 14 s)", ajustes: {"maq1.setup": "Some(Triangular(min: 12.0, mode: 14.0, max: 16.0))", "maq2.setup": "Some(Triangular(min: 12.0, mode: 14.0, max: 16.0))", "maq3.setup": "Some(Triangular(min: 12.0, mode: 14.0, max: 16.0))"}, custo: 1500),
+            (rotulo: "Kit de troca rápida e material separado (cerca de 8 s)", ajustes: {"maq1.setup": "Some(Triangular(min: 6.0, mode: 8.0, max: 10.0))", "maq2.setup": "Some(Triangular(min: 6.0, mode: 8.0, max: 10.0))", "maq3.setup": "Some(Triangular(min: 6.0, mode: 8.0, max: 10.0))"}, custo: 6000),
+        ]),
+    ],
+    orcamento: 6000,
+    metricas: [
+        (nome: "vazao", rotulo: "Peças por hora", unidade: "peças/h",
+         valor: [(chave: "saida.input", fator: 0.1)], objetivo: Maior, meta: 122.0, casas: 1),
+    ],
+    justificativa: [
+        (pergunta: "Por que tirar trabalho da máquina parada aumenta a produção, se a operadora continua com o mesmo trabalho?",
+         opcoes: ["Porque o ciclo da máquina (a + t) diminui, e são as máquinas que ditam o ritmo", "Porque a operadora anda mais rápido", "Porque a máquina processa mais rápido"],
+         certa: 0),
+    ],
+    dicas: [
+        "Que parte da preparação precisa mesmo da máquina parada?",
+        "Compare a + t (ciclo de uma máquina) com n × (a + b) (ciclo da operadora para todas).",
+        "Quando as máquinas ditam o ritmo, cada segundo tirado da preparação com a máquina parada vira produção.",
+    ],
+    referencia: {"metodo": 2},
+    animacao: (duracao: 600, unidade: "s"),
+)

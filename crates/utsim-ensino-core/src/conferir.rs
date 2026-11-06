@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use utsim_model::analysis::{is_significant, paired_difference};
 
 use crate::missao::Decisoes;
-use crate::motor::{Cenario, ErroMotor, avaliar, rodar};
+use crate::motor::{Cenario, ErroMotor, rodar, valor_metrica};
 use crate::nota::{Intervalo, fracao, portao, situacao};
 use crate::pacote::MissaoCarregada;
 
@@ -46,6 +46,34 @@ struct Avaliada {
 /// Runs every combination of `m` (without variant) and checks the mission.
 pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
     let missao = &m.missao;
+    if let (Some(_), Some(g)) = (&missao.modelagem, &m.gabarito) {
+        let mut c = Conferencia {
+            missao: missao.id.clone(),
+            combinacoes: 1,
+            viaveis: 1,
+            batem_meta: 0,
+            melhor: Decisoes::new(),
+            referencia_confere: true,
+            erros: Vec::new(),
+            avisos: Vec::new(),
+        };
+        let texto =
+            ron::ser::to_string_pretty(g, ron::ser::PrettyConfig::default().struct_names(true))
+                .map_err(|e| ErroMotor::Modelo(e.to_string()))?;
+        let t = crate::nota::Tentativa {
+            modelo: Some(texto),
+            ..Default::default()
+        };
+        let r = crate::modelagem::corrigir_modelagem(m, &crate::pacote::Pesos::default(), &t)?;
+        for k in r.criterios.iter().filter(|k| !k.ok) {
+            c.erros.push(format!(
+                "o gabarito falha em \"{}\": {}",
+                k.rotulo, k.detalhe
+            ));
+        }
+        c.batem_meta = usize::from(r.resolvida);
+        return Ok(c);
+    }
     let todas = if missao.tem_pecas() {
         // Assignments and layouts are too many to enumerate: the candidates are the
         // stored reference and the optimum of the exact search of the piece.
@@ -100,12 +128,12 @@ pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
         missao
             .metricas
             .iter()
-            .map(|mt| Ok(Intervalo::de(&avaliar(missao, &mt.valor, cen)?).media))
+            .map(|mt| Ok(Intervalo::de(&valor_metrica(missao, mt, cen)?).media))
             .collect()
     };
     let bate = |cen: &Cenario| -> Result<bool, ErroMotor> {
         for mt in &missao.metricas {
-            let v = Intervalo::de(&avaliar(missao, &mt.valor, cen)?);
+            let v = Intervalo::de(&valor_metrica(missao, mt, cen)?);
             if !situacao(mt, &v).ok() {
                 return Ok(false);
             }
@@ -203,8 +231,8 @@ pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
         .expect("evaluated");
     let mut algum = false;
     for mt in &missao.metricas {
-        let a = avaliar(missao, &mt.valor, ref_cen)?;
-        let b = avaliar(missao, &mt.valor, base)?;
+        let a = valor_metrica(missao, mt, ref_cen)?;
+        let b = valor_metrica(missao, mt, base)?;
         if is_significant(&paired_difference(&a, &b)) {
             algum = true;
         }
@@ -281,11 +309,11 @@ pub fn golden(m: &MissaoCarregada) -> Result<Golden, ErroMotor> {
     for mt in &missao.metricas {
         base.push((
             mt.nome.clone(),
-            Intervalo::de(&avaliar(missao, &mt.valor, &sim.base)?).media,
+            Intervalo::de(&valor_metrica(missao, mt, &sim.base)?).media,
         ));
         ref_valores.push((
             mt.nome.clone(),
-            Intervalo::de(&avaliar(missao, &mt.valor, &sim.referencia)?).media,
+            Intervalo::de(&valor_metrica(missao, mt, &sim.referencia)?).media,
         ));
     }
     Ok(Golden {

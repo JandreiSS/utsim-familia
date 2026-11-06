@@ -1,0 +1,11 @@
+// Missão 7.2: ponto de partida da padaria. Só a chegada das massas e a expedição; o aluno
+// monta o resto. Tempo em minutos.
+Model(
+    name: "Padaria industrial (ponto de partida)",
+    run: (stop_time: 10560.0, warmup: 480.0, seed: 72, replications: 10),
+    objects: [
+        (name: "massas", kind: Source(interarrival: Exp(mean: 6.0)), position: (0.0, 0.0, 0.0)),
+        (name: "expedicao", kind: Sink, position: (32.0, 0.0, 0.0)),
+    ],
+    connections: [("massas", "expedicao")],
+)

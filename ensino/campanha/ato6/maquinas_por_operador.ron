@@ -1,0 +1,43 @@
+Missao(
+    id: "ato6/maquinas_por_operador",
+    titulo: "Quantas máquinas por operador",
+    conceitos: ["relacao_homem_maquina", "ciclo", "custo_por_peca"],
+    modelo: "../modelos/operadora.ron",
+    texto: "maquinas_por_operador.md",
+    previsao: [
+        Calculo(
+            id: "n_linha",
+            pergunta: "Pela relação homem-máquina, quantas máquinas a operadora atende sem deixar máquina parada (n' = (a + t) / (a + b))?",
+            calculo: MaquinasPorOperador(a: 20.0, b: 4.0, t: 70.0),
+            unidade: "máquinas",
+            tolerancia: Absoluta(0.1),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "maquinas", rotulo: "Máquinas com a operadora", inicial: 2, opcoes: [
+            (rotulo: "1", ajustes: {"maq1.shifts": "None", "maq2.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq3.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq4.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq5.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])"}, numero: 1),
+            (rotulo: "2", ajustes: {"maq1.shifts": "None", "maq2.shifts": "None", "maq3.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq4.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq5.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])"}, numero: 2),
+            (rotulo: "3", ajustes: {"maq1.shifts": "None", "maq2.shifts": "None", "maq3.shifts": "None", "maq4.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])", "maq5.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])"}, numero: 3),
+            (rotulo: "4", ajustes: {"maq1.shifts": "None", "maq2.shifts": "None", "maq3.shifts": "None", "maq4.shifts": "None", "maq5.shifts": "(period: 1000000.0, off: [(start: 0.0, duration: 1000000.0)])"}, numero: 4),
+            (rotulo: "5", ajustes: {"maq1.shifts": "None", "maq2.shifts": "None", "maq3.shifts": "None", "maq4.shifts": "None", "maq5.shifts": "None"}, numero: 5),
+        ]),
+    ],
+    metricas: [
+        (nome: "custo_peca", rotulo: "Custo por peça (operadora R$ 40/h, máquina R$ 25/h)", unidade: "R$",
+         valor: [(chave: "const", fator: 40.0), (chave: "decisao.maquinas", fator: 25.0)],
+         divisor: [(chave: "saida.input", fator: 0.1)],
+         objetivo: Menor, meta: 1.04, casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Com mais máquinas que n', quem fica esperando?",
+         opcoes: ["As máquinas, porque a operadora não dá conta de todas", "A operadora", "Ninguém"],
+         certa: 0),
+    ],
+    dicas: [
+        "O que limita o ciclo: o tempo da máquina ou o tempo que a operadora gasta para atender todas?",
+        "Calcule n' = (a + t)/(a + b) e compare o custo por peça com o número inteiro abaixo e acima dele.",
+        "Com n abaixo de n', a operadora espera. Acima, as máquinas esperam. O custo decide entre os dois inteiros vizinhos.",
+    ],
+    referencia: {"maquinas": 3},
+    animacao: (duracao: 600, unidade: "s"),
+)

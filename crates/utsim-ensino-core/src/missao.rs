@@ -56,6 +56,8 @@ pub struct Missao {
     /// Other limits over the decisions (area, people).
     #[serde(default)]
     pub restricoes: Vec<Restricao>,
+    /// The measures of the grade (none in a mission of questions or of modelling).
+    #[serde(default)]
     pub metricas: Vec<Metrica>,
     /// Objective questions about the why (justification points).
     #[serde(default)]
@@ -76,6 +78,9 @@ pub struct Missao {
     /// Machines to place on a grid (act 5).
     #[serde(default)]
     pub arranjo: Option<crate::pecas::Arranjo>,
+    /// The student delivers the model (the third step): what the check looks at.
+    #[serde(default)]
+    pub modelagem: Option<crate::modelagem::Modelagem>,
 }
 
 /// The decisions of an attempt: lever id to number (a quantity, the index of a choice or
@@ -127,6 +132,15 @@ pub enum Previsao {
         opcoes: Vec<OpcaoPrevisao>,
         resposta: Resposta,
     },
+    /// A number computed by a recipe from the data of the statement (work measurement).
+    Calculo {
+        id: String,
+        pergunta: String,
+        calculo: Calculo,
+        #[serde(default)]
+        unidade: String,
+        tolerancia: Tolerancia,
+    },
     /// A number, right when within the tolerance of the value of the initial state.
     Valor {
         id: String,
@@ -141,12 +155,64 @@ pub enum Previsao {
 impl Previsao {
     pub fn id(&self) -> &str {
         match self {
-            Previsao::Escolha { id, .. } | Previsao::Valor { id, .. } => id,
+            Previsao::Escolha { id, .. }
+            | Previsao::Valor { id, .. }
+            | Previsao::Calculo { id, .. } => id,
         }
     }
     pub fn pergunta(&self) -> &str {
         match self {
-            Previsao::Escolha { pergunta, .. } | Previsao::Valor { pergunta, .. } => pergunta,
+            Previsao::Escolha { pergunta, .. }
+            | Previsao::Valor { pergunta, .. }
+            | Previsao::Calculo { pergunta, .. } => pergunta,
+        }
+    }
+}
+
+/// The recipes of the computed questions (`utsim_diagram::tempos::formulas`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Calculo {
+    /// Machines one operator can tend without idle machines: `n' = (a + t)/(a + b)`, with
+    /// `a` the operator time with the machine stopped, `b` the operator time per machine
+    /// away from it (walking) and `t` the automatic time.
+    MaquinasPorOperador { a: f64, b: f64, t: f64 },
+    /// Normal time: the mean of the observed times × the rating (1.1 is 110 %).
+    TempoNormal { tempos: Vec<f64>, ritmo: f64 },
+    /// Standard time: normal time × (1 + allowances).
+    TempoPadrao {
+        tempos: Vec<f64>,
+        ritmo: f64,
+        tolerancia: f64,
+    },
+    /// Cycles to time for a relative error `erro` at 95 % confidence:
+    /// `n = (1,96 · s / (erro · média))²`, rounded up.
+    Ciclos { tempos: Vec<f64>, erro: f64 },
+}
+
+impl Calculo {
+    pub fn valor(&self) -> f64 {
+        use utsim_diagram::tempos::formulas::{Abt, tempo_normal, tempo_padrao};
+        let media = |xs: &[f64]| xs.iter().sum::<f64>() / xs.len().max(1) as f64;
+        match self {
+            Calculo::MaquinasPorOperador { a, b, t } => Abt {
+                a: *a,
+                b: *b,
+                t: *t,
+            }
+            .n_linha(),
+            Calculo::TempoNormal { tempos, ritmo } => tempo_normal(media(tempos), *ritmo),
+            Calculo::TempoPadrao {
+                tempos,
+                ritmo,
+                tolerancia,
+            } => tempo_padrao(tempo_normal(media(tempos), *ritmo), *tolerancia),
+            Calculo::Ciclos { tempos, erro } => {
+                let m = media(tempos);
+                let n = tempos.len() as f64;
+                let s = (tempos.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0).max(1.0))
+                    .sqrt();
+                ((1.96 * s / (erro * m)).powi(2) - 1e-9).ceil()
+            }
         }
     }
 }
@@ -373,6 +439,9 @@ pub struct Metrica {
     #[serde(default)]
     pub unidade: String,
     pub valor: Vec<Termo>,
+    /// When present, the measure is `valor / divisor` per replication (a cost per piece).
+    #[serde(default)]
+    pub divisor: Vec<Termo>,
     pub objetivo: Objetivo,
     /// The goal; without it the measure only counts in the performance.
     #[serde(default)]

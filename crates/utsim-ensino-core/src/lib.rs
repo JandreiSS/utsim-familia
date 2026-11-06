@@ -20,6 +20,7 @@ pub mod campanha;
 pub mod conferir;
 pub mod dicas;
 pub mod missao;
+pub mod modelagem;
 pub mod motor;
 pub mod nota;
 pub mod pacote;

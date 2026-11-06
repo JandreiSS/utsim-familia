@@ -1,0 +1,42 @@
+Missao(
+    id: "ato7/padaria",
+    titulo: "Do enunciado ao modelo",
+    conceitos: ["modelagem", "capacidade", "disponibilidade"],
+    modelo: "../modelos/padaria_inicial.ron",
+    texto: "padaria.md",
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "Antes de modelar: qual etapa deve limitar a padaria?",
+            opcoes: [
+                (rotulo: "A divisora", valor: [(chave: "divisora.utilization")]),
+                (rotulo: "O forno", valor: [(chave: "forno.utilization"), (chave: "forno.state.down")]),
+                (rotulo: "A embalagem", valor: [(chave: "embalagem.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    modelagem: (
+        gabarito: "../modelos/padaria_gabarito.ron",
+        replicacoes: 5,
+        criterios: [
+            Objetos(rotulo: "Divisora, câmara, forno e embalagem (quatro processadores)", tipo: "Processor", minimo: 4),
+            Capacidade(rotulo: "A câmara de fermentação recebe 10 massas ao mesmo tempo", minimo: 10),
+            Quebras(rotulo: "O forno quebra (quebras no modelo)"),
+            Medida(rotulo: "Massas expedidas por semana", valor: [(chave: "expedicao.input")], tolerancia: Relativa(0.05), peso: 2.0),
+            Medida(rotulo: "Utilização do forno", valor: [(chave: "forno.utilization")], tolerancia: Absoluta(0.05)),
+            Medida(rotulo: "Lead time da massa", valor: [(chave: "expedicao.time_in_system.mean")], tolerancia: Relativa(0.1)),
+        ],
+    ),
+    justificativa: [
+        (pergunta: "Como se representa a câmara de fermentação, que segura cada massa 45 minutos e cabe 10 por vez?",
+         opcoes: ["Um processador de capacidade 10 com tempo de 45 min", "Uma fila de 10 lugares", "Dez fontes"],
+         certa: 0),
+    ],
+    dicas: [
+        "Liste as etapas na ordem, com o tempo e a capacidade de cada uma.",
+        "Cada etapa é um processador. Filas entre as etapas guardam as massas que esperam. O forno tem capacidade 2 e quebras.",
+        "Use os nomes do enunciado (divisora, camara, forno, embalagem, expedicao) para que as medidas possam ser comparadas.",
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

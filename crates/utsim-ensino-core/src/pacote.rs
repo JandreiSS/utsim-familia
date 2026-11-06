@@ -108,6 +108,8 @@ pub struct MissaoCarregada {
     pub texto: String,
     /// Act number.
     pub ato: u32,
+    /// The reference model of a modelling mission.
+    pub gabarito: Option<Model>,
 }
 
 /// A package read and validated.
@@ -253,12 +255,21 @@ fn carregar_missao(
     let modelo =
         Model::parse(&modelo_txt).map_err(|e| vec![format!("modelo '{}': {e}", missao.modelo)])?;
     let texto_md = texto(arquivos, &junta(&missao.texto)).map_err(|e| vec![e])?;
-    validar_missao(&missao, &modelo)?;
+    let gabarito = match &missao.modelagem {
+        Some(md) => {
+            let txt = texto(arquivos, &junta(&md.gabarito)).map_err(|e| vec![e])?;
+            Some(Model::parse(&txt).map_err(|e| vec![format!("gabarito '{}': {e}", md.gabarito)])?)
+        }
+        None => None,
+    };
+    // A modelling mission asks about the reference model (the starting one is incomplete).
+    validar_missao(&missao, gabarito.as_ref().unwrap_or(&modelo))?;
     Ok(MissaoCarregada {
         missao,
         modelo,
         texto: texto_md,
         ato,
+        gabarito,
     })
 }
 
