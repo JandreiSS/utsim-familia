@@ -8150,7 +8150,9 @@ name = "utsim-seguranca-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "serde_json",
  "tempfile",
+ "utsim-diagram",
  "utsim-exposicao",
  "utsim-model",
  "utsim-posto",
