@@ -7995,6 +7995,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-posto-ui"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "utsim-model",
+ "utsim-posto",
+ "utsim-ui-tema",
+]
+
+[[package]]
 name = "utsim-publicar"
 version = "0.1.0"
 dependencies = [
@@ -8004,6 +8017,20 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-launcher-core",
+]
+
+[[package]]
+name = "utsim-qualidade-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_plot",
+ "tempfile",
+ "utsim-model",
+ "utsim-posto",
+ "utsim-posto-ui",
+ "utsim-qualidade-core",
+ "utsim-ui-tema",
 ]
 
 [[package]]
@@ -8045,6 +8072,20 @@ version = "0.1.0"
 dependencies = [
  "rhai",
  "utsim-core",
+]
+
+[[package]]
+name = "utsim-seguranca-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "tempfile",
+ "utsim-exposicao",
+ "utsim-model",
+ "utsim-posto",
+ "utsim-posto-ui",
+ "utsim-seguranca-core",
+ "utsim-ui-tema",
 ]
 
 [[package]]

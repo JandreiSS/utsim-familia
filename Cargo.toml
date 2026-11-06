@@ -5,7 +5,7 @@ members = ["crates/*"]
 exclude = ["crates/utsim-py", "tools/icone"]
 # The 3D viewer pulls in Bevy (slow to build): it is opt-in (`-p utsim-viewer`). The Godot
 # bridge (`-p utsim-godot`, a GDExtension library) is opt-in too: `scripts/godot.sh`. The
-# windowed apps (`utsim-launcher`, `utsim-lss-app`) build with `-p` or `--workspace`.
+# windowed apps (`utsim-launcher`, `utsim-lss-app`, `utsim-qualidade-app`, `utsim-seguranca-app`, `utsim-posto-ui`) build with `-p` or `--workspace`.
 default-members = [
     "crates/utsim-assets",
     "crates/utsim-cad",
@@ -62,6 +62,7 @@ utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
 utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
+utsim-posto-ui = { path = "crates/utsim-posto-ui" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }
