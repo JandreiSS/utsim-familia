@@ -39,9 +39,15 @@ pub struct QualityDef {
     /// Characteristics measured on every item.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub characteristics: Vec<CharacteristicDef>,
-    /// Cost of one item scrapped after this process (record for the reports).
+    /// Value this process adds to each item: a scrapped item loses the values of every
+    /// process it went through (internal failure in the cost of quality). Never read by the
+    /// simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit_cost: Option<f64>,
+    /// Cost of each defect of this process that reaches the customer (external failure:
+    /// warranty, return, claim). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escape_cost: Option<f64>,
 }
 
 /// A defect type: base probability per item, changed by factors.
@@ -145,6 +151,10 @@ pub struct InspectionDef {
     /// Rework passes an item may have; a rejected item that used them goes to scrap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_rework: Option<u32>,
+    /// Cost of inspecting one item (appraisal in the cost of quality). Never read by the
+    /// simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
 }
 
 impl Default for InspectionDef {
@@ -158,6 +168,7 @@ impl Default for InspectionDef {
             measure: Vec::new(),
             on_reject: RejectTo::Rework,
             max_rework: None,
+            cost: None,
         }
     }
 }
@@ -195,6 +206,9 @@ pub struct ReworkDef {
     /// Fix probability by defect type, instead of `fix`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fix_by: BTreeMap<String, f64>,
+    /// Cost of one rework pass (internal failure). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
 }
 
 impl Default for ReworkDef {
@@ -202,6 +216,7 @@ impl Default for ReworkDef {
         ReworkDef {
             fix: 1.0,
             fix_by: BTreeMap::new(),
+            cost: None,
         }
     }
 }
