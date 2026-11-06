@@ -1,0 +1,16 @@
+[package]
+name = "utsim-seguranca-core"
+description = "Inventário de perigos e riscos por posto, matriz de risco própria configurável e importável, hierarquia de controle, plano de ação e relatório com aviso legal, base do app UTSim Segurança do Trabalho (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-posto.workspace = true
+utsim-exposicao.workspace = true
+utsim-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "=3.27.0"

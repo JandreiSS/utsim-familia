@@ -28,10 +28,12 @@ default-members = [
     "crates/utsim-objects",
     "crates/utsim-opt",
     "crates/utsim-pert",
+    "crates/utsim-posto",
     "crates/utsim-quality",
     "crates/utsim-qualidade-core",
     "crates/utsim-scene",
     "crates/utsim-script",
+    "crates/utsim-seguranca-core",
     "crates/utsim-stats",
     "crates/utsim-twin",
     "crates/utsim-ui-tema",
@@ -54,10 +56,12 @@ utsim-quality = { path = "crates/utsim-quality" }
 utsim-qualidade-core = { path = "crates/utsim-qualidade-core" }
 utsim-edit = { path = "crates/utsim-edit" }
 utsim-script = { path = "crates/utsim-script" }
+utsim-seguranca-core = { path = "crates/utsim-seguranca-core" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
 utsim-pert = { path = "crates/utsim-pert" }
+utsim-posto = { path = "crates/utsim-posto" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }
 utsim-web = { path = "crates/utsim-web" }

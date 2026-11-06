@@ -7984,6 +7984,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-posto"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.17",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "utsim-model",
+]
+
+[[package]]
 name = "utsim-publicar"
 version = "0.1.0"
 dependencies = [
@@ -8034,6 +8045,18 @@ version = "0.1.0"
 dependencies = [
  "rhai",
  "utsim-core",
+]
+
+[[package]]
+name = "utsim-seguranca-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "utsim-exposicao",
+ "utsim-model",
+ "utsim-posto",
 ]
 
 [[package]]
