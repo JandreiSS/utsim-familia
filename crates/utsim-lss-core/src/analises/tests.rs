@@ -245,3 +245,108 @@ fn rerun_gives_the_same_numbers() {
     );
     assert_eq!(a.recipe.as_ref().unwrap().key(), "descritiva");
 }
+
+#[test]
+fn bias_and_linearity_match_the_crate() {
+    // Twelve readings of a reference of 5: a bias of about +0,05.
+    let x: Vec<f64> = (0..12)
+        .map(|i| 5.05 + if i % 2 == 0 { 0.01 } else { -0.01 })
+        .collect();
+    let csv: String = std::iter::once("v".to_string())
+        .chain(x.iter().map(|v| v.to_string()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let o = run(
+        &Recipe::Bias {
+            col: 0,
+            reference: 5.0,
+            tolerance: Some(1.0),
+        },
+        &table(&csv),
+    )
+    .unwrap();
+    let b = msa::bias(5.0, &x, LEVEL).unwrap();
+    assert_eq!(o.value("viés"), Some(b.bias));
+    assert_eq!(o.value("valor-p"), Some(b.p_value));
+    assert!((o.value("%viés da tolerância").unwrap() - 5.0).abs() < 1e-6);
+    assert!(o.verdict.contains("significativo"), "{}", o.verdict);
+    assert!(
+        run(
+            &Recipe::Bias {
+                col: 0,
+                reference: 5.0,
+                tolerance: None
+            },
+            &table("v\n1\n2\n")
+        )
+        .is_err()
+    );
+    // Linearity: the bias grows with the reference (0 at 2, 0,1 at 4, 0,2 at 6...).
+    let mut csv = String::from("ref;medida\n");
+    let mut pairs = Vec::new();
+    for r in [2.0, 4.0, 6.0, 8.0, 10.0] {
+        for k in 0..3 {
+            let m = r + 0.05 * (r - 2.0) + 0.001 * f64::from(k);
+            pairs.push((r, m));
+            csv.push_str(&format!("{};{}\n", r, m.to_string().replace('.', ",")));
+        }
+    }
+    let o = run(
+        &Recipe::Linearity {
+            reference: 0,
+            value: 1,
+            variation: Some(6.0),
+        },
+        &table(&csv),
+    )
+    .unwrap();
+    let l = msa::linearity(&pairs, Some(6.0), LEVEL).unwrap();
+    assert!((o.value("inclinação").unwrap() - l.slope).abs() < 1e-12);
+    assert!((l.slope - 0.05).abs() < 1e-3);
+    assert_eq!(o.series.len(), 5);
+    assert!(o.verdict.contains("linearidade"), "{}", o.verdict);
+}
+
+#[test]
+fn attribute_agreement_and_the_medir_check() {
+    // Three appraisers, ten items, two trials; C misses item 3 once.
+    let mut csv = String::from("item,avaliador,resposta,padrao\n");
+    for i in 0..10 {
+        let std = if i % 3 == 0 { "ruim" } else { "bom" };
+        for a in ["A", "B", "C"] {
+            for trial in 0..2 {
+                let resp = if a == "C" && i == 3 && trial == 1 {
+                    "bom"
+                } else {
+                    std
+                };
+                csv.push_str(&format!("p{i},{a},{resp},{std}\n"));
+            }
+        }
+    }
+    let rec = Recipe::Attribute {
+        item: 0,
+        appraiser: 1,
+        response: 2,
+        standard: Some(3),
+    };
+    let o = run(&rec, &table(&csv)).unwrap();
+    assert_eq!(o.value("itens"), Some(10.0));
+    assert_eq!(o.value("avaliadores"), Some(3.0));
+    assert_eq!(o.value("repetições"), Some(2.0));
+    assert!((o.value("% entre avaliadores").unwrap() - 90.0).abs() < 1e-9);
+    let k = o.value(KAPPA).unwrap();
+    assert!(k > KAPPA_LIMIT && k < 1.0, "{k}");
+    assert_eq!(o.value("% A contra o padrão"), Some(100.0));
+    assert!(o.verdict.contains("aceito"));
+    // Saved, it approves the MSA of Medir.
+    let mut t = T::new();
+    let p = t.program;
+    let ds = dataset(&mut t, DataOrigin::Real);
+    assert!(!msa_approved(&t.s, p));
+    let id = t.id();
+    t.commit(record(p, id, "", &ds, &rec, &o, d(2026, 11, 6)));
+    assert!(msa_approved(&t.s, p));
+    assert_eq!(analyses(&t.s, p)[0].kappa(), Some(k));
+    assert_eq!(rec.key(), "msa_atributos");
+}

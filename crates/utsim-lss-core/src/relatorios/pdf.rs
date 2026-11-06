@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use super::{Block, Document, Template};
+use super::{Block, Chart, Document, Template};
 
 const MARGIN: f64 = 42.0;
 const HEADER_H: f64 = 26.0;
@@ -220,6 +220,13 @@ enum Op {
         w: f64,
         h: f64,
     },
+    FillRgb {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        rgb: (f64, f64, f64),
+    },
 }
 
 const BLACK: (f64, f64, f64) = (0.0, 0.0, 0.0);
@@ -362,6 +369,238 @@ impl Layout {
     }
 }
 
+/// Colours of the series of a chart.
+const PALETTE: [(f64, f64, f64); 6] = [
+    (0.12, 0.42, 0.68),
+    (0.85, 0.40, 0.05),
+    (0.18, 0.55, 0.20),
+    (0.75, 0.15, 0.15),
+    (0.50, 0.35, 0.68),
+    (0.45, 0.33, 0.25),
+];
+const SIGNAL: (f64, f64, f64) = (0.80, 0.05, 0.05);
+const REFERENCE: (f64, f64, f64) = (0.45, 0.10, 0.10);
+
+/// A number on a chart axis, with a decimal comma.
+fn axis(x: f64) -> String {
+    let a = x.abs();
+    let s = if a >= 1000.0 || a == 0.0 {
+        format!("{x:.0}")
+    } else if a >= 10.0 {
+        format!("{x:.1}")
+    } else if a >= 0.1 {
+        format!("{x:.2}")
+    } else {
+        format!("{x:.4}")
+    };
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    };
+    s.replace('.', ",")
+}
+
+/// The first characters of `s` that fit in `max` points.
+fn fit(s: &str, max: f64, size: f64) -> String {
+    if width(s, size, false) <= max {
+        return s.to_string();
+    }
+    let mut out = String::new();
+    for c in s.chars() {
+        let next = format!("{out}{c}…");
+        if width(&next, size, false) > max {
+            break;
+        }
+        out.push(c);
+    }
+    format!("{out}…")
+}
+
+impl Layout {
+    fn rect(&mut self, x: f64, y: f64, w: f64, h: f64, rgb: (f64, f64, f64)) {
+        self.op(Op::FillRgb { x, y, w, h, rgb });
+    }
+
+    fn line(&mut self, a: (f64, f64), b: (f64, f64), w: f64, rgb: (f64, f64, f64)) {
+        self.op(Op::Line {
+            x1: a.0,
+            y1: a.1,
+            x2: b.0,
+            y2: b.1,
+            w,
+            rgb,
+        });
+    }
+
+    /// A bar or line chart with its axes, reference lines, marked points and legend.
+    fn chart(&mut self, c: &Chart) {
+        let n = c
+            .series
+            .iter()
+            .map(|(_, v)| v.len())
+            .max()
+            .unwrap_or(0)
+            .max(c.labels.len());
+        let plot_h = 150.0;
+        let named = c.series.iter().filter(|(s, _)| !s.is_empty()).count();
+        let legend = named + c.hlines.len();
+        let legend_h = if legend > 1 || !c.hlines.is_empty() {
+            12.0 * legend.div_ceil(3) as f64
+        } else {
+            0.0
+        };
+        self.need(plot_h + 44.0 + legend_h);
+        if !c.title.is_empty() {
+            self.y -= 12.0;
+            self.text(MARGIN, 9.5, true, BLACK, &c.title);
+        }
+        let inner = self.inner();
+        let left = MARGIN + 44.0;
+        let right = MARGIN + inner - 4.0;
+        let top = self.y - 8.0;
+        let bottom = top - plot_h;
+        let mut vals: Vec<f64> = c
+            .series
+            .iter()
+            .flat_map(|(_, v)| v.iter().copied())
+            .chain(c.hlines.iter().map(|(_, v)| *v))
+            .filter(|v| v.is_finite())
+            .collect();
+        if c.bars {
+            vals.push(0.0);
+        }
+        let mut lo = vals.iter().copied().fold(f64::INFINITY, f64::min);
+        let mut hi = vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        if !lo.is_finite() || !hi.is_finite() {
+            lo = 0.0;
+            hi = 1.0;
+        }
+        if hi - lo < 1e-12 {
+            hi = lo + 1.0;
+        }
+        let pad = 0.06 * (hi - lo);
+        if !(c.bars && lo == 0.0) {
+            lo -= pad;
+        }
+        hi += pad;
+        let yy = |v: f64| bottom + (v - lo) / (hi - lo) * plot_h;
+        let w = right - left;
+        self.op(Op::Frame {
+            x: left,
+            y: bottom,
+            w,
+            h: plot_h,
+        });
+        for i in 0..=4 {
+            let v = lo + (hi - lo) * f64::from(i) / 4.0;
+            let y = yy(v);
+            if i > 0 && i < 4 {
+                self.line((left, y), (right, y), 0.2, (0.85, 0.85, 0.85));
+            }
+            let s = axis(v);
+            let sw = width(&s, 7.0, false);
+            let keep = self.y;
+            self.y = y - 2.5;
+            self.text(left - 4.0 - sw, 7.0, false, GREY, &s);
+            self.y = keep;
+        }
+        if n > 0 {
+            let slot = w / n as f64;
+            let ns = c.series.len().max(1);
+            for (si, (_, v)) in c.series.iter().enumerate() {
+                let rgb = PALETTE[si % PALETTE.len()];
+                if c.bars {
+                    let group = slot * 0.75;
+                    let bw = group / ns as f64;
+                    for (i, y) in v.iter().enumerate() {
+                        if !y.is_finite() {
+                            continue;
+                        }
+                        let x = left + i as f64 * slot + (slot - group) / 2.0 + si as f64 * bw;
+                        let (a, b) = (yy(0.0f64.max(lo)), yy(*y));
+                        self.rect(x, a.min(b), bw * 0.92, (b - a).abs(), rgb);
+                    }
+                } else {
+                    let pts: Vec<Option<(f64, f64)>> = v
+                        .iter()
+                        .enumerate()
+                        .map(|(i, y)| {
+                            y.is_finite()
+                                .then(|| (left + (i as f64 + 0.5) * slot, yy(*y)))
+                        })
+                        .collect();
+                    for pair in pts.windows(2) {
+                        if let (Some(a), Some(b)) = (pair[0], pair[1]) {
+                            self.line(a, b, 0.9, rgb);
+                        }
+                    }
+                    if n <= 60 {
+                        for (x, y) in pts.iter().flatten() {
+                            self.rect(x - 1.3, y - 1.3, 2.6, 2.6, rgb);
+                        }
+                    }
+                }
+            }
+            if let Some((_, v)) = c.series.first() {
+                for i in &c.marks {
+                    if let Some(y) = v.get(*i).filter(|y| y.is_finite()) {
+                        let x = left + (*i as f64 + 0.5) * slot;
+                        self.rect(x - 2.4, yy(*y) - 2.4, 4.8, 4.8, SIGNAL);
+                    }
+                }
+            }
+            // The labels under the axis, every k-th when they do not fit.
+            let every = (n as f64 * 22.0 / w).ceil().max(1.0) as usize;
+            for (i, l) in c.labels.iter().enumerate() {
+                if i % every != 0 {
+                    continue;
+                }
+                let s = fit(l, slot * every as f64 - 2.0, 6.5);
+                let sw = width(&s, 6.5, false);
+                let x = left + (i as f64 + 0.5) * slot - sw / 2.0;
+                let keep = self.y;
+                self.y = bottom - 9.0;
+                self.text(x, 6.5, false, GREY, &s);
+                self.y = keep;
+            }
+        }
+        for (_, v) in &c.hlines {
+            if v.is_finite() {
+                let y = yy(*v);
+                self.line((left, y), (right, y), 0.7, REFERENCE);
+            }
+        }
+        // Legend.
+        self.y = bottom - 16.0;
+        if legend_h > 0.0 {
+            let col = inner / 3.0;
+            let entries: Vec<(String, (f64, f64, f64))> = c
+                .series
+                .iter()
+                .enumerate()
+                .filter(|(_, (s, _))| !s.is_empty())
+                .map(|(i, (s, _))| (s.clone(), PALETTE[i % PALETTE.len()]))
+                .chain(
+                    c.hlines
+                        .iter()
+                        .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE)),
+                )
+                .collect();
+            for (k, (s, rgb)) in entries.into_iter().enumerate() {
+                let x = MARGIN + (k % 3) as f64 * col;
+                if k % 3 == 0 {
+                    self.y -= 12.0;
+                }
+                let y = self.y;
+                self.rect(x, y, 7.0, 7.0, rgb);
+                self.text(x + 10.0, 7.5, false, BLACK, &fit(&s, col - 14.0, 7.5));
+            }
+        }
+        self.y -= 8.0;
+    }
+}
+
 fn lay_out(doc: &Document, t: &Template) -> Layout {
     let (w, h) = doc.size.points();
     let mut l = Layout {
@@ -462,6 +701,7 @@ fn lay_out(doc: &Document, t: &Template) -> Layout {
             }
             Block::Space(p) => l.y -= p,
             Block::PageBreak => l.new_page(),
+            Block::Chart(c) => l.chart(c),
         }
     }
     l
@@ -588,6 +828,19 @@ fn page_content(
                     c,
                     "{} g {} {} {} {} re f 0 g",
                     num(*grey),
+                    num(*x),
+                    num(*y),
+                    num(*w),
+                    num(*h)
+                );
+            }
+            Op::FillRgb { x, y, w, h, rgb } => {
+                let _ = writeln!(
+                    c,
+                    "{} {} {} rg {} {} {} {} re f 0 g",
+                    num(rgb.0),
+                    num(rgb.1),
+                    num(rgb.2),
                     num(*x),
                     num(*y),
                     num(*w),

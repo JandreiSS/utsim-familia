@@ -115,7 +115,7 @@ pub const PHASES: [Phase; 5] = [
                 tools: &[
                     t("SIPOC", Deliverable(Tool::Sipoc)),
                     t("Fluxograma e SIPOC do modelo", Screen("modelo")),
-                    t("Mapa do fluxo de valor", Soon),
+                    t("Mapa do fluxo de valor", Deliverable(Tool::Vsm)),
                 ],
                 check: Some(|| Check::DeliverableExists("sipoc".into())),
             },
@@ -153,7 +153,8 @@ pub const PHASES: [Phase; 5] = [
                 tools: &[
                     t("Gage R&R", Analysis("gage_rr")),
                     t("Estudo do tipo 1", Analysis("msa_tipo1")),
-                    t("Concordância de atributos", Soon),
+                    t("Viés e linearidade", Analysis("msa_linearidade")),
+                    t("Concordância de atributos", Analysis("msa_atributos")),
                 ],
                 check: Some(|| Check::MsaApproved),
             },
@@ -220,7 +221,8 @@ pub const PHASES: [Phase; 5] = [
                 purpose: "Achar onde o fluxo para e quanto do tempo agrega valor.",
                 tools: &[
                     t("Gargalo e caminho crítico do modelo", Screen("modelo")),
-                    t("Mapa do fluxo de valor", Soon),
+                    t("Mapa do fluxo de valor", Deliverable(Tool::Vsm)),
+                    t("Diagrama de espaguete", Screen("modelo")),
                 ],
                 check: None,
             },
@@ -247,7 +249,7 @@ pub const PHASES: [Phase; 5] = [
                 purpose: "Comparar a solução com a situação atual no modelo, com repetições.",
                 tools: &[
                     t("Estudo de cenários", Screen("modelo")),
-                    t("Planejamento de experimentos", Soon),
+                    t("Planejamento de experimentos", Screen("experimentos")),
                 ],
                 check: None,
             },
@@ -397,6 +399,10 @@ mod tests {
             "wilcoxon",
             "gage_rr",
             "msa_tipo1",
+            "msa_vies",
+            "msa_linearidade",
+            "msa_atributos",
+            "experimento_fatorial",
         ];
         for t in all_tools() {
             match t.target {

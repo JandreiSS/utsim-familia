@@ -5,16 +5,20 @@
 //! hash and origin, and the summary of the result, so the tollgate report cites it and
 //! anyone runs it again on the same file. The recipe is recalculated, never typed.
 //!
-//! The Medir checks of the tollgate come from here: [`msa_approved`] (a Gage R&R with
-//! %VE of the GRR ≤ 30 %, or the justification recorded) and [`baseline_real`] (a
+//! The measurement studies are the Gage R&R, the type 1 study, bias, linearity and the
+//! attribute agreement (kappa). The Medir checks of the tollgate come from here:
+//! [`msa_approved`] (a Gage R&R with %VE of the GRR ≤ 30 % or an attribute study with
+//! kappa ≥ 0,75, or the justification recorded) and [`baseline_real`] (a
 //! capability or chart on a data set of origin `Real`).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utsim_quality::attribute::{self, Rating};
 use utsim_quality::charts::{self, ChartData, ChartKind};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
 use utsim_stats::descriptive::{self, QuantileMethod};
+use utsim_stats::doe;
 use utsim_stats::hypothesis::{self, Alternative};
 use utsim_stats::nonparametric::{self, RankMethod};
 
@@ -48,6 +52,12 @@ pub const FAMILY: &str = "estatistica";
 pub const LEVEL: f64 = 0.95;
 /// %VE of the GRR accepted for the tollgate (conditional above 10 %).
 pub const GRR_LIMIT: f64 = 30.0;
+/// Significance of the bias and linearity tests.
+pub const ALPHA: f64 = 1.0 - LEVEL;
+/// The label of Fleiss' kappa over all ratings of an attribute study.
+pub const KAPPA: &str = "kappa de Fleiss";
+/// Kappa accepted for an attribute measurement system.
+pub const KAPPA_LIMIT: f64 = 0.75;
 
 /// What to compute, with the columns (0-based) of the data set.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +122,36 @@ pub enum Recipe {
         reference: f64,
         tolerance: f64,
     },
+    /// Bias: repeated measurements of one reference part.
+    #[serde(rename = "msa_vies")]
+    Bias {
+        col: usize,
+        reference: f64,
+        tolerance: Option<f64>,
+    },
+    /// Linearity: reference and measured value columns over several reference parts.
+    #[serde(rename = "msa_linearidade")]
+    Linearity {
+        reference: usize,
+        value: usize,
+        variation: Option<f64>,
+    },
+    /// Attribute agreement: item, appraiser and response columns, and the known standard.
+    #[serde(rename = "msa_atributos")]
+    Attribute {
+        item: usize,
+        appraiser: usize,
+        response: usize,
+        standard: Option<usize>,
+    },
+    /// Two-level factorial experiment: the factor columns (coded `-1/0/+1` or actual
+    /// levels), the response and the highest order of the interactions in the model.
+    #[serde(rename = "experimento_fatorial")]
+    Factorial {
+        factors: Vec<usize>,
+        response: usize,
+        order: usize,
+    },
 }
 
 impl Recipe {
@@ -132,6 +172,10 @@ impl Recipe {
             Recipe::Wilcoxon { .. } => "Wilcoxon pareado",
             Recipe::GageRr { .. } => "MSA: Gage R&R",
             Recipe::Type1 { .. } => "MSA: estudo do tipo 1",
+            Recipe::Bias { .. } => "MSA: viés",
+            Recipe::Linearity { .. } => "MSA: linearidade",
+            Recipe::Attribute { .. } => "MSA: concordância de atributos",
+            Recipe::Factorial { .. } => "Experimento fatorial 2^k",
         }
     }
 
@@ -162,6 +206,22 @@ pub struct Outcome {
     pub signals: Vec<usize>,
     #[serde(rename = "avisos", default)]
     pub notes: Vec<String>,
+    /// Further charts (effects of an experiment).
+    #[serde(rename = "graficos", default)]
+    pub plots: Vec<Plot>,
+}
+
+/// A chart of a result: bars (one series) or lines, over labelled points.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct Plot {
+    #[serde(rename = "titulo")]
+    pub title: String,
+    #[serde(rename = "barras")]
+    pub bars: bool,
+    #[serde(rename = "rotulos")]
+    pub labels: Vec<String>,
+    #[serde(rename = "series")]
+    pub series: Vec<(String, Vec<f64>)>,
 }
 
 impl Outcome {
@@ -633,6 +693,290 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             };
             o.series = x;
         }
+        Recipe::Bias {
+            col,
+            reference,
+            tolerance,
+        } => {
+            let x = t.numbers(*col);
+            need(&x, 10, "estudo de viés")?;
+            let b = msa::bias(*reference, &x, LEVEL)?;
+            o.put("n", b.n as f64);
+            o.put("média", b.mean);
+            o.put("viés", b.bias);
+            o.put("desvio", b.sd);
+            o.put("t", b.t);
+            o.put("valor-p", b.p_value);
+            o.put("IC inferior", b.ci.0);
+            o.put("IC superior", b.ci.1);
+            if let Some(tol) = tolerance.filter(|t| *t > 0.0) {
+                o.put("%viés da tolerância", 100.0 * b.bias.abs() / tol);
+            }
+            o.verdict = if b.p_value < ALPHA {
+                format!(
+                    "viés de {:.4} significativo (valor-p {:.4}): o instrumento lê deslocado da referência",
+                    b.bias, b.p_value
+                )
+            } else {
+                format!(
+                    "viés não significativo (valor-p {:.4}): o intervalo do viés contém zero",
+                    b.p_value
+                )
+            };
+            o.series = x;
+        }
+        Recipe::Linearity {
+            reference,
+            value,
+            variation,
+        } => {
+            let (r, v) = t.pairs(*reference, *value);
+            let pairs: Vec<(f64, f64)> = r.into_iter().zip(v).collect();
+            let l = msa::linearity(&pairs, *variation, LEVEL)?;
+            o.put("n", l.n as f64);
+            o.put("inclinação", l.slope);
+            o.put("intercepto", l.intercept);
+            o.put("valor-p da inclinação", l.p_slope);
+            o.put("valor-p do intercepto", l.p_intercept);
+            o.put("R²", l.r2);
+            o.put("%linearidade", l.pct_linearity);
+            if let Some(lin) = l.linearity {
+                o.put("linearidade", lin);
+            }
+            for b in &l.per_reference {
+                o.put(&format!("viés em {}", b.reference), b.bias);
+            }
+            o.verdict = if l.p_slope < ALPHA {
+                format!(
+                    "o viés muda ao longo da faixa (inclinação {:.4}, valor-p {:.4}): há problema de linearidade",
+                    l.slope, l.p_slope
+                )
+            } else if l.p_intercept < ALPHA {
+                format!(
+                    "viés constante ao longo da faixa (valor-p do intercepto {:.4}): corrigir o deslocamento",
+                    l.p_intercept
+                )
+            } else {
+                "sem viés nem problema de linearidade ao longo da faixa".to_string()
+            };
+            o.series = l.per_reference.iter().map(|b| b.bias).collect();
+        }
+        Recipe::Attribute {
+            item,
+            appraiser,
+            response,
+            standard,
+        } => {
+            let ratings: Vec<Rating> = t
+                .rows
+                .iter()
+                .filter_map(|row| {
+                    let cell = |c: usize| row.get(c).map(|s| s.trim().to_string());
+                    Some(Rating {
+                        item: cell(*item)?,
+                        appraiser: cell(*appraiser)?,
+                        response: cell(*response)?,
+                        standard: standard.and_then(cell).filter(|s| !s.is_empty()),
+                    })
+                })
+                .filter(|r| !r.item.is_empty() && !r.response.is_empty())
+                .collect();
+            let a = attribute::attribute_agreement(&ratings, LEVEL)?;
+            o.put("itens", a.items as f64);
+            o.put("avaliadores", a.appraisers.len() as f64);
+            o.put("repetições", a.trials as f64);
+            o.put("% entre avaliadores", a.between.percent);
+            if let Some(s) = &a.all_vs_standard {
+                o.put("% todos contra o padrão", s.percent);
+            }
+            let kappa = a.fleiss_all.as_ref().map(|f| f.overall.kappa);
+            if let Some(k) = kappa {
+                o.put(KAPPA, k);
+            }
+            for r in &a.appraisers {
+                if let Some(w) = &r.within {
+                    o.put(&format!("% dentro de {}", r.appraiser), w.percent);
+                }
+                if let Some(s) = &r.vs_standard {
+                    o.put(&format!("% {} contra o padrão", r.appraiser), s.percent);
+                }
+            }
+            o.verdict = match kappa {
+                Some(k) if k >= KAPPA_LIMIT => {
+                    format!("kappa {k:.2} ≥ 0,75: concordância boa, sistema aceito")
+                }
+                Some(k) if k >= 0.4 => {
+                    format!(
+                        "kappa {k:.2} entre 0,40 e 0,75: concordância razoável, melhorar o critério"
+                    )
+                }
+                Some(k) => format!("kappa {k:.2} < 0,40: concordância fraca, sistema não aceito"),
+                None => "sem kappa: precisa de ao menos dois avaliadores ou repetições".to_string(),
+            };
+            o.notes = a.warnings.clone();
+        }
+        Recipe::Factorial {
+            factors,
+            response,
+            order,
+        } => {
+            if factors.len() < 2 {
+                return Err("escolha ao menos dois fatores".into());
+            }
+            let num = |r: &Vec<String>, c: usize| {
+                r.get(c)
+                    .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+            };
+            let mut cols: Vec<Vec<f64>> = vec![Vec::new(); factors.len()];
+            let mut y = Vec::new();
+            for r in &t.rows {
+                let (Some(v), Some(xs)) = (
+                    num(r, *response),
+                    factors
+                        .iter()
+                        .map(|c| num(r, *c))
+                        .collect::<Option<Vec<f64>>>(),
+                ) else {
+                    continue;
+                };
+                y.push(v);
+                for (c, x) in cols.iter_mut().zip(xs) {
+                    c.push(x);
+                }
+            }
+            if y.len() < 4 {
+                return Err(
+                    "o experimento precisa de ao menos 4 corridas com a resposta preenchida".into(),
+                );
+            }
+            for (i, c) in cols.iter_mut().enumerate() {
+                let coded = c.iter().all(|v| [-1.0, 0.0, 1.0].contains(v));
+                if !coded {
+                    *c = doe::code(c)
+                        .ok_or_else(|| format!("o fator {} tem um só nível", doe::letter(i)))?;
+                }
+            }
+            let x: Vec<Vec<f64>> = (0..y.len())
+                .map(|r| cols.iter().map(|c| c[r]).collect())
+                .collect();
+            let a = doe::analyze(&x, &y, (*order).max(1), LEVEL)?;
+            let k = factors.len();
+            let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+            let name = |i: usize| {
+                let h = header(factors[i]);
+                if h == doe::letter(i).to_string() {
+                    let real = header(factors[k - 1] + 1 + i);
+                    if !real.is_empty() {
+                        return real;
+                    }
+                }
+                h
+            };
+            o.notes.push(
+                (0..k)
+                    .map(|i| format!("{} = {}", doe::letter(i), name(i)))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            );
+            o.put("corridas", a.n as f64);
+            o.put("média", a.mean);
+            o.put("R²", a.r2);
+            for e in &a.effects {
+                let n = doe::term_name(e.term);
+                o.put(&format!("efeito {n}"), e.effect);
+                if let Some(p) = e.p_value {
+                    o.put(&format!("valor-p {n}"), p);
+                }
+            }
+            if let Some(c) = a.curvature {
+                o.put("curvatura", c);
+                if let Some(p) = a
+                    .anova
+                    .iter()
+                    .find(|l| l.source == "curvatura")
+                    .and_then(|l| l.p_value)
+                {
+                    o.put("valor-p curvatura", p);
+                }
+            }
+            if let Some(l) = &a.lenth {
+                o.put("PSE de Lenth", l.pse);
+                o.put("margem de erro de Lenth", l.me);
+                o.notes.push(
+                    "sem grau de liberdade para o erro: os valores-p vêm do pseudo erro padrão de Lenth"
+                        .into(),
+                );
+            }
+            for (m, f) in &a.confounded {
+                o.notes.push(if *f == 0 {
+                    format!("{} confundido com a média", doe::term_name(*m))
+                } else {
+                    format!(
+                        "{} confundido com {}",
+                        doe::term_name(*m),
+                        doe::term_name(*f)
+                    )
+                });
+            }
+            let active: Vec<String> = a
+                .effects
+                .iter()
+                .filter(|e| e.p_value.is_some_and(|p| p < ALPHA))
+                .map(|e| doe::term_name(e.term))
+                .collect();
+            o.verdict = if active.is_empty() {
+                "nenhum termo ativo a 5 %".to_string()
+            } else {
+                format!("termos ativos a 5 %: {}", active.join(", "))
+            };
+            if a.anova
+                .iter()
+                .any(|l| l.source == "curvatura" && l.p_value.is_some_and(|p| p < ALPHA))
+            {
+                o.verdict
+                    .push_str("; curvatura significativa: a resposta não é linear entre os níveis");
+            }
+            // Pareto of the effects, main effects and the interactions in the model.
+            let mut by: Vec<&doe::Effect> = a.effects.iter().collect();
+            by.sort_by(|p, q| q.effect.abs().total_cmp(&p.effect.abs()));
+            o.plots.push(Plot {
+                title: "Pareto dos efeitos (valor absoluto)".into(),
+                bars: true,
+                labels: by.iter().map(|e| doe::term_name(e.term)).collect(),
+                series: vec![(
+                    "|efeito|".into(),
+                    by.iter().map(|e| e.effect.abs()).collect(),
+                )],
+            });
+            o.plots.push(Plot {
+                title: "Efeitos principais".into(),
+                bars: false,
+                labels: vec!["baixo (−1)".into(), "alto (+1)".into()],
+                series: (0..k)
+                    .map(|i| {
+                        let (lo, hi) = doe::main_effect_means(&x, &y, i);
+                        (format!("{} {}", doe::letter(i), name(i)), vec![lo, hi])
+                    })
+                    .collect(),
+            });
+            for e in a.effects.iter().filter(|e| doe::order(e.term) == 2).take(6) {
+                let ij: Vec<usize> = (0..k).filter(|i| e.term & (1 << i) != 0).collect();
+                let (i, j) = (ij[0], ij[1]);
+                let m = doe::interaction_means(&x, &y, i, j);
+                o.plots.push(Plot {
+                    title: format!("Interação {} × {}", doe::letter(i), doe::letter(j)),
+                    bars: false,
+                    labels: vec![
+                        format!("{} baixo", doe::letter(i)),
+                        format!("{} alto", doe::letter(i)),
+                    ],
+                    series: vec![
+                        (format!("{} baixo", doe::letter(j)), m[0].to_vec()),
+                        (format!("{} alto", doe::letter(j)), m[1].to_vec()),
+                    ],
+                });
+            }
+        }
     }
     Ok(o)
 }
@@ -702,6 +1046,13 @@ impl Analysis {
 
     pub fn entity_ref(id: Id) -> EntityRef {
         EntityRef::new(Kind::Analysis, id)
+    }
+
+    /// Fleiss' kappa of an attribute agreement study.
+    pub fn kappa(&self) -> Option<f64> {
+        matches!(self.recipe, Some(Recipe::Attribute { .. }))
+            .then(|| self.outcome.value(KAPPA))
+            .flatten()
     }
 
     /// The `%VE` of the GRR of a Gage R&R.
@@ -778,12 +1129,15 @@ pub fn rerun(a: &Analysis, text: &str) -> Result<Outcome, String> {
     run(r, &Table::parse(text))
 }
 
-/// The Medir check "MSA aprovado": a Gage R&R with `%VE` of the GRR ≤ 30 %, or one above
-/// with a justification recorded.
+/// The Medir check "MSA aprovado": a Gage R&R with `%VE` of the GRR ≤ 30 %, or an attribute
+/// agreement study with Fleiss' kappa ≥ 0,75 (for a characteristic judged by people), or
+/// either one with a justification recorded.
 pub fn msa_approved(state: &State, project: Id) -> bool {
     analyses(state, project).iter().any(|a| {
-        a.grr()
-            .is_some_and(|g| g <= GRR_LIMIT + 1e-9 || !a.justification.trim().is_empty())
+        let justified = !a.justification.trim().is_empty();
+        a.grr().is_some_and(|g| g <= GRR_LIMIT + 1e-9 || justified)
+            || a.kappa()
+                .is_some_and(|k| k + 1e-9 >= KAPPA_LIMIT || justified)
     })
 }
 
