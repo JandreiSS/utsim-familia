@@ -171,6 +171,10 @@ pub struct Library {
     pub subtitle: String,
     #[serde(default)]
     pub description: String,
+    /// Cross-cutting pack (quality, safety): added to any line through `Model.packs`,
+    /// never the model's `line`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub transversal: bool,
     #[serde(default)]
     pub models: Vec<ModelRef>,
     pub presets: Vec<Preset>,
@@ -252,6 +256,11 @@ impl Pack {
 
     pub fn id(&self) -> &str {
         &self.library.line
+    }
+
+    /// Whether this is a cross-cutting pack (added through `Model.packs`).
+    pub fn is_cross_cutting(&self) -> bool {
+        self.library.transversal
     }
 
     pub fn preset(&self, id: &str) -> Option<&Preset> {
@@ -498,7 +507,13 @@ impl Pack {
         let fragment = p.instantiate(self.id(), &name, &at.values, at.position, at.department)?;
         let names = fragment.objects.iter().map(|o| o.name.clone()).collect();
         let mut command = add_command(doc, &fragment)?;
-        if doc.model().line.is_none() {
+        if self.is_cross_cutting() {
+            if !doc.model().packs.iter().any(|x| x == self.id()) {
+                let mut packs = doc.model().packs.clone();
+                packs.push(self.id().to_string());
+                command = Command::Batch(vec![Command::SetPacks(packs), command]);
+            }
+        } else if doc.model().line.is_none() {
             command = Command::Batch(vec![Command::SetLine(Some(self.id().to_string())), command]);
         }
         Ok((names, command))

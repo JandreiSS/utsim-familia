@@ -1,0 +1,108 @@
+// Biblioteca do pacote transversal Qualidade: predefinições sobre os objetos comuns do UTSim
+// (docs/plano_qualidade_e_seguranca.md, seções 2.2 e 4.5; formato em
+// docs/formato_qualidade_seguranca.md). O pacote não é uma linha: soma-se a qualquer linha
+// pelo campo `packs` do modelo. Colocar uma predefinição cria objetos comuns, marcados com
+// preset: "qualidade/<id>", e o modelo continua legível sem o pacote.
+//
+// As ligações de saída são do modelo, não da predefinição: a estação de inspeção pede uma
+// ligação de saída por porta (1 aprovado, 2 retrabalho, 3 refugo depois do limite).
+Library(
+    line: "qualidade",
+    name: "Qualidade",
+    subtitle: "pacote transversal",
+    description: "Defeito por processo, inspeção, inspeção por medição, retrabalho, refugo e cliente. Combina com qualquer linha pelo campo packs.",
+    transversal: true,
+    models: [
+        (
+            file: "examples/inspecao_e_retrabalho.ron",
+            name: "Inspeção e retrabalho",
+            description: "Defeito por processo, característica com deriva, inspeção por medição, retrabalho com limite e refugo.",
+        ),
+    ],
+    presets: [
+        (
+            id: "estacao_inspecao",
+            name: "Estação de inspeção",
+            icon: "lupa",
+            role: Check,
+            description: "Examina os itens e escolhe a porta de saída: 1 aprovado, 2 retrabalho, 3 refugo depois do limite de passagens. Ligue uma saída para cada porta, nessa ordem.",
+            name_base: "inspecao",
+            fields: [
+                (key: "tempo", label: "Tempo de inspeção", default: "Const(0.8)"),
+                (key: "amostragem", label: "Inspeciona um a cada n itens", default: "1", help: "1 inspeciona todos."),
+                (key: "deteccao", label: "Probabilidade de detectar defeito", default: "0.9"),
+                (key: "alarme_falso", label: "Probabilidade de alarme falso", default: "0.01"),
+                (key: "max_retrabalho", label: "Passagens de retrabalho permitidas", default: "Some(2)", help: "None: sem limite, e então só há duas portas."),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), output: ByLabel("inspecao"), inspection: Some((every: ${amostragem}, detect: ${deteccao}, false_reject: ${alarme_falso}, on_reject: Rework, max_rework: ${max_retrabalho})))"#,
+            ],
+        ),
+        (
+            id: "inspecao_medicao",
+            name: "Inspeção por medição",
+            icon: "paquimetro",
+            role: Check,
+            description: "Mede uma característica e compara com os limites, com o erro do sistema de medição (desvio da MSA). A característica e seus limites vêm de um processo anterior com quality.",
+            name_base: "medicao",
+            fields: [
+                (key: "tempo", label: "Tempo de medição", default: "Const(1.0)"),
+                (key: "caracteristica", label: "Característica medida", default: "\"diametro\""),
+                (key: "sigma", label: "Desvio do sistema de medição", default: "0.004"),
+                (key: "max_retrabalho", label: "Passagens de retrabalho permitidas", default: "Some(2)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), output: ByLabel("inspecao"), inspection: Some((measure: [(characteristic: ${caracteristica}, sigma: ${sigma})], on_reject: Rework, max_rework: ${max_retrabalho})))"#,
+            ],
+        ),
+        (
+            id: "retrabalho",
+            name: "Retrabalho",
+            icon: "chave",
+            role: Work,
+            description: "Conta a passagem e corrige cada defeito presente com a probabilidade de correção. Ligue a saída de volta à fila da inspeção.",
+            name_base: "retrabalho",
+            fields: [
+                (key: "tempo", label: "Tempo de retrabalho", default: "Exp(mean: 3.0)"),
+                (key: "correcao", label: "Probabilidade de corrigir o defeito", default: "0.95"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), rework: Some((fix: ${correcao})))"#,
+            ],
+        ),
+        (
+            id: "refugo",
+            name: "Refugo",
+            icon: "lixeira",
+            role: Done,
+            description: "Onde terminam as peças descartadas (falha interna).",
+            name_base: "refugo",
+            objects: [r#"(name: "${name}", kind: Sink, sink_role: Some(Scrap))"#],
+        ),
+        (
+            id: "cliente",
+            name: "Cliente",
+            icon: "caminhao",
+            role: Done,
+            description: "Onde terminam as peças entregues. Defeito que chega aqui escapou (falha externa).",
+            name_base: "cliente",
+            objects: [r#"(name: "${name}", kind: Sink, sink_role: Some(Customer))"#],
+        ),
+        (
+            id: "processo_defeito",
+            name: "Processo com defeito",
+            icon: "engrenagem",
+            role: Work,
+            description: "Posto que gera um tipo de defeito com probabilidade base por item.",
+            name_base: "processo",
+            fields: [
+                (key: "tempo", label: "Tempo de processo", default: "Triangular(min: 1.2, mode: 1.5, max: 2.0)"),
+                (key: "defeito", label: "Nome do defeito", default: "\"risco\""),
+                (key: "probabilidade", label: "Probabilidade de defeito por item", default: "0.02"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), quality: Some((defects: [(name: ${defeito}, probability: ${probabilidade})])))"#,
+            ],
+        ),
+    ],
+)

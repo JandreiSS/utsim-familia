@@ -1,0 +1,13 @@
+[package]
+name = "utsim-exposicao"
+description = "Exposição em zonas de risco, quase-conflitos simulados entre pessoas e veículos e mapa de calor, sobre o rastro de uma replicação (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-nav.workspace = true
+utsim-stats.workspace = true
+serde.workspace = true

@@ -1,0 +1,17 @@
+// Vocabulário do pacote Qualidade: termo do núcleo -> termo da qualidade.
+Vocabulary(
+    line: "qualidade",
+    terms: {
+        "item": "peça",
+        "itens": "peças",
+        "Processor": "processo",
+        "Sink": "destino final",
+        "inspection": "inspeção",
+        "rework": "retrabalho",
+        "scrap": "refugo",
+        "customer": "cliente",
+        "defect": "defeito",
+        "characteristic": "característica",
+        "passes": "passagens de retrabalho",
+    },
+)

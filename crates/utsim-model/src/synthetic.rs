@@ -59,6 +59,11 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         preset: None,
         department: None,
         symbol: None,
+        quality: None,
+        inspection: None,
+        rework: None,
+        sink_role: None,
+        ppe: Vec::new(),
     }
 }
 
@@ -245,6 +250,8 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         aisles: Vec::new(),
         floor_marking: None,
         line: None,
+        packs: Vec::new(),
+        zones: Vec::new(),
     })
 }
 

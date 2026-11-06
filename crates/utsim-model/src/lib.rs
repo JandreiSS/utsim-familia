@@ -14,6 +14,7 @@ mod maintenance;
 mod movement;
 mod multitask;
 mod person;
+pub mod quality;
 pub mod replay;
 mod shifts;
 mod spans;
@@ -25,6 +26,10 @@ mod warnings;
 pub use line::SYMBOL_IDS;
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
 pub use movement::{Movement, NavSet};
+pub use quality::{
+    CharacteristicDef, DefectDef, DefectFactor, InspectionDef, MeasureDef, QualityDef, RejectTo,
+    ReworkDef, SinkRole, ZoneDef, ZoneKind,
+};
 pub use spans::SpanDef;
 pub use state::InitialState;
 pub use utsim_cad::FloorPlanDef;
@@ -177,6 +182,14 @@ pub struct Model {
     /// reports use its vocabulary, library and indicators. Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<String>,
+    /// Cross-cutting packs added to the line (`"qualidade"`, `"seguranca"`): more presets
+    /// and reports in the interface. Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packs: Vec<String>,
+    /// Risk zones on the floor ([`ZoneDef`]): exposure analysis and 3D. Never read by the
+    /// simulation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<ZoneDef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -274,6 +287,31 @@ pub struct ObjectDef {
     /// the flowchart infers from its kind. Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
+    /// Defects and measured characteristics drawn for the items entering the object
+    /// (`Processor`, `Combiner`, `Separator`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<Box<QualityDef>>,
+    /// Inspection station: writes the output port of each item (`ByLabel("inspecao")`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspection: Option<Box<InspectionDef>>,
+    /// Rework station: counts passes and fixes defects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rework: Option<ReworkDef>,
+    /// Role of a `Sink` in the quality reports (scrap or customer). Never read by the
+    /// simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sink_role: Option<SinkRole>,
+    /// Protective equipment required at this work station (names of
+    /// [`quality::PPE_NAMES`] or others). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ppe: Vec<String>,
+}
+
+impl ObjectDef {
+    /// Whether the object has any of the blocks that install the quality hook.
+    pub fn has_quality_hook(&self) -> bool {
+        self.quality.is_some() || self.inspection.is_some() || self.rework.is_some()
+    }
 }
 
 /// Look of an object in 3D. Every field is optional; the viewer falls back to the
@@ -971,6 +1009,7 @@ impl Model {
         self.validate_movement(&mut errors);
         self.validate_aisles(&mut errors);
         self.validate_logic(&mut errors);
+        self.validate_quality(&mut errors);
         self.validate_spans(&mut errors);
         self.validate_maintenance(&mut errors);
         self.validate_people(&mut errors);
@@ -1113,6 +1152,62 @@ impl Model {
         }
         if let Some(net) = &self.network {
             errors.extend(net.validate());
+        }
+    }
+
+    /// Quality blocks, sink roles and risk zones (`docs/formato_qualidade_seguranca.md`).
+    fn validate_quality(&self, errors: &mut Vec<String>) {
+        for obj in &self.objects {
+            let outputs = self
+                .connections
+                .iter()
+                .filter(|(from, _)| *from == obj.name)
+                .count();
+            if obj.has_quality_hook()
+                && !matches!(
+                    obj.kind,
+                    ObjectKind::Processor { .. }
+                        | ObjectKind::Combiner { .. }
+                        | ObjectKind::Separator { .. }
+                        | ObjectKind::Queue { .. }
+                )
+            {
+                errors.push(format!(
+                    "{}: quality, inspection e rework só valem em Processor, Combiner, Separator ou Queue",
+                    obj.name
+                ));
+            }
+            if let Some(i) = &obj.inspection {
+                if obj.output != OutputRule::ByLabel(i.label.clone()) {
+                    errors.push(format!(
+                        "{}: a inspeção pede output: ByLabel(\"{}\")",
+                        obj.name, i.label
+                    ));
+                }
+            }
+            quality::validate(
+                &obj.name,
+                obj.quality.as_deref(),
+                obj.inspection.as_deref(),
+                obj.rework.as_ref(),
+                outputs,
+                errors,
+            );
+            if obj.sink_role.is_some() && !matches!(obj.kind, ObjectKind::Sink) {
+                errors.push(format!("{}: sink_role só vale em Sink", obj.name));
+            }
+        }
+        let mut names = HashSet::new();
+        for z in &self.zones {
+            if !names.insert(z.name.as_str()) {
+                errors.push(format!("zona '{}' repetida", z.name));
+            }
+            if z.polygon.len() < 3 || z.polygon.iter().flatten().any(|v| !v.is_finite()) {
+                errors.push(format!(
+                    "zona '{}': o polígono precisa de 3 vértices finitos ou mais",
+                    z.name
+                ));
+            }
         }
     }
 
@@ -1339,11 +1434,24 @@ impl Model {
                     );
                 }
             }
-            if let Some(script) = obj
+            let script = obj
                 .on_entry
                 .as_deref()
-                .and_then(|s| utsim_script::compile_item_script(s).ok())
-            {
+                .and_then(|s| utsim_script::compile_item_script(s).ok());
+            if obj.has_quality_hook() {
+                sim.set_entry_script(
+                    id,
+                    Box::new(quality::QualityHook::new(
+                        self.run.seed,
+                        replication,
+                        id.0,
+                        obj.quality.as_deref().cloned(),
+                        obj.inspection.as_deref().cloned(),
+                        obj.rework.clone(),
+                        script,
+                    )),
+                );
+            } else if let Some(script) = script {
                 sim.set_entry_script(id, script);
             }
             if let OutputRule::Script(src) = &obj.output {

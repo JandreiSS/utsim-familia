@@ -185,6 +185,10 @@ pub enum Command {
     Batch(Vec<Command>),
     /// The specialised line of the model (`Model.line`, `None`: no line).
     SetLine(Option<String>),
+    /// The cross-cutting packs of the model (`Model.packs`).
+    SetPacks(Vec<String>),
+    /// Adds a risk zone (`Model.zones`); the name must be new.
+    AddZone(utsim_model::quality::ZoneDef),
 }
 
 /// Where a distribution field gets its distribution from.
@@ -606,6 +610,13 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::AddFluidLink { from, to } => fluids::add_link(model, from, to)?,
         Command::RemoveFluidLink { from, to } => fluids::remove_link(model, from, to)?,
         Command::SetLine(line) => model.line = line.clone(),
+        Command::SetPacks(packs) => model.packs = packs.clone(),
+        Command::AddZone(zone) => {
+            if model.zones.iter().any(|z| z.name == zone.name) {
+                return Err(format!("já existe a zona '{}'", zone.name));
+            }
+            model.zones.push(zone.clone());
+        }
         Command::SetInfo { name, description } => {
             let name = name.trim();
             if name.is_empty() {
@@ -942,6 +953,11 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         preset: None,
         department: None,
         symbol: None,
+        quality: None,
+        inspection: None,
+        rework: None,
+        sink_role: None,
+        ppe: Vec::new(),
     })
 }
 
