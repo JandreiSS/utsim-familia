@@ -37,6 +37,8 @@ pub mod fields {
         /// The company's action priority table (1000 letters), when one was imported.
         pub const AP_TABLE: &str = "tabela_ap";
         pub const AP_TABLE_NAME: &str = "tabela_ap_nome";
+        /// Project template of a specialised line (`modelos_linha`), when it has one.
+        pub const MODEL: &str = "modelo";
     }
     pub mod phase {
         pub const PROJECT: &str = "projeto";
