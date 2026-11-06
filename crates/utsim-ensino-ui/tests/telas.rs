@@ -84,6 +84,15 @@ fn aluno_resolve_a_missao_1_1() {
         State::Idle | State::Processing
     ));
 
+    // Reopening the mission brings back the locked prediction and the decisions.
+    app.abrir_missao(0);
+    {
+        let m = app.missao.as_ref().unwrap();
+        assert!(m.previsao_travada);
+        assert!(m.previsoes_completas());
+        assert_eq!(m.tentativa.decisoes["furacao"], 2.0);
+    }
+
     // The next mission is unlocked; the sandbox runs.
     app.abrir_areia(0);
     {

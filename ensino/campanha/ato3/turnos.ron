@@ -1,0 +1,46 @@
+Missao(
+    id: "ato3/turnos",
+    titulo: "A demanda dobrou",
+    conceitos: ["capacidade", "turno", "gargalo"],
+    modelo: "../modelos/turnos.ron",
+    texto: "turnos.md",
+    variante: [
+        (chave: "pedidos.interarrival", de: 5.7, ate: 5.82, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "capacidade",
+            pergunta: "Com um turno de 8 horas e uma máquina de corte, quantas peças a linha entrega por semana?",
+            valor: [(chave: "expedicao.input")],
+            unidade: "peças",
+            tolerancia: Relativa(0.1),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "turnos", rotulo: "Turnos por dia", opcoes: [
+            (rotulo: "Um turno", ajustes: {"calendars.turno": "(period: 1440.0, off: [(start: 480.0, duration: 960.0)])"}, numero: 1),
+            (rotulo: "Dois turnos", ajustes: {"calendars.turno": "(period: 1440.0, off: [(start: 960.0, duration: 480.0)])"}, custo: 6000, numero: 2),
+            (rotulo: "Três turnos", ajustes: {"calendars.turno": "(period: 1440.0, off: [])"}, custo: 14000, numero: 3),
+        ]),
+        Quantidade(id: "cortes", rotulo: "Máquinas de corte (aluguel semanal)", chave: "corte.capacity", de: 1, ate: 2, custo_unitario: 4000),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo semanal (turnos, aluguel e pedidos não entregues)", unidade: "R$",
+         valor: [(chave: "custo"), (chave: "pedidos.output", fator: 100.0), (chave: "expedicao.input", fator: -100.0)],
+         objetivo: Menor, meta: 11000.0, peso: 1.0, casas: 0),
+        (nome: "entregas", rotulo: "Peças entregues por semana", unidade: "peças",
+         valor: [(chave: "expedicao.input")], objetivo: Maior, meta: 1230.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Com dois turnos e uma máquina de corte, por que a linha ainda não atende a demanda?",
+         opcoes: ["Porque o corte continua sendo o gargalo, com capacidade abaixo da demanda", "Porque a montagem fica sem peças", "Porque os pedidos chegam só de dia"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quantas peças o corte faz por dia em cada turno? E a montagem?",
+        "Compare a capacidade semanal de cada estação com a demanda de 1.250 peças.",
+        "Dê capacidade ao gargalo pelo meio mais barato e confira se a outra estação aguenta.",
+    ],
+    referencia: {"turnos": 1, "cortes": 2},
+    animacao: (duracao: 1440, unidade: "min"),
+)

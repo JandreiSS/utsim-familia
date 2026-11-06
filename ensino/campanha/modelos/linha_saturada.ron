@@ -1,0 +1,21 @@
+// Missão 1.2: linha com estoques pequenos entre as máquinas. Tempo em minutos.
+// As peças que não cabem na fila de entrada são recusadas (pedido perdido).
+Model(
+    name: "Linha de usinagem saturada",
+    run: (stop_time: 10500.0, warmup: 500.0, seed: 11, replications: 10),
+    objects: [
+        (name: "chegada",      kind: Source(interarrival: Exp(mean: 3.0), on_blocked: Drop), position: (0.0, 0.0, 0.0)),
+        (name: "fila_corte",   kind: Queue(capacity: 6),                    position: (4.0, 0.0, 0.0)),
+        (name: "corte",        kind: Processor(process: Exp(mean: 2.4)),    position: (8.0, 0.0, 0.0)),
+        (name: "fila_furacao", kind: Queue(capacity: 4),                    position: (12.0, 0.0, 0.0)),
+        (name: "furacao",      kind: Processor(process: Exp(mean: 3.6)),    position: (16.0, 0.0, 0.0)),
+        (name: "fila_pintura", kind: Queue(capacity: 4),                    position: (20.0, 0.0, 0.0)),
+        (name: "pintura",      kind: Processor(process: Exp(mean: 2.0)),    position: (24.0, 0.0, 0.0)),
+        (name: "saida",        kind: Sink,                                  position: (28.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "fila_corte"), ("fila_corte", "corte"), ("corte", "fila_furacao"),
+        ("fila_furacao", "furacao"), ("furacao", "fila_pintura"), ("fila_pintura", "pintura"),
+        ("pintura", "saida"),
+    ],
+)

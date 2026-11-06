@@ -1,0 +1,50 @@
+Missao(
+    id: "ato3/manutencao",
+    titulo: "Corretiva ou preventiva",
+    conceitos: ["disponibilidade", "manutencao_preventiva"],
+    modelo: "../modelos/manutencao.ron",
+    texto: "manutencao.md",
+    medicoes: [
+        (rotulo: "Disponibilidade do torno", valor: [(chave: "torno.oee.availability")], casas: 3),
+        (rotulo: "Quebras por semana", valor: [(chave: "torno.maintenance.failures")], casas: 1),
+        (rotulo: "Custo de manutenção e de parada por semana", valor: [(chave: "torno.maintenance.cost")], unidade: "R$", casas: 0),
+    ],
+    previsao: [
+        Escolha(
+            id: "desgaste",
+            pergunta: "Este torno quebra mais quando está velho (desde o último reparo) ou as quebras não dependem da idade?",
+            opcoes: [(rotulo: "Quebra mais quando está velho"), (rotulo: "As quebras não dependem da idade")],
+            resposta: Fixa(0),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "plano", rotulo: "Plano de manutenção do torno", opcoes: [
+            (rotulo: "Só corretiva", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 30.0, mode: 45.0, max: 90.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}),
+            (rotulo: "Preventiva a cada 150 min de uso", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 30.0, mode: 45.0, max: 90.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(150.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}),
+            (rotulo: "Preventiva a cada 250 min de uso", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 30.0, mode: 45.0, max: 90.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(250.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}),
+            (rotulo: "Preventiva a cada 400 min de uso", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 30.0, mode: 45.0, max: 90.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(400.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}),
+            (rotulo: "Só corretiva e kit de reparo rápido", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 15.0, mode: 20.0, max: 40.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}, custo: 2000),
+            (rotulo: "Preventiva a cada 150 min de uso e kit de reparo rápido", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 15.0, mode: 20.0, max: 40.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(150.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}, custo: 2000),
+            (rotulo: "Preventiva a cada 250 min de uso e kit de reparo rápido", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 15.0, mode: 20.0, max: 40.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(250.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}, custo: 2000),
+            (rotulo: "Preventiva a cada 400 min de uso e kit de reparo rápido", ajustes: {"torno.downtime": "(mtbf: Exp(mean: 600.0), mttr: Triangular(min: 15.0, mode: 20.0, max: 40.0), wear: Weibull(shape: 3.0, scale: 500.0), basis: Busy, repair: AsGoodAsNew, preventive: [(every: Hours(400.0), duration: Const(20.0))], cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0), oee: ())"}, custo: 2000),
+        ]),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo semanal de manutenção, parada e kit", unidade: "R$",
+         valor: [(chave: "torno.maintenance.cost"), (chave: "custo")], objetivo: Menor, meta: 11800.0, peso: 1.0, casas: 0),
+        (nome: "disponibilidade", rotulo: "Disponibilidade do torno", unidade: "",
+         valor: [(chave: "torno.oee.availability")], objetivo: Maior, meta: 0.93, peso: 0.0, casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Por que a preventiva muito frequente também sai cara?",
+         opcoes: ["Porque cada preventiva para a máquina e custa, mesmo quando ela ainda não ia quebrar", "Porque a preventiva aumenta o desgaste", "Porque a preventiva aumenta o tempo de reparo"],
+         certa: 0),
+    ],
+    dicas: [
+        "A chance de quebrar cresce com o uso desde o último reparo. O que isso diz sobre trocar antes da quebra?",
+        "Compare o número de quebras e de preventivas e o custo de cada plano.",
+        "Procure o intervalo em que o custo das preventivas e o das quebras se equilibram. Avalie o kit só depois.",
+    ],
+    referencia: {"plano": 2},
+    animacao: (duracao: 1440, unidade: "min"),
+)

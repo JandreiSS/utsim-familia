@@ -1,0 +1,47 @@
+Missao(
+    id: "ato1/little",
+    titulo: "Quanto tem no chão",
+    conceitos: ["wip", "lei_de_little", "lead_time", "vazao"],
+    modelo: "../modelos/linha_little.ron",
+    texto: "little.md",
+    variante: [
+        (chave: "chegada.interarrival", de: 2.45, ate: 2.55, modelo: "Exp(mean: {})"),
+    ],
+    medicoes: [
+        (rotulo: "Vazão", valor: [(chave: "saida.input", fator: 0.006)], unidade: "peças/h", casas: 2),
+        (rotulo: "Lead time (permanência média na célula)", valor: [(chave: "saida.time_in_system.mean")], unidade: "min", casas: 1),
+    ],
+    previsao: [
+        Valor(
+            id: "wip",
+            pergunta: "Quantas peças, em média, estão dentro da célula (filas e máquinas)?",
+            valor: [
+                (chave: "fila_solda.content.mean"), (chave: "solda.content.mean"),
+                (chave: "estoque.content.mean"), (chave: "acabamento.content.mean"),
+            ],
+            unidade: "peças",
+            tolerancia: Relativa(0.1),
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "estoque", rotulo: "Limite do estoque entre solda e acabamento", chave: "estoque.capacity", de: 1, ate: 20, inicial: 20),
+    ],
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time", unidade: "min",
+         valor: [(chave: "saida.time_in_system.mean")], objetivo: Menor, meta: 14.5, peso: 1.0, casas: 1),
+        (nome: "vazao", rotulo: "Peças entregues por hora", unidade: "peças/h",
+         valor: [(chave: "saida.input", fator: 0.006)], objetivo: Maior, meta: 21.8, peso: 0.0, casas: 2),
+    ],
+    justificativa: [
+        (pergunta: "Com a vazão quase igual, o que acontece com o lead time quando o estoque em processo cai pela metade?",
+         opcoes: ["Cai mais ou menos pela metade", "Dobra", "Não muda"],
+         certa: 0),
+    ],
+    dicas: [
+        "Se você sabe quantas peças saem por minuto e quanto tempo cada uma fica, sabe quantas estão lá dentro?",
+        "Lei de Little: estoque em processo = vazão × lead time, com as unidades de tempo iguais.",
+        "Limite o estoque entre as estações até o lead time cair abaixo da meta sem derrubar a vazão.",
+    ],
+    referencia: {"estoque": 5},
+    animacao: (duracao: 300, unidade: "min"),
+)

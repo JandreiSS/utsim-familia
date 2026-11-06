@@ -1,0 +1,13 @@
+// Missão 2.2: atendimento com sala de espera limitada. Quem chega com a sala cheia vai embora.
+// Tempo em minutos.
+Model(
+    name: "Posto de atendimento",
+    run: (stop_time: 10200.0, warmup: 600.0, seed: 22, replications: 10),
+    objects: [
+        (name: "clientes", kind: Source(interarrival: Exp(mean: 1.0), on_blocked: Drop), position: (0.0, 0.0, 0.0)),
+        (name: "sala",     kind: Queue(capacity: 2),                                  position: (4.0, 0.0, 0.0)),
+        (name: "guiches",  kind: Processor(capacity: 1, process: Exp(mean: 1.6)),     position: (8.0, 0.0, 0.0)),
+        (name: "saida",    kind: Sink,                                                position: (12.0, 0.0, 0.0)),
+    ],
+    connections: [("clientes", "sala"), ("sala", "guiches"), ("guiches", "saida")],
+)

@@ -1,0 +1,51 @@
+Missao(
+    id: "ato1/lugar_errado",
+    titulo: "Reforçar o lugar errado",
+    conceitos: ["gargalo", "vazao", "utilizacao"],
+    modelo: "../modelos/linha_saturada.ron",
+    texto: "lugar_errado.md",
+    variante: [
+        (chave: "furacao.process", de: 3.5, ate: 3.7, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "Qual estação limita a vazão da linha?",
+            opcoes: [
+                (rotulo: "Corte", valor: [(chave: "corte.utilization")]),
+                (rotulo: "Furação", valor: [(chave: "furacao.utilization")]),
+                (rotulo: "Pintura", valor: [(chave: "pintura.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "plano", rotulo: "Plano de compra (duas máquinas)", opcoes: [
+            (rotulo: "Nenhuma compra", ajustes: {}),
+            (rotulo: "Corte e pintura", ajustes: {"corte.capacity": "2", "pintura.capacity": "2"}, custo: 110000),
+            (rotulo: "Corte e furação", ajustes: {"corte.capacity": "2", "furacao.capacity": "2"}, custo: 140000),
+            (rotulo: "Furação e pintura", ajustes: {"furacao.capacity": "2", "pintura.capacity": "2"}, custo: 130000),
+            (rotulo: "Duas na furação", ajustes: {"furacao.capacity": "3"}, custo: 160000),
+        ]),
+    ],
+    orcamento: 140000,
+    metricas: [
+        (nome: "vazao", rotulo: "Peças entregues por hora", unidade: "peças/h",
+         valor: [(chave: "saida.input", fator: 0.006)], objetivo: Maior, meta: 19.3, casas: 1),
+    ],
+    justificativa: [
+        (pergunta: "Por que comprar no corte e na pintura quase não mudou a vazão?",
+         opcoes: ["Porque a furação continuou limitando a linha", "Porque as máquinas novas são mais lentas", "Porque faltou orçamento para a terceira máquina"],
+         certa: 0),
+        (pergunta: "Depois de reforçar a furação, o que acontece com a fila antes dela?",
+         opcoes: ["Diminui", "Aumenta", "Não muda"],
+         certa: 0),
+    ],
+    dicas: [
+        "Qual estação trabalha quase o tempo todo e tem a fila sempre cheia antes dela?",
+        "Olhe a utilização de cada estação no estado atual: a maior aponta o gargalo.",
+        "O plano precisa incluir a furação. A segunda máquina vai para a estação que vira o novo gargalo.",
+    ],
+    referencia: {"plano": 2},
+    animacao: (duracao: 300, unidade: "min"),
+)

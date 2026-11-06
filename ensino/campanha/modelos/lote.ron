@@ -1,0 +1,13 @@
+// Missão 3.4: uma prensa que troca de ferramenta a cada lote. Cada item do modelo é um
+// lote de peças. Tempo em minutos. O lote inicial é de 40 peças.
+Model(
+    name: "Prensa com troca de ferramenta",
+    run: (stop_time: 30500.0, warmup: 500.0, seed: 34, replications: 10),
+    objects: [
+        (name: "lotes",     kind: Source(interarrival: Erlang(k: 4, mean: 80.0)),                       position: (0.0, 0.0, 0.0)),
+        (name: "fila",      kind: Queue(),                                                              position: (4.0, 0.0, 0.0)),
+        (name: "prensa",    kind: Processor(setup: Const(10.0), process: Gamma(shape: 4.0, scale: 12.0)), position: (8.0, 0.0, 0.0)),
+        (name: "expedicao", kind: Sink,                                                                 position: (12.0, 0.0, 0.0)),
+    ],
+    connections: [("lotes", "fila"), ("fila", "prensa"), ("prensa", "expedicao")],
+)

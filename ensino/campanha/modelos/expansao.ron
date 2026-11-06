@@ -1,0 +1,24 @@
+// Missão 3.5: a linha de eixos com quebras no corte e um pulmão limitado antes da montagem.
+// A semana tem 5 dias de 1.440 min.
+Model(
+    name: "Expansão da linha de eixos",
+    run: (stop_time: 14400.0, warmup: 7200.0, seed: 35, replications: 10),
+    calendars: {
+        "turno": (period: 1440.0, off: [(start: 480.0, duration: 960.0)]),
+    },
+    objects: [
+        (name: "pedidos",       kind: Source(interarrival: Exp(mean: 5.76)),                position: (0.0, 0.0, 0.0)),
+        (name: "carteira",      kind: Queue(),                                             position: (4.0, 0.0, 0.0)),
+        (name: "corte",         kind: Processor(process: Triangular(min: 3.0, mode: 4.0, max: 5.0)), position: (8.0, 0.0, 0.0),
+         shifts: Calendar("turno"),
+         downtime: (mtbf: Exp(mean: 240.0), mttr: Exp(mean: 40.0), basis: Busy)),
+        (name: "pulmao",        kind: Queue(capacity: 2),                                  position: (12.0, 0.0, 0.0)),
+        (name: "montagem",      kind: Processor(process: Triangular(min: 2.5, mode: 3.5, max: 4.5)), position: (16.0, 0.0, 0.0),
+         shifts: Calendar("turno")),
+        (name: "expedicao",     kind: Sink,                                                position: (20.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("pedidos", "carteira"), ("carteira", "corte"), ("corte", "pulmao"),
+        ("pulmao", "montagem"), ("montagem", "expedicao"),
+    ],
+)

@@ -1,0 +1,42 @@
+Missao(
+    id: "ato3/pulmao",
+    titulo: "Pulmão certo",
+    conceitos: ["pulmao", "bloqueio", "vazao", "variabilidade"],
+    modelo: "../modelos/pulmao.ron",
+    texto: "pulmao.md",
+    variante: [
+        (chave: "fresa.process", de: 0.74, ate: 0.76, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "bloqueio",
+            pergunta: "Com pulmão de uma peça, o torno passa tempo parado esperando a fresa liberar espaço?",
+            opcoes: [
+                (rotulo: "Sim, uma parte importante do tempo (mais de 5 %)", valor: [(chave: "torno.state.blocked")]),
+                (rotulo: "Quase nunca (menos de 5 %)", valor: [(chave: "const", fator: 0.05)]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "pulmao", rotulo: "Lugares no pulmão entre torno e fresa", chave: "pulmao.capacity", de: 1, ate: 12),
+    ],
+    metricas: [
+        (nome: "vazao", rotulo: "Peças por hora", unidade: "peças/h",
+         valor: [(chave: "expedicao.input", fator: 0.02)], objetivo: Maior, meta: 72.0, peso: 0.0, casas: 1),
+        (nome: "lugares", rotulo: "Lugares no pulmão", unidade: "",
+         valor: [(chave: "decisao.pulmao")], objetivo: Menor, peso: 1.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que um pulmão maior aumenta a vazão de duas máquinas com a mesma capacidade média?",
+         opcoes: ["Porque absorve a variação dos tempos e evita bloqueio e falta", "Porque aumenta a velocidade da fresa", "Porque diminui o tempo de setup"],
+         certa: 0),
+    ],
+    dicas: [
+        "O que o torno faz quando termina uma peça e o pulmão está cheio?",
+        "Veja a fração do tempo em que o torno fica bloqueado e a fresa fica sem peça.",
+        "Aumente o pulmão só até a vazão alcançar a meta: cada lugar a mais custa espaço e estoque.",
+    ],
+    referencia: {"pulmao": 5},
+    animacao: (duracao: 120, unidade: "min"),
+)

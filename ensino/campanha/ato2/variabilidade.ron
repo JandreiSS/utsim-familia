@@ -1,0 +1,46 @@
+Missao(
+    id: "ato2/variabilidade",
+    titulo: "Mesma média, outra fila",
+    conceitos: ["variabilidade", "fila", "utilizacao"],
+    modelo: "../modelos/variabilidade.ron",
+    texto: "variabilidade.md",
+    previsao: [
+        Escolha(
+            id: "maior_fila",
+            pergunta: "Qual bancada terá a maior fila média?",
+            opcoes: [
+                (rotulo: "Bancada A", valor: [(chave: "fila_a.content.mean")]),
+                (rotulo: "Bancada B", valor: [(chave: "fila_b.content.mean")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "metodo", rotulo: "Método na bancada B", opcoes: [
+            (rotulo: "Como está", ajustes: {}),
+            (rotulo: "Método padronizado (mesma média, menos variação)", ajustes: {"bancada_b.process": "Gamma(shape: 4.0, scale: 1.0)"}, custo: 20000),
+            (rotulo: "Equipamento mais rápido (3,2 min)", ajustes: {"bancada_b.process": "Exp(mean: 3.2)"}, custo: 60000),
+        ]),
+        Escolha(id: "chegadas", rotulo: "Chegadas na bancada B", opcoes: [
+            (rotulo: "Como estão (aleatórias)", ajustes: {}),
+            (rotulo: "Agendadas pelo almoxarifado", ajustes: {"chegada_b.interarrival": "Uniform(min: 4.0, max: 6.0)"}, custo: 15000),
+        ]),
+    ],
+    orcamento: 40000,
+    metricas: [
+        (nome: "espera_b", rotulo: "Espera média na fila da bancada B", unidade: "min",
+         valor: [(chave: "fila_b.staytime.mean")], objetivo: Menor, meta: 5.0, casas: 1),
+    ],
+    justificativa: [
+        (pergunta: "As duas bancadas têm a mesma utilização. O que explica a diferença das filas?",
+         opcoes: ["A variabilidade das chegadas e dos tempos de processo", "A bancada B é mais lenta em média", "A bancada A recebe menos peças"],
+         certa: 0),
+    ],
+    dicas: [
+        "As médias são iguais. O que é diferente entre as duas bancadas?",
+        "Compare a variação dos tempos de processo e dos intervalos entre chegadas.",
+        "Reduza a variação dos dois lados: do processo e das chegadas.",
+    ],
+    referencia: {"metodo": 1, "chegadas": 1},
+    animacao: (duracao: 480, unidade: "min"),
+)

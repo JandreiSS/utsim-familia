@@ -1,0 +1,54 @@
+Missao(
+    id: "ato3/expansao",
+    titulo: "A expansão da linha de eixos",
+    conceitos: ["capacidade", "turno", "pulmao", "disponibilidade"],
+    modelo: "../modelos/expansao.ron",
+    texto: "expansao.md",
+    variante: [
+        (chave: "pedidos.interarrival", de: 5.7, ate: 5.82, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "No estado atual, qual estação limita a linha, contando trabalho e quebras?",
+            opcoes: [
+                (rotulo: "Corte", valor: [(chave: "corte.utilization"), (chave: "corte.state.down")]),
+                (rotulo: "Montagem", valor: [(chave: "montagem.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "turnos", rotulo: "Turnos por dia", opcoes: [
+            (rotulo: "Um turno", ajustes: {"calendars.turno": "(period: 1440.0, off: [(start: 480.0, duration: 960.0)])"}, numero: 1),
+            (rotulo: "Dois turnos", ajustes: {"calendars.turno": "(period: 1440.0, off: [(start: 960.0, duration: 480.0)])"}, custo: 6000, numero: 2),
+            (rotulo: "Três turnos", ajustes: {"calendars.turno": "(period: 1440.0, off: [])"}, custo: 14000, numero: 3),
+        ]),
+        Quantidade(id: "cortes", rotulo: "Máquinas de corte (aluguel semanal)", chave: "corte.capacity", de: 1, ate: 2, custo_unitario: 4000),
+        Escolha(id: "pulmao", rotulo: "Pulmão antes da montagem", opcoes: [
+            (rotulo: "2 lugares", ajustes: {"pulmao.capacity": "2"}),
+            (rotulo: "5 lugares", ajustes: {"pulmao.capacity": "5"}, custo: 300),
+            (rotulo: "10 lugares", ajustes: {"pulmao.capacity": "10"}, custo: 600),
+            (rotulo: "20 lugares", ajustes: {"pulmao.capacity": "20"}, custo: 1200),
+        ]),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo semanal (turnos, aluguel, pulmão e pedidos não entregues)", unidade: "R$",
+         valor: [(chave: "custo"), (chave: "pedidos.output", fator: 100.0), (chave: "expedicao.input", fator: -100.0)],
+         objetivo: Menor, meta: 11500.0, peso: 1.0, casas: 0),
+        (nome: "entregas", rotulo: "Peças entregues por semana", unidade: "peças",
+         valor: [(chave: "expedicao.input")], objetivo: Maior, meta: 1230.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Para que serve o pulmão antes da montagem quando o corte quebra?",
+         opcoes: ["Para a montagem continuar trabalhando enquanto o corte está parado", "Para o corte quebrar menos", "Para reduzir o tempo de montagem"],
+         certa: 0),
+    ],
+    dicas: [
+        "O que acontece com a montagem quando o corte quebra e o pulmão está vazio?",
+        "Some a utilização e o tempo em quebra de cada estação e compare com a demanda.",
+        "Resolva a capacidade primeiro (turnos ou máquinas). Depois dimensione o pulmão para as quebras.",
+    ],
+    referencia: {"turnos": 1, "cortes": 2, "pulmao": 3},
+    animacao: (duracao: 1440, unidade: "min"),
+)

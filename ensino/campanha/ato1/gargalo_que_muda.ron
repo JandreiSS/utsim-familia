@@ -1,0 +1,46 @@
+Missao(
+    id: "ato1/gargalo_que_muda",
+    titulo: "O gargalo que muda",
+    conceitos: ["gargalo", "gargalo_movel", "disponibilidade"],
+    modelo: "../modelos/linha_quebras.ron",
+    texto: "gargalo_que_muda.md",
+    variante: [
+        (chave: "chegada.interarrival", de: 2.95, ate: 3.05, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "Qual máquina limita mais a linha, contando o tempo trabalhando e o tempo parada por quebra?",
+            opcoes: [
+                (rotulo: "Prensa", valor: [(chave: "prensa.utilization"), (chave: "prensa.state.down")]),
+                (rotulo: "Dobradeira", valor: [(chave: "dobradeira.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "investimento", rotulo: "Onde investir", opcoes: [
+            (rotulo: "Nada", ajustes: {}),
+            (rotulo: "Dobradeira mais rápida (2,4 para 2,0 min)", ajustes: {"dobradeira.process": "Exp(mean: 2.0)"}, custo: 50000),
+            (rotulo: "Manutenção da prensa com reparo mais rápido (45 para 15 min)", ajustes: {"prensa.downtime": "Some((mtbf: Exp(mean: 150.0), mttr: Exp(mean: 15.0)))"}, custo: 50000),
+            (rotulo: "Prensa mais rápida (1,9 para 1,5 min)", ajustes: {"prensa.process": "Exp(mean: 1.5)"}, custo: 50000),
+        ]),
+    ],
+    orcamento: 50000,
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time", unidade: "min",
+         valor: [(chave: "saida.time_in_system.mean")], objetivo: Menor, meta: 30.0, casas: 1),
+    ],
+    justificativa: [
+        (pergunta: "Por que a prensa limita a linha mesmo sendo a máquina mais rápida?",
+         opcoes: ["Porque as quebras longas tiram tempo disponível", "Porque ela recebe mais peças que a dobradeira", "Porque a fila dela é limitada"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto tempo cada máquina passa parada por quebra?",
+        "Some a utilização com a fração do tempo em quebra de cada máquina.",
+        "Ataque o que tira mais tempo disponível da máquina que limita a linha.",
+    ],
+    referencia: {"investimento": 2},
+    animacao: (duracao: 600, unidade: "min"),
+)

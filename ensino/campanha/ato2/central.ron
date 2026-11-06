@@ -1,0 +1,47 @@
+Missao(
+    id: "ato2/central",
+    titulo: "A central de atendimento",
+    conceitos: ["fila", "perda_de_demanda", "custo_de_espera", "utilizacao"],
+    modelo: "../modelos/central.ron",
+    texto: "central.md",
+    variante: [
+        (chave: "chamadas.interarrival", de: 0.97, ate: 1.03, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "utilizacao",
+            pergunta: "Com 3 atendentes, qual é a utilização média deles (de 0 a 1)?",
+            valor: [(chave: "atendentes.utilization")],
+            tolerancia: Absoluta(0.05),
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "atendentes", rotulo: "Atendentes", chave: "atendentes.capacity", de: 3, ate: 6),
+        Quantidade(id: "linhas", rotulo: "Linhas de espera", chave: "espera.capacity", de: 2, ate: 12, inicial: 6),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo por hora (atendentes, linhas e chamadas perdidas)", unidade: "R$/h",
+         valor: [
+            (chave: "decisao.atendentes", fator: 35.0),
+            (chave: "decisao.linhas", fator: 3.0),
+            (chave: "model.lost.count", fator: 0.18),
+         ],
+         objetivo: Menor, meta: 175.0, peso: 1.0, casas: 0),
+        (nome: "espera", rotulo: "Espera média na linha", unidade: "min",
+         valor: [(chave: "espera.staytime.mean")], objetivo: Menor, meta: 1.0, peso: 0.0, casas: 2),
+        (nome: "perda", rotulo: "Fração de chamadas perdidas", unidade: "",
+         valor: [(chave: "model.loss_fraction")], objetivo: Menor, meta: 0.03, peso: 0.0, casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Por que três atendentes não bastam, se cada um atende uma chamada a cada 3 min e chega uma por minuto?",
+         opcoes: ["Porque com utilização perto de 1 a variabilidade gera fila e perda", "Porque os atendentes são lentos", "Porque a sala de espera é pequena demais"],
+         certa: 0),
+    ],
+    dicas: [
+        "Compare a carga (chegadas × tempo de atendimento) com o número de atendentes.",
+        "Veja a perda, a espera e o custo de cada combinação de atendentes e linhas.",
+        "Primeiro escolha atendentes para a utilização ficar bem abaixo de 1. Depois ajuste as linhas.",
+    ],
+    referencia: {"atendentes": 4, "linhas": 8},
+    animacao: (duracao: 120, unidade: "min"),
+)

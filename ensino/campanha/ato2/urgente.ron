@@ -1,0 +1,44 @@
+Missao(
+    id: "ato2/urgente",
+    titulo: "Urgente na frente",
+    conceitos: ["disciplina_de_fila", "fila", "lead_time"],
+    modelo: "../modelos/prioridade.ron",
+    texto: "urgente.md",
+    variante: [
+        (chave: "normais.interarrival", de: 9.8, ate: 10.2, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Escolha(
+            id: "fifo",
+            pergunta: "Com a fila por ordem de chegada, quem espera mais: pedidos normais ou urgentes?",
+            opcoes: [(rotulo: "Os normais"), (rotulo: "Os urgentes"), (rotulo: "Esperam praticamente o mesmo")],
+            resposta: Fixa(2),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "regra", rotulo: "Regra da fila da retífica", opcoes: [
+            (rotulo: "Ordem de chegada", ajustes: {"fila.order": "None", "fila.discipline": "Fifo"}),
+            (rotulo: "Urgentes primeiro", ajustes: {"fila.order": r#"Some(Desc("tipo"))"#, "fila.discipline": "Fifo"}),
+            (rotulo: "Normais primeiro", ajustes: {"fila.order": r#"Some(Asc("tipo"))"#, "fila.discipline": "Fifo"}),
+            (rotulo: "Último a chegar, primeiro a sair", ajustes: {"fila.order": "None", "fila.discipline": "Lifo"}),
+        ]),
+    ],
+    metricas: [
+        (nome: "urgentes", rotulo: "Lead time dos urgentes", unidade: "min",
+         valor: [(chave: "entrega_urgente.time_in_system.mean")], objetivo: Menor, meta: 15.0, peso: 1.0, casas: 1),
+        (nome: "normais", rotulo: "Lead time dos normais", unidade: "min",
+         valor: [(chave: "entrega_normal.time_in_system.mean")], objetivo: Menor, meta: 40.0, peso: 0.0, casas: 1),
+    ],
+    justificativa: [
+        (pergunta: "Dar prioridade aos urgentes muda a vazão total da retífica?",
+         opcoes: ["Não: a retífica faz o mesmo trabalho, só muda a ordem", "Sim: a retífica produz mais", "Sim: a retífica produz menos"],
+         certa: 0),
+    ],
+    dicas: [
+        "A ordem da fila muda quanto trabalho a retífica faz ou só quem espera?",
+        "Compare o lead time de cada tipo de pedido em cada regra.",
+        "Escolha a regra que atende os urgentes no prazo sem estourar o prazo dos normais.",
+    ],
+    referencia: {"regra": 1},
+    animacao: (duracao: 480, unidade: "min"),
+)

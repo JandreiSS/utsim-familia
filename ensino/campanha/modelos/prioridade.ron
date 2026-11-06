@@ -1,0 +1,17 @@
+// Missão 2.3: uma retífica atende pedidos normais (tipo 1) e urgentes (tipo 2). Tempo em minutos.
+Model(
+    name: "Retífica com pedidos urgentes",
+    run: (stop_time: 30500.0, warmup: 500.0, seed: 23, replications: 10),
+    objects: [
+        (name: "normais",  kind: Source(interarrival: Exp(mean: 10.0), labels: {"tipo": Const(1.0)}), position: (0.0, 2.0, 0.0)),
+        (name: "urgentes", kind: Source(interarrival: Exp(mean: 30.0), labels: {"tipo": Const(2.0)}), position: (0.0, -2.0, 0.0)),
+        (name: "fila",     kind: Queue(),                                       position: (4.0, 0.0, 0.0)),
+        (name: "retifica", kind: Processor(process: Exp(mean: 6.0)), output: ByLabel("tipo"), position: (8.0, 0.0, 0.0)),
+        (name: "entrega_normal",  kind: Sink, position: (12.0, 2.0, 0.0)),
+        (name: "entrega_urgente", kind: Sink, position: (12.0, -2.0, 0.0)),
+    ],
+    connections: [
+        ("normais", "fila"), ("urgentes", "fila"), ("fila", "retifica"),
+        ("retifica", "entrega_normal"), ("retifica", "entrega_urgente"),
+    ],
+)

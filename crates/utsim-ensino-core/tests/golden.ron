@@ -1,0 +1,198 @@
+// Gerado por UTSIM_ENSINO_GOLDEN=1 cargo test -p utsim-ensino-core --test conteudo
+[
+    (
+        missao: "ato1/furadeira",
+        referencia: {
+            "corte": 1.0,
+            "furacao": 2.0,
+            "pintura": 1.0,
+        },
+        base: [
+            ("permanencia", 55.51838400472903),
+        ],
+        ref_valores: [
+            ("permanencia", 20.11444797269081),
+        ],
+    ),
+    (
+        missao: "ato1/lugar_errado",
+        referencia: {
+            "plano": 2.0,
+        },
+        base: [
+            ("vazao", 15.726600000000001),
+        ],
+        ref_valores: [
+            ("vazao", 19.7856),
+        ],
+    ),
+    (
+        missao: "ato1/little",
+        referencia: {
+            "estoque": 5.0,
+        },
+        base: [
+            ("lead_time", 18.343487769415145),
+            ("vazao", 22.2504),
+        ],
+        ref_valores: [
+            ("lead_time", 13.547884572935397),
+            ("vazao", 21.702),
+        ],
+    ),
+    (
+        missao: "ato1/gargalo_que_muda",
+        referencia: {
+            "investimento": 2.0,
+        },
+        base: [
+            ("lead_time", 88.16204757469177),
+        ],
+        ref_valores: [
+            ("lead_time", 25.659195755631192),
+        ],
+    ),
+    (
+        missao: "ato2/ferramentaria",
+        referencia: {
+            "atendentes": 2.0,
+        },
+        base: [
+            ("custo", 574.6875196644963),
+        ],
+        ref_valores: [
+            ("custo", 145.84451135932866),
+        ],
+    ),
+    (
+        missao: "ato2/desistencia",
+        referencia: {
+            "guiches": 2.0,
+            "lugares": 10.0,
+        },
+        base: [
+            ("custo", 311.33125),
+            ("perda", 0.4451098452714112),
+        ],
+        ref_valores: [
+            ("custo", 110.29375),
+            ("perda", 0.017120023464146157),
+        ],
+    ),
+    (
+        missao: "ato2/urgente",
+        referencia: {
+            "regra": 1.0,
+        },
+        base: [
+            ("urgentes", 29.965440000617015),
+            ("normais", 29.830625960578782),
+        ],
+        ref_valores: [
+            ("urgentes", 12.138359180355614),
+            ("normais", 35.73772421640161),
+        ],
+    ),
+    (
+        missao: "ato2/variabilidade",
+        referencia: {
+            "chegadas": 1.0,
+            "metodo": 1.0,
+        },
+        base: [
+            ("espera_b", 14.931605776557028),
+        ],
+        ref_valores: [
+            ("espera_b", 1.3836060949926794),
+        ],
+    ),
+    (
+        missao: "ato2/central",
+        referencia: {
+            "atendentes": 4.0,
+            "linhas": 8.0,
+        },
+        base: [
+            ("custo", 299.59799999999996),
+            ("espera", 2.672877298681648),
+            ("perda", 0.09766461396242403),
+        ],
+        ref_valores: [
+            ("custo", 176.00599999999997),
+            ("espera", 0.9880912199401176),
+            ("perda", 0.006638033383500497),
+        ],
+    ),
+    (
+        missao: "ato3/turnos",
+        referencia: {
+            "cortes": 2.0,
+            "turnos": 1.0,
+        },
+        base: [
+            ("custo", 67070.0),
+            ("entregas", 600.7),
+        ],
+        ref_valores: [
+            ("custo", 9560.0),
+            ("entregas", 1275.8),
+        ],
+    ),
+    (
+        missao: "ato3/pulmao",
+        referencia: {
+            "pulmao": 5.0,
+        },
+        base: [
+            ("vazao", 63.716),
+            ("lugares", 1.0),
+        ],
+        ref_valores: [
+            ("vazao", 71.714),
+            ("lugares", 5.0),
+        ],
+    ),
+    (
+        missao: "ato3/manutencao",
+        referencia: {
+            "plano": 2.0,
+        },
+        base: [
+            ("custo", 14305.604723282822),
+            ("disponibilidade", 0.9084126398402428),
+        ],
+        ref_valores: [
+            ("custo", 11419.31231656842),
+            ("disponibilidade", 0.9737009813565821),
+        ],
+    ),
+    (
+        missao: "ato3/lote",
+        referencia: {
+            "lote": 0.0,
+            "troca": 1.0,
+        },
+        base: [
+            ("lead_time", 124.06384535162528),
+        ],
+        ref_valores: [
+            ("lead_time", 36.275874126018536),
+        ],
+    ),
+    (
+        missao: "ato3/expansao",
+        referencia: {
+            "cortes": 2.0,
+            "pulmao": 3.0,
+            "turnos": 1.0,
+        },
+        base: [
+            ("custo", 74010.0),
+            ("entregas", 516.0000000000001),
+        ],
+        ref_valores: [
+            ("custo", 11130.0),
+            ("entregas", 1256.8),
+        ],
+    ),
+]

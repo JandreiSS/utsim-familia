@@ -175,7 +175,31 @@ impl App {
                 .get(i)
                 .and_then(|m| self.progresso.registro(&m.missao.id))
                 .map_or(0, |r| r.tentativas);
-            self.missao = Some(missao::EstadoMissao::new(p.clone(), i, tentativas));
+            let mut estado = missao::EstadoMissao::new(p.clone(), i, tentativas);
+            // The last attempt of the journal brings back the locked predictions, the
+            // answers, the hints already opened and the decisions.
+            let id = &p.missoes[i].missao.id;
+            if let Some(r) = self
+                .perfil
+                .diario()
+                .iter()
+                .rev()
+                .filter_map(|t| t.registro().ok())
+                .find(|r| &r.missao == id && r.pacote == p.pacote.id)
+            {
+                let anterior = r.tentativa;
+                estado.tentativa.decisoes = p.missoes[i].missao.completar(&anterior.decisoes);
+                estado.tentativa.previsoes = anterior.previsoes;
+                estado.tentativa.dicas = anterior.dicas;
+                if anterior.justificativas.len() == estado.tentativa.justificativas.len() {
+                    estado.tentativa.justificativas = anterior.justificativas;
+                }
+                estado.previsao_travada = true;
+            } else {
+                // No attempt on record (another computer): the predictions stay open.
+                estado.previsao_travada = false;
+            }
+            self.missao = Some(estado);
             self.tela = Tela::Missao;
         }
     }

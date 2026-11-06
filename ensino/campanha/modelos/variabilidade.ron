@@ -1,0 +1,20 @@
+// Missão 2.4: duas estações com a mesma média de chegada e de processo, variabilidades
+// diferentes. Tempo em minutos.
+Model(
+    name: "Duas bancadas de inspeção",
+    run: (stop_time: 30500.0, warmup: 500.0, seed: 24, replications: 10),
+    objects: [
+        (name: "chegada_a", kind: Source(interarrival: Exp(mean: 5.0)),            position: (0.0, 3.0, 0.0)),
+        (name: "fila_a",    kind: Queue(),                                         position: (4.0, 3.0, 0.0)),
+        (name: "bancada_a", kind: Processor(process: Uniform(min: 3.5, max: 4.5)), position: (8.0, 3.0, 0.0)),
+        (name: "saida_a",   kind: Sink,                                            position: (12.0, 3.0, 0.0)),
+        (name: "chegada_b", kind: Source(interarrival: Exp(mean: 5.0)),            position: (0.0, -3.0, 0.0)),
+        (name: "fila_b",    kind: Queue(),                                         position: (4.0, -3.0, 0.0)),
+        (name: "bancada_b", kind: Processor(process: Exp(mean: 4.0)),              position: (8.0, -3.0, 0.0)),
+        (name: "saida_b",   kind: Sink,                                            position: (12.0, -3.0, 0.0)),
+    ],
+    connections: [
+        ("chegada_a", "fila_a"), ("fila_a", "bancada_a"), ("bancada_a", "saida_a"),
+        ("chegada_b", "fila_b"), ("fila_b", "bancada_b"), ("bancada_b", "saida_b"),
+    ],
+)

@@ -1,0 +1,17 @@
+// Missão 1.3: duas estações com um estoque entre elas. Tempo em minutos.
+Model(
+    name: "Célula de solda e acabamento",
+    run: (stop_time: 10500.0, warmup: 500.0, seed: 13, replications: 10),
+    objects: [
+        (name: "chegada",       kind: Source(interarrival: Exp(mean: 2.5), on_blocked: Drop), position: (0.0, 0.0, 0.0)),
+        (name: "fila_solda",    kind: Queue(capacity: 4),                       position: (4.0, 0.0, 0.0)),
+        (name: "solda",         kind: Processor(process: Erlang(k: 2, mean: 2.0)), position: (8.0, 0.0, 0.0)),
+        (name: "estoque",       kind: Queue(capacity: 20),                       position: (12.0, 0.0, 0.0)),
+        (name: "acabamento",    kind: Processor(process: Erlang(k: 2, mean: 2.4)), position: (16.0, 0.0, 0.0)),
+        (name: "saida",         kind: Sink,                                      position: (20.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "fila_solda"), ("fila_solda", "solda"), ("solda", "estoque"),
+        ("estoque", "acabamento"), ("acabamento", "saida"),
+    ],
+)

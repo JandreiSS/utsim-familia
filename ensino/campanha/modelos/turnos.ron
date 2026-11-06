@@ -1,0 +1,23 @@
+// Missão 3.1: a demanda passou de 600 para 1.250 peças por semana. A semana tem 5 dias
+// de 1.440 min. Os pedidos chegam o dia todo. As máquinas seguem o calendário "turno".
+Model(
+    name: "Linha de eixos com turnos",
+    run: (stop_time: 14400.0, warmup: 7200.0, seed: 31, replications: 10),
+    calendars: {
+        "turno": (period: 1440.0, off: [(start: 480.0, duration: 960.0)]),
+    },
+    objects: [
+        (name: "pedidos",       kind: Source(interarrival: Exp(mean: 5.76)),                position: (0.0, 0.0, 0.0)),
+        (name: "carteira",      kind: Queue(),                                             position: (4.0, 0.0, 0.0)),
+        (name: "corte",         kind: Processor(process: Triangular(min: 3.0, mode: 4.0, max: 5.0)), position: (8.0, 0.0, 0.0),
+         shifts: Calendar("turno")),
+        (name: "fila_montagem", kind: Queue(),                                             position: (12.0, 0.0, 0.0)),
+        (name: "montagem",      kind: Processor(process: Triangular(min: 2.5, mode: 3.5, max: 4.5)), position: (16.0, 0.0, 0.0),
+         shifts: Calendar("turno")),
+        (name: "expedicao",     kind: Sink,                                                position: (20.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("pedidos", "carteira"), ("carteira", "corte"), ("corte", "fila_montagem"),
+        ("fila_montagem", "montagem"), ("montagem", "expedicao"),
+    ],
+)

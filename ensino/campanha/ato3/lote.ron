@@ -1,0 +1,50 @@
+Missao(
+    id: "ato3/lote",
+    titulo: "Lote e setup",
+    conceitos: ["lote", "setup", "lead_time", "utilizacao"],
+    modelo: "../modelos/lote.ron",
+    texto: "lote.md",
+    previsao: [
+        Valor(
+            id: "utilizacao",
+            pergunta: "Com lotes de 40 peças, qual é a utilização da prensa, contando o setup (de 0 a 1)?",
+            valor: [(chave: "prensa.utilization")],
+            tolerancia: Absoluta(0.05),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "lote", rotulo: "Tamanho do lote (peças)", inicial: 4, opcoes: [
+            (rotulo: "10", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 20.0)", "prensa.process": "Gamma(shape: 4.0, scale: 3.0)"}, numero: 10),
+            (rotulo: "15", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 30.0)", "prensa.process": "Gamma(shape: 4.0, scale: 4.5)"}, numero: 15),
+            (rotulo: "20", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 40.0)", "prensa.process": "Gamma(shape: 4.0, scale: 6.0)"}, numero: 20),
+            (rotulo: "30", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 60.0)", "prensa.process": "Gamma(shape: 4.0, scale: 9.0)"}, numero: 30),
+            (rotulo: "40", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 80.0)", "prensa.process": "Gamma(shape: 4.0, scale: 12.0)"}, numero: 40),
+            (rotulo: "60", ajustes: {"lotes.interarrival": "Erlang(k: 4, mean: 120.0)", "prensa.process": "Gamma(shape: 4.0, scale: 18.0)"}, numero: 60),
+        ]),
+        Escolha(id: "troca", rotulo: "Troca de ferramenta", opcoes: [
+            (rotulo: "Atual (10 min)", ajustes: {"prensa.setup": "Const(10.0)"}),
+            (rotulo: "Troca rápida, com preparação externa (4 min)", ajustes: {"prensa.setup": "Const(4.0)"}, custo: 30000),
+        ]),
+    ],
+    orcamento: 30000,
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time da peça (formação do lote, fila, setup e processo)", unidade: "min",
+         valor: [(chave: "expedicao.time_in_system.mean"), (chave: "decisao.lote", fator: 1.0)],
+         objetivo: Menor, meta: 80.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que lotes muito pequenos pioram tudo com o setup atual?",
+         opcoes: ["Porque o tempo de setup por peça cresce e a prensa passa da sua capacidade", "Porque a prensa fica ociosa", "Porque o lote pequeno demora mais para ser formado"],
+         certa: 0),
+        (pergunta: "O que a troca rápida de ferramenta permite?",
+         opcoes: ["Lotes menores sem estourar a capacidade, com lead time menor", "Lotes maiores com o mesmo lead time", "Dispensar o setup"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto tempo de setup cada peça carrega em cada tamanho de lote?",
+        "Calcule a utilização da prensa: (setup + processo do lote) dividido pelo intervalo entre lotes.",
+        "Reduza o setup e use o menor lote que mantém a utilização bem abaixo de 1.",
+    ],
+    referencia: {"lote": 0, "troca": 1},
+    animacao: (duracao: 1440, unidade: "min"),
+)

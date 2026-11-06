@@ -11,6 +11,23 @@ Pacote(
     atos: [
         (numero: 1, titulo: "Gargalo e fluxo", missoes: [
             "ato1/furadeira.ron",
+            "ato1/lugar_errado.ron",
+            "ato1/little.ron",
+            "ato1/gargalo_que_muda.ron",
+        ]),
+        (numero: 2, titulo: "Filas e atendimento", missoes: [
+            "ato2/ferramentaria.ron",
+            "ato2/desistencia.ron",
+            "ato2/urgente.ron",
+            "ato2/variabilidade.ron",
+            "ato2/central.ron",
+        ]),
+        (numero: 3, titulo: "Capacidade, turnos e estoque intermediário", missoes: [
+            "ato3/turnos.ron",
+            "ato3/pulmao.ron",
+            "ato3/manutencao.ron",
+            "ato3/lote.ron",
+            "ato3/expansao.ron",
         ]),
     ],
 )

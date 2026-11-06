@@ -165,7 +165,7 @@ fn turma_de_60_corrigida_em_lote() {
     assert!(erros[0].texto.contains("%"), "{erros:?}");
 
     let csv = c.matriz.csv();
-    assert!(csv.starts_with("registro;nome;apelido;ato1/furadeira;media;avisos"));
+    assert!(csv.starts_with("registro;nome;apelido;ato1/furadeira;ato1/lugar_errado;"));
     let (cab, linhas) = c.matriz.tabela();
     let bytes = xlsx(&[("Notas".into(), cab, linhas)]).unwrap();
     assert!(bytes.starts_with(b"PK"));
@@ -316,5 +316,72 @@ fn perfil_registra_e_entrega() {
     assert_eq!(
         perfil.chave().unwrap().publica(),
         Perfil::em(dir.path()).chave().unwrap().publica()
+    );
+}
+
+/// The acceptance measure of EN4: 60 students, every mission of the campaign, two
+/// attempts each (the initial state and the reference). Slow in debug: run with
+/// `cargo test --release -p utsim-ensino-store --test turma -- --ignored`.
+#[test]
+#[ignore]
+fn turma_de_60_com_todas_as_missoes() {
+    let p = carregar_campanha().unwrap();
+    let alunos: Vec<Aluno> = (0..60)
+        .map(|i| Aluno {
+            nome: format!("Aluno {i:02}"),
+            registro: format!("ra{i:03}"),
+            apelido: String::new(),
+        })
+        .collect();
+    let entregas: Vec<Entrega> = alunos
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let chave = Chave::de_semente(seed(i));
+            let mut d: Vec<TentativaAssinada> = Vec::new();
+            for m in &p.missoes {
+                for decisoes in [m.missao.decisoes_iniciais(), m.missao.referencia.clone()] {
+                    let mut r = registro(&p, &a.registro, Tentativa::default(), None);
+                    r.missao = m.missao.id.clone();
+                    r.tentativa.decisoes = decisoes;
+                    let t = assinar(&chave, r, d.last()).unwrap();
+                    d.push(t);
+                }
+            }
+            Entrega {
+                formato: FORMATO_ENTREGA,
+                turma: String::new(),
+                aluno: a.clone(),
+                chave_publica: chave.publica(),
+                tentativas: d,
+            }
+        })
+        .collect();
+    let inicio = Instant::now();
+    let c = corrigir_turma(
+        &p,
+        Registro::Melhor,
+        &alunos,
+        &entregas,
+        &|_, _| {},
+        &AtomicBool::new(false),
+    );
+    let tempo = inicio.elapsed();
+    eprintln!(
+        "60 alunos x {} missões corrigidos em {tempo:?}",
+        p.missoes.len()
+    );
+    assert!(tempo.as_secs() < 300, "{tempo:?}");
+    let resolvidas = c
+        .matriz
+        .linhas
+        .iter()
+        .flat_map(|l| &l.celulas)
+        .filter(|c| c.as_ref().is_some_and(|c| c.resolvida))
+        .count();
+    // The reference of each student's variant solves almost every mission.
+    assert!(
+        resolvidas as f64 >= 0.9 * (60 * p.missoes.len()) as f64,
+        "{resolvidas}"
     );
 }

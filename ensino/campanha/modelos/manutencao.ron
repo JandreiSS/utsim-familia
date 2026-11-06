@@ -1,0 +1,22 @@
+// Missão 3.3: um torno que se desgasta com o uso (falhas cada vez mais frequentes com a
+// idade). Tempo em minutos, uma semana de 7 dias.
+Model(
+    name: "Torno com desgaste",
+    run: (stop_time: 10560.0, warmup: 480.0, seed: 33, replications: 10),
+    objects: [
+        (name: "entrada",    kind: Source(interarrival: Exp(mean: 1.4)),                          position: (0.0, 0.0, 0.0)),
+        (name: "fila_torno", kind: Queue(),                                                       position: (4.0, 0.0, 0.0)),
+        (name: "torno",      kind: Processor(process: Triangular(min: 0.9, mode: 1.0, max: 1.4)),  position: (8.0, 0.0, 0.0),
+         downtime: (
+            mtbf: Exp(mean: 600.0),
+            mttr: Triangular(min: 30.0, mode: 45.0, max: 90.0),
+            wear: Weibull(shape: 3.0, scale: 500.0),
+            basis: Busy,
+            repair: AsGoodAsNew,
+            cost: (per_time_down: 8.0, per_repair: 400.0, per_preventive: 80.0),
+            oee: (),
+         )),
+        (name: "expedicao",  kind: Sink,                                                          position: (12.0, 0.0, 0.0)),
+    ],
+    connections: [("entrada", "fila_torno"), ("fila_torno", "torno"), ("torno", "expedicao")],
+)

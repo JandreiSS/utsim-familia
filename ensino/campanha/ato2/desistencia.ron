@@ -1,0 +1,45 @@
+Missao(
+    id: "ato2/desistencia",
+    titulo: "Quem desiste vai embora",
+    conceitos: ["perda_de_demanda", "bloqueio", "fila"],
+    modelo: "../modelos/atendimento_perda.ron",
+    texto: "desistencia.md",
+    variante: [
+        (chave: "clientes.interarrival", de: 0.97, ate: 1.03, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "perda",
+            pergunta: "Hoje, que fração dos clientes vai embora sem ser atendida (de 0 a 1)?",
+            valor: [(chave: "model.loss_fraction")],
+            tolerancia: Absoluta(0.05),
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "lugares", rotulo: "Lugares na sala de espera", chave: "sala.capacity", de: 2, ate: 10, custo_unitario: 0),
+        Quantidade(id: "guiches", rotulo: "Guichês abertos", chave: "guiches.capacity", de: 1, ate: 3, custo_unitario: 0),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo por hora (guichês, lugares e clientes perdidos)", unidade: "R$/h",
+         valor: [
+            (chave: "decisao.guiches", fator: 40.0),
+            (chave: "decisao.lugares", fator: 2.0),
+            (chave: "model.lost.count", fator: 0.0625),
+         ],
+         objetivo: Menor, meta: 112.0, casas: 0),
+        (nome: "perda", rotulo: "Fração de clientes perdidos", unidade: "",
+         valor: [(chave: "model.loss_fraction")], objetivo: Menor, meta: 0.05, peso: 0.0, casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Mais lugares na sala resolvem a perda quando o guichê está quase sempre ocupado?",
+         opcoes: ["Não: a sala só adia a perda se a capacidade de atendimento não acompanha a demanda", "Sim: com sala grande ninguém vai embora", "Depende só do tamanho da sala"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quantos clientes chegam por minuto e quantos um guichê atende por minuto?",
+        "Compare a utilização dos guichês com a fração de perdidos em cada opção.",
+        "Primeiro garanta capacidade de atendimento. Depois ajuste a sala para cortar o que ainda se perde.",
+    ],
+    referencia: {"guiches": 2, "lugares": 10},
+    animacao: (duracao: 120, unidade: "min"),
+)

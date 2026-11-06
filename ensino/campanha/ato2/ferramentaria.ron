@@ -1,0 +1,42 @@
+Missao(
+    id: "ato2/ferramentaria",
+    titulo: "Balcão da ferramentaria",
+    conceitos: ["fila", "utilizacao", "custo_de_espera"],
+    modelo: "../modelos/ferramentaria.ron",
+    texto: "ferramentaria.md",
+    variante: [
+        (chave: "mecanicos.interarrival", de: 3.9, ate: 4.1, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "utilizacao",
+            pergunta: "Com um atendente, qual é a utilização do balcão (de 0 a 1)?",
+            valor: [(chave: "balcao.utilization")],
+            tolerancia: Absoluta(0.05),
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "atendentes", rotulo: "Atendentes no balcão", chave: "balcao.capacity", de: 1, ate: 4),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo por hora (atendentes e mecânicos parados)", unidade: "R$/h",
+         valor: [
+            (chave: "decisao.atendentes", fator: 30.0),
+            (chave: "fila.content.mean", fator: 80.0),
+            (chave: "balcao.content.mean", fator: 80.0),
+         ],
+         objetivo: Menor, meta: 150.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a fila com um atendente é tão grande se ele não fica ocupado o tempo todo?",
+         opcoes: ["Porque chegadas e atendimentos variam, e a fila cresce muito quando a utilização se aproxima de 1", "Porque o atendente é lento", "Porque os mecânicos chegam todos juntos no início do turno"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto custa uma hora de mecânico parado na fila, comparada a uma hora de atendente?",
+        "Veja o número médio de mecânicos no balcão (fila e atendimento) em cada opção.",
+        "O menor custo total fica onde o custo dos atendentes e o custo da espera se equilibram.",
+    ],
+    referencia: {"atendentes": 2},
+    animacao: (duracao: 240, unidade: "min"),
+)

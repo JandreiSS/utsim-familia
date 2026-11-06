@@ -1,0 +1,18 @@
+// Missão 3.2: torno e fresa com um pulmão entre eles. O torno nunca fica sem peça bruta.
+// Tempo em minutos.
+Model(
+    name: "Torno e fresa com pulmão",
+    run: (stop_time: 3200.0, warmup: 200.0, seed: 32, replications: 10),
+    objects: [
+        (name: "barras",     kind: Source(interarrival: Const(0.3)),                                   position: (0.0, 0.0, 0.0)),
+        (name: "fila_torno", kind: Queue(capacity: 2),                                                 position: (4.0, 0.0, 0.0)),
+        (name: "torno",      kind: Processor(process: Triangular(min: 0.5, mode: 0.7, max: 1.2)),      position: (8.0, 0.0, 0.0)),
+        (name: "pulmao",     kind: Queue(capacity: 1),                                                 position: (12.0, 0.0, 0.0)),
+        (name: "fresa",      kind: Processor(process: Exp(mean: 0.75)),                                position: (16.0, 0.0, 0.0)),
+        (name: "expedicao",  kind: Sink,                                                               position: (20.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("barras", "fila_torno"), ("fila_torno", "torno"), ("torno", "pulmao"),
+        ("pulmao", "fresa"), ("fresa", "expedicao"),
+    ],
+)
