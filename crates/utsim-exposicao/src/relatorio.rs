@@ -31,6 +31,9 @@ fn fmt(v: f64) -> String {
     }
 }
 
+/// Time, entries and entries without equipment per replication, and the missing equipment.
+type Serie = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<String>);
+
 /// Report over the replications of one model.
 pub fn html(model: &Model, reps: &[Exposure]) -> String {
     let mut s = String::new();
@@ -49,8 +52,7 @@ pub fn html(model: &Model, reps: &[Exposure]) -> String {
             .map_or(crate::NEAR_MISS_DISTANCE, |e| e.options.near_miss)),
         aviso = AVISO_LEGAL
     );
-    let mut por: BTreeMap<(String, String), (Vec<f64>, Vec<f64>, Vec<f64>, Vec<String>)> =
-        BTreeMap::new();
+    let mut por: BTreeMap<(String, String), Serie> = BTreeMap::new();
     for e in reps {
         for z in &e.zones {
             let k = por.entry((z.zone.clone(), z.person.clone())).or_default();

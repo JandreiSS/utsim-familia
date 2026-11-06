@@ -310,7 +310,7 @@ pub(crate) fn validate(
             for f in &d.factors {
                 match f {
                     DefectFactor::Label { times, .. } | DefectFactor::Cycle { times, .. }
-                        if !(*times >= 0.0) =>
+                        if times.is_nan() || *times < 0.0 =>
                     {
                         errors.push(format!("{name}: fator do defeito {} negativo", d.name));
                     }
