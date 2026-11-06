@@ -9,6 +9,7 @@ rust-version.workspace = true
 utsim-model.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+utsim-pasta.workspace = true
 getrandom = { version = "=0.2.17", features = ["std"] }
 
 [dev-dependencies]

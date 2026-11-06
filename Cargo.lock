@@ -7987,6 +7987,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "utsim-lss-core",
+ "utsim-pasta",
  "zip 2.6.1",
 ]
 
@@ -8041,6 +8042,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-pasta"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.17",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "utsim-pert"
 version = "0.1.0"
 dependencies = [
@@ -8062,6 +8072,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-model",
+ "utsim-pasta",
 ]
 
 [[package]]
