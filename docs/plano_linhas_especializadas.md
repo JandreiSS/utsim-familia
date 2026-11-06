@@ -266,7 +266,8 @@ Os modelos prontos cobrem áreas diferentes, para mostrar que a linha não é s�
 | Revisão de contratos | jurídico e contratos | contratos padrão e específicos, advogados em multitarefa, negociação com a contraparte, revisão final e aprovação | feito |
 | Licença de funcionamento | serviço público | protocolo, exigência ao requerente, vistoria em lote, parecer, despacho com dois desfechos e publicação, prazo legal | feito |
 | Secretaria acadêmica | secretaria acadêmica | pico de pedidos no início do semestre (taxa por período), declarações, históricos com espera pelo professor, ajustes de matrícula | feito |
-| Próximos candidatos | contas a receber, pós-venda | cobrança; troca e garantia | a fazer |
+| Pós-venda com interrupções | atendimento e pós-venda | trocas e garantias, analistas em multitarefa, ligações que interrompem o trabalho (preempção `Full`) | feito |
+| Próximos candidatos | contas a receber | cobrança | a fazer |
 
 ---
 
@@ -443,8 +444,10 @@ colocar`). Onde este plano diz "campo `area`" ou "área por objeto", leia `depar
 - **Modelos da seção 1.9** que faltavam: revisão de contratos (jurídico, com advogados em
   multitarefa), licença de funcionamento (serviço público, com dois desfechos) e secretaria
   acadêmica (pico no início do semestre), com golden novos.
-- **Interrupções:** a preempção de quem já está trabalhando (E4 `Full`, passo 16 do plano de
-  chegadas) ainda não existe; só `Preempt::Empty`. Ficam anotadas para quando ela vier.
+- **Interrupções (2026-11-06):** feitas com a preempção `Full` no núcleo (E4, passo 16 do
+  plano de chegadas): predefinição Interrupção (papel `Interruption`, que não conta como caso
+  nos indicadores), campo "Interrupções" da Equipe e o modelo pronto
+  `examples/pos_venda_com_interrupcoes.ron`; capítulo "Interrupções" no manual.
 
 **Escopo administrativo (2026-11-03).** Junto com os passos 9, 14 e 15, a linha passou a
 tratar processos administrativos em geral (seção 1.1): subtítulo "processos administrativos"

@@ -484,7 +484,8 @@ pub enum ObjectKind {
         /// Which waiting task a member that becomes free takes (absent: `Priority`).
         #[serde(default, skip_serializing_if = "TaskPick::is_priority")]
         pick: TaskPick,
-        /// Whether a more urgent request takes a member travelling empty (absent: `Never`).
+        /// Whether a more urgent request takes a busy member (absent: `Never`): `Empty`, one
+        /// travelling empty to its work; `Full`, also one working at stations (interruption).
         #[serde(default, skip_serializing_if = "Preempt::is_never")]
         preempt: Preempt,
         /// Team metrics in the report (`request_wait`, `requests.count`, per member

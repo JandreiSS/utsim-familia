@@ -8,6 +8,7 @@
 //! no compliance with any Norma Regulamentadora. Every report carries
 //! [`AVISO_LEGAL`].
 
+pub mod ergonomia;
 pub mod inventario;
 pub mod matriz;
 pub mod relatorio;

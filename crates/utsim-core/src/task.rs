@@ -80,6 +80,10 @@ pub const MSG_INJECT_REFUSED: u32 = 8;
 pub const MSG_SUSPEND: u32 = 9;
 /// The operator is back on the job it suspended (payload: request id): its work resumes.
 pub const MSG_RESUME_WORK: u32 = 10;
+/// An operator taken away from this station's job for more urgent work (preemption, payload:
+/// request id): the station pauses the job and waits for an operator for the same request
+/// again, which the dispatcher hands to a member like any other.
+pub const MSG_WITHDRAW: u32 = 11;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path

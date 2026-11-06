@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
-    MSG_ARRIVED, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_TRANSPORT_RESERVED,
+    MSG_ARRIVED, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_TRANSPORT_RESERVED, MSG_WITHDRAW,
     request_priority,
 };
 use utsim_core::{
@@ -75,6 +75,9 @@ struct Pending {
     stage: Phase,
     requests: Vec<RequestId>,
     arrived: Vec<(RequestId, BlockId)>,
+    /// The stage was already running when an operator was taken away (preemption): when
+    /// the crew is complete again its paused timer goes on, no new time is drawn.
+    resume: bool,
 }
 
 /// Operators currently assigned to an item: (request id, operator block).
@@ -96,6 +99,12 @@ type Crew = Vec<(RequestId, BlockId)>;
 /// back (payload: its request id). The item's timer stands still while any of its
 /// operators is away, so the work time drawn at the start stays the touch time; the item
 /// does not count as a busy server meanwhile.
+///
+/// **Preempted operators.** An operator taken away for more urgent work sends
+/// [`MSG_WITHDRAW`] (payload: its request id): the item's timer stops with the time left
+/// and the item waits for an operator again (state `WaitingOperator`). The request goes back
+/// to the team's dispatcher with the same id; when an operator arrives for it, the stage
+/// goes on with the time left (the work drawn at the start stays the touch time).
 pub struct Processor {
     capacity: usize,
     setup: Option<Dist>,
@@ -113,8 +122,9 @@ pub struct Processor {
     /// Initial state: work already done on an item's next phase; its timer draws the
     /// residual time instead of a full duration.
     resume: Vec<(ItemId, Time)>,
-    /// Items whose operators turned to other cases, with how many of them are away.
-    suspended: Vec<(ItemId, usize)>,
+    /// Items whose operators turned to other cases or were taken away, with the requests
+    /// of the operators that are away.
+    suspended: Vec<(ItemId, Vec<RequestId>)>,
 }
 
 impl Processor {
@@ -207,9 +217,15 @@ impl Processor {
         let Some(item) = self.item_of_request(id) else {
             return;
         };
+        self.pause(cx, item, id);
+    }
+
+    /// Marks the operator of request `id` away from `item` and stops the item's timers.
+    fn pause(&mut self, cx: &mut Ctx, item: ItemId, id: RequestId) {
         match self.suspended.iter_mut().find(|(i, _)| *i == item) {
-            Some(entry) => entry.1 += 1,
-            None => self.suspended.push((item, 1)),
+            Some(entry) if !entry.1.contains(&id) => entry.1.push(id),
+            Some(_) => {}
+            None => self.suspended.push((item, vec![id])),
         }
         let now = cx.now();
         for timer in self.timers.iter_mut().filter(|t| t.item == item) {
@@ -229,11 +245,17 @@ impl Processor {
         let Some(item) = self.item_of_request(id) else {
             return;
         };
+        self.unpause(cx, item, id);
+    }
+
+    /// The operator of request `id` is back on `item`: its timers go on once no operator
+    /// is away.
+    fn unpause(&mut self, cx: &mut Ctx, item: ItemId, id: RequestId) {
         let Some(at) = self.suspended.iter().position(|(i, _)| *i == item) else {
             return;
         };
-        self.suspended[at].1 -= 1;
-        if self.suspended[at].1 > 0 {
+        self.suspended[at].1.retain(|r| *r != id);
+        if !self.suspended[at].1.is_empty() {
             return;
         }
         self.suspended.remove(at);
@@ -246,6 +268,50 @@ impl Processor {
                 timer.due = now + timer.remaining;
             }
         }
+    }
+
+    /// The operator of request `id` was taken away for more urgent work: the item waits for
+    /// an operator again, with its stage paused (see [`Processor`], preempted operators).
+    fn withdraw(&mut self, cx: &mut Ctx, id: RequestId) {
+        if let Some(p) = self
+            .pending
+            .iter_mut()
+            .find(|p| p.arrived.iter().any(|(r, _)| *r == id))
+        {
+            // Still gathering the crew: it waits for this operator again.
+            p.arrived.retain(|(r, _)| *r != id);
+            return;
+        }
+        let Some(at) = self
+            .held
+            .iter()
+            .position(|(_, crew)| crew.iter().any(|(r, _)| *r == id))
+        else {
+            return;
+        };
+        let (item, crew) = self.held.remove(at);
+        let stage = match self.phases.iter().find(|(i, _)| *i == item).map(|p| p.1) {
+            Some(Phase::Setup) => Phase::Setup,
+            Some(Phase::Processing) => Phase::Processing,
+            // Between stages, or done: nothing runs; the crew is simply given back.
+            _ => {
+                for (request, operator) in crew {
+                    if request != id {
+                        cx.send(operator, MSG_RELEASE, request.0);
+                    }
+                }
+                return;
+            }
+        };
+        self.pause(cx, item, id);
+        self.pending.push(Pending {
+            item,
+            stage,
+            requests: crew.iter().map(|(r, _)| *r).collect(),
+            arrived: crew.into_iter().filter(|(r, _)| *r != id).collect(),
+            resume: true,
+        });
+        self.set_phase(item, Phase::WaitingOperator);
     }
 
     fn needs_operators(&self, stage: Phase) -> bool {
@@ -288,6 +354,7 @@ impl Processor {
                 stage,
                 requests,
                 arrived: Vec::new(),
+                resume: false,
             });
             self.set_phase(item, Phase::WaitingOperator);
             return;
@@ -355,7 +422,12 @@ impl Processor {
             State::Processing
         } else if has(Phase::Setup) {
             State::Setup
-        } else if has(Phase::WaitingOperator) || away {
+        } else if away
+            || self
+                .phases
+                .iter()
+                .any(|(_, q)| *q == Phase::WaitingOperator)
+        {
             State::WaitingOperator
         } else if has(Phase::Done) {
             let waiting = self
@@ -498,11 +570,16 @@ impl Behavior for Processor {
                         .find(|p| p.item == id)
                         .map_or(Phase::Processing, |p| p.stage);
                     it.phase = Some(work(stage));
-                    it.elapsed = self
-                        .resume
-                        .iter()
-                        .find(|(i, _)| *i == id)
-                        .map_or(0.0, |r| r.1);
+                    // A preempted stage keeps its paused timer; one not started yet may
+                    // carry the work done before the saved state.
+                    it.elapsed = match self.timers.iter().find(|t| t.item == id) {
+                        Some(t) => (t.duration - t.remaining).max(0.0),
+                        None => self
+                            .resume
+                            .iter()
+                            .find(|(i, _)| *i == id)
+                            .map_or(0.0, |r| r.1),
+                    };
                 }
                 Phase::Done => {
                     it.phase = Some(WorkPhase::Done);
@@ -579,8 +656,18 @@ impl Behavior for Processor {
                 if self.pending[at].arrived.len() == self.pending[at].requests.len() {
                     let p = self.pending.remove(at);
                     self.held.push((p.item, p.arrived));
-                    self.run_stage(cx, p.item, p.stage);
+                    if p.resume {
+                        // Back from a preemption: the paused stage goes on.
+                        self.set_phase(p.item, p.stage);
+                        self.unpause(cx, p.item, id);
+                    } else {
+                        self.run_stage(cx, p.item, p.stage);
+                    }
                 }
+                self.update_state(cx);
+            }
+            MSG_WITHDRAW => {
+                self.withdraw(cx, RequestId(payload));
                 self.update_state(cx);
             }
             MSG_SUSPEND => {
