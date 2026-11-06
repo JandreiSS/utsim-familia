@@ -84,6 +84,18 @@ pub fn training_path(program_root: &Path, f: TrainingFolder) -> PathBuf {
     }
 }
 
+/// Subfolder of the certificates in PDF.
+pub const CERTIFICATES: &str = "certificacoes";
+
+/// Writes a certificate's PDF into `certificacoes/` (made again at any time).
+pub fn write_certificate(program_root: &Path, number: u32, bytes: &[u8]) -> Result<PathBuf> {
+    let dir = program_root.join(CERTIFICATES);
+    fs::create_dir_all(&dir).map_err(|e| crate::Error::io(&dir, e))?;
+    let target = dir.join(format!("certificado-{number:04}.pdf"));
+    fsio::write_replace(&target, bytes)?;
+    Ok(target)
+}
+
 /// Where the coaching log of a belt lives.
 pub fn coaching_path(program_root: &Path, belt: Id) -> PathBuf {
     program_root

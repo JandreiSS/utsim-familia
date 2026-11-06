@@ -62,6 +62,9 @@ pub mod formacao;
 pub mod dados;
 pub mod simulacao;
 
+// Stage L5, reports (`docs/plano_lean_seis_sigma.md`, 4.6 and 4.7).
+pub mod relatorios;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};

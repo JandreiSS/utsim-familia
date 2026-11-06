@@ -29,6 +29,7 @@ use utsim_lss_core::format::FormatError;
 
 pub mod fsio;
 pub mod lssz;
+pub mod planilha;
 pub mod program;
 pub mod project;
 pub mod user;
