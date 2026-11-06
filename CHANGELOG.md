@@ -10,6 +10,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - UTSim 3D, ligar pelos nós: cada objeto com fluxo mostra no Editar um nó de saída (verde) e um de entrada (azul) nos lados, a chegada só o de saída e a saída só o de entrada, e o nó sob o mouse cresce em destaque. Arrastar do nó de saída até o destino (ou do nó de entrada até a origem) liga, com uma seta de prévia; um clique no nó seleciona a ligação dele e o × no meio da ligação selecionada (ou o Del) a remove, com desfazer e refazer. A seleção é marcada só nos cantos e a moldura em volta do objeto que se liga saiu. O `.ron` não muda. Roteiro `g4_nos.json`.
 
 ### Corrigido
+- O launcher abre a interface 3D nova (Godot com a moldura em Rust, `3d/utsim-3d.exe`) quando o pacote a leva; antes abria o editor `utsim-view` (`scripts/publicar-utsim.sh`).
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
