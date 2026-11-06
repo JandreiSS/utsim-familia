@@ -66,10 +66,13 @@ pub enum Role {
     Person,
     /// Where cases end.
     Done,
+    /// An interruption (phone call, chat, urgency) that takes a person away from the cases:
+    /// its own arrivals, urgent work and end. Its items are not cases.
+    Interruption,
 }
 
 impl Role {
-    pub const ALL: [Role; 12] = [
+    pub const ALL: [Role; 13] = [
         Role::Entry,
         Role::Inbox,
         Role::Work,
@@ -82,6 +85,7 @@ impl Role {
         Role::Team,
         Role::Person,
         Role::Done,
+        Role::Interruption,
     ];
 
     /// Portuguese name.
@@ -99,6 +103,7 @@ impl Role {
             Role::Team => "equipe",
             Role::Person => "pessoa",
             Role::Done => "conclusão",
+            Role::Interruption => "interrupção",
         }
     }
 

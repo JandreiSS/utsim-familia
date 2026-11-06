@@ -8,7 +8,7 @@ use utsim_core::person::{TASK_LOAD, TASK_UNLOAD};
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
     MAINTENANCE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_USER,
-    distance, path_length, travel_time,
+    MSG_WITHDRAW, distance, path_length, travel_time,
 };
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, Router, State,
@@ -60,6 +60,13 @@ pub const MSG_PREEMPTED: u32 = MSG_USER + 22;
 /// Multitasking member to dispatcher: this case (payload: request id) is done and the
 /// member has room for another one while it goes on with its other open cases.
 pub const MSG_CASE_DONE: u32 = MSG_USER + 23;
+/// Dispatcher to member, with [`crate::Preempt::Full`]: like [`MSG_PREEMPT`], and the member
+/// may also give back the station jobs it is working on (payload: the priority of the
+/// urgent request). For each job already started it sends [`MSG_WITHDRAW`] to the station
+/// (which keeps the time left), then [`MSG_PREEMPTED`] for every task it gives back and its
+/// idle report. A loaded transport or a maintenance job is never interrupted: the member
+/// answers [`MSG_PREEMPT_REFUSED`].
+pub const MSG_PREEMPT_FULL: u32 = MSG_USER + 24;
 
 const START: u32 = 10;
 const ARRIVED_PICKUP: u32 = 0;
@@ -917,6 +924,75 @@ impl Transporter {
         }
     }
 
+    /// Whether the member works only on station jobs (not maintenance) of priority below
+    /// `below`, which it may give back mid-work ([`MSG_PREEMPT_FULL`]): at a station, walking
+    /// to one or turning from one case to another, never loaded nor resting.
+    fn on_lower_cases(&self, cx: &Ctx, below: i32) -> bool {
+        if cx.is_down() || self.k != 0 || self.route.is_some() {
+            return false;
+        }
+        if self
+            .timer
+            .as_ref()
+            .is_some_and(|t| t.tag == RESTED || t.tag == START)
+        {
+            return false;
+        }
+        let cases: Vec<&TaskRequest> = self
+            .trip
+            .iter()
+            .chain(self.others.iter().map(|(r, _)| r))
+            .collect();
+        !cases.is_empty()
+            && cases
+                .iter()
+                .all(|r| matches!(r.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG))
+            && cases
+                .iter()
+                .copied()
+                .chain(self.queue.iter())
+                .all(|r| r.priority < below)
+    }
+
+    /// Gives back the station jobs in progress (and the queued tasks) for a more urgent
+    /// request: the stations keep the time left of the jobs already started (see
+    /// [`MSG_PREEMPT_FULL`]); then the member reports idle from where it is.
+    fn give_back_cases(&mut self, cx: &mut Ctx, dispatcher: BlockId) {
+        if let Some(timer) = self.timer.take() {
+            if let Some(event) = timer.event {
+                cx.cancel(event);
+            }
+            if let Some(leg) = &timer.leg {
+                self.position = Self::progress(leg, cx.now()).0;
+                if leg.duration > 0.0 {
+                    cx.trace_travel(vec![self.position, self.position], 0.0);
+                }
+            }
+        }
+        let cases: Vec<TaskRequest> = self
+            .trip
+            .drain(..)
+            .chain(self.others.drain(..).map(|(r, _)| r))
+            .collect();
+        for c in &cases {
+            if let TaskKind::Operate { station, .. } = c.kind
+                && self.started.contains(&c.id)
+            {
+                cx.send(station, MSG_WITHDRAW, c.id.0);
+            }
+        }
+        self.started.clear();
+        self.k = 0;
+        let now = cx.now();
+        self.switching.set(now, 0.0);
+        self.open.set(now, 0.0);
+        let queued: Vec<TaskRequest> = self.queue.drain(..).collect();
+        for t in cases.iter().chain(&queued) {
+            cx.send(dispatcher, MSG_PREEMPTED, t.id.0);
+        }
+        self.go_idle(cx, true);
+    }
+
     /// Gives the current trip (and queued tasks) back to the dispatcher and reports idle
     /// from the point reached (see [`MSG_PREEMPT`]).
     fn give_back(&mut self, cx: &mut Ctx, dispatcher: BlockId) {
@@ -1193,8 +1269,10 @@ impl Behavior for Transporter {
                     cx.send(station, MSG_RESUME_WORK, task.id.0);
                 } else {
                     cx.send(station, MSG_ARRIVED, task.id.0);
+                    // Remembered also without multitasking: a preemption tells the
+                    // station the job was left (`MSG_WITHDRAW`).
+                    self.started.push(task.id);
                     if self.multitask.is_some() {
-                        self.started.push(task.id);
                         self.open.set(cx.now(), self.open_cases() as f64);
                     }
                 }
@@ -1344,12 +1422,15 @@ impl Behavior for Transporter {
             }
             return;
         }
-        if tag == MSG_PREEMPT {
+        if tag == MSG_PREEMPT || tag == MSG_PREEMPT_FULL {
             let Some(d) = self.dispatcher.filter(|d| *d == from) else {
                 return;
             };
-            if self.travelling_empty(cx, payload as i64 as i32) {
+            let below = payload as i64 as i32;
+            if self.travelling_empty(cx, below) {
                 self.give_back(cx, d);
+            } else if tag == MSG_PREEMPT_FULL && self.on_lower_cases(cx, below) {
+                self.give_back_cases(cx, d);
             } else {
                 cx.send(d, MSG_PREEMPT_REFUSED, payload);
             }
