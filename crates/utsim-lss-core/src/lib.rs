@@ -71,6 +71,9 @@ pub mod analises;
 // The DMAIC roadmap (`docs/plano_lean_seis_sigma.md`, 1.4 and 2).
 pub mod roteiro;
 
+// Project templates of the specialised lines (`docs/plano_linhas_especializadas.md`, 1.8).
+pub mod modelos_linha;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};
