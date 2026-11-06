@@ -177,3 +177,60 @@ proptest! {
         prop_assert_eq!(joined, orig);
     }
 }
+
+#[test]
+fn charts_are_drawn_inside_the_pdf() {
+    let mut d = Document::new("Análise", "carta e efeitos");
+    let values: Vec<f64> = (0..120)
+        .map(|i| 10.0 + ((i * 7) % 11) as f64 / 10.0)
+        .collect();
+    d.chart(Chart {
+        title: "Carta I".into(),
+        labels: (1..=120).map(|i| i.to_string()).collect(),
+        series: vec![("valores".into(), values)],
+        hlines: vec![("LSC".into(), 11.5), ("LIC".into(), 9.5)],
+        marks: vec![3, 500],
+        ..Chart::default()
+    });
+    d.chart(Chart {
+        title: "Pareto dos efeitos".into(),
+        bars: true,
+        labels: vec!["A".into(), "B".into(), "AB".into()],
+        series: vec![("".into(), vec![8.0, -3.0, f64::NAN])],
+        ..Chart::default()
+    });
+    d.chart(Chart {
+        title: "Interação A × B".into(),
+        labels: vec!["baixo".into(), "alto".into()],
+        series: vec![
+            ("B baixo".into(), vec![11.0, 21.0]),
+            ("B alto".into(), vec![15.0, 29.0]),
+        ],
+        ..Chart::default()
+    });
+    d.chart(Chart::default());
+    let t = Template::default();
+    let a = pdf::render(&d, &t, "");
+    check_structure(&a);
+    assert_eq!(a, pdf::render(&d, &t, ""));
+    let text = String::from_utf8_lossy(&a);
+    // Coloured rectangles (bars, markers, legend) and the reference lines.
+    assert!(text.contains(" rg ") && text.contains(" re f 0 g"));
+    assert!(text.contains("(LSC = 11,5)"));
+    assert!(text.contains("(Pareto dos efeitos)"));
+    assert!(d.plain_text().contains("Interação A × B"));
+    // Many charts break the page.
+    let mut many = Document::new("x", "");
+    for _ in 0..8 {
+        many.chart(
+            d.blocks
+                .iter()
+                .find_map(|b| match b {
+                    Block::Chart(c) => Some(c.clone()),
+                    _ => None,
+                })
+                .unwrap(),
+        );
+    }
+    assert!(pdf::page_count(&many, &t) >= 2);
+}

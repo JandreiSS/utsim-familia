@@ -1,6 +1,7 @@
 //! Reports (`docs/plano_lean_seis_sigma.md`, 4.6 and 4.7; decision of section 7: the PDF is
 //! made by the program itself, without a browser): a small document model (title, meta,
-//! headings, paragraphs, key-value lists, tables, bullets, signatures), the company's
+//! headings, paragraphs, key-value lists, tables, bullets, signatures and bar or line
+//! charts), the company's
 //! template (name, header, footer and accent colour) and two renderers, both pure and
 //! deterministic (the same document gives the same bytes):
 //!
@@ -40,6 +41,24 @@ pub enum Block {
     Space(f64),
     /// Starts a new page.
     PageBreak,
+    /// A chart drawn with lines and rectangles (no image).
+    Chart(Chart),
+}
+
+/// A bar or line chart of a document.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Chart {
+    pub title: String,
+    /// Bars (grouped when there are several series) instead of lines.
+    pub bars: bool,
+    /// The labels of the points, under the axis.
+    pub labels: Vec<String>,
+    /// `(name, values)`; an empty name stays out of the legend.
+    pub series: Vec<(String, Vec<f64>)>,
+    /// Horizontal reference lines: limits, takt, target.
+    pub hlines: Vec<(String, f64)>,
+    /// Points of the first series to mark (signals of a control chart).
+    pub marks: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -119,6 +138,11 @@ impl Document {
         self
     }
 
+    pub fn chart(&mut self, c: Chart) -> &mut Self {
+        self.blocks.push(Block::Chart(c));
+        self
+    }
+
     pub fn signatures(&mut self, names: Vec<String>) -> &mut Self {
         self.blocks.push(Block::Signatures(names));
         self
@@ -149,6 +173,7 @@ impl Document {
                     out.extend(rows.iter().map(|r| r.join(" | ")));
                 }
                 Block::Bullets(v) | Block::Signatures(v) => out.extend(v.iter().cloned()),
+                Block::Chart(c) => out.push(c.title.clone()),
                 Block::Space(_) | Block::PageBreak => {}
             }
         }

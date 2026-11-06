@@ -37,6 +37,9 @@ pub mod fields {
     pub const FORECAST_ON: &str = "previsto_em";
     pub const VALIDATED_BY: &str = "validado_por";
     pub const VALIDATED_ON: &str = "validado_em";
+    /// The study a saving estimated by simulation came from, and which difference.
+    pub const STUDY: &str = "estudo";
+    pub const STUDY_DIFFERENCE: &str = "estudo_diferenca";
     // Monthly entry.
     pub const SAVING: &str = "ganho";
     pub const MONTH: &str = "mes";
@@ -130,6 +133,8 @@ pub struct Plan {
     pub forecast_on: Option<Date>,
     pub validated_by: Option<Id>,
     pub validated_on: Option<Date>,
+    /// The study of a saving estimated by simulation.
+    pub study: Option<Id>,
 }
 
 impl Plan {
@@ -149,6 +154,7 @@ impl Plan {
             forecast_on: date(f::FORECAST_ON),
             validated_by: e.id(f::VALIDATED_BY),
             validated_on: date(f::VALIDATED_ON),
+            study: e.id(f::STUDY),
         }
     }
 }

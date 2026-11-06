@@ -199,6 +199,62 @@ pub fn diagram_html(model: &Model, kind: utsim_diagram::TipoDiagrama) -> Result<
         .map_err(SimError::Model)
 }
 
+/// The value stream map of the model (one run with the trace): its page and the processes
+/// of the main path, to fill a VSM deliverable (P4).
+pub fn vsm_from_model(
+    model: &Model,
+) -> Result<(String, Vec<crate::tools::vsm::ModelProcess>), SimError> {
+    let s = utsim_diagram::gerar(
+        utsim_diagram::TipoDiagrama::Vsm,
+        model,
+        &utsim_diagram::Options::default(),
+    )
+    .map_err(SimError::Model)?;
+    let rows = crate::tools::vsm::from_diagram_csv(s.csv.as_deref().unwrap_or(""));
+    Ok((s.html, rows))
+}
+
+/// One line of the distances of a spaghetti diagram.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Travel {
+    #[serde(rename = "recurso")]
+    pub resource: String,
+    #[serde(rename = "viagens")]
+    pub trips: u64,
+    #[serde(rename = "distancia")]
+    pub distance: f64,
+}
+
+/// The spaghetti diagram of the model over the plant (one run with the trace): its page
+/// and the trips and distance of each mobile resource and of the items (the last line).
+pub fn spaghetti(model: &Model) -> Result<(String, Vec<Travel>), SimError> {
+    let s = utsim_diagram::gerar(
+        utsim_diagram::TipoDiagrama::Espaguete,
+        model,
+        &utsim_diagram::Options::default(),
+    )
+    .map_err(SimError::Model)?;
+    let rows = s
+        .csv
+        .as_deref()
+        .unwrap_or("")
+        .lines()
+        .skip(1)
+        .filter_map(|l| {
+            let c: Vec<&str> = l.split(',').collect();
+            if c.len() < 3 {
+                return None;
+            }
+            Some(Travel {
+                resource: c[0].trim_matches('"').to_string(),
+                trips: c[1].trim().parse().ok()?,
+                distance: c[2].trim().parse().ok()?,
+            })
+        })
+        .collect();
+    Ok((s.html, rows))
+}
+
 /// The five SIPOC columns generated from the model (suppliers, inputs, process, outputs,
 /// customers), in [`sipoc::COLUMNS`] order.
 pub fn sipoc_columns(model: &Model) -> Result<[Vec<String>; 5], SimError> {
@@ -634,6 +690,162 @@ pub fn record_study(
     ]
 }
 
+// --- Estimated gain from a study ---------------------------------------------------------------
+
+/// How the belt turns a difference of a study into money (section 1.10: the saving starts
+/// estimated, with source "simulação", and never becomes validated without real entries).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GainInput {
+    pub description: String,
+    pub category: crate::domain::SavingCategory,
+    /// Value of one unit of the measure, in the company's currency.
+    pub value_per_unit: f64,
+    /// How many times a year the simulated horizon happens (a run of one week: 52).
+    pub periods_per_year: f64,
+    /// An increase of the measure is the improvement (throughput); otherwise a decrease is
+    /// (lead time, queue).
+    pub higher_is_better: bool,
+    /// Uses the end of the interval nearest to zero instead of the mean.
+    pub conservative: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum GainError {
+    #[error("dê uma descrição ao ganho")]
+    NoDescription,
+    #[error("o valor por unidade e os períodos por ano devem ser positivos")]
+    BadFactor,
+    #[error("a diferença não é significativa: o intervalo contém zero")]
+    NotSignificant,
+    #[error("o cenário piora o indicador no sentido escolhido")]
+    Worse,
+}
+
+/// The yearly value and the rationale (formula, assumptions and source) of a saving
+/// estimated from one difference of a saved study.
+pub fn gain_value(
+    study: &Study,
+    file: &StudyFile,
+    d: &Difference,
+    g: &GainInput,
+) -> Result<(f64, String), GainError> {
+    if g.description.trim().is_empty() {
+        return Err(GainError::NoDescription);
+    }
+    let ok = |x: f64| x.is_finite() && x > 0.0;
+    if !ok(g.value_per_unit) || !ok(g.periods_per_year) {
+        return Err(GainError::BadFactor);
+    }
+    if !d.significant {
+        return Err(GainError::NotSignificant);
+    }
+    let sign = if g.higher_is_better { 1.0 } else { -1.0 };
+    let basis = if g.conservative {
+        if d.lo().abs() < d.hi().abs() {
+            d.lo()
+        } else {
+            d.hi()
+        }
+    } else {
+        d.mean
+    };
+    let improvement = basis * sign;
+    if improvement <= 0.0 {
+        return Err(GainError::Worse);
+    }
+    let value = improvement * g.value_per_unit * g.periods_per_year;
+    let n = num;
+    let rationale = format!(
+        "Estimado por simulação no estudo \"{}\" (arquivo {}, hash {}; modelo {}, hash {}; {} replicações, semente {}). \
+         Cenário \"{}\" contra a linha de base, indicador {}: diferença pareada {} [{}; {}] a {} %{}. \
+         Base usada: {} ({}). Conta: {} × {} por unidade × {} períodos por ano = {} por ano. \
+         {} Um ganho estimado por simulação só é validado com lançamentos reais.",
+        file.name,
+        study.file,
+        short(&study.hash),
+        file.model,
+        short(&file.model_hash),
+        file.replications,
+        file.seed,
+        d.scenario,
+        d.metric,
+        n(d.mean),
+        n(d.lo()),
+        n(d.hi()),
+        (file.level * 100.0).round(),
+        if d.relevant {
+            ", significativa e relevante"
+        } else {
+            ", significativa"
+        },
+        n(basis),
+        if g.conservative {
+            "ponta do intervalo mais próxima de zero"
+        } else {
+            "média"
+        },
+        n(improvement),
+        n(g.value_per_unit),
+        n(g.periods_per_year),
+        n(value),
+        if g.higher_is_better {
+            "Aumento do indicador é melhora."
+        } else {
+            "Redução do indicador é melhora."
+        },
+    );
+    Ok((value, rationale))
+}
+
+fn short(h: &str) -> &str {
+    &h[..h.len().min(12)]
+}
+
+/// Edits of a saving estimated from a difference of a saved study: estimated, source
+/// "simulação", with the rationale and the study it came from.
+pub fn gain_edits(
+    project: Id,
+    id: Id,
+    study: &Study,
+    file: &StudyFile,
+    d: &Difference,
+    g: &GainInput,
+) -> Result<Vec<Edit>, GainError> {
+    let (value, rationale) = gain_value(study, file, d, g)?;
+    let mut e = crate::savings::new_saving(
+        project,
+        id,
+        &g.description,
+        g.category,
+        value,
+        crate::savings::Source::Simulation,
+    );
+    let r = EntityRef::new(Kind::Saving, id);
+    e.push(Edit::new(
+        r,
+        crate::domain::fields::saving::RATIONALE,
+        rationale,
+    ));
+    e.push(Edit::new(
+        r,
+        crate::savings::fields::STUDY,
+        study.id.to_string(),
+    ));
+    e.push(Edit::new(
+        r,
+        crate::savings::fields::STUDY_DIFFERENCE,
+        format!("{} em {}", d.scenario, d.metric),
+    ));
+    Ok(e)
+}
+
+/// A number with a decimal comma and up to four decimals.
+fn num(x: f64) -> String {
+    let s = format!("{x:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    s.replace('.', ",")
+}
+
 // --- Analyses on the model ---------------------------------------------------------------------
 
 #[derive(
@@ -647,6 +859,9 @@ pub enum AnalysisKind {
     ShiftingBottleneck,
     #[serde(rename = "pert_observado")]
     ObservedPert,
+    /// Distances travelled by the mobile resources and the items (spaghetti diagram).
+    #[serde(rename = "espaguete")]
+    Spaghetti,
 }
 
 /// One row of the bottleneck table.
