@@ -557,6 +557,7 @@ h1{margin:0}h2{margin:32px 0 8px;font-size:18px;border-bottom:1px solid var(--li
 .scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}\
 th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-weight:600}\
 tr.best{background:var(--best);font-weight:600}tr.rej,tr.na{color:var(--muted)}\
+.explica dt{font-weight:600;margin-top:12px}.explica dd{margin:2px 0 0 0}.explica dd p{margin:2px 0}\
 pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;overflow-x:auto;font-size:15px}\
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}figure{margin:0}\
 details{border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:8px 0}summary{cursor:pointer;font-weight:600}\

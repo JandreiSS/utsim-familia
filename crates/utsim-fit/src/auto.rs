@@ -719,6 +719,7 @@ impl AutoFit {
             h.push_str("</tr>");
         }
         h.push_str("</tbody></table></div>");
+        h.push_str(&crate::compare::comparison_html(self));
         h
     }
 
