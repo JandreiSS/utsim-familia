@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Corrigido
+- O launcher abre a interface 3D nova (Godot com a moldura em Rust, `3d/utsim-3d.exe`) quando o pacote a leva; antes abria o editor `utsim-view` (`scripts/publicar-utsim.sh`).
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
