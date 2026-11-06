@@ -195,4 +195,123 @@
             ("entregas", 1256.8),
         ],
     ),
+    (
+        missao: "ato4/ventilador",
+        referencia: {
+            "tarefa.A": 1.0,
+            "tarefa.B": 1.0,
+            "tarefa.C": 2.0,
+            "tarefa.D": 3.0,
+            "tarefa.E": 4.0,
+            "tarefa.F": 4.0,
+            "tarefa.G": 6.0,
+            "tarefa.H": 2.0,
+            "tarefa.I": 3.0,
+            "tarefa.J": 5.0,
+            "tarefa.K": 5.0,
+            "tarefa.L": 6.0,
+            "tarefa.M": 7.0,
+            "tarefa.N": 8.0,
+        },
+        base: [
+            ("eficiencia", 0.6166666666666667),
+            ("vazao", 60.0),
+        ],
+        ref_valores: [
+            ("eficiencia", 0.7708333333333334),
+            ("vazao", 60.0),
+        ],
+    ),
+    (
+        missao: "ato4/variabilidade",
+        referencia: {
+            "pulmoes": 1.0,
+        },
+        base: [
+            ("vazao", 57.3875),
+            ("lugares", 1.0),
+        ],
+        ref_valores: [
+            ("vazao", 58.237500000000004),
+            ("lugares", 2.0),
+        ],
+    ),
+    (
+        missao: "ato4/demanda_nova",
+        referencia: {
+            "tarefa.A": 1.0,
+            "tarefa.B": 1.0,
+            "tarefa.C": 2.0,
+            "tarefa.D": 3.0,
+            "tarefa.E": 3.0,
+            "tarefa.F": 4.0,
+            "tarefa.G": 4.0,
+            "tarefa.H": 5.0,
+            "tarefa.I": 6.0,
+            "tarefa.J": 7.0,
+            "tarefa.K": 8.0,
+            "tarefa.L": 8.0,
+            "tarefa.M": 9.0,
+            "tarefa.N": 10.0,
+        },
+        base: [
+            ("vazao", 60.0),
+            ("ciclo", 60.0),
+        ],
+        ref_valores: [
+            ("vazao", 80.0),
+            ("ciclo", 45.0),
+        ],
+    ),
+    (
+        missao: "ato5/oficina",
+        referencia: {
+            "pos.fresa": 8.0,
+            "pos.furadeira": 9.0,
+            "pos.inspecao": 5.0,
+            "pos.retifica": 2.0,
+            "pos.serra": 0.0,
+            "pos.torno": 1.0,
+        },
+        base: [
+            ("momento", 15249.37157632011),
+        ],
+        ref_valores: [
+            ("momento", 6943.502884254441),
+        ],
+    ),
+    (
+        missao: "ato5/armazem",
+        referencia: {
+            "pos.item_a": 7.0,
+            "pos.item_b": 5.0,
+            "pos.item_c": 11.0,
+            "pos.item_d": 6.0,
+            "pos.item_e": 1.0,
+            "pos.item_f": 12.0,
+            "pos.item_g": 2.0,
+            "pos.item_h": 10.0,
+        },
+        base: [
+            ("momento", 8114.971825827427),
+        ],
+        ref_valores: [
+            ("momento", 3315.478824539035),
+        ],
+    ),
+    (
+        missao: "ato5/frota",
+        referencia: {
+            "agvs": 2.0,
+            "regra": 1.0,
+        },
+        base: [
+            ("lead_time", 3737.9229146071125),
+            ("agvs", 1.0),
+        ],
+        ref_valores: [
+            ("lead_time", 252.42615290240917),
+            ("agvs", 3.0),
+        ],
+    ),
 ]

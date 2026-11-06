@@ -1,9 +1,10 @@
-// Campanha do UTSim Ensino: atos 1 a 3 (gargalo e fluxo, filas, capacidade).
+// Campanha do UTSim Ensino: atos 1 a 5 (gargalo e fluxo, filas, capacidade, balanceamento,
+// arranjo físico).
 Pacote(
     id: "campanha",
     formato: 1,
     titulo: "Campanha UTSim Ensino",
-    versao: "0.1.0",
+    versao: "0.2.0",
     autor: "UTSim",
     descricao: "Do gargalo à capacidade: decisões numa fábrica simulada, com previsão, alavancas e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
@@ -28,6 +29,16 @@ Pacote(
             "ato3/manutencao.ron",
             "ato3/lote.ron",
             "ato3/expansao.ron",
+        ]),
+        (numero: 4, titulo: "Balanceamento de linha", missoes: [
+            "ato4/ventilador.ron",
+            "ato4/variabilidade.ron",
+            "ato4/demanda_nova.ron",
+        ]),
+        (numero: 5, titulo: "Arranjo físico e movimentação", missoes: [
+            "ato5/oficina.ron",
+            "ato5/armazem.ron",
+            "ato5/frota.ron",
         ]),
     ],
 )

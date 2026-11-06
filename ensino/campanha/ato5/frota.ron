@@ -1,0 +1,48 @@
+Missao(
+    id: "ato5/frota",
+    titulo: "Frota de transporte",
+    conceitos: ["movimentacao_interna", "utilizacao"],
+    modelo: "../modelos/frota.ron",
+    texto: "frota.md",
+    variante: [
+        (chave: "chegada_paletes.interarrival", de: 58.0, ate: 62.0, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "utilizacao",
+            pergunta: "Com um AGV, qual é a utilização dele (de 0 a 1)?",
+            valor: [(chave: "agv_1.utilization")],
+            tolerancia: Absoluta(0.08),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "agvs", rotulo: "AGVs na frota", opcoes: [
+            (rotulo: "1", ajustes: {"frota.team": r#"["agv_1"]"#}, numero: 1),
+            (rotulo: "2", ajustes: {"frota.team": r#"["agv_1", "agv_2"]"#}, custo: 3000, numero: 2),
+            (rotulo: "3", ajustes: {"frota.team": r#"["agv_1", "agv_2", "agv_3"]"#}, custo: 6000, numero: 3),
+            (rotulo: "4", ajustes: {"frota.team": r#"["agv_1", "agv_2", "agv_3", "agv_4"]"#}, custo: 9000, numero: 4),
+        ]),
+        Escolha(id: "regra", rotulo: "Regra de chamada", opcoes: [
+            (rotulo: "O primeiro livre da lista", ajustes: {"frota.rule": "FirstAvailable"}),
+            (rotulo: "O livre mais perto", ajustes: {"frota.rule": "Nearest"}),
+        ], inicial: 1),
+    ],
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time do palete", unidade: "s",
+         valor: [(chave: "expedicao.time_in_system.mean")], objetivo: Menor, meta: 300.0, peso: 0.0, casas: 0),
+        (nome: "agvs", rotulo: "AGVs na frota", unidade: "",
+         valor: [(chave: "decisao.agvs")], objetivo: Menor, peso: 1.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a frota pequena demais faz o lead time explodir mesmo com as estações folgadas?",
+         opcoes: ["Porque os paletes esperam um AGV livre na doca e entre as estações", "Porque os AGVs andam mais devagar", "Porque as estações quebram"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto tempo um AGV gasta por palete, somando as viagens, a carga e a descarga?",
+        "Compare a utilização dos AGVs e a espera dos paletes em cada tamanho de frota.",
+        "Use a menor frota que mantém o lead time na meta.",
+    ],
+    referencia: {"agvs": 2, "regra": 1},
+    animacao: (duracao: 1200, unidade: "s"),
+)

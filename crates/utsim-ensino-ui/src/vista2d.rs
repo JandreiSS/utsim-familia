@@ -159,14 +159,24 @@ impl Animacao {
             ui.ctx().request_repaint();
         }
         let largura = ui.available_width().max(300.0);
-        let (resp, painter) = ui.allocate_painter(vec2(largura, 260.0), Sense::hover());
+        let (resp, painter) = ui.allocate_painter(vec2(largura, 300.0), Sense::hover());
         let rect = resp.rect;
         painter.rect_filled(rect, CornerRadius::same(4), ui.visuals().extreme_bg_color);
         let pos = self.na_tela(rect);
         let texto = ui.visuals().text_color();
         let fraco = ui.visuals().weak_text_color();
+        // Objects named `<maquina>__...` are copies of one machine (one per flow of a
+        // layout mission): they are drawn as a single box.
+        let base = |i: usize| -> &str {
+            let n = self.replay.blocks[i].name.as_str();
+            n.split("__").next().unwrap_or(n)
+        };
+        let mut setas = std::collections::BTreeSet::new();
         for (a, b) in &self.replay.connections {
-            if !(self.desenha(*a) && self.desenha(*b)) {
+            if !(self.desenha(*a) && self.desenha(*b)) || base(*a) == base(*b) {
+                continue;
+            }
+            if !setas.insert((base(*a).to_string(), base(*b).to_string())) {
                 continue;
             }
             let (pa, pb) = (pos[*a], pos[*b]);
@@ -186,13 +196,38 @@ impl Animacao {
             let p = pos[*a] + (pos[*b] - pos[*a]) * f;
             painter.circle_filled(p, 4.0, Color32::from_rgb(242, 163, 58));
         }
+        // One box per machine: the content added up, the busiest state.
+        let prioridade = |st: State| match st {
+            State::Processing | State::Utilize => 5,
+            State::Setup => 4,
+            State::Blocked | State::WaitingTransport => 3,
+            State::Down | State::WaitingRepair | State::Maintenance | State::Stopped => 2,
+            State::Idle => 0,
+            _ => 1,
+        };
+        let mut caixas: Vec<(String, usize, usize, State, String)> = Vec::new();
         for (i, b) in self.replay.blocks.iter().enumerate() {
             if !desenhavel(&b.kind) {
                 continue;
             }
-            let c = pos[i];
+            let nome = base(i).to_string();
+            match caixas.iter_mut().find(|c| c.0 == nome) {
+                Some(c) => {
+                    c.2 += self.conteudo[i];
+                    if prioridade(self.estados[i]) > prioridade(c.3) {
+                        c.3 = self.estados[i];
+                    }
+                    if b.kind == "Processor" {
+                        c.4 = b.kind.clone();
+                    }
+                }
+                None => caixas.push((nome, i, self.conteudo[i], self.estados[i], b.kind.clone())),
+            }
+        }
+        for (nome, i, conteudo, estado, kind) in &caixas {
+            let c = pos[*i];
             let r = Rect::from_center_size(c, vec2(84.0, 46.0));
-            let (cor, nome_estado) = cor_estado(&b.kind, self.estados[i], self.conteudo[i]);
+            let (cor, nome_estado) = cor_estado(kind, *estado, *conteudo);
             painter.rect_filled(r, CornerRadius::same(4), cor);
             painter.rect_stroke(
                 r,
@@ -203,7 +238,7 @@ impl Animacao {
             painter.text(
                 r.center_top() + vec2(0.0, 2.0),
                 Align2::CENTER_TOP,
-                &b.name,
+                nome,
                 FontId::proportional(13.0),
                 Color32::WHITE,
             );
@@ -214,9 +249,9 @@ impl Animacao {
                 FontId::proportional(12.0),
                 Color32::WHITE,
             );
-            if b.kind == "Queue" || b.kind == "Processor" || b.kind == "Conveyor" {
+            if kind == "Queue" || kind == "Processor" || kind == "Conveyor" {
                 // The stack of items under the box.
-                let n = self.conteudo[i];
+                let n = *conteudo;
                 for k in 0..n.min(12) {
                     let p = pos2(
                         r.left() + 5.0 + (k % 6) as f32 * 9.0,

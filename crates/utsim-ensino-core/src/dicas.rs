@@ -15,6 +15,8 @@ pub fn mais_ocupado(c: &crate::motor::Cenario) -> Option<(String, f64)> {
         .iter()
         .filter_map(|(k, xs)| {
             let obj = k.strip_suffix(".utilization")?;
+            // Copies of a machine in a layout mission are named `<maquina>__...`.
+            let obj = obj.split("__").next().unwrap_or(obj);
             Some((obj.to_string(), Intervalo::de(xs).media))
         })
         .max_by(|a, b| a.1.total_cmp(&b.1))
