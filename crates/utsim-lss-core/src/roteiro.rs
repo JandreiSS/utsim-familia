@@ -153,7 +153,8 @@ pub const PHASES: [Phase; 5] = [
                 tools: &[
                     t("Gage R&R", Analysis("gage_rr")),
                     t("Estudo do tipo 1", Analysis("msa_tipo1")),
-                    t("Concordância de atributos", Soon),
+                    t("Viés e linearidade", Analysis("msa_linearidade")),
+                    t("Concordância de atributos", Analysis("msa_atributos")),
                 ],
                 check: Some(|| Check::MsaApproved),
             },
@@ -397,6 +398,9 @@ mod tests {
             "wilcoxon",
             "gage_rr",
             "msa_tipo1",
+            "msa_vies",
+            "msa_linearidade",
+            "msa_atributos",
         ];
         for t in all_tools() {
             match t.target {

@@ -250,3 +250,87 @@ fn bottleneck_and_observed_path() {
     let back: Observed = serde_json::from_value(a.result.clone()).unwrap();
     assert_eq!(back, o);
 }
+
+fn study_file(mean: f64, hw: f64) -> StudyFile {
+    let (significant, relevant) = decide(mean, hw, 0.0);
+    StudyFile {
+        schema: STUDY_SCHEMA,
+        name: "Segunda máquina".into(),
+        model: "Linha".into(),
+        model_hash: "ab".repeat(32),
+        version: "x".into(),
+        replications: 10,
+        seed: 42,
+        level: LEVEL,
+        scenarios: Vec::new(),
+        measures: vec!["vazao".into()],
+        results: Vec::new(),
+        per_replication: BTreeMap::new(),
+        differences: vec![Difference {
+            scenario: "duas maquinas".into(),
+            metric: "vazao".into(),
+            mean,
+            half_width: hw,
+            significant,
+            minimum: 0.0,
+            relevant,
+        }],
+    }
+}
+
+#[test]
+fn gain_from_a_difference_of_the_study() {
+    let mut t = T::new();
+    let p = t.program;
+    let file = study_file(40.0, 10.0);
+    let sid = t.id();
+    t.commit(record_study(
+        p,
+        sid,
+        &file,
+        "e.json",
+        &"cd".repeat(32),
+        d(2026, 11, 6),
+    ));
+    let study = studies(&t.s, p)[0].clone();
+    let dif = &file.differences[0];
+    let mut g = GainInput {
+        description: "Peças a mais com a segunda máquina".into(),
+        category: crate::domain::SavingCategory::Hard,
+        value_per_unit: 2.5,
+        periods_per_year: 50.0,
+        higher_is_better: true,
+        conservative: true,
+    };
+    // Conservative: the end of the interval nearest to zero, 30.
+    let (v, why) = gain_value(&study, &file, dif, &g).unwrap();
+    assert!((v - 30.0 * 2.5 * 50.0).abs() < 1e-9);
+    assert!(why.contains("Segunda máquina") && why.contains("semente 42") && why.contains("3750"));
+    g.conservative = false;
+    assert!((gain_value(&study, &file, dif, &g).unwrap().0 - 5000.0).abs() < 1e-9);
+    // A decrease in the chosen sense is a loss, not a gain.
+    g.higher_is_better = false;
+    assert_eq!(gain_value(&study, &file, dif, &g), Err(GainError::Worse));
+    g.higher_is_better = true;
+    g.periods_per_year = 0.0;
+    assert_eq!(
+        gain_value(&study, &file, dif, &g),
+        Err(GainError::BadFactor)
+    );
+    g.periods_per_year = 50.0;
+    let flat = study_file(1.0, 5.0);
+    assert_eq!(
+        gain_value(&study, &flat, &flat.differences[0], &g),
+        Err(GainError::NotSignificant)
+    );
+    // The saving: estimated, source simulation, with the study and the rationale.
+    g.conservative = true;
+    let id = t.id();
+    t.commit(gain_edits(p, id, &study, &file, dif, &g).unwrap());
+    let plan = &crate::savings::plans(&t.s, p)[0];
+    assert_eq!(plan.source, crate::savings::Source::Simulation);
+    assert_eq!(plan.study, Some(study.id));
+    assert_eq!(plan.saving.status, crate::domain::SavingStatus::Estimated);
+    assert!((plan.saving.value - 3750.0).abs() < 1e-9);
+    assert!(plan.saving.rationale.contains("duas maquinas"));
+}

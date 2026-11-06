@@ -5,12 +5,15 @@
 //! hash and origin, and the summary of the result, so the tollgate report cites it and
 //! anyone runs it again on the same file. The recipe is recalculated, never typed.
 //!
-//! The Medir checks of the tollgate come from here: [`msa_approved`] (a Gage R&R with
-//! %VE of the GRR ≤ 30 %, or the justification recorded) and [`baseline_real`] (a
+//! The measurement studies are the Gage R&R, the type 1 study, bias, linearity and the
+//! attribute agreement (kappa). The Medir checks of the tollgate come from here:
+//! [`msa_approved`] (a Gage R&R with %VE of the GRR ≤ 30 % or an attribute study with
+//! kappa ≥ 0,75, or the justification recorded) and [`baseline_real`] (a
 //! capability or chart on a data set of origin `Real`).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utsim_quality::attribute::{self, Rating};
 use utsim_quality::charts::{self, ChartData, ChartKind};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
@@ -48,6 +51,12 @@ pub const FAMILY: &str = "estatistica";
 pub const LEVEL: f64 = 0.95;
 /// %VE of the GRR accepted for the tollgate (conditional above 10 %).
 pub const GRR_LIMIT: f64 = 30.0;
+/// Significance of the bias and linearity tests.
+pub const ALPHA: f64 = 1.0 - LEVEL;
+/// The label of Fleiss' kappa over all ratings of an attribute study.
+pub const KAPPA: &str = "kappa de Fleiss";
+/// Kappa accepted for an attribute measurement system.
+pub const KAPPA_LIMIT: f64 = 0.75;
 
 /// What to compute, with the columns (0-based) of the data set.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +121,28 @@ pub enum Recipe {
         reference: f64,
         tolerance: f64,
     },
+    /// Bias: repeated measurements of one reference part.
+    #[serde(rename = "msa_vies")]
+    Bias {
+        col: usize,
+        reference: f64,
+        tolerance: Option<f64>,
+    },
+    /// Linearity: reference and measured value columns over several reference parts.
+    #[serde(rename = "msa_linearidade")]
+    Linearity {
+        reference: usize,
+        value: usize,
+        variation: Option<f64>,
+    },
+    /// Attribute agreement: item, appraiser and response columns, and the known standard.
+    #[serde(rename = "msa_atributos")]
+    Attribute {
+        item: usize,
+        appraiser: usize,
+        response: usize,
+        standard: Option<usize>,
+    },
 }
 
 impl Recipe {
@@ -132,6 +163,9 @@ impl Recipe {
             Recipe::Wilcoxon { .. } => "Wilcoxon pareado",
             Recipe::GageRr { .. } => "MSA: Gage R&R",
             Recipe::Type1 { .. } => "MSA: estudo do tipo 1",
+            Recipe::Bias { .. } => "MSA: viés",
+            Recipe::Linearity { .. } => "MSA: linearidade",
+            Recipe::Attribute { .. } => "MSA: concordância de atributos",
         }
     }
 
@@ -633,6 +667,128 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             };
             o.series = x;
         }
+        Recipe::Bias {
+            col,
+            reference,
+            tolerance,
+        } => {
+            let x = t.numbers(*col);
+            need(&x, 10, "estudo de viés")?;
+            let b = msa::bias(*reference, &x, LEVEL)?;
+            o.put("n", b.n as f64);
+            o.put("média", b.mean);
+            o.put("viés", b.bias);
+            o.put("desvio", b.sd);
+            o.put("t", b.t);
+            o.put("valor-p", b.p_value);
+            o.put("IC inferior", b.ci.0);
+            o.put("IC superior", b.ci.1);
+            if let Some(tol) = tolerance.filter(|t| *t > 0.0) {
+                o.put("%viés da tolerância", 100.0 * b.bias.abs() / tol);
+            }
+            o.verdict = if b.p_value < ALPHA {
+                format!(
+                    "viés de {:.4} significativo (valor-p {:.4}): o instrumento lê deslocado da referência",
+                    b.bias, b.p_value
+                )
+            } else {
+                format!(
+                    "viés não significativo (valor-p {:.4}): o intervalo do viés contém zero",
+                    b.p_value
+                )
+            };
+            o.series = x;
+        }
+        Recipe::Linearity {
+            reference,
+            value,
+            variation,
+        } => {
+            let (r, v) = t.pairs(*reference, *value);
+            let pairs: Vec<(f64, f64)> = r.into_iter().zip(v).collect();
+            let l = msa::linearity(&pairs, *variation, LEVEL)?;
+            o.put("n", l.n as f64);
+            o.put("inclinação", l.slope);
+            o.put("intercepto", l.intercept);
+            o.put("valor-p da inclinação", l.p_slope);
+            o.put("valor-p do intercepto", l.p_intercept);
+            o.put("R²", l.r2);
+            o.put("%linearidade", l.pct_linearity);
+            if let Some(lin) = l.linearity {
+                o.put("linearidade", lin);
+            }
+            for b in &l.per_reference {
+                o.put(&format!("viés em {}", b.reference), b.bias);
+            }
+            o.verdict = if l.p_slope < ALPHA {
+                format!(
+                    "o viés muda ao longo da faixa (inclinação {:.4}, valor-p {:.4}): há problema de linearidade",
+                    l.slope, l.p_slope
+                )
+            } else if l.p_intercept < ALPHA {
+                format!(
+                    "viés constante ao longo da faixa (valor-p do intercepto {:.4}): corrigir o deslocamento",
+                    l.p_intercept
+                )
+            } else {
+                "sem viés nem problema de linearidade ao longo da faixa".to_string()
+            };
+            o.series = l.per_reference.iter().map(|b| b.bias).collect();
+        }
+        Recipe::Attribute {
+            item,
+            appraiser,
+            response,
+            standard,
+        } => {
+            let ratings: Vec<Rating> = t
+                .rows
+                .iter()
+                .filter_map(|row| {
+                    let cell = |c: usize| row.get(c).map(|s| s.trim().to_string());
+                    Some(Rating {
+                        item: cell(*item)?,
+                        appraiser: cell(*appraiser)?,
+                        response: cell(*response)?,
+                        standard: standard.and_then(cell).filter(|s| !s.is_empty()),
+                    })
+                })
+                .filter(|r| !r.item.is_empty() && !r.response.is_empty())
+                .collect();
+            let a = attribute::attribute_agreement(&ratings, LEVEL)?;
+            o.put("itens", a.items as f64);
+            o.put("avaliadores", a.appraisers.len() as f64);
+            o.put("repetições", a.trials as f64);
+            o.put("% entre avaliadores", a.between.percent);
+            if let Some(s) = &a.all_vs_standard {
+                o.put("% todos contra o padrão", s.percent);
+            }
+            let kappa = a.fleiss_all.as_ref().map(|f| f.overall.kappa);
+            if let Some(k) = kappa {
+                o.put(KAPPA, k);
+            }
+            for r in &a.appraisers {
+                if let Some(w) = &r.within {
+                    o.put(&format!("% dentro de {}", r.appraiser), w.percent);
+                }
+                if let Some(s) = &r.vs_standard {
+                    o.put(&format!("% {} contra o padrão", r.appraiser), s.percent);
+                }
+            }
+            o.verdict = match kappa {
+                Some(k) if k >= KAPPA_LIMIT => {
+                    format!("kappa {k:.2} ≥ 0,75: concordância boa, sistema aceito")
+                }
+                Some(k) if k >= 0.4 => {
+                    format!(
+                        "kappa {k:.2} entre 0,40 e 0,75: concordância razoável, melhorar o critério"
+                    )
+                }
+                Some(k) => format!("kappa {k:.2} < 0,40: concordância fraca, sistema não aceito"),
+                None => "sem kappa: precisa de ao menos dois avaliadores ou repetições".to_string(),
+            };
+            o.notes = a.warnings.clone();
+        }
     }
     Ok(o)
 }
@@ -702,6 +858,13 @@ impl Analysis {
 
     pub fn entity_ref(id: Id) -> EntityRef {
         EntityRef::new(Kind::Analysis, id)
+    }
+
+    /// Fleiss' kappa of an attribute agreement study.
+    pub fn kappa(&self) -> Option<f64> {
+        matches!(self.recipe, Some(Recipe::Attribute { .. }))
+            .then(|| self.outcome.value(KAPPA))
+            .flatten()
     }
 
     /// The `%VE` of the GRR of a Gage R&R.
@@ -778,12 +941,15 @@ pub fn rerun(a: &Analysis, text: &str) -> Result<Outcome, String> {
     run(r, &Table::parse(text))
 }
 
-/// The Medir check "MSA aprovado": a Gage R&R with `%VE` of the GRR ≤ 30 %, or one above
-/// with a justification recorded.
+/// The Medir check "MSA aprovado": a Gage R&R with `%VE` of the GRR ≤ 30 %, or an attribute
+/// agreement study with Fleiss' kappa ≥ 0,75 (for a characteristic judged by people), or
+/// either one with a justification recorded.
 pub fn msa_approved(state: &State, project: Id) -> bool {
     analyses(state, project).iter().any(|a| {
-        a.grr()
-            .is_some_and(|g| g <= GRR_LIMIT + 1e-9 || !a.justification.trim().is_empty())
+        let justified = !a.justification.trim().is_empty();
+        a.grr().is_some_and(|g| g <= GRR_LIMIT + 1e-9 || justified)
+            || a.kappa()
+                .is_some_and(|k| k + 1e-9 >= KAPPA_LIMIT || justified)
     })
 }
 
