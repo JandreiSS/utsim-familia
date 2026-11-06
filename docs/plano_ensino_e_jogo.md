@@ -565,6 +565,8 @@ O aluno instala o UTSim Ensino pelo launcher, joga os atos 1 a 3 (cerca de 14 mi
 
 ## 10. Decisões do dono
 
+**Aceitas pelo dono em 2026-11-06.** Todas as propostas desta seção valem como decididas (E1 a E16). Em E8 fica a ordem proposta dos oito atos. O MVP (EN0 a EN4) começa numa sessão própria.
+
 Propostas, a aceitar ou mudar.
 
 1. **E1 Formato.** Proposta: híbrido (C), começando pelo app egui próprio (A) com vista 2D, e o 3D pelo cliente Godot depois (EN11). Alternativas: só A, ou o jogo dentro do cliente Godot (B).
