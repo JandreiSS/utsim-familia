@@ -31,7 +31,7 @@ pub struct TeamSummary {
     /// Mean and largest wait for a member (request to assignment; `metrics: true`).
     pub wait_mean: Option<f64>,
     pub wait_max: Option<f64>,
-    /// Members that gave their work back (with `preempt: Empty`; else 0).
+    /// Members that gave their work back (with `preempt: Empty` or `Full`; else 0).
     pub preemptions: f64,
     pub members: Vec<MemberSummary>,
 }

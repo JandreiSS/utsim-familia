@@ -5,7 +5,7 @@ use utsim_core::task::{MAINTENANCE_TAG, MSG_IDLE, distance};
 use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, State, TaskKind, TaskRequest, Time};
 
 use crate::transporter::{
-    MSG_CASE_DONE, MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z, MSG_PREEMPT,
+    MSG_CASE_DONE, MSG_POSITION_X, MSG_POSITION_Y, MSG_POSITION_Z, MSG_PREEMPT, MSG_PREEMPT_FULL,
     MSG_PREEMPT_REFUSED, MSG_PREEMPTED,
 };
 
@@ -52,6 +52,11 @@ pub enum Preempt {
     /// the station) gives it back and takes the new request; the work given back goes to
     /// the front of its priority in the queue. A loaded member is never interrupted.
     Empty,
+    /// As `Empty`, and a member working at stations on jobs of lower priority also leaves
+    /// them for the new request (an interruption): each station keeps the time left and
+    /// waits for an operator again, and the jobs go back to the front of their priority in
+    /// the queue. A loaded transport or a maintenance job is still never interrupted.
+    Full,
 }
 
 impl Preempt {
@@ -209,13 +214,25 @@ impl Dispatcher {
             && self.assigned[m].iter().all(Self::is_case)
     }
 
+    /// Whether `request` may join the work of member `m` as one more open case: only work
+    /// of the same priority is interleaved. A more urgent request is not sliced with the
+    /// cases in hand (it waits for a free member or takes one by preemption), and urgent
+    /// work taken that way is done alone.
+    fn joins(&self, m: usize, request: &TaskRequest) -> bool {
+        self.assigned[m]
+            .iter()
+            .all(|r| request.priority == r.priority)
+    }
+
     /// Hands member `m` waiting operator jobs while it has room for them.
     fn fill_room(&mut self, cx: &mut Ctx, m: usize) {
         while self.has_room(m) && !cx.away_on_finish(self.team[m]) {
             let me = self.team[m];
-            let Some(i) = (0..self.queue.len())
-                .find(|&i| Self::is_case(&self.queue[i]) && cx.qualified(me, &self.queue[i]))
-            else {
+            let Some(i) = (0..self.queue.len()).find(|&i| {
+                Self::is_case(&self.queue[i])
+                    && cx.qualified(me, &self.queue[i])
+                    && self.joins(m, &self.queue[i])
+            }) else {
                 return;
             };
             let request = self.queue.remove(i).expect("index in range");
@@ -313,7 +330,12 @@ impl Dispatcher {
         }
         if let Some((m, _)) = best {
             self.asking = Some(m);
-            cx.send(self.team[m], MSG_PREEMPT, head.priority as i64 as u64);
+            let tag = if self.preempt == Preempt::Full {
+                MSG_PREEMPT_FULL
+            } else {
+                MSG_PREEMPT
+            };
+            cx.send(self.team[m], tag, head.priority as i64 as u64);
         }
     }
 
@@ -380,6 +402,7 @@ impl Dispatcher {
         let room: Vec<bool> = (0..n)
             .map(|m| {
                 self.has_room(m)
+                    && self.joins(m, request)
                     && !cx.away_on_finish(self.team[m])
                     && cx.qualified(self.team[m], request)
             })
