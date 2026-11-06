@@ -7651,11 +7651,13 @@ dependencies = [
  "utsim-diagram",
  "utsim-edit",
  "utsim-emu",
+ "utsim-exposicao",
  "utsim-fit",
  "utsim-linhas",
  "utsim-model",
  "utsim-opt",
  "utsim-pert",
+ "utsim-qualidade-core",
  "utsim-quality",
  "utsim-scene",
  "utsim-stats",
@@ -7739,6 +7741,17 @@ dependencies = [
  "thiserror 2.0.21",
  "utsim-core",
  "utsim-model",
+]
+
+[[package]]
+name = "utsim-exposicao"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-core",
+ "utsim-model",
+ "utsim-nav",
+ "utsim-stats",
 ]
 
 [[package]]
@@ -7979,6 +7992,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-launcher-core",
+]
+
+[[package]]
+name = "utsim-qualidade-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-core",
+ "utsim-model",
+ "utsim-quality",
 ]
 
 [[package]]

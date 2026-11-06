@@ -1,0 +1,12 @@
+[package]
+name = "utsim-qualidade-core"
+description = "Indicadores de qualidade da simulação (rendimentos, DPMO, escape, Pareto, capacidade da característica simulada) e relatório HTML, base do app UTSim Qualidade (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-core.workspace = true
+utsim-model.workspace = true
+utsim-quality.workspace = true
+serde.workspace = true

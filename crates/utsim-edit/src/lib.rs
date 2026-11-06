@@ -942,6 +942,11 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         preset: None,
         department: None,
         symbol: None,
+        quality: None,
+        inspection: None,
+        rework: None,
+        sink_role: None,
+        ppe: Vec::new(),
     })
 }
 

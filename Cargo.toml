@@ -14,6 +14,7 @@ default-members = [
     "crates/utsim-dash",
     "crates/utsim-diagram",
     "crates/utsim-edit",
+    "crates/utsim-exposicao",
     "crates/utsim-env",
     "crates/utsim-fit",
     "crates/utsim-flow",
@@ -28,6 +29,7 @@ default-members = [
     "crates/utsim-opt",
     "crates/utsim-pert",
     "crates/utsim-quality",
+    "crates/utsim-qualidade-core",
     "crates/utsim-scene",
     "crates/utsim-script",
     "crates/utsim-stats",
@@ -49,6 +51,7 @@ utsim-model = { path = "crates/utsim-model" }
 utsim-fit = { path = "crates/utsim-fit" }
 utsim-stats = { path = "crates/utsim-stats" }
 utsim-quality = { path = "crates/utsim-quality" }
+utsim-qualidade-core = { path = "crates/utsim-qualidade-core" }
 utsim-edit = { path = "crates/utsim-edit" }
 utsim-script = { path = "crates/utsim-script" }
 utsim-flow = { path = "crates/utsim-flow" }
@@ -65,6 +68,7 @@ utsim-cad = { path = "crates/utsim-cad" }
 utsim-diagram = { path = "crates/utsim-diagram" }
 utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }
+utsim-exposicao = { path = "crates/utsim-exposicao" }
 utsim-twin = { path = "crates/utsim-twin" }
 utsim-ui-tema = { path = "crates/utsim-ui-tema" }
 utsim-linhas = { path = "crates/utsim-linhas" }
