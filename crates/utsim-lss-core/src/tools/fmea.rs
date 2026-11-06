@@ -3,11 +3,12 @@
 //! RPN = S × O × D and the action priority from the project's table ([`super::ap`]); the
 //! recommended action becomes a card on the board (linked both ways); S, O and D revised
 //! after the action, with RPN and AP before and after; critical characteristics (high S)
-//! checked against the control plan.
+//! checked against the control plan. The rules are in `utsim_ferramentas::fmea` (decision
+//! G3); this module reads the rows from the journal and writes the edits.
 
 use serde_json::Value;
 
-use super::ap::{Ap, ApTable};
+use super::ap::ApTable;
 use super::{Deliverable, ItemRef, Tool, item_ref, items, of_tool, plans, rating};
 use crate::domain::{Origin, Project, enum_value, fields as df};
 use crate::id::Id;
@@ -15,53 +16,9 @@ use crate::kanban;
 use crate::op::Edit;
 use crate::state::State;
 
-pub const ITEM: &str = "linha_fmea";
-
-pub mod fields {
-    pub const STEP: &str = "etapa";
-    pub const MODE: &str = "modo";
-    pub const EFFECT: &str = "efeito";
-    pub const S: &str = "s";
-    pub const CAUSE: &str = "causa";
-    pub const O: &str = "o";
-    pub const PREVENTION: &str = "prevencao";
-    pub const DETECTION: &str = "deteccao";
-    pub const D: &str = "d";
-    pub const ACTION: &str = "acao";
-    /// The board card made from the action.
-    pub const CARD: &str = "cartao";
-    pub const ACTION_TAKEN: &str = "acao_tomada";
-    pub const S2: &str = "s_revista";
-    pub const O2: &str = "o_revista";
-    pub const D2: &str = "d_revista";
-    /// Deliverable: severity from which a row is a critical characteristic (default 9).
-    pub const CRITICAL_FROM: &str = "severidade_critica";
-}
-
-/// Severity from which a characteristic is critical when the deliverable does not say.
-pub const CRITICAL_FROM: u8 = 9;
-
-/// The three company scales.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scale {
-    S,
-    O,
-    D,
-}
-
-impl Scale {
-    pub const ALL: [Scale; 3] = [Scale::S, Scale::O, Scale::D];
-
-    /// Deliverable field holding the description of `level` (1 to 10): `escala_s_7`.
-    pub fn field(self, level: u8) -> String {
-        let k = match self {
-            Scale::S => 's',
-            Scale::O => 'o',
-            Scale::D => 'd',
-        };
-        format!("escala_{k}_{level}")
-    }
-}
+pub use utsim_ferramentas::fmea::{
+    CRITICAL_FROM, ITEM, Revision, Scale, TableSource, fields, ranked, rpn,
+};
 
 /// The descriptions of a scale written by the company (empty where not written).
 pub fn scale(state: &State, deliverable: Id, which: Scale) -> [String; 10] {
@@ -72,145 +29,39 @@ pub fn scale(state: &State, deliverable: Id, which: Scale) -> [String; 10] {
     })
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Row {
-    pub id: Id,
-    pub step: String,
-    pub mode: String,
-    pub effect: String,
-    pub s: Option<u8>,
-    pub cause: String,
-    pub o: Option<u8>,
-    pub prevention: String,
-    pub detection: String,
-    pub d: Option<u8>,
-    pub action: String,
-    pub card: Option<Id>,
-    pub action_taken: String,
-    pub s2: Option<u8>,
-    pub o2: Option<u8>,
-    pub d2: Option<u8>,
-}
+/// A row of the FMEA, with the project's ids (`utsim_ferramentas::fmea::Row`).
+pub type Row = utsim_ferramentas::fmea::Row<Id>;
 
-/// RPN and AP before and after the action.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Revision {
-    pub rpn_before: u32,
-    pub rpn_after: u32,
-    pub ap_before: Ap,
-    pub ap_after: Ap,
-}
-
-impl Revision {
-    pub fn improved(&self) -> bool {
-        self.rpn_after < self.rpn_before || self.ap_after < self.ap_before
+/// Reads a row from its item.
+pub fn read_row(i: &ItemRef) -> Row {
+    use fields as f;
+    let e = i.entity;
+    Row {
+        id: i.id,
+        step: e.text(f::STEP),
+        mode: e.text(f::MODE),
+        effect: e.text(f::EFFECT),
+        s: rating(e, f::S),
+        cause: e.text(f::CAUSE),
+        o: rating(e, f::O),
+        prevention: e.text(f::PREVENTION),
+        detection: e.text(f::DETECTION),
+        d: rating(e, f::D),
+        action: e.text(f::ACTION),
+        card: e.id(f::CARD),
+        action_taken: e.text(f::ACTION_TAKEN),
+        s2: rating(e, f::S2),
+        o2: rating(e, f::O2),
+        d2: rating(e, f::D2),
     }
-}
-
-impl Row {
-    pub fn read(i: &ItemRef) -> Self {
-        use fields as f;
-        let e = i.entity;
-        Self {
-            id: i.id,
-            step: e.text(f::STEP),
-            mode: e.text(f::MODE),
-            effect: e.text(f::EFFECT),
-            s: rating(e, f::S),
-            cause: e.text(f::CAUSE),
-            o: rating(e, f::O),
-            prevention: e.text(f::PREVENTION),
-            detection: e.text(f::DETECTION),
-            d: rating(e, f::D),
-            action: e.text(f::ACTION),
-            card: e.id(f::CARD),
-            action_taken: e.text(f::ACTION_TAKEN),
-            s2: rating(e, f::S2),
-            o2: rating(e, f::O2),
-            d2: rating(e, f::D2),
-        }
-    }
-
-    /// S, O and D when all three are rated.
-    pub fn sod(&self) -> Option<(u8, u8, u8)> {
-        Some((self.s?, self.o?, self.d?))
-    }
-
-    /// S, O and D after the action: each revised value, or the original where not revised.
-    /// `None` while nothing was revised.
-    pub fn sod_after(&self) -> Option<(u8, u8, u8)> {
-        if self.s2.is_none() && self.o2.is_none() && self.d2.is_none() {
-            return None;
-        }
-        let (s, o, d) = self.sod()?;
-        Some((
-            self.s2.unwrap_or(s),
-            self.o2.unwrap_or(o),
-            self.d2.unwrap_or(d),
-        ))
-    }
-
-    pub fn rpn(&self) -> Option<u32> {
-        self.sod().map(rpn)
-    }
-
-    pub fn ap(&self, table: &ApTable) -> Option<Ap> {
-        self.sod().and_then(|(s, o, d)| table.get(s, o, d))
-    }
-
-    pub fn revision(&self, table: &ApTable) -> Option<Revision> {
-        let (s, o, d) = self.sod()?;
-        let (s2, o2, d2) = self.sod_after()?;
-        Some(Revision {
-            rpn_before: rpn((s, o, d)),
-            rpn_after: rpn((s2, o2, d2)),
-            ap_before: table.get(s, o, d)?,
-            ap_after: table.get(s2, o2, d2)?,
-        })
-    }
-
-    /// Severity that decides whether the characteristic is critical (the revised one when
-    /// there is one: a design change can lower it).
-    pub fn current_s(&self) -> Option<u8> {
-        self.s2.or(self.s)
-    }
-
-    pub fn is_critical(&self, from: u8) -> bool {
-        self.current_s().is_some_and(|s| s >= from)
-    }
-}
-
-/// `S × O × D` (1 to 1000).
-pub fn rpn((s, o, d): (u8, u8, u8)) -> u32 {
-    u32::from(s) * u32::from(o) * u32::from(d)
 }
 
 /// Rows of an FMEA deliverable in order.
 pub fn rows(state: &State, deliverable: Id) -> Vec<Row> {
     items(state, deliverable, ITEM)
         .iter()
-        .map(Row::read)
+        .map(read_row)
         .collect()
-}
-
-/// Rows sorted for action: AP (high first), then RPN, then S.
-pub fn ranked(rows: &[Row], table: &ApTable) -> Vec<Row> {
-    let mut v = rows.to_vec();
-    v.sort_by(|a, b| {
-        b.ap(table)
-            .cmp(&a.ap(table))
-            .then(b.rpn().cmp(&a.rpn()))
-            .then(b.s.cmp(&a.s))
-    });
-    v
-}
-
-/// Where the project's AP table comes from.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TableSource {
-    BuiltIn,
-    /// Imported by the company, with the name given at the import.
-    Company(String),
 }
 
 /// The AP table that applies to the project: the company's when one was imported (and is
@@ -261,29 +112,20 @@ pub fn action_card(state: &State, project: Id, row: Id, card: Id) -> Vec<Edit> {
     let Some(e) = state.entity(row).filter(|e| !e.is_deleted()) else {
         return Vec::new();
     };
-    let r = Row::read(&ItemRef { id: row, entity: e });
+    let r = read_row(&ItemRef { id: row, entity: e });
     if r.card
         .and_then(|c| state.entity(c))
         .is_some_and(|c| !c.is_deleted())
     {
         return Vec::new();
     }
-    let title = if r.action.trim().is_empty() {
-        format!("FMEA: {}", r.mode.trim())
-    } else {
-        r.action.trim().to_string()
-    };
+    let title = utsim_ferramentas::fmea::card_title(&r);
     let mut edits = kanban::new_card(state, project, card, &title, Default::default());
     let c = crate::domain::Action::entity_ref(card);
     edits.retain(|e| e.field != df::action::ORIGIN);
     edits.push(Edit::new(c, df::action::ORIGIN, enum_value(Origin::Fmea)));
     edits.push(Edit::new(c, df::action::LINK, row.to_string()));
-    let why = [r.mode.trim(), r.cause.trim()]
-        .iter()
-        .filter(|x| !x.is_empty())
-        .copied()
-        .collect::<Vec<_>>()
-        .join(" / ");
+    let why = utsim_ferramentas::fmea::card_reason(&r);
     if !why.is_empty() {
         edits.push(Edit::new(c, df::action::WHY, why));
     }
@@ -348,6 +190,7 @@ pub fn set_rating(row: Id, field: &str, v: Option<u8>) -> Edit {
 
 #[cfg(test)]
 mod tests {
+    use super::super::ap::Ap;
     use super::*;
     use crate::domain::{Action, Column};
     use crate::tools::testing::Fixture;

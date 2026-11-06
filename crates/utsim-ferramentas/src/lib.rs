@@ -1,12 +1,28 @@
-//! Problem-solving tools shared by the apps of the family (stage QS7 of
-//! `docs/plano_qualidade_e_seguranca.md`): the project's own action priority table of the
-//! FMEA ([`ap`]), the Pareto analysis ([`pareto`]) and the report generator with its PDF
-//! and CSV ([`relatorios`]). Nothing here knows the state of a Seis Sigma project: the
-//! tools bound to it (FMEA rows, Ishikawa, 5 porquês, A3, plans) stay in
-//! `utsim_lss_core::tools` and use these pieces.
+//! Problem-solving tools shared by the apps of the family (stage QS7 and decision G3 of
+//! `docs/plano_qualidade_e_seguranca.md`), without any project state and without screens:
+//!
+//! - [`ap`]: the project's own action priority table of the FMEA;
+//! - [`fmea`]: the FMEA row, RPN, AP before and after, ranking, critical rows;
+//! - [`ishikawa`]: the cause and effect diagram (6M and the team's categories);
+//! - [`cinco_porques`]: five whys chains and their root causes;
+//! - [`arvore`]: forests of items robust to cycles (Ishikawa and five whys use it);
+//! - [`planos`]: data collection, control and response (reaction) plans;
+//! - [`a3`]: the sections of the A3;
+//! - [`pareto`]: the Pareto analysis;
+//! - [`relatorios`]: the report generator with its PDF and CSV.
+//!
+//! The structures are generic over the identifier of the app; the field names are the
+//! ones the apps save. Reading them from an app's file (in the Seis Sigma, the journal) and
+//! writing the edits stay in the app (`utsim_lss_core::tools`).
 
+pub mod a3;
 pub mod ap;
+pub mod arvore;
+pub mod cinco_porques;
+pub mod fmea;
+pub mod ishikawa;
 pub mod pareto;
+pub mod planos;
 pub mod relatorios;
 
 /// A number typed by a person: `1,5`, `1.5`, ` 2 `; `None` when empty or not a number.
