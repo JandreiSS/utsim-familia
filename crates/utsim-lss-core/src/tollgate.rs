@@ -620,6 +620,10 @@ pub fn prepare(state: &State, project: Id, phase: Id, mut ids: impl FnMut() -> I
         .entity(project)
         .map(|e| Project::read(project, e).approach)
         .unwrap_or_default();
+    let model = state
+        .entity(project)
+        .map(|e| e.text(dfields::project::MODEL))
+        .unwrap_or_default();
     let index = phases(state, project)
         .iter()
         .position(|p| p.id == phase)
@@ -640,7 +644,9 @@ pub fn prepare(state: &State, project: Id, phase: Id, mut ids: impl FnMut() -> I
         Edit::new(t, fields::APPROVERS, ids_value(&approvers)),
         Edit::new(t, fields::ROUND, 0),
     ];
-    for (i, (text, required, check)) in default_checklist(approach, index).into_iter().enumerate() {
+    let mut checklist = default_checklist(approach, index);
+    checklist.extend(crate::modelos_linha::extra_checklist(&model, index));
+    for (i, (text, required, check)) in checklist.into_iter().enumerate() {
         edits.extend(item_edits(
             t.id,
             ids(),
@@ -1311,6 +1317,24 @@ mod tests {
         }
         assert_eq!(Check::from_key("entregavel:"), None);
         assert_eq!(Check::from_key("nada"), None);
+    }
+
+    #[test]
+    fn a_line_template_adds_its_items_after_the_approach_ones() {
+        let mut t = T::new(Approach::Dmaic);
+        let model = crate::modelos_linha::find("dmaic_transacional").unwrap();
+        let p = t.p;
+        t.commit(vec![crate::modelos_linha::set(p, model)]);
+        let tg = t.tollgate(1); // Medir.
+        let list = items(&t.s, tg.id);
+        let base = default_checklist(Approach::Dmaic, 1).len();
+        assert_eq!(list.len(), base + 2);
+        assert!(list[base].text.contains("%C&A medido em cada etapa"));
+        assert!(list.windows(2).all(|w| w[0].order < w[1].order));
+        // Without a template, only the approach's items.
+        let mut plain = T::new(Approach::Dmaic);
+        let tg = plain.tollgate(1);
+        assert_eq!(items(&plain.s, tg.id).len(), base);
     }
 
     #[test]
