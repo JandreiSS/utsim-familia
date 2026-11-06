@@ -1,4 +1,4 @@
-// Vocabulário da linha Lean Office: termo do núcleo -> termo do escritório, aplicado na
+// Vocabulário da linha Lean Office: termo do núcleo -> termo do processo administrativo, aplicado na
 // interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam de nome.
 Vocabulary(
     line: "lean_office",
@@ -26,7 +26,7 @@ Vocabulary(
         // Estados.
         "idle": "livre",
         "processing": "trabalhando no caso",
-        "setup": "preparando",
+        "setup": "preparando ou trocando de caso",
         "blocked": "sem espaço na próxima etapa",
         "waiting_operator": "esperando a pessoa",
         "waiting_transport": "esperando quem leve",

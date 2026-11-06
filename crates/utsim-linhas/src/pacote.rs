@@ -166,11 +166,25 @@ pub struct Library {
     pub line: String,
     /// Name shown (`Lean Office`).
     pub name: String,
+    /// Shown after the name (`processos administrativos`); may be empty.
+    #[serde(default)]
+    pub subtitle: String,
     #[serde(default)]
     pub description: String,
     #[serde(default)]
     pub models: Vec<ModelRef>,
     pub presets: Vec<Preset>,
+}
+
+impl Library {
+    /// The name with the subtitle: `Lean Office (processos administrativos)`.
+    pub fn title(&self) -> String {
+        if self.subtitle.trim().is_empty() {
+            self.name.clone()
+        } else {
+            format!("{} ({})", self.name, self.subtitle.trim())
+        }
+    }
 }
 
 /// `vocabulario.ron`: core term → domain term.

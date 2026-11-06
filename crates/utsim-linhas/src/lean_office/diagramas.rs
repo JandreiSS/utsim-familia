@@ -48,7 +48,7 @@ pub enum Caixa {
 
 /// The office value stream map of a model and its indicators.
 #[derive(Clone, Debug)]
-pub struct VsmEscritorio {
+pub struct VsmAdministrativo {
     pub caixas: Vec<Caixa>,
     pub lead_time: Summary,
     pub touch: Summary,
@@ -89,7 +89,7 @@ fn pessoas(model: &Model, kind: &ObjectKind) -> (String, String) {
 }
 
 /// Builds the map along the main path of the flowchart.
-pub fn montar(model: &Model, pack: Option<&Pack>, k: &Indicadores) -> VsmEscritorio {
+pub fn montar(model: &Model, pack: Option<&Pack>, k: &Indicadores) -> VsmAdministrativo {
     let g = utsim_diagram::flowchart(model, &Options::default());
     let mut caixas = Vec::new();
     for n in main_path(&g) {
@@ -145,7 +145,7 @@ pub fn montar(model: &Model, pack: Option<&Pack>, k: &Indicadores) -> VsmEscrito
             }
         }
     }
-    VsmEscritorio {
+    VsmAdministrativo {
         caixas,
         lead_time: k.resumo(|r| r.lead_time),
         touch: k.resumo(|r| r.touch),
@@ -166,7 +166,7 @@ fn curto(t: &str, max: usize) -> String {
     super::relatorio::curto(t, max)
 }
 
-impl VsmEscritorio {
+impl VsmAdministrativo {
     /// The map as an SVG element (to put inside a page).
     pub fn svg(&self, titulo: &str) -> String {
         let (bw, gap, x0) = (176.0, 84.0, 20.0);
@@ -427,7 +427,7 @@ pub fn secoes(
     k: &Indicadores,
     futuro: Option<(&Model, &Indicadores)>,
 ) -> String {
-    let mut h = String::from("<h2>Mapa do fluxo de valor do escritório</h2>");
+    let mut h = String::from("<h2>Mapa do fluxo de valor do processo administrativo</h2>");
     let atual = montar(model, pack, k);
     let _ = write!(
         h,
