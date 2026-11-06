@@ -65,6 +65,9 @@ pub mod simulacao;
 // Stage L5, reports (`docs/plano_lean_seis_sigma.md`, 4.6 and 4.7).
 pub mod relatorios;
 
+// Stage L3 (screens) and P1, statistical analyses and MSA (`docs/plano_lean_seis_sigma.md`, 2.2 and 2.3).
+pub mod analises;
+
 pub use date::Date;
 pub use id::Id;
 pub use journal::{Insert, Journal, Snapshot};

@@ -157,6 +157,10 @@ pub enum Check {
     /// A deliverable of this tool exists in the project (an entity whose kind key starts with
     /// it, or a `entregavel` whose `ferramenta` is it): `fmea`, `sipoc`, `ishikawa`...
     DeliverableExists(String),
+    /// A Gage R&R with %VE of the GRR ≤ 30 %, or justified (P1).
+    MsaApproved,
+    /// A capability or control chart on a data set of origin Real (P1).
+    BaselineReal,
 }
 
 impl Check {
@@ -176,6 +180,8 @@ impl Check {
             Check::LessonsRecorded => "licoes_registradas".into(),
             Check::OwnerAccepted => "aceite_do_dono".into(),
             Check::DeliverableExists(t) => format!("entregavel:{t}"),
+            Check::MsaApproved => "msa_aprovado".into(),
+            Check::BaselineReal => "linha_de_base_real".into(),
         }
     }
 
@@ -193,6 +199,8 @@ impl Check {
             "acoes_da_fase_concluidas" => Check::PhaseActionsDone,
             "licoes_registradas" => Check::LessonsRecorded,
             "aceite_do_dono" => Check::OwnerAccepted,
+            "msa_aprovado" => Check::MsaApproved,
+            "linha_de_base_real" => Check::BaselineReal,
             _ => {
                 let t = s.strip_prefix("entregavel:")?.trim();
                 if t.is_empty() {
@@ -259,6 +267,8 @@ pub fn verify(state: &State, project: Id, phase: Id, check: &Check) -> bool {
             .entity(project)
             .is_some_and(|e| e.boolean(crate::closure::fields::OWNER_ACCEPTED)),
         Check::DeliverableExists(tool) => deliverable_exists(state, project, tool),
+        Check::MsaApproved => crate::analises::msa_approved(state, project),
+        Check::BaselineReal => crate::analises::baseline_real(state, project),
     }
 }
 
@@ -479,12 +489,12 @@ pub fn default_checklist(approach: Approach, phase_index: usize) -> Vec<Template
             (
                 "MSA aprovado (%GRR ≤ 30 % ou justificativa registrada)",
                 true,
-                None,
+                Some(Check::MsaApproved),
             ),
             (
                 "Linha de base de estabilidade e capacidade (dado de origem Real)",
                 true,
-                None,
+                Some(Check::BaselineReal),
             ),
             ("Mapa detalhado do processo e VSM atual", false, None),
             ("Meta confirmada com o patrocinador", true, None),
