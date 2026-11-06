@@ -50,6 +50,21 @@ Library(
             description: "Comercial, crédito, PCP e faturamento em sistema, espera pelo cliente, faturamento em lote e conferência fiscal.",
         ),
         (
+            file: "examples/revisao_de_contratos.ron",
+            name: "Revisão de contratos",
+            description: "Jurídico: contratos padrão e específicos, advogados em multitarefa, negociação com a contraparte, revisão final e aprovação.",
+        ),
+        (
+            file: "examples/licenca_de_funcionamento.ron",
+            name: "Licença de funcionamento",
+            description: "Serviço público: protocolo, exigência ao requerente, vistoria em lote, parecer técnico, despacho e publicação, com prazo legal.",
+        ),
+        (
+            file: "examples/secretaria_academica.ron",
+            name: "Secretaria acadêmica",
+            description: "Pico de pedidos no início do semestre, declarações, históricos com espera pelo professor e ajustes de matrícula.",
+        ),
+        (
             file: "examples/reembolso_atual.ron",
             name: "Reembolso de despesas (atual)",
             description: "Tutorial: o processo de cinco etapas do tutorial \"Do mapa ao modelo\"; o estado futuro está em examples/reembolso_futuro.ron.",
@@ -88,7 +103,7 @@ Library(
                 (key: "limite", label: "Limite de casos", default: "None"),
             ],
             objects: [
-                r#"(name: "${name}", kind: Queue(capacity: ${limite}, order: ${ordem}), symbol: "espera",
+                r#"(name: "${name}", kind: Queue(capacity: ${limite}, order: ${ordem}), symbol: "espera", visual: Some((asset: Some("pilha_papeis"))),
                     on_entry: "if label(item, \"prazo\", -1.0) < 0.0 && label(item, \"sla\", -1.0) >= 0.0 { item.prazo = now + item.sla; }")"#,
             ],
         ),
@@ -108,7 +123,7 @@ Library(
             ],
             objects: [
                 r#"(name: "${name}", kind: Processor(capacity: ${mesas}, process: ${tempo},
-                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao",
+                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao", visual: Some((asset: Some("mesa"))),
                     on_entry: "if random() > ${ca} { item.erro = 1.0; item.erros_${name} = label(item, \"erros_${name}\", 0.0) + 1.0; }")"#,
             ],
         ),
@@ -128,7 +143,7 @@ Library(
             objects: [
                 r#"(name: "${name}", kind: Processor(process: ${tempo},
                     operators: Some(OperatorUse(team: ${aprovador}))),
-                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao")"#,
+                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao", visual: Some((asset: Some("mesa"))))"#,
             ],
         ),
         (
@@ -146,7 +161,7 @@ Library(
             objects: [
                 r#"(name: "${name}", kind: Processor(process: ${tempo},
                     operators: Some(OperatorUse(team: ${equipe}))),
-                    output: ByLabel("rota"), symbol: "inspecao",
+                    output: ByLabel("rota"), symbol: "inspecao", visual: Some((asset: Some("mesa"))),
                     on_entry: "item.rota = 1.0; if label(item, \"erro\", 0.0) >= 1.0 && random() < ${percebe} { item.erro = 0.0; item.rota = 2.0; }")"#,
             ],
         ),
@@ -190,7 +205,7 @@ Library(
                 (key: "espera_maxima", label: "Espera máxima do lote (min, 0 = sem limite)", default: "480.0"),
             ],
             objects: [
-                r#"(name: "${name}", kind: Queue(batch: Some(Batch(size: ${tamanho}, max_wait: ${espera_maxima}))), symbol: "espera")"#,
+                r#"(name: "${name}", kind: Queue(batch: Some(Batch(size: ${tamanho}, max_wait: ${espera_maxima}))), symbol: "espera", visual: Some((asset: Some("bandeja"))))"#,
             ],
         ),
         (
@@ -210,8 +225,8 @@ Library(
             ],
             objects: [
                 r#"(name: "${name}", kind: Processor(process: ${tempo}), shifts: ${horario},
-                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao")"#,
-                r#"(name: "${name}_pauta", kind: Queue(), position: (-2.0, 0.0, 0.0), symbol: "espera")"#,
+                    output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao", visual: Some((asset: Some("mesa"))))"#,
+                r#"(name: "${name}_pauta", kind: Queue(), position: (-2.0, 0.0, 0.0), symbol: "espera", visual: Some((asset: Some("pilha_papeis"))))"#,
             ],
             connections: [("${name}_pauta", "${name}")],
         ),

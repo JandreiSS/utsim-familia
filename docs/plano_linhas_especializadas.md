@@ -263,7 +263,10 @@ Os modelos prontos cobrem áreas diferentes, para mostrar que a linha não é s�
 | Admissão de funcionário | RH | passagens entre RH, TI, financeiro e gestor; espera por documentos do candidato | feito |
 | Pedido ao faturamento | comercial e fiscal | trabalho em sistema (ninguém anda), crédito com espera pelo cliente, faturamento em lote, conferência fiscal | feito |
 | Tutorial "do mapa ao modelo" | financeiro (reembolso) | montar o VSM administrativo de um processo de 5 etapas, rodar e comparar com o futuro | feito |
-| Próximos candidatos | jurídico, serviço público, secretaria acadêmica, contas a receber, pós-venda | contratos com revisão jurídica; protocolo e licença com prazos legais; matrícula e emissão de documentos com pico sazonal; cobrança; troca e garantia | a fazer |
+| Revisão de contratos | jurídico e contratos | contratos padrão e específicos, advogados em multitarefa, negociação com a contraparte, revisão final e aprovação | feito |
+| Licença de funcionamento | serviço público | protocolo, exigência ao requerente, vistoria em lote, parecer, despacho com dois desfechos e publicação, prazo legal | feito |
+| Secretaria acadêmica | secretaria acadêmica | pico de pedidos no início do semestre (taxa por período), declarações, históricos com espera pelo professor, ajustes de matrícula | feito |
+| Próximos candidatos | contas a receber, pós-venda | cobrança; troca e garantia | a fazer |
 
 ---
 
@@ -329,9 +332,9 @@ infraestrutura do Lean Office, a multitarefa e a disciplina por rótulo), depois
 | 8 | Comando `utsim linha` e `--linha` | 3–4 | Sonnet | 6 |
 | 9 | Mais três modelos prontos e o tutorial "do mapa ao modelo" | 8–10 | Sonnet | 3, 7 |
 | 10 | Multitarefa da pessoa com custo de troca (projeto e núcleo) | 18–26 | Opus | 5 |
-| 11 | Ativos gerados por código (mesa, armário, bandeja, pilha, divisória) e vista 2D de planta | 12–18 | Sonnet | entrega do outro agente em `godot/` |
-| 12 | Vocabulário e biblioteca da linha na interface Rust/egui | 8–12 | Sonnet | plano da interface Rust |
-| 13 | Modelos de projeto "Kaizen administrativo" e "DMAIC transacional" no app Seis Sigma | 6–8 | Sonnet | app Seis Sigma (L0 a L5) |
+| 11 | Ativos gerados por código (mesa, armário, bandeja, pilha, divisória) e vista 2D de planta (feito) | 12–18 | Sonnet | entrega do outro agente em `godot/` |
+| 12 | Vocabulário e biblioteca da linha na interface Rust/egui (feito) | 8–12 | Sonnet | plano da interface Rust |
+| 13 | Modelos de projeto "Kaizen administrativo" e "DMAIC transacional" no app Seis Sigma (feito) | 6–8 | Sonnet | app Seis Sigma (L0 a L5) |
 | 14 | Manual da linha (capítulos com o vocabulário) | 6–8 | Sonnet | 3, 6 |
 | 15 | Conferir termos e links do manual da linha | 1–2 | Haiku | 14 |
 | 16 | Lote de ativos com Tripo 3D e Blender (cadeira, computador, impressora, pessoas sentadas) | 6–10 mais créditos | Sonnet | **aprovação do gasto pelo dono** |
@@ -414,6 +417,34 @@ objetos e essas áreas. Um `area: "Compras"` no objeto pareceria uma referência
 então o campo passou a se chamar `department` (opção `--departamento` em `utsim linha
 colocar`). Onde este plano diz "campo `area`" ou "área por objeto", leia `department`; as
 `areas` do modelo seguem sendo só lugares no piso.
+
+**Passos 11 a 13 feitos em 2026-11-06**, com as dependências já em `feat/fase-1`:
+
+- **Passo 11.** Cinco modelos gerados por código em `utsim-assets` (módulo `office`): `mesa`,
+  `armario`, `bandeja`, `pilha_papeis` (com o nó `papeis` para a altura acompanhar os casos) e
+  `divisoria`, em `assets/modelos/`. As predefinições gravam o `visual` (posto, aprovação,
+  verificação e reunião: mesa; caixa de entrada e pauta: pilha; lote: bandeja), e os modelos
+  prontos também. A vista 2D de planta é a câmera "Planta (2D)" do Simular, para todas as
+  linhas (decisão L4): projeção ortogonal de cima em `camera_orbita.gd`, uma entrada em
+  `CAMERAS` de `ui_left.rs` e o modo em `principal.gd`; roteiro sem janela
+  `g4_planta_lean_office.json`. Ficam para depois as zonas por departamento pintadas no chão
+  (a interface Godot ainda não desenha as `areas` da cena) e a altura da pilha.
+- **Passo 12.** `crates/utsim-godot/src/linha.rs`: as predefinições de cada linha instalada
+  viram uma categoria da Biblioteca (id `"<linha>/<predefinição>"`, ícone do tipo do núcleo),
+  colocar uma é um só passo de desfazer (`Pack::placement_command`, que também grava `line`),
+  o fantasma do arrasto mostra a predefinição inteira e a lista de objetos de um modelo da
+  linha usa o vocabulário. Ganchos de poucas linhas em `document.rs` e `ui_class.rs`; roteiro
+  sem janela `g4_biblioteca_lean_office.json`.
+- **Passo 13.** `utsim_lss_core::modelos_linha`: "Kaizen administrativo" e "DMAIC
+  transacional", com o campo `modelo` do projeto acrescentando os itens da linha ao checklist
+  de cada tollgate (`tollgate::prepare`); no app, a escolha "Modelo de projeto" no cartão
+  Novo projeto (`App::create_line_project`). Os modelos de fluxo da empresa (seção 4.7 do
+  plano Seis Sigma) continuam por fazer; estes dois são os primeiros, no código.
+- **Modelos da seção 1.9** que faltavam: revisão de contratos (jurídico, com advogados em
+  multitarefa), licença de funcionamento (serviço público, com dois desfechos) e secretaria
+  acadêmica (pico no início do semestre), com golden novos.
+- **Interrupções:** a preempção de quem já está trabalhando (E4 `Full`, passo 16 do plano de
+  chegadas) ainda não existe; só `Preempt::Empty`. Ficam anotadas para quando ela vier.
 
 **Escopo administrativo (2026-11-03).** Junto com os passos 9, 14 e 15, a linha passou a
 tratar processos administrativos em geral (seção 1.1): subtítulo "processos administrativos"
