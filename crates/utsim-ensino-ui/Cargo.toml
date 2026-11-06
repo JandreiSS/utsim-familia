@@ -19,3 +19,5 @@ egui = { version = "=0.36.2", default-features = false, features = ["default_fon
 
 [dev-dependencies]
 tempfile = "=3.27.0"
+# Headless pictures of the screens (`tests/capturas.rs`).
+utsim-ui-tema = { workspace = true, features = ["captura"] }

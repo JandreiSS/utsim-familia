@@ -456,11 +456,11 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     });
     ui.separator();
     ui.label(RichText::new("Erros mais comuns").strong());
-    if c.erros_comuns.is_empty() {
-        ui.label("Sem entregas corrigidas.");
+    if c.erros_comuns.values().all(Vec::is_empty) {
+        ui.label("Nenhum erro frequente nas entregas corrigidas.");
     }
     for (i, m) in pacote.missoes.iter().enumerate() {
-        if let Some(es) = c.erros_comuns.get(&m.missao.id) {
+        if let Some(es) = c.erros_comuns.get(&m.missao.id).filter(|es| !es.is_empty()) {
             ui.label(
                 RichText::new(format!("{} {}", numero_missao(&pacote, i), m.missao.titulo))
                     .strong(),

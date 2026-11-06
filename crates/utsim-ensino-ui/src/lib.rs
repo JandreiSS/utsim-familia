@@ -385,7 +385,13 @@ impl App {
                         abrir = Some(i);
                     }
                     if !liberada {
-                        ui.label(RichText::new("bloqueada: resolva a anterior").weak());
+                        let primeira_do_ato = i == 0 || p.missoes[i - 1].ato != m.ato;
+                        let txt = if primeira_do_ato {
+                            "bloqueada: resolva o ato anterior"
+                        } else {
+                            "bloqueada: resolva a anterior"
+                        };
+                        ui.label(RichText::new(txt).weak());
                     }
                     if let Some(r) = reg {
                         ui.label(format!(

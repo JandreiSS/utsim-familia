@@ -172,8 +172,8 @@ impl Animacao {
             let (pa, pb) = (pos[*a], pos[*b]);
             let dir = (pb - pa).normalized();
             painter.arrow(
-                pa + dir * 34.0,
-                (pb - pa) - dir * 68.0,
+                pa + dir * 44.0,
+                (pb - pa) - dir * 88.0,
                 Stroke::new(1.5, fraco),
             );
         }
@@ -191,7 +191,7 @@ impl Animacao {
                 continue;
             }
             let c = pos[i];
-            let r = Rect::from_center_size(c, vec2(64.0, 40.0));
+            let r = Rect::from_center_size(c, vec2(84.0, 46.0));
             let (cor, nome_estado) = cor_estado(&b.kind, self.estados[i], self.conteudo[i]);
             painter.rect_filled(r, CornerRadius::same(4), cor);
             painter.rect_stroke(
@@ -204,14 +204,14 @@ impl Animacao {
                 r.center_top() + vec2(0.0, 2.0),
                 Align2::CENTER_TOP,
                 &b.name,
-                FontId::proportional(11.0),
+                FontId::proportional(13.0),
                 Color32::WHITE,
             );
             painter.text(
                 r.center_bottom() - vec2(0.0, 3.0),
                 Align2::CENTER_BOTTOM,
                 nome_estado,
-                FontId::proportional(10.0),
+                FontId::proportional(12.0),
                 Color32::WHITE,
             );
             if b.kind == "Queue" || b.kind == "Processor" || b.kind == "Conveyor" {
@@ -232,7 +232,7 @@ impl Animacao {
                     r.right_bottom() + vec2(4.0, 6.0),
                     Align2::LEFT_TOP,
                     format!("{n}"),
-                    FontId::proportional(11.0),
+                    FontId::proportional(13.0),
                     texto,
                 );
             }
@@ -275,7 +275,7 @@ impl Animacao {
             min = min.min(*p);
             max = max.max(*p);
         }
-        let area = rect.shrink2(vec2(48.0, 40.0));
+        let area = rect.shrink2(vec2(56.0, 44.0));
         let w = (max.x - min.x).max(1e-3);
         let h = (max.y - min.y).max(1e-3);
         let s = (area.width() / w).min(if h > 1e-2 {

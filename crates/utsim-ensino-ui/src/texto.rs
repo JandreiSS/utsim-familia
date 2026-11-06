@@ -25,7 +25,7 @@ pub fn markdown(ui: &mut Ui, md: &str) {
         for linha in bloco.lines() {
             let l = linha.trim_end();
             if let Some(t) = l.strip_prefix("# ") {
-                ui.label(RichText::new(t).heading());
+                ui.label(RichText::new(t).size(22.0).strong());
             } else if let Some(t) = l.strip_prefix("## ") {
                 ui.add_space(4.0);
                 ui.label(RichText::new(t).strong().size(16.0));

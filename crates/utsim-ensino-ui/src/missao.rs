@@ -248,6 +248,13 @@ fn situacao_texto(s: Situacao) -> (&'static str, Color32) {
     }
 }
 
+/// The label of a slider in a column of fixed width, so the sliders line up.
+fn rotulo_alinhado(ui: &mut Ui, rotulo: &str) {
+    let r = ui.label(rotulo);
+    ui.add_space((300.0 - r.rect.width()).max(6.0));
+    ui.spacing_mut().slider_width = 220.0;
+}
+
 /// Draws one lever; returns whether it changed.
 fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
     let antes = *v;
@@ -257,8 +264,16 @@ fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
         } => {
             let mut n = v.round() as i64;
             ui.horizontal(|ui| {
-                ui.label(rotulo);
+                rotulo_alinhado(ui, rotulo);
                 ui.add(egui::Slider::new(&mut n, *de..=*ate));
+                if let Alavanca::Quantidade { custo_unitario, .. } = a
+                    && *custo_unitario > 0.0
+                {
+                    ui.label(
+                        RichText::new(format!("{} cada unidade a mais", dinheiro(*custo_unitario)))
+                            .weak(),
+                    );
+                }
             });
             *v = n as f64;
         }
@@ -271,7 +286,7 @@ fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
             ..
         } => {
             ui.horizontal(|ui| {
-                ui.label(rotulo);
+                rotulo_alinhado(ui, rotulo);
                 ui.add(
                     egui::Slider::new(v, *de..=*ate)
                         .step_by(*passo)
@@ -589,11 +604,11 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
         }
     });
     ui.label(format!(
-        "Desempenho {} de {} · previsão {} · justificativa {} · descontos {} (dicas) e {} (rodadas)",
+        "Pontos: desempenho {}, previsão {}, justificativa {} (de {} possíveis) · descontos {} (dicas) e {} (rodadas)",
         fmt_num(r.pontos_desempenho, 1),
-        fmt_num(r.pontos_possiveis, 0),
         fmt_num(r.pontos_previsao, 1),
         fmt_num(r.pontos_justificativa, 1),
+        fmt_num(r.pontos_possiveis, 0),
         fmt_num(r.desconto_dicas, 0),
         fmt_num(r.desconto_rodadas, 0),
     ));
