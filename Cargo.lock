@@ -7842,6 +7842,7 @@ dependencies = [
  "utsim-edit",
  "utsim-fit",
  "utsim-flow",
+ "utsim-linhas",
  "utsim-look",
  "utsim-model",
  "utsim-objects",

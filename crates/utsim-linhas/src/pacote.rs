@@ -30,8 +30,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use utsim_edit::Document;
 use utsim_edit::preset::{Fragment, add_command, fill, markers, parse_object};
+use utsim_edit::{Command, Document};
 
 /// Library file name inside a pack directory.
 pub const LIBRARY_FILE: &str = "biblioteca.ron";
@@ -472,6 +472,18 @@ pub struct Placement<'a> {
 impl Pack {
     /// Adds a preset to `doc` as one undo step; returns the names of the new objects.
     pub fn apply(&self, doc: &mut Document, at: &Placement) -> Result<Vec<String>, String> {
+        let (names, command) = self.placement_command(doc, at)?;
+        doc.apply(command)?;
+        Ok(names)
+    }
+
+    /// The names of the objects a preset would create in `doc` and the one command
+    /// (one undo step) that creates them; a model without a line also gets this one.
+    pub fn placement_command(
+        &self,
+        doc: &Document,
+        at: &Placement,
+    ) -> Result<(Vec<String>, Command), String> {
         let p = self.preset(at.preset).ok_or_else(|| {
             format!(
                 "a linha '{}' não tem a predefinição '{}'",
@@ -485,9 +497,11 @@ impl Pack {
         };
         let fragment = p.instantiate(self.id(), &name, &at.values, at.position, at.department)?;
         let names = fragment.objects.iter().map(|o| o.name.clone()).collect();
-        let command = add_command(doc, &fragment)?;
-        doc.apply(command)?;
-        Ok(names)
+        let mut command = add_command(doc, &fragment)?;
+        if doc.model().line.is_none() {
+            command = Command::Batch(vec![Command::SetLine(Some(self.id().to_string())), command]);
+        }
+        Ok((names, command))
     }
 }
 
