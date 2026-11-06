@@ -11,6 +11,7 @@
 //! - [`pareto`]: Pareto analysis;
 //! - [`fmea`]: process FMEA with RPN and action priority; [`ap`]: the AP tables;
 //! - [`plans`]: data collection, control and response plans;
+//! - [`vsm`]: value stream map, current and future state, with the lead time ladder;
 //! - [`a3`]: the one page report composed of the other deliverables;
 //! - [`tree`]: forests of items (parent links) robust to cycles.
 
@@ -24,6 +25,7 @@ pub mod plans;
 pub mod sipoc;
 pub mod tree;
 pub mod voc;
+pub mod vsm;
 pub mod whys;
 
 use serde::{Deserialize, Serialize};
@@ -73,10 +75,12 @@ pub enum Tool {
     ResponsePlan,
     #[serde(rename = "a3")]
     A3,
+    #[serde(rename = "vsm")]
+    Vsm,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 11] = [
+    pub const ALL: [Tool; 12] = [
         Tool::Voc,
         Tool::Sipoc,
         Tool::Pareto,
@@ -88,13 +92,14 @@ impl Tool {
         Tool::ControlPlan,
         Tool::ResponsePlan,
         Tool::A3,
+        Tool::Vsm,
     ];
 
     /// Index of the DMAIC phase where the tool usually lives (Definir 0 ... Controlar 4).
     pub fn usual_phase(self) -> usize {
         match self {
             Tool::Voc | Tool::Sipoc | Tool::Pareto | Tool::A3 => 0,
-            Tool::DataCollection => 1,
+            Tool::DataCollection | Tool::Vsm => 1,
             Tool::Ishikawa | Tool::FiveWhys | Tool::CauseEffect | Tool::Fmea => 2,
             Tool::ControlPlan | Tool::ResponsePlan => 4,
         }

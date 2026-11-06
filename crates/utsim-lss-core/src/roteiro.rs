@@ -115,7 +115,7 @@ pub const PHASES: [Phase; 5] = [
                 tools: &[
                     t("SIPOC", Deliverable(Tool::Sipoc)),
                     t("Fluxograma e SIPOC do modelo", Screen("modelo")),
-                    t("Mapa do fluxo de valor", Soon),
+                    t("Mapa do fluxo de valor", Deliverable(Tool::Vsm)),
                 ],
                 check: Some(|| Check::DeliverableExists("sipoc".into())),
             },
@@ -221,7 +221,8 @@ pub const PHASES: [Phase; 5] = [
                 purpose: "Achar onde o fluxo para e quanto do tempo agrega valor.",
                 tools: &[
                     t("Gargalo e caminho crítico do modelo", Screen("modelo")),
-                    t("Mapa do fluxo de valor", Soon),
+                    t("Mapa do fluxo de valor", Deliverable(Tool::Vsm)),
+                    t("Diagrama de espaguete", Screen("modelo")),
                 ],
                 check: None,
             },

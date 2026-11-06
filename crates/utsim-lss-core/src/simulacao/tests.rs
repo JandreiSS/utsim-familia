@@ -334,3 +334,19 @@ fn gain_from_a_difference_of_the_study() {
     assert!((plan.saving.value - 3750.0).abs() < 1e-9);
     assert!(plan.saving.rationale.contains("duas maquinas"));
 }
+
+#[test]
+fn vsm_and_spaghetti_from_the_model() {
+    let m = model();
+    let (html, rows) = vsm_from_model(&m).unwrap();
+    assert!(html.contains("<svg"));
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, "maquina");
+    assert!((rows[0].cycle - 0.8).abs() < 1e-9);
+    assert!(rows[0].value_added);
+    assert!(rows[0].inventory.is_some_and(|i| i > 0.0));
+    let (page, travels) = spaghetti(&m).unwrap();
+    assert!(page.contains("<html") || page.contains("<!DOCTYPE") || page.contains("<!doctype"));
+    assert_eq!(travels.last().map(|t| t.resource.as_str()), Some("itens"));
+    assert!(travels.last().unwrap().trips > 0);
+}

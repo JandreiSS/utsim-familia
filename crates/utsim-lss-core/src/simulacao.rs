@@ -199,6 +199,62 @@ pub fn diagram_html(model: &Model, kind: utsim_diagram::TipoDiagrama) -> Result<
         .map_err(SimError::Model)
 }
 
+/// The value stream map of the model (one run with the trace): its page and the processes
+/// of the main path, to fill a VSM deliverable (P4).
+pub fn vsm_from_model(
+    model: &Model,
+) -> Result<(String, Vec<crate::tools::vsm::ModelProcess>), SimError> {
+    let s = utsim_diagram::gerar(
+        utsim_diagram::TipoDiagrama::Vsm,
+        model,
+        &utsim_diagram::Options::default(),
+    )
+    .map_err(SimError::Model)?;
+    let rows = crate::tools::vsm::from_diagram_csv(s.csv.as_deref().unwrap_or(""));
+    Ok((s.html, rows))
+}
+
+/// One line of the distances of a spaghetti diagram.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Travel {
+    #[serde(rename = "recurso")]
+    pub resource: String,
+    #[serde(rename = "viagens")]
+    pub trips: u64,
+    #[serde(rename = "distancia")]
+    pub distance: f64,
+}
+
+/// The spaghetti diagram of the model over the plant (one run with the trace): its page
+/// and the trips and distance of each mobile resource and of the items (the last line).
+pub fn spaghetti(model: &Model) -> Result<(String, Vec<Travel>), SimError> {
+    let s = utsim_diagram::gerar(
+        utsim_diagram::TipoDiagrama::Espaguete,
+        model,
+        &utsim_diagram::Options::default(),
+    )
+    .map_err(SimError::Model)?;
+    let rows = s
+        .csv
+        .as_deref()
+        .unwrap_or("")
+        .lines()
+        .skip(1)
+        .filter_map(|l| {
+            let c: Vec<&str> = l.split(',').collect();
+            if c.len() < 3 {
+                return None;
+            }
+            Some(Travel {
+                resource: c[0].trim_matches('"').to_string(),
+                trips: c[1].trim().parse().ok()?,
+                distance: c[2].trim().parse().ok()?,
+            })
+        })
+        .collect();
+    Ok((s.html, rows))
+}
+
 /// The five SIPOC columns generated from the model (suppliers, inputs, process, outputs,
 /// customers), in [`sipoc::COLUMNS`] order.
 pub fn sipoc_columns(model: &Model) -> Result<[Vec<String>; 5], SimError> {
@@ -803,6 +859,9 @@ pub enum AnalysisKind {
     ShiftingBottleneck,
     #[serde(rename = "pert_observado")]
     ObservedPert,
+    /// Distances travelled by the mobile resources and the items (spaghetti diagram).
+    #[serde(rename = "espaguete")]
+    Spaghetti,
 }
 
 /// One row of the bottleneck table.
