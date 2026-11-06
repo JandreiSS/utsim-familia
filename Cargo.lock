@@ -7739,6 +7739,7 @@ dependencies = [
  "eframe",
  "utsim-ensino-store",
  "utsim-ensino-ui",
+ "utsim-ui-tema",
  "winresource",
 ]
 
