@@ -93,6 +93,14 @@ fn five_steps_on_a_unit_folder() {
     let html = relatorio::html(&b);
     assert!(html.contains("Prensamento das mãos"));
     assert!(html.contains("Comando bimanual"));
+    let pdf = relatorio::pdf(&b, "prof, 2026-12-10");
+    assert!(pdf.starts_with(b"%PDF"));
+    // The notice is in the page text (WinAnsi bytes of an ASCII stretch of it).
+    let trecho = b"profissional legalmente habilitado";
+    assert!(
+        pdf.windows(trecho.len()).any(|w| w == trecho),
+        "aviso fora do PDF"
+    );
     // A company matrix replaces the default in the whole register.
     let csv = "niveis;Tolerável;Moderado;Intolerável\n\
                p/s;Leve;Séria;Fatal\n\

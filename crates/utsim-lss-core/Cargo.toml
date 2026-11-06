@@ -11,6 +11,8 @@ name = "utsim_lss_core"
 path = "src/lib.rs"
 
 [dependencies]
+# Tools shared with the quality and safety apps (AP table, Pareto, reports and PDF).
+utsim-ferramentas.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

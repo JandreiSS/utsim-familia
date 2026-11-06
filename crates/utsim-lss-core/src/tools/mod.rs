@@ -16,7 +16,7 @@
 //! - [`tree`]: forests of items (parent links) robust to cycles.
 
 pub mod a3;
-pub mod ap;
+pub use utsim_ferramentas::ap;
 pub mod cause_effect;
 pub mod fmea;
 pub mod ishikawa;
@@ -344,19 +344,7 @@ pub fn rating(e: &Entity, field: &str) -> Option<u8> {
         .map(|v| v as u8)
 }
 
-/// A number typed by a person: `1,5`, `1.5`, ` 2 `; `None` when empty or not a number.
-pub fn parse_number(text: &str) -> Option<f64> {
-    let t = text.trim();
-    if t.is_empty() {
-        return None;
-    }
-    let t = if t.contains(',') && !t.contains('.') {
-        t.replace(',', ".")
-    } else {
-        t.replace(',', "")
-    };
-    t.parse::<f64>().ok().filter(|x| x.is_finite())
-}
+pub use utsim_ferramentas::parse_number;
 
 #[cfg(test)]
 pub(crate) mod testing {

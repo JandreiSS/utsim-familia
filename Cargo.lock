@@ -7755,6 +7755,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-ferramentas"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "utsim-fit"
 version = "0.1.0"
 dependencies = [
@@ -7900,6 +7910,7 @@ dependencies = [
  "thiserror 2.0.21",
  "utsim-core",
  "utsim-diagram",
+ "utsim-ferramentas",
  "utsim-model",
  "utsim-pert",
  "utsim-quality",
@@ -8033,6 +8044,7 @@ dependencies = [
  "utsim-posto-ui",
  "utsim-qualidade-core",
  "utsim-ui-tema",
+ "winresource",
 ]
 
 [[package]]
@@ -8088,6 +8100,7 @@ dependencies = [
  "utsim-posto-ui",
  "utsim-seguranca-core",
  "utsim-ui-tema",
+ "winresource",
 ]
 
 [[package]]
@@ -8098,6 +8111,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-exposicao",
+ "utsim-ferramentas",
  "utsim-model",
  "utsim-posto",
 ]

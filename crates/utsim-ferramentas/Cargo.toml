@@ -1,0 +1,14 @@
+[package]
+name = "utsim-ferramentas"
+description = "Ferramentas de solução de problemas comuns aos apps da família (tabela de AP do FMEA, Pareto, gerador de relatórios em PDF e CSV), sem estado de projeto e sem interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { version = "=1.11.0", default-features = false, features = ["std"] }

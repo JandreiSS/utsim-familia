@@ -219,3 +219,41 @@ pub fn html(blocos: &[Bloco]) -> String {
     s.push_str("</body></html>");
     s
 }
+
+/// The report as PDF (A3 landscape, for the wide tables), with the legal notice also in the
+/// footer of every page. `emitido` goes in the footer (who and when printed it).
+pub fn pdf(blocos: &[Bloco], emitido: &str) -> Vec<u8> {
+    use utsim_ferramentas::relatorios::{Document, PageSize, Template, pdf};
+    let titulo = blocos
+        .iter()
+        .find_map(|b| match b {
+            Bloco::Titulo(t) => Some(t.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| "Inventário de riscos".into());
+    let mut doc = Document::new(&titulo, "UTSim Segurança do Trabalho");
+    doc.size = PageSize::A3Landscape;
+    for b in blocos {
+        match b {
+            Bloco::Titulo(_) => {}
+            Bloco::Subtitulo(t) => {
+                doc.heading(t);
+            }
+            Bloco::Paragrafo(t) => {
+                doc.para(t);
+            }
+            Bloco::Aviso(t) => {
+                doc.para(&format!("AVISO: {t}"));
+            }
+            Bloco::Tabela { cabecalho, linhas } => {
+                let cab: Vec<&str> = cabecalho.iter().map(String::as_str).collect();
+                doc.table("", &cab, linhas.clone(), &[]);
+            }
+        }
+    }
+    let modelo = Template {
+        footer: AVISO_LEGAL.to_string(),
+        ..Template::default()
+    };
+    pdf::render(&doc, &modelo, emitido)
+}
