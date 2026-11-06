@@ -194,7 +194,11 @@ pub struct Resultado {
 
 /// Why `decisoes` break a constraint of `missao` (`None` when they pass).
 pub fn portao(missao: &Missao, decisoes: &Decisoes) -> Option<String> {
+    let iniciais = missao.decisoes_iniciais();
     for (k, v) in decisoes {
+        if (k.starts_with("tarefa.") || k.starts_with("pos.")) && iniciais.contains_key(k) {
+            continue;
+        }
         match missao.alavanca(k) {
             None => return Some(format!("a alavanca '{k}' não existe")),
             Some(a) if !a.aceita(*v) => {
@@ -204,6 +208,16 @@ pub fn portao(missao: &Missao, decisoes: &Decisoes) -> Option<String> {
         }
     }
     let d = missao.completar(decisoes);
+    if let Some(b) = &missao.balanceamento
+        && let Some(v) = b.violacao(&b.atribuicao(&d))
+    {
+        return Some(v);
+    }
+    if let Some(a) = &missao.arranjo
+        && let Some(v) = a.violacao(&a.posicoes(&d))
+    {
+        return Some(v);
+    }
     let custo = missao.custo(&d);
     if let Some(orc) = missao.orcamento
         && custo > orc + 1e-9
@@ -220,6 +234,7 @@ pub fn portao(missao: &Missao, decisoes: &Decisoes) -> Option<String> {
             let x = match t.chave.as_str() {
                 "const" => 1.0,
                 "custo" => custo,
+                k if crate::pecas::e_termo(k) => crate::pecas::termo(missao, k, &d).unwrap_or(0.0),
                 k => k
                     .strip_prefix("decisao.")
                     .and_then(|id| missao.alavanca(id).map(|a| a.numero(d[id])))

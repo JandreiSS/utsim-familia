@@ -84,7 +84,7 @@ fn cause(role: Role) -> Option<usize> {
         Role::Batch => Some(5),
         Role::Entry => Some(6),
         Role::Person | Role::Team => Some(7),
-        Role::Done => None,
+        Role::Done | Role::Interruption => None,
     }
 }
 
@@ -168,6 +168,17 @@ pub fn replicacao(
         .map(|i| role(model, pack, i))
         .collect();
     let role_of = |b: usize| roles.get(b).copied().flatten();
+    // Interruptions (calls, urgencies) are not cases: they only take the people's time.
+    let cases: Vec<ItemRecord> = items
+        .iter()
+        .filter(|r| {
+            !r.visits
+                .keys()
+                .any(|b| role_of(*b) == Some(Role::Interruption))
+        })
+        .cloned()
+        .collect();
+    let items = &cases[..];
     let done: Vec<&ItemRecord> = items
         .iter()
         .filter(|r| r.ended_at.is_some_and(|t| t >= from))
@@ -401,7 +412,16 @@ impl Indicadores {
             let report = model.drive(&mut sim)?;
             let items = sim.take_item_log();
             if r == 0 {
-                serie = serie_wip(&items, report.stats_from, report.end_time);
+                let cases: Vec<ItemRecord> = items
+                    .iter()
+                    .filter(|it| {
+                        !it.visits
+                            .keys()
+                            .any(|b| role(model, pack, *b) == Some(Role::Interruption))
+                    })
+                    .cloned()
+                    .collect();
+                serie = serie_wip(&cases, report.stats_from, report.end_time);
                 hora = ocupacao_hora(
                     &sim.take_trace(),
                     &people,
@@ -419,7 +439,7 @@ impl Indicadores {
             .filter(|(i, _)| {
                 !matches!(
                     role(model, pack, *i),
-                    Some(Role::Entry | Role::Done | Role::Person | Role::Team)
+                    Some(Role::Entry | Role::Done | Role::Person | Role::Team | Role::Interruption)
                 )
             })
             .map(|(i, o)| {

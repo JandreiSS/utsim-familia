@@ -7753,6 +7753,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "utsim-core",
+ "utsim-diagram",
  "utsim-model",
 ]
 

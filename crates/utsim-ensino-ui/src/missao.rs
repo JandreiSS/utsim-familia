@@ -84,6 +84,8 @@ pub struct EstadoMissao {
     pub resultado: Option<Resultado>,
     pub animacao: Option<Animacao>,
     pub erro: Option<String>,
+    /// The task or machine picked by a click on the board or the grid.
+    pub selecionada: Option<String>,
 }
 
 impl EstadoMissao {
@@ -105,6 +107,7 @@ impl EstadoMissao {
             resultado: None,
             animacao: None,
             erro: None,
+            selecionada: None,
             pacote,
         }
     }
@@ -443,6 +446,23 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         if let Some(motivo) = utsim_ensino_core::nota::portao(missao, &m.tentativa.decisoes) {
             ui.colored_label(VERMELHO, format!("Restrição: {motivo}"));
         }
+        ui.add_space(6.0);
+    }
+
+    if let Some(b) = missao.balanceamento.as_ref().filter(|b| b.editavel) {
+        ui.label(RichText::new("Balanceamento da linha").strong());
+        crate::pecas::quadro_balanceamento(ui, b, &mut m.tentativa.decisoes, &mut m.selecionada);
+    }
+    if let Some(a) = &missao.arranjo {
+        ui.label(RichText::new("Arranjo físico").strong());
+        crate::pecas::grade_arranjo(ui, a, &mut m.tentativa.decisoes, &mut m.selecionada);
+    }
+    if missao.tem_pecas()
+        && let Some(motivo) = utsim_ensino_core::nota::portao(missao, &m.tentativa.decisoes)
+    {
+        ui.colored_label(VERMELHO, format!("Restrição: {motivo}"));
+    }
+    if missao.tem_pecas() {
         ui.add_space(6.0);
     }
 

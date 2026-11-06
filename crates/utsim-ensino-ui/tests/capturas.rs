@@ -111,3 +111,50 @@ fn telas_principais() {
     salvar(&img, "5_professor");
     assert!(distintas(&img) > 3);
 }
+
+#[test]
+fn telas_das_pecas() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::com(Perfil::em(dir.path()), Arc::new(NaHora), || 0);
+    app.salvar_identidade("Ana Lima", "2027001", "ana");
+    let mut cap = Captura::new(Context::default(), vec2(1180.0, 1700.0));
+    for (id, nome) in [
+        ("ato4/ventilador", "6_balanceamento"),
+        ("ato5/oficina", "7_arranjo"),
+    ] {
+        let p = app.pacote.clone().unwrap();
+        let i = p.indice(id).unwrap();
+        app.abrir_missao(i);
+        let img = cap.imagem(3, |ui| app.draw(ui));
+        salvar(&img, &format!("{nome}_antes"));
+        assert!(distintas(&img) > 10);
+        {
+            let m = app.missao.as_mut().unwrap();
+            let r = m.missao().missao.completar(&m.missao().missao.referencia);
+            m.tentativa.decisoes = r;
+            let ids: Vec<String> = m
+                .missao()
+                .missao
+                .previsao
+                .iter()
+                .map(|p| p.id().to_string())
+                .collect();
+            for id in ids {
+                m.tentativa
+                    .previsoes
+                    .insert(id, RespostaPrevisao::Escolha(0));
+            }
+            m.simular("2027001".into(), &NaHora, None);
+        }
+        let img = cap.imagem(3, |ui| app.draw(ui));
+        salvar(&img, &format!("{nome}_resultado"));
+        let r = app
+            .missao
+            .as_ref()
+            .unwrap()
+            .resultado
+            .as_ref()
+            .expect("resultado");
+        assert!(r.resolvida, "{id}: {r:#?}");
+    }
+}

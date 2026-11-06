@@ -9,6 +9,7 @@
 //! - [`variante`]: the per-student variant drawn from `hash(missao, aluno)`;
 //! - [`motor`]: the runs with common random numbers and the replay for the 2D view;
 //! - [`nota`]: gate, performance, prediction, justification, tolerance and stars;
+//! - [`pecas`]: line balancing and grid layout (the pieces of acts 4 and 5);
 //! - [`dicas`]: automatic hints about the attempt;
 //! - [`progresso`]: grades per mission and unlocking;
 //! - [`turma`]: the class, the student list, the matrix and the common mistakes;
@@ -22,6 +23,7 @@ pub mod missao;
 pub mod motor;
 pub mod nota;
 pub mod pacote;
+pub mod pecas;
 pub mod progresso;
 pub mod turma;
 pub mod validar;

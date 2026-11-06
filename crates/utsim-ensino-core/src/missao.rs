@@ -70,6 +70,12 @@ pub struct Missao {
     pub referencia: Decisoes,
     #[serde(default)]
     pub animacao: Animacao,
+    /// Tasks to assign to stations (act 4).
+    #[serde(default)]
+    pub balanceamento: Option<crate::pecas::Balanceamento>,
+    /// Machines to place on a grid (act 5).
+    #[serde(default)]
+    pub arranjo: Option<crate::pecas::Arranjo>,
 }
 
 /// The decisions of an attempt: lever id to number (a quantity, the index of a choice or
@@ -466,10 +472,40 @@ impl Missao {
 
     /// The decisions of the initial state.
     pub fn decisoes_iniciais(&self) -> Decisoes {
-        self.alavancas
+        let mut d: Decisoes = self
+            .alavancas
             .iter()
             .map(|a| (a.id().to_string(), a.inicial()))
-            .collect()
+            .collect();
+        if let Some(b) = self.balanceamento.as_ref().filter(|b| b.editavel) {
+            d.extend(b.decisoes(&b.inicial));
+        }
+        if let Some(a) = &self.arranjo {
+            d.extend(a.decisoes(&a.inicial));
+        }
+        d
+    }
+
+    /// Whether the student assigns tasks or places machines (the pieces of act 4 and 5).
+    pub fn tem_pecas(&self) -> bool {
+        self.balanceamento.as_ref().is_some_and(|b| b.editavel) || self.arranjo.is_some()
+    }
+
+    /// The model keys of the levers and of the pieces, for the objects of the model.
+    pub fn ajustes_completos(
+        &self,
+        decisoes: &Decisoes,
+        objetos: &[String],
+    ) -> BTreeMap<String, String> {
+        let d = self.completar(decisoes);
+        let mut out = self.ajustes(&d);
+        if let Some(b) = &self.balanceamento {
+            out.extend(b.ajustes(&b.atribuicao(&d)));
+        }
+        if let Some(a) = &self.arranjo {
+            out.extend(a.ajustes(&a.posicoes(&d), objetos));
+        }
+        out
     }
 
     /// `decisoes` completed with the initial value of the missing levers.

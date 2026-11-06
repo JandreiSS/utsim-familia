@@ -1,0 +1,58 @@
+Missao(
+    id: "ato5/oficina",
+    titulo: "Oficina de usinagem",
+    conceitos: ["arranjo_funcional", "matriz_de_para", "momento_de_transporte"],
+    modelo: "../modelos/oficina.ron",
+    texto: "oficina.md",
+    previsao: [
+        Escolha(
+            id: "vizinhos",
+            pergunta: "Qual par de máquinas deve ficar lado a lado?",
+            opcoes: [
+                (rotulo: "Serra e torno"),
+                (rotulo: "Fresa e retífica"),
+                (rotulo: "Retífica e furadeira"),
+            ],
+            resposta: Fixa(0),
+        ),
+    ],
+    arranjo: (
+        colunas: 4,
+        linhas: 3,
+        celula: 10.0,
+        maquinas: [
+            (id: "doca", nome: "Doca", fixa: true),
+            (id: "serra", nome: "Serra"),
+            (id: "torno", nome: "Torno"),
+            (id: "fresa", nome: "Fresa"),
+            (id: "furadeira", nome: "Furadeira"),
+            (id: "retifica", nome: "Retífica"),
+            (id: "inspecao", nome: "Inspeção"),
+        ],
+        fluxos: [
+            (nome: "Eixos", volume: 40.0, roteiro: ["doca", "serra", "torno", "retifica", "inspecao", "doca"]),
+            (nome: "Flanges", volume: 30.0, roteiro: ["doca", "serra", "torno", "furadeira", "inspecao", "doca"]),
+            (nome: "Suportes", volume: 25.0, roteiro: ["doca", "serra", "fresa", "furadeira", "inspecao", "doca"]),
+            (nome: "Buchas", volume: 20.0, roteiro: ["doca", "torno", "retifica", "inspecao", "doca"]),
+            (nome: "Placas", volume: 15.0, roteiro: ["doca", "fresa", "furadeira", "doca"]),
+        ],
+        inicial: {"doca": 4, "serra": 3, "torno": 8, "fresa": 0, "furadeira": 11, "retifica": 1, "inspecao": 10},
+    ),
+    metricas: [
+        (nome: "momento", rotulo: "Momento de transporte (viagens por dia × metros)", unidade: "m",
+         valor: [(chave: "arranjo.momento")], objetivo: Menor, meta: 7600.0, peso: 1.0,
+         tolerancia: Relativa(0.0), casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Qual informação decide quais máquinas ficam perto uma da outra?",
+         opcoes: ["As viagens entre cada par de máquinas na matriz de-para", "O tamanho das máquinas", "A ordem alfabética dos roteiros"],
+         certa: 0),
+    ],
+    dicas: [
+        "Entre quais máquinas passam mais peças por dia?",
+        "Monte a matriz de-para: some, para cada par de máquinas, o volume das famílias que vão de uma à outra.",
+        "Ponha lado a lado os pares com mais viagens, começando pela doca e pela serra.",
+    ],
+    referencia: {"pos.fresa": 8, "pos.furadeira": 9, "pos.inspecao": 5, "pos.retifica": 2, "pos.serra": 0, "pos.torno": 1},
+    animacao: (duracao: 240, unidade: "min"),
+)

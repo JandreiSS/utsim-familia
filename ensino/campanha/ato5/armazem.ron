@@ -1,0 +1,63 @@
+Missao(
+    id: "ato5/armazem",
+    titulo: "Giro perto da doca",
+    conceitos: ["enderecamento_por_giro", "momento_de_transporte"],
+    modelo: "../modelos/armazem.ron",
+    texto: "armazem.md",
+    previsao: [
+        Escolha(
+            id: "perto",
+            pergunta: "Qual item deve ficar mais perto da doca?",
+            opcoes: [
+                (rotulo: "O que sai mais vezes por dia"),
+                (rotulo: "O mais pesado"),
+                (rotulo: "O que chegou primeiro"),
+            ],
+            resposta: Fixa(0),
+        ),
+    ],
+    arranjo: (
+        colunas: 5,
+        linhas: 3,
+        celula: 6.0,
+        maquinas: [
+            (id: "doca", nome: "Doca", fixa: true),
+            (id: "item_a", nome: "Item A"),
+            (id: "item_b", nome: "Item B"),
+            (id: "item_c", nome: "Item C"),
+            (id: "item_d", nome: "Item D"),
+            (id: "item_e", nome: "Item E"),
+            (id: "item_f", nome: "Item F"),
+            (id: "item_g", nome: "Item G"),
+            (id: "item_h", nome: "Item H"),
+        ],
+        fluxos: [
+            (nome: "A", volume: 12.0, roteiro: ["doca", "item_a", "doca"]),
+            (nome: "B", volume: 45.0, roteiro: ["doca", "item_b", "doca"]),
+            (nome: "C", volume: 8.0, roteiro: ["doca", "item_c", "doca"]),
+            (nome: "D", volume: 30.0, roteiro: ["doca", "item_d", "doca"]),
+            (nome: "E", volume: 60.0, roteiro: ["doca", "item_e", "doca"]),
+            (nome: "F", volume: 5.0, roteiro: ["doca", "item_f", "doca"]),
+            (nome: "G", volume: 20.0, roteiro: ["doca", "item_g", "doca"]),
+            (nome: "H", volume: 15.0, roteiro: ["doca", "item_h", "doca"]),
+        ],
+        inicial: {"doca": 0, "item_a": 1, "item_b": 9, "item_c": 2, "item_d": 13, "item_e": 14, "item_f": 5, "item_g": 3, "item_h": 6},
+    ),
+    metricas: [
+        (nome: "momento", rotulo: "Distância percorrida por dia (ida e volta)", unidade: "m",
+         valor: [(chave: "arranjo.momento")], objetivo: Menor, meta: 3600.0, peso: 1.0,
+         tolerancia: Relativa(0.0), casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que o item de maior giro vai para o endereço mais perto da doca?",
+         opcoes: ["Porque cada metro a menos se repete em todas as retiradas do dia", "Porque ele é o mais caro", "Porque ocupa menos espaço"],
+         certa: 0),
+    ],
+    dicas: [
+        "Qual item faz o separador andar mais vezes por dia?",
+        "Ordene os itens pelas retiradas por dia e os endereços pela distância até a doca.",
+        "O item com mais retiradas vai para o endereço mais próximo, e assim por diante.",
+    ],
+    referencia: {"pos.item_a": 7, "pos.item_b": 5, "pos.item_c": 11, "pos.item_d": 6, "pos.item_e": 1, "pos.item_f": 12, "pos.item_g": 2, "pos.item_h": 10},
+    animacao: (duracao: 120, unidade: "min"),
+)

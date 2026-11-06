@@ -10,6 +10,7 @@
 //! - [`texto`]: the text catalogue.
 
 pub mod missao;
+pub mod pecas;
 pub mod texto;
 pub mod turma;
 pub mod vista2d;

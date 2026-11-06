@@ -1,0 +1,68 @@
+Missao(
+    id: "ato4/variabilidade",
+    titulo: "O balanceamento no papel e no chão",
+    conceitos: ["variabilidade", "pulmao", "takt"],
+    modelo: "../modelos/ventilador.ron",
+    texto: "variabilidade.md",
+    previsao: [
+        Escolha(
+            id: "vazao",
+            pergunta: "Com os tempos variando de ciclo para ciclo, a linha balanceada no takt ainda entrega 60 ventiladores por hora?",
+            opcoes: [
+                (rotulo: "Sim, porque nenhuma estação passa do takt na média", valor: [(chave: "saida.input", fator: 0.125)]),
+                (rotulo: "Não, entrega menos", valor: [(chave: "const", fator: 59.5)]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    balanceamento: (
+        takt: 60.0,
+        estacoes: 10,
+        cv: 0.3,
+        editavel: false,
+        tarefas: [
+            (id: "A", nome: "Fixar a base na bancada", tempo: 20.0),
+            (id: "B", nome: "Montar a haste", tempo: 25.0, depois_de: ["A"]),
+            (id: "C", nome: "Fixar o motor na haste", tempo: 40.0, depois_de: ["B"]),
+            (id: "D", nome: "Passar o cabo pela haste", tempo: 15.0, depois_de: ["C"]),
+            (id: "E", nome: "Montar a grade traseira", tempo: 30.0, depois_de: ["C"]),
+            (id: "F", nome: "Instalar a hélice", tempo: 20.0, depois_de: ["E"]),
+            (id: "G", nome: "Montar a grade frontal", tempo: 25.0, depois_de: ["F"]),
+            (id: "H", nome: "Fixar os botões na base", tempo: 20.0, depois_de: ["A"]),
+            (id: "I", nome: "Ligar o painel de botões", tempo: 30.0, depois_de: ["D", "H"]),
+            (id: "J", nome: "Montar a carcaça do motor", tempo: 35.0, depois_de: ["I"]),
+            (id: "K", nome: "Fixar a carcaça", tempo: 25.0, depois_de: ["J"]),
+            (id: "L", nome: "Colar a etiqueta", tempo: 10.0, depois_de: ["K"]),
+            (id: "M", nome: "Testar o funcionamento", tempo: 45.0, depois_de: ["G", "K"]),
+            (id: "N", nome: "Embalar", tempo: 30.0, depois_de: ["L", "M"]),
+        ],
+        inicial: {"A": 1, "B": 1, "C": 2, "H": 2, "D": 3, "I": 3, "E": 4, "F": 4, "J": 5, "K": 5, "G": 6, "L": 6, "M": 7, "N": 8},
+    ),
+    alavancas: [
+        Escolha(id: "pulmoes", rotulo: "Pulmão entre as estações", opcoes: [
+            (rotulo: "1 lugar(es) entre estações", ajustes: {"fila2.capacity": "1", "fila3.capacity": "1", "fila4.capacity": "1", "fila5.capacity": "1", "fila6.capacity": "1", "fila7.capacity": "1", "fila8.capacity": "1", "fila9.capacity": "1", "fila10.capacity": "1"}, numero: 1),
+            (rotulo: "2 lugar(es) entre estações", ajustes: {"fila2.capacity": "2", "fila3.capacity": "2", "fila4.capacity": "2", "fila5.capacity": "2", "fila6.capacity": "2", "fila7.capacity": "2", "fila8.capacity": "2", "fila9.capacity": "2", "fila10.capacity": "2"}, custo: 900, numero: 2),
+            (rotulo: "4 lugar(es) entre estações", ajustes: {"fila2.capacity": "4", "fila3.capacity": "4", "fila4.capacity": "4", "fila5.capacity": "4", "fila6.capacity": "4", "fila7.capacity": "4", "fila8.capacity": "4", "fila9.capacity": "4", "fila10.capacity": "4"}, custo: 2700, numero: 4),
+            (rotulo: "8 lugar(es) entre estações", ajustes: {"fila2.capacity": "8", "fila3.capacity": "8", "fila4.capacity": "8", "fila5.capacity": "8", "fila6.capacity": "8", "fila7.capacity": "8", "fila8.capacity": "8", "fila9.capacity": "8", "fila10.capacity": "8"}, custo: 6300, numero: 8),
+        ]),
+    ],
+    metricas: [
+        (nome: "vazao", rotulo: "Ventiladores por hora (simulado)", unidade: "un/h",
+         valor: [(chave: "saida.input", fator: 0.125)], objetivo: Maior, meta: 58.4, peso: 0.0,
+         tolerancia: Absoluta(0.2), casas: 1),
+        (nome: "lugares", rotulo: "Lugares de pulmão entre estações", unidade: "",
+         valor: [(chave: "decisao.pulmoes")], objetivo: Menor, peso: 1.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que uma linha balanceada no papel perde vazão no chão?",
+         opcoes: ["Porque a variação dos tempos faz estações esperarem ou ficarem bloqueadas", "Porque o takt foi calculado errado", "Porque as estações são mais lentas que no papel"],
+         certa: 0),
+    ],
+    dicas: [
+        "O que acontece quando uma estação demora mais que a média e a seguinte já terminou?",
+        "Compare a vazão simulada com o takt e veja onde há estações bloqueadas ou paradas sem peça.",
+        "Pulmões pequenos entre as estações absorvem a variação. Escolha o menor que alcança a meta.",
+    ],
+    referencia: {"pulmoes": 1},
+    animacao: (duracao: 900, unidade: "s"),
+)

@@ -16,11 +16,11 @@ fn repo(path: &str) -> String {
 }
 
 #[test]
-fn twelve_presets_one_per_role() {
+fn one_preset_per_role() {
     let p = pack();
     assert_eq!(p.library.name, "Lean Office");
     assert_eq!(p.library.title(), "Lean Office (processos administrativos)");
-    assert_eq!(p.library.presets.len(), 12);
+    assert_eq!(p.library.presets.len(), Role::ALL.len());
     for role in Role::ALL {
         assert!(p.library.presets.iter().any(|x| x.role == role), "{role:?}");
     }

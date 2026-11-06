@@ -240,3 +240,32 @@ fn multitasking_buyers_lose_time_switching_and_lengthen_the_lead_time() {
     assert!((t0 - t1).abs() / t0 < 0.05, "{t0} {t1}");
     assert!(mean(&k, |r| r.lead_time) > mean(&base, |r| r.lead_time));
 }
+
+#[test]
+fn interruptions_are_not_cases_but_take_the_peoples_time() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/pos_venda_com_interrupcoes.ron"
+    );
+    let text = std::fs::read_to_string(path).unwrap();
+    let m = Model::parse(&text).unwrap();
+    let k = Indicadores::rodar(&m, find(LEAN_OFFICE).as_ref()).unwrap();
+    for (r, report) in k.reps.iter().zip(&k.reports) {
+        // Only the exchanges count, never the calls.
+        let trocas = report.block("troca_aprovada").unwrap();
+        let ligacoes = report.block("telefone_fim").unwrap();
+        assert!(ligacoes.input > 100, "{}", ligacoes.input);
+        assert!(
+            r.concluidos as u64 <= trocas.input + 5,
+            "{} {}",
+            r.concluidos,
+            trocas.input
+        );
+        assert!((r.concluidos as u64) + 50 < trocas.input + ligacoes.input);
+        // The calls are work time of the analysts.
+        let ana = &r.ocupacao["analista_1"];
+        assert!(ana.trabalhando > 0.0);
+    }
+    // The calls are not steps of the case: no %C&A, no box in the waits.
+    assert!(!k.reps[0].ca.contains_key("telefone"));
+}

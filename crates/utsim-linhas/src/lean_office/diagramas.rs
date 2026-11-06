@@ -109,7 +109,7 @@ pub fn montar(model: &Model, pack: Option<&Pack>, k: &Indicadores) -> VsmAdminis
         );
         let processor = matches!(obj.kind, ObjectKind::Processor { .. });
         match papel {
-            Role::Entry | Role::Done | Role::Person | Role::Team => {}
+            Role::Entry | Role::Done | Role::Person | Role::Team | Role::Interruption => {}
             Role::Work | Role::Approval | Role::Check | Role::Meeting if processor => {
                 let (pessoas, horario) = pessoas(model, &obj.kind);
                 let horario = match &obj.shifts {
