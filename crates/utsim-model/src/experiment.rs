@@ -358,7 +358,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "table.rows[n].labels.<nome>",
             ],
         ),
-        ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch"]),
+        ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch", "order"]),
         ObjectKind::Processor { .. } => {
             ("Processor", &["capacity", "setup", "process", "operators"])
         }
@@ -423,6 +423,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Queue { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Queue { discipline, .. }, "discipline") => set!(*discipline),
         (ObjectKind::Queue { batch, .. }, "batch") => set!(*batch),
+        (ObjectKind::Queue { order, .. }, "order") => set!(*order),
         (ObjectKind::Processor { capacity, .. }, "capacity") => set!(*capacity),
         (ObjectKind::Processor { setup, .. }, "setup") => set!(*setup),
         (ObjectKind::Processor { process, .. }, "process") => set!(*process),

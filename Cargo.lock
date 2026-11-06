@@ -7789,6 +7789,7 @@ dependencies = [
  "utsim-flow",
  "utsim-look",
  "utsim-model",
+ "utsim-objects",
  "utsim-opt",
  "utsim-pert",
  "utsim-scene",
