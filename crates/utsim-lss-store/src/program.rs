@@ -313,3 +313,93 @@ pub fn redact_coaching(log_root: &Path, person: Id) -> Result<usize> {
         }
     })
 }
+
+/// Why an entry from UTSim Ensino was not recorded.
+#[derive(Debug, thiserror::Error)]
+pub enum TeachingError {
+    #[error("a pasta não é de um programa Lean Seis Sigma")]
+    NotAProgram,
+    #[error(
+        "{0} não está no cadastro deste programa: abra o programa uma vez no UTSim Seis Sigma ou peça ao master black belt para incluir você"
+    )]
+    NotAMember(String),
+    #[error("o UTSim Ensino só registra os níveis \"estudou\" e \"praticou\"")]
+    Level,
+    #[error("ferramenta desconhecida no mapa de competências: {0}")]
+    Tool(String),
+    #[error(transparent)]
+    Store(#[from] crate::Error),
+    #[error("{0}")]
+    Denied(String),
+}
+
+/// Whether `me` can record from UTSim Ensino in the program at `program_root`: the folder
+/// opens, is a program, and `me` is in its people list. Writes nothing.
+pub fn teaching_check(
+    program_root: &Path,
+    me: &Identity,
+) -> std::result::Result<(), TeachingError> {
+    let pf = ProjectFolder::open(program_root, me, None)?;
+    if !pf.is_program() {
+        return Err(TeachingError::NotAProgram);
+    }
+    if !programa::members(pf.state())
+        .iter()
+        .any(|m| m.id == me.person)
+    {
+        return Err(TeachingError::NotAMember(me.name.clone()));
+    }
+    Ok(())
+}
+
+/// Records in the program at `program_root`, as `me`, the level of a tool reached in the
+/// final case of UTSim Ensino (origin `ensino`, by the person themselves). The person must
+/// be in the program's people list; the level is `estudou` or `praticou`; the tool is a key
+/// of [`utsim_lss_core::mentoria::all_tools`]. Returns the id of the entry; when the same
+/// entry is already there (same person, tool, level, origin `ensino` and evidence),
+/// nothing is written and its id is returned.
+pub fn record_teaching(
+    program_root: &Path,
+    me: &Identity,
+    clock: &dyn crate::Clock,
+    tool: &str,
+    level: utsim_lss_core::mentoria::Level,
+    evidence: &str,
+) -> std::result::Result<Id, TeachingError> {
+    use utsim_lss_core::mentoria;
+    if !mentoria::teaching_level(level) {
+        return Err(TeachingError::Level);
+    }
+    if !mentoria::all_tools().iter().any(|t| t == tool) {
+        return Err(TeachingError::Tool(tool.to_string()));
+    }
+    let mut pf = ProjectFolder::open(program_root, me, None)?;
+    if !pf.is_program() {
+        return Err(TeachingError::NotAProgram);
+    }
+    if !programa::members(pf.state())
+        .iter()
+        .any(|m| m.id == me.person)
+    {
+        return Err(TeachingError::NotAMember(me.name.clone()));
+    }
+    if let Some(old) = mentoria::entries(pf.state()).into_iter().find(|e| {
+        e.person == Some(me.person)
+            && e.tool == tool
+            && e.level == level
+            && e.source == mentoria::Source::Teaching
+            && e.evidence.trim() == evidence.trim()
+    }) {
+        return Ok(old.id);
+    }
+    let id = clock.new_id();
+    let today = Date::from_unix_ms(clock.now_ms(), clock.utc_offset_minutes());
+    let edits =
+        mentoria::record_teaching(pf.project_id(), id, me.person, tool, level, evidence, today)
+            .ok_or(TeachingError::Level)?;
+    let founder = pf.manifest().created_by;
+    utsim_lss_core::perfis::check_edits(pf.state(), founder, me.person, &edits)
+        .map_err(|d| TeachingError::Denied(d.to_string()))?;
+    pf.commit(edits, clock)?;
+    Ok(id)
+}

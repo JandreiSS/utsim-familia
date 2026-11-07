@@ -34,6 +34,18 @@ pub struct Identity {
 }
 
 impl Identity {
+    /// The identity UTSim Seis Sigma keeps on this computer (the same person and id in
+    /// every app of the family that writes in a Seis Sigma folder); `None` before the first
+    /// run of the Seis Sigma.
+    pub fn local() -> Option<Identity> {
+        AppDirs::standard().and_then(|d| Self::local_in(&d))
+    }
+
+    /// The identity kept in the configuration of `dirs`.
+    pub fn local_in(dirs: &AppDirs) -> Option<Identity> {
+        UserConfig::load(&dirs.config_file).identity
+    }
+
     /// Checks the fields typed on the first run.
     pub fn validate(name: &str, email: &str) -> Result<(), String> {
         let name = name.trim();

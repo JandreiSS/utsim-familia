@@ -7775,6 +7775,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "utsim-ensino-core",
+ "utsim-launcher-core",
  "utsim-lss-core",
  "utsim-lss-store",
  "utsim-model",
