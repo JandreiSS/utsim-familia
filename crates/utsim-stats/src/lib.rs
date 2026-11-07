@@ -24,9 +24,14 @@
 //! - [`nonparametric`]: Mann-Whitney and Wilcoxon signed-rank tests, exact for small
 //!   samples without ties.
 //!
+//! - [`variances`], [`ranks`], [`anova2`], [`regression`], [`power`]: the extended
+//!   statistics (Levene, Bartlett, Kruskal-Wallis, Mood, Friedman, two-way ANOVA, linear
+//!   regression, power and sample size; P2 of the Lean Six Sigma plan).
+//!
 //! The statistical tests of the Lean Six Sigma plan (`docs/plano_lean_seis_sigma.md`,
 //! phase L3) live here; control charts, capability and MSA are in `utsim-quality`.
 
+pub mod anova2;
 pub mod compare;
 pub mod correlation;
 pub mod descriptive;
@@ -34,9 +39,13 @@ pub mod doe;
 pub mod hypothesis;
 pub mod little;
 pub mod nonparametric;
+pub mod power;
 pub mod precision;
 pub mod range;
+pub mod ranks;
+pub mod regression;
 pub mod special;
+pub mod variances;
 pub mod warmup;
 
 use utsim_core::stats::{Summary, t_975};

@@ -18,9 +18,9 @@ use utsim_quality::charts::{self, ChartData, ChartKind};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
 use utsim_stats::descriptive::{self, QuantileMethod};
-use utsim_stats::doe;
 use utsim_stats::hypothesis::{self, Alternative};
 use utsim_stats::nonparametric::{self, RankMethod};
+use utsim_stats::{anova2, doe, power, ranks, regression, variances};
 
 use crate::dados::{self, DataOrigin, Dataset};
 use crate::date::Date;
@@ -152,6 +152,39 @@ pub enum Recipe {
         response: usize,
         order: usize,
     },
+    /// Equal variances: Levene (median) and Bartlett, values and group columns.
+    #[serde(rename = "variancias")]
+    Variances { col: usize, group: usize },
+    #[serde(rename = "kruskal_wallis")]
+    KruskalWallis { col: usize, group: usize },
+    #[serde(rename = "mediana_mood")]
+    MoodMedian { col: usize, group: usize },
+    /// Friedman: value, treatment and block columns.
+    #[serde(rename = "friedman")]
+    Friedman {
+        value: usize,
+        treatment: usize,
+        block: usize,
+    },
+    /// Two-way ANOVA: value and the columns of the two factors.
+    #[serde(rename = "anova_dois_fatores")]
+    TwoWayAnova { value: usize, a: usize, b: usize },
+    /// Linear regression of `response` on the predictor columns.
+    #[serde(rename = "regressao")]
+    Regression {
+        response: usize,
+        predictors: Vec<usize>,
+    },
+    /// Sample size: `kind` 0 one mean (`a` difference, `b` deviation), 1 two means, 2 two
+    /// proportions (`a`, `b`); target power and significance.
+    #[serde(rename = "tamanho_amostra")]
+    SampleSize {
+        kind: u8,
+        a: f64,
+        b: f64,
+        target: f64,
+        alpha: f64,
+    },
 }
 
 impl Recipe {
@@ -176,6 +209,13 @@ impl Recipe {
             Recipe::Linearity { .. } => "MSA: linearidade",
             Recipe::Attribute { .. } => "MSA: concordância de atributos",
             Recipe::Factorial { .. } => "Experimento fatorial 2^k",
+            Recipe::Variances { .. } => "Igualdade de variâncias (Levene e Bartlett)",
+            Recipe::KruskalWallis { .. } => "Kruskal-Wallis",
+            Recipe::MoodMedian { .. } => "Teste da mediana de Mood",
+            Recipe::Friedman { .. } => "Friedman",
+            Recipe::TwoWayAnova { .. } => "ANOVA de dois fatores",
+            Recipe::Regression { .. } => "Regressão linear",
+            Recipe::SampleSize { .. } => "Tamanho de amostra e poder",
         }
     }
 
@@ -284,6 +324,27 @@ impl Table {
             .map(|r| r.get(col).map(|s| s.trim().to_string()).unwrap_or_default())
             .collect()
     }
+}
+
+/// The values of `col` split by the labels of `group` (sorted labels, empty ones out).
+fn grouped(t: &Table, col: usize, group: usize) -> (Vec<String>, Vec<Vec<f64>>) {
+    let labels = t.texts(group);
+    let mut keys: Vec<String> = labels.iter().filter(|k| !k.is_empty()).cloned().collect();
+    keys.sort();
+    keys.dedup();
+    let mut groups: Vec<Vec<f64>> = vec![Vec::new(); keys.len()];
+    for (r, lab) in t.rows.iter().zip(&labels) {
+        let Some(i) = keys.iter().position(|k| k == lab) else {
+            continue;
+        };
+        if let Some(v) = r
+            .get(col)
+            .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+        {
+            groups[i].push(v);
+        }
+    }
+    (keys, groups)
 }
 
 fn need(v: &[f64], n: usize, what: &str) -> Result<(), String> {
@@ -814,6 +875,251 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 None => "sem kappa: precisa de ao menos dois avaliadores ou repetições".to_string(),
             };
             o.notes = a.warnings.clone();
+        }
+        Recipe::Variances { col, group } => {
+            let (keys, groups) = grouped(t, *col, *group);
+            let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
+            let l =
+                variances::levene(&refs).ok_or("são precisos 2 grupos com 2 valores ou mais")?;
+            o.put("Levene (mediana)", l.statistic);
+            o.put("valor-p Levene", l.p_value);
+            if let Some(b) = variances::bartlett(&refs) {
+                o.put("Bartlett", b.statistic);
+                o.put("valor-p Bartlett", b.p_value);
+            }
+            for (k, s) in keys.iter().zip(&l.sds) {
+                o.put(&format!("desvio de {k}"), *s);
+            }
+            o.verdict = verdict_p(l.p_value, "as variâncias dos grupos diferem (Levene)");
+            o.notes.push(
+                "Levene com a mediana serve para qualquer distribuição; Bartlett supõe dados normais"
+                    .into(),
+            );
+        }
+        Recipe::KruskalWallis { col, group } => {
+            let (keys, groups) = grouped(t, *col, *group);
+            let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
+            let r =
+                ranks::kruskal_wallis(&refs).ok_or("são precisos 2 grupos com dados diferentes")?;
+            o.put("H", r.statistic);
+            o.put("gl", r.df);
+            o.put("valor-p", r.p_value);
+            for (k, m) in keys.iter().zip(&r.per_group) {
+                o.put(&format!("posto médio de {k}"), *m);
+            }
+            o.verdict = verdict_p(r.p_value, "alguma mediana de grupo difere");
+        }
+        Recipe::MoodMedian { col, group } => {
+            let (keys, groups) = grouped(t, *col, *group);
+            let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
+            let r = ranks::mood_median(&refs)
+                .ok_or("são precisos 2 grupos e valores dos dois lados da mediana geral")?;
+            o.put("χ²", r.statistic);
+            o.put("gl", r.df);
+            o.put("valor-p", r.p_value);
+            for (k, m) in keys.iter().zip(&r.per_group) {
+                o.put(&format!("mediana de {k}"), *m);
+            }
+            o.verdict = verdict_p(r.p_value, "alguma mediana de grupo difere");
+        }
+        Recipe::Friedman {
+            value,
+            treatment,
+            block,
+        } => {
+            let tr = t.texts(*treatment);
+            let bl = t.texts(*block);
+            let mut kt: Vec<String> = tr.iter().filter(|s| !s.is_empty()).cloned().collect();
+            kt.sort();
+            kt.dedup();
+            let mut kb: Vec<String> = bl.iter().filter(|s| !s.is_empty()).cloned().collect();
+            kb.sort();
+            kb.dedup();
+            let mut table = vec![vec![f64::NAN; kt.len()]; kb.len()];
+            for (r, (a, b)) in t.rows.iter().zip(tr.iter().zip(&bl)) {
+                let (Some(i), Some(j)) = (
+                    kb.iter().position(|k| k == b),
+                    kt.iter().position(|k| k == a),
+                ) else {
+                    continue;
+                };
+                if let Some(v) = r
+                    .get(*value)
+                    .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+                {
+                    table[i][j] = v;
+                }
+            }
+            if table.iter().flatten().any(|v| v.is_nan()) {
+                return Err("cada bloco precisa de um valor de cada tratamento".into());
+            }
+            let r = ranks::friedman(&table).ok_or("são precisos 2 blocos e 2 tratamentos")?;
+            o.put("Q", r.statistic);
+            o.put("gl", r.df);
+            o.put("valor-p", r.p_value);
+            for (k, m) in kt.iter().zip(&r.per_group) {
+                o.put(&format!("posto médio de {k}"), *m);
+            }
+            o.verdict = verdict_p(r.p_value, "algum tratamento difere");
+        }
+        Recipe::TwoWayAnova { value, a, b } => {
+            let (ta, tb) = (t.texts(*a), t.texts(*b));
+            let obs: Vec<(String, String, f64)> = t
+                .rows
+                .iter()
+                .zip(ta.into_iter().zip(tb))
+                .filter_map(|(r, (x, y))| {
+                    let v = r
+                        .get(*value)
+                        .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))?;
+                    (!x.is_empty() && !y.is_empty()).then_some((x, y, v))
+                })
+                .collect();
+            let r = anova2::two_way(&obs)?;
+            let ha = t.header.get(*a).cloned().unwrap_or_else(|| "A".into());
+            let hb = t.header.get(*b).cloned().unwrap_or_else(|| "B".into());
+            let name = |s: &str| match s {
+                "A" => ha.clone(),
+                "B" => hb.clone(),
+                "A×B" => format!("{ha} × {hb}"),
+                x => x.to_string(),
+            };
+            for l in &r.lines {
+                o.put(&format!("SQ {}", name(l.source)), l.ss);
+                if let Some(p) = l.p_value {
+                    o.put(&format!("valor-p {}", name(l.source)), p);
+                }
+            }
+            let active: Vec<String> = r
+                .lines
+                .iter()
+                .filter(|l| l.p_value.is_some_and(|p| p < ALPHA))
+                .map(|l| name(l.source))
+                .collect();
+            o.verdict = if active.is_empty() {
+                "nenhum efeito significativo a 5 %".into()
+            } else {
+                format!("efeitos significativos a 5 %: {}", active.join(", "))
+            };
+            if r.replicates == 1 {
+                o.notes
+                    .push("sem repetições: a interação vira o erro (modelo aditivo)".into());
+            }
+            o.plots.push(Plot {
+                title: format!("Interação {ha} × {hb}"),
+                bars: false,
+                labels: r.levels_a.clone(),
+                series: r
+                    .levels_b
+                    .iter()
+                    .enumerate()
+                    .map(|(j, lb)| {
+                        (
+                            format!("{hb} = {lb}"),
+                            r.cells.iter().map(|row| row[j]).collect(),
+                        )
+                    })
+                    .collect(),
+            });
+        }
+        Recipe::Regression {
+            response,
+            predictors,
+        } => {
+            if predictors.is_empty() {
+                return Err("escolha ao menos um preditor".into());
+            }
+            let mut x: Vec<Vec<f64>> = vec![Vec::new(); predictors.len()];
+            let mut y = Vec::new();
+            for r in &t.rows {
+                let num = |c: usize| {
+                    r.get(c)
+                        .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+                };
+                let (Some(v), Some(xs)) = (
+                    num(*response),
+                    predictors
+                        .iter()
+                        .map(|c| num(*c))
+                        .collect::<Option<Vec<f64>>>(),
+                ) else {
+                    continue;
+                };
+                y.push(v);
+                for (col, val) in x.iter_mut().zip(xs) {
+                    col.push(val);
+                }
+            }
+            let names: Vec<String> = predictors
+                .iter()
+                .map(|c| t.header.get(*c).cloned().unwrap_or_default())
+                .collect();
+            let r = regression::fit(&names, &x, &y, LEVEL)?;
+            o.put("n", r.n as f64);
+            o.put("R²", r.r2);
+            o.put("R² ajustado", r.r2_adj);
+            o.put("erro padrão residual", r.s);
+            o.put("F", r.f);
+            o.put("valor-p do modelo", r.f_p_value);
+            for c in &r.coefs {
+                o.put(&format!("coeficiente {}", c.name), c.estimate);
+                o.put(&format!("valor-p {}", c.name), c.p_value);
+                if let Some(v) = c.vif {
+                    o.put(&format!("VIF {}", c.name), v);
+                }
+            }
+            let eq = r
+                .coefs
+                .iter()
+                .skip(1)
+                .map(|c| format!("{:+.4}·{}", c.estimate, c.name))
+                .collect::<Vec<_>>()
+                .join(" ");
+            o.verdict = format!(
+                "{} = {:.4} {eq}; R² {:.3}; {}",
+                t.header
+                    .get(*response)
+                    .cloned()
+                    .unwrap_or_else(|| "y".into()),
+                r.coefs[0].estimate,
+                r.r2,
+                if r.f_p_value < ALPHA {
+                    "modelo significativo a 5 %"
+                } else {
+                    "modelo não significativo a 5 %"
+                }
+            );
+            if r.coefs.iter().any(|c| c.vif.is_some_and(|v| v > 5.0)) {
+                o.notes
+                    .push("VIF acima de 5: preditores muito correlacionados entre si".into());
+            }
+            o.notes
+                .push("o gráfico mostra os resíduos na ordem dos dados".into());
+            o.series = r.residuals.clone();
+            o.limits = Some((0.0, -2.0 * r.s, 2.0 * r.s));
+        }
+        Recipe::SampleSize {
+            kind,
+            a,
+            b,
+            target,
+            alpha,
+        } => {
+            let d = match kind {
+                0 => power::Design::OneMean { delta: *a, sd: *b },
+                1 => power::Design::TwoMeans { delta: *a, sd: *b },
+                _ => power::Design::TwoProportions { p1: *a, p2: *b },
+            };
+            let n = power::sample_size(d, *target, *alpha)
+                .ok_or("parâmetros impossíveis: confira a diferença, o desvio ou as proporções")?;
+            o.put("n", n as f64);
+            if let Some(p) = power::power(d, n, *alpha) {
+                o.put("poder com esse n", p);
+            }
+            o.verdict = match kind {
+                0 => format!("{n} observações"),
+                _ => format!("{n} observações em cada grupo"),
+            };
         }
         Recipe::Factorial {
             factors,
