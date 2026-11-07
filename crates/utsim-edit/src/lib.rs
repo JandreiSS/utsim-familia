@@ -189,6 +189,16 @@ pub enum Command {
     SetPacks(Vec<String>),
     /// Adds a risk zone (`Model.zones`); the name must be new.
     AddZone(utsim_model::quality::ZoneDef),
+    /// Replaces risk zone `name` (polygon, kind, level, protective equipment, or a new name
+    /// that is not taken).
+    SetZone {
+        name: String,
+        zone: utsim_model::quality::ZoneDef,
+    },
+    /// Removes risk zone `name`.
+    RemoveZone {
+        name: String,
+    },
 }
 
 /// Where a distribution field gets its distribution from.
@@ -616,6 +626,33 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 return Err(format!("já existe a zona '{}'", zone.name));
             }
             model.zones.push(zone.clone());
+        }
+        Command::SetZone { name, zone } => {
+            if zone.polygon.len() < 3 {
+                return Err(format!(
+                    "a zona '{}' precisa de pelo menos 3 pontos",
+                    zone.name
+                ));
+            }
+            if zone.name.trim().is_empty() {
+                return Err("a zona precisa de um nome".into());
+            }
+            if &zone.name != name && model.zones.iter().any(|z| z.name == zone.name) {
+                return Err(format!("já existe a zona '{}'", zone.name));
+            }
+            let z = model
+                .zones
+                .iter_mut()
+                .find(|z| &z.name == name)
+                .ok_or_else(|| format!("a zona '{name}' não existe"))?;
+            *z = zone.clone();
+        }
+        Command::RemoveZone { name } => {
+            let before = model.zones.len();
+            model.zones.retain(|z| &z.name != name);
+            if model.zones.len() == before {
+                return Err(format!("a zona '{name}' não existe"));
+            }
         }
         Command::SetInfo { name, description } => {
             let name = name.trim();
@@ -1091,6 +1128,49 @@ mod tests {
         assert!(doc.undo());
         assert_eq!(doc.model().name, "a");
         assert!(doc.model().description.is_empty());
+    }
+
+    #[test]
+    fn zones_are_added_changed_renamed_and_removed_with_undo() {
+        use utsim_model::quality::{ZoneDef, ZoneKind};
+        let mut doc = Document::new("zonas");
+        let zone = |name: &str, n: usize| ZoneDef {
+            name: name.into(),
+            kind: ZoneKind::Vehicle,
+            polygon: (0..n).map(|k| [k as f64, (k * k) as f64]).collect(),
+            level: Some(3),
+            ppe: vec!["capacete".into()],
+        };
+        doc.apply(Command::AddZone(zone("a", 3))).unwrap();
+        doc.apply(Command::AddZone(zone("b", 4))).unwrap();
+        let mut changed = zone("a2", 5);
+        changed.kind = ZoneKind::Noise;
+        doc.apply(Command::SetZone {
+            name: "a".into(),
+            zone: changed.clone(),
+        })
+        .unwrap();
+        assert_eq!(doc.model().zones[0], changed);
+        // A taken name, too few points or a zone that does not exist: refused, no trace.
+        for bad in [
+            Command::SetZone {
+                name: "a2".into(),
+                zone: zone("b", 3),
+            },
+            Command::SetZone {
+                name: "a2".into(),
+                zone: zone("a2", 2),
+            },
+            Command::RemoveZone { name: "x".into() },
+        ] {
+            assert!(doc.apply(bad).is_err());
+        }
+        doc.apply(Command::RemoveZone { name: "b".into() }).unwrap();
+        assert_eq!(doc.model().zones.len(), 1);
+        assert!(doc.undo());
+        assert_eq!(doc.model().zones.len(), 2);
+        assert!(doc.undo());
+        assert_eq!(doc.model().zones[0].name, "a");
     }
 
     #[test]
