@@ -14,9 +14,11 @@
 //! - [`progresso`]: grades per mission and unlocking;
 //! - [`turma`]: the class, the student list, the matrix and the common mistakes;
 //! - [`conferir`]: the exhaustive reference search, the mission checker and the golden;
-//! - [`campanha`]: the built-in campaign.
+//! - [`campanha`]: the built-in campaign;
+//! - [`competencias`]: the solved missions as practice in the Seis Sigma curriculum.
 
 pub mod campanha;
+pub mod competencias;
 pub mod conferir;
 pub mod construtor;
 pub mod dados;
