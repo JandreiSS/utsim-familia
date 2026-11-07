@@ -88,3 +88,14 @@ fn entries_and_scenarios() {
     let h = html(&c.b, Some(&c));
     assert!(h.contains("Falha externa") && h.contains("Comparação de cenários"));
 }
+
+#[test]
+fn flat_keys_for_the_missions() {
+    let model = Model::parse(&MODELO.replace("DETECT", "0.75")).unwrap();
+    let (_, items) = model.run_item_log(0).unwrap();
+    let m = utsim_qualidade_core::simulado::metricas(&model, &items);
+    let c = custos(&model, &items);
+    assert_eq!(m["custo_qualidade.total"], c.total());
+    assert!(m["qualidade.pct_escape"] > 0.0 && m["qualidade.pct_escape"] < 0.2);
+    assert!(m.contains_key("qualidade.defeitos.risco"));
+}

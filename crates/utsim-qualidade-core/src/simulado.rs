@@ -406,3 +406,51 @@ pub fn coluna(medicoes: &[Medicao], caracteristica: &str, replicacao: u32) -> Ve
         .map(|m| m.valor)
         .collect()
 }
+
+/// Indicators of one replication from its per-item log (the same as [`rodar`] computes).
+pub fn de_itens(model: &Model, items: &[ItemRecord]) -> Indicadores {
+    indicadores(&mapa(model), items)
+}
+
+/// Quality and cost of quality of one replication as flat keys, for the teaching missions
+/// and the experiments: `qualidade.<indicador>` and `custo_qualidade.<categoria>` (and
+/// `custo_qualidade.total`), plus `qualidade.defeitos.<tipo>` per defect type.
+pub fn metricas(model: &Model, items: &[ItemRecord]) -> BTreeMap<String, f64> {
+    let k = de_itens(model, items);
+    let mut out = BTreeMap::new();
+    for (nome, v) in [
+        ("concluidos", k.concluidos),
+        ("entregues", k.entregues),
+        ("refugados", k.refugados),
+        ("retrabalhados", k.retrabalhados),
+        ("escapados", k.escapados),
+        ("rendimento_primeira", k.rendimento_primeira),
+        ("rendimento_acumulado", k.rendimento_acumulado),
+        ("pct_refugo", k.pct_refugo),
+        ("pct_retrabalho", k.pct_retrabalho),
+        ("pct_escape", k.pct_escape),
+        ("dpu", k.dpu),
+        ("dpmo", k.dpmo),
+        ("eficacia_inspecao", k.eficacia_inspecao),
+    ] {
+        out.insert(format!("qualidade.{nome}"), v);
+    }
+    for (t, v) in &k.defeitos_por_tipo {
+        out.insert(format!("qualidade.defeitos.{t}"), *v);
+    }
+    let c = crate::custos::custos(model, items);
+    for cat in crate::custos::Categoria::TODAS {
+        let chave = match cat {
+            crate::custos::Categoria::Prevencao => "prevencao",
+            crate::custos::Categoria::Avaliacao => "avaliacao",
+            crate::custos::Categoria::FalhaInterna => "falha_interna",
+            crate::custos::Categoria::FalhaExterna => "falha_externa",
+        };
+        out.insert(
+            format!("custo_qualidade.{chave}"),
+            c.por_categoria.get(&cat).copied().unwrap_or(0.0),
+        );
+    }
+    out.insert("custo_qualidade.total".into(), c.total());
+    out
+}

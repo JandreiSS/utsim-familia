@@ -665,3 +665,25 @@ mod tests {
         assert_eq!(i.half_width, 0.0);
     }
 }
+
+/// The exposure of one replication as flat keys, for the teaching missions and the
+/// experiments: `exposicao.quase_conflitos`, `exposicao.sem_epi`, `exposicao.tempo.<zona>`
+/// (all people) and `exposicao.entradas.<zona>`.
+pub fn metricas(e: &Exposure) -> std::collections::BTreeMap<String, f64> {
+    let mut out = std::collections::BTreeMap::new();
+    out.insert(
+        "exposicao.quase_conflitos".into(),
+        e.near_miss_count() as f64,
+    );
+    out.insert(
+        "exposicao.sem_epi".into(),
+        f64::from(e.entries_without_ppe()),
+    );
+    for z in &e.zones {
+        *out.entry(format!("exposicao.tempo.{}", z.zone))
+            .or_insert(0.0) += z.time;
+        *out.entry(format!("exposicao.entradas.{}", z.zone))
+            .or_insert(0.0) += f64::from(z.entries);
+    }
+    out
+}
