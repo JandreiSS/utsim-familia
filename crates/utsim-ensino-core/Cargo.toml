@@ -18,3 +18,7 @@ utsim-diagram.workspace = true
 sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+# The recovery tests use the same analyses the student will use.
+utsim-fit.workspace = true
+utsim-quality.workspace = true
+utsim-stats.workspace = true

@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 utsim-ensino-core = { path = "../utsim-ensino-core" }
+utsim-model.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ron.workspace = true

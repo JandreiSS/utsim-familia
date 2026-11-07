@@ -2,6 +2,7 @@
 //! server and no Drive API: packages, deliveries and class folders are plain files.
 //!
 //! - [`arquivos`]: packages (folder or `.utse`), deliveries (`.utsr`), invitations (`.utsc`);
+//! - [`caso`]: the case builder on disk (draft package, check, `.utse`);
 //! - [`chave`]: ed25519 keys of the student and the teacher;
 //! - [`diario`]: the signed attempt journal chained by hash;
 //! - [`pasta`]: the class folder (local or synced by Google Drive for desktop);
@@ -10,6 +11,7 @@
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 
 pub mod arquivos;
+pub mod caso;
 pub mod chave;
 pub mod correcao;
 pub mod diario;

@@ -199,3 +199,32 @@ fn professor_cria_turma_e_corrige() {
         .unwrap();
     assert!(beto.celulas.iter().all(Option::is_none));
 }
+
+#[test]
+fn construtor_de_casos_na_tela_do_professor() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut prof = App::com(Perfil::em(&dir.path().join("prof")), Arc::new(NaHora), || 0);
+    prof.salvar_identidade("Professor", "prof", "");
+    prof.config.professor = true;
+    prof.tela = Tela::Professor;
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    prof.professor.caso_modelo = raiz.join("examples/mm1.ron").display().to_string();
+    prof.professor.caso_titulo = "Fila clássica".into();
+    let pasta = dir.path().join("caso");
+    prof.professor.caso_pasta = pasta.display().to_string();
+    prof.professor.criar_caso(&NaHora, None);
+    frames(&mut prof, &ctx, 2);
+    let r = prof.professor.caso_relatorio.clone().expect("relatório");
+    assert!(r.contains("conferidor"), "{r}");
+    assert!(pasta.join("pacote.ron").exists());
+    prof.professor.conferir_caso(&NaHora, None);
+    frames(&mut prof, &ctx, 2);
+    assert!(
+        prof.professor
+            .caso_relatorio
+            .as_ref()
+            .unwrap()
+            .contains("Fila clássica")
+    );
+}

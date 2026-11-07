@@ -134,15 +134,57 @@ pub struct EstadoProfessor {
     pub correcao: Option<Correcao>,
     pub avisos_leitura: Vec<String>,
     pub missao_erros: usize,
+    /// The case builder: model, title, output folder and the last report.
+    pub caso_modelo: String,
+    pub caso_titulo: String,
+    pub caso_pasta: String,
+    pub caso_trabalho: Option<Trabalho<Result<String, String>>>,
+    pub caso_relatorio: Option<String>,
 }
 
 impl EstadoProfessor {
     pub fn receber(&mut self) {
+        if let Some(r) = self
+            .caso_trabalho
+            .as_ref()
+            .and_then(|t| t.rx.try_recv().ok())
+        {
+            self.caso_trabalho = None;
+            self.caso_relatorio = Some(match r {
+                Ok(t) => t,
+                Err(e) => format!("erro: {e}"),
+            });
+        }
         let Some(c) = self.trabalho.as_ref().and_then(|t| t.rx.try_recv().ok()) else {
             return;
         };
         self.trabalho = None;
         self.correcao = Some(c);
+    }
+
+    /// Starts the case builder: a draft package folder from a UTSim model, calibrated.
+    pub fn criar_caso(&mut self, executor: &dyn crate::Executor, ctx: Option<egui::Context>) {
+        let modelo = PathBuf::from(self.caso_modelo.trim());
+        let pasta = PathBuf::from(self.caso_pasta.trim());
+        let titulo = if self.caso_titulo.trim().is_empty() {
+            "Missão nova".to_string()
+        } else {
+            self.caso_titulo.trim().to_string()
+        };
+        self.caso_relatorio = None;
+        self.caso_trabalho = Some(Trabalho::iniciar(executor, ctx, move |_| {
+            utsim_ensino_store::caso::criar_caso(&modelo, &pasta, &titulo)
+                .map_err(|e| e.to_string())
+        }));
+    }
+
+    /// Checks the package folder again (after the teacher edited it).
+    pub fn conferir_caso(&mut self, executor: &dyn crate::Executor, ctx: Option<egui::Context>) {
+        let pasta = PathBuf::from(self.caso_pasta.trim());
+        self.caso_relatorio = None;
+        self.caso_trabalho = Some(Trabalho::iniciar(executor, ctx, move |_| {
+            utsim_ensino_store::caso::conferir_pacote(&pasta).map_err(|e| e.to_string())
+        }));
     }
 
     /// Opens the class folder at `dir`.
@@ -241,6 +283,47 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     };
     ui.heading("Professor");
     let s = &mut app.professor;
+
+    ui.collapsing("Construtor de casos", |ui| {
+        ui.label("Gera uma missão de rascunho a partir de um modelo do UTSim: alavancas sugeridas (capacidades, filas limitadas, equipes), medidas de cada saída, referência pela busca exaustiva e metas a 5 % dela. Revise o texto, as faixas, os custos e as metas na pasta e confira de novo.");
+        egui::Grid::new("caso").num_columns(2).show(ui, |ui| {
+            ui.label("Modelo (.ron)");
+            ui.text_edit_singleline(&mut s.caso_modelo);
+            ui.end_row();
+            ui.label("Título da missão");
+            ui.text_edit_singleline(&mut s.caso_titulo);
+            ui.end_row();
+            ui.label("Pasta do pacote");
+            ui.text_edit_singleline(&mut s.caso_pasta);
+            ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            let livre = s.caso_trabalho.is_none();
+            if ui.add_enabled(livre, egui::Button::new("Criar e calibrar")).clicked() {
+                s.criar_caso(executor.as_ref(), Some(ctx.clone()));
+            }
+            if ui.add_enabled(livre, egui::Button::new("Conferir de novo")).clicked() {
+                s.conferir_caso(executor.as_ref(), Some(ctx.clone()));
+            }
+            if ui.button("Gravar .utse").clicked() {
+                let pasta = PathBuf::from(s.caso_pasta.trim());
+                let destino = pasta.with_extension("utse");
+                s.caso_relatorio = Some(match utsim_ensino_store::caso::empacotar(&pasta, &destino) {
+                    Ok(p) => format!("pacote gravado em {}", p.display()),
+                    Err(e) => format!("erro: {e}"),
+                });
+            }
+            if s.caso_trabalho.is_some() {
+                ui.spinner();
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+            }
+        });
+        if let Some(r) = &s.caso_relatorio {
+            for l in r.lines() {
+                ui.label(l);
+            }
+        }
+    });
 
     ui.collapsing("Nova turma", |ui| {
         egui::Grid::new("nova_turma").num_columns(2).show(ui, |ui| {

@@ -18,6 +18,8 @@
 
 pub mod campanha;
 pub mod conferir;
+pub mod construtor;
+pub mod dados;
 pub mod dicas;
 pub mod missao;
 pub mod modelagem;
