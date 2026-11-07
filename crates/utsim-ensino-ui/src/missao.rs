@@ -265,6 +265,32 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
                 {
                     app.mensagem = Some(format!("não foi possível salvar o progresso: {e}"));
                 }
+                // A solved mission records the practice in the company program.
+                if res.resolvida
+                    && pacote.pacote.prova.is_none()
+                    && let Some(prog) = app.config.programa_seis_sigma.clone()
+                {
+                    let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
+                        utsim_ensino_store::seis_sigma::registrar_competencias(
+                            &prog,
+                            &me,
+                            &utsim_lss_store::SystemClock,
+                            &pacote,
+                            &app.progresso,
+                            Some(&id),
+                        )
+                    });
+                    match r {
+                        Ok(x) if !x.erros.is_empty() => {
+                            app.mensagem = Some(format!("competências: {}", x.erros.join("; ")))
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            app.mensagem =
+                                Some(format!("competências não registradas no programa: {e}"))
+                        }
+                    }
+                }
                 match app
                     .perfil
                     .registrar(&pacote, &id, &t, Some(res.nota), (app.relogio)())

@@ -29,6 +29,8 @@ pub struct EstadoTurma {
     pub convite: String,
     pub pasta: String,
     pub destino_entrega: String,
+    /// Folder of the company program of UTSim Seis Sigma, as typed.
+    pub programa: String,
 }
 
 pub fn tela_turma(app: &mut App, ui: &mut Ui) {
@@ -117,6 +119,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             );
         }
     });
+    programa_seis_sigma(app, ui);
     // The scoreboards the teacher published in the class folder.
     if let Some(pasta) = app.config.turma.as_ref().and_then(|t| t.pasta.clone()) {
         let ps = utsim_ensino_store::desafio::placares(&pasta);
@@ -1120,4 +1123,65 @@ fn secao_prova(
         });
     });
     msg
+}
+
+/// The company program of UTSim Seis Sigma: the solved missions record `praticou` in its
+/// competence map, by the student themself.
+fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
+    ui.separator();
+    ui.label(RichText::new("Programa Lean Seis Sigma da empresa").strong());
+    ui.label(texto::PROGRAMA_TEXTO);
+    ui.horizontal(|ui| {
+        ui.label("Pasta do programa");
+        ui.text_edit_singleline(&mut app.turma.programa);
+        if ui.button("Ligar").clicked() {
+            let dir = PathBuf::from(app.turma.programa.trim().trim_matches('"'));
+            let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
+                utsim_lss_store::program::teaching_check(&dir, &me)
+                    .map_err(|e| e.to_string())
+                    .map(|_| me)
+            });
+            match r {
+                Ok(me) => {
+                    app.config.programa_seis_sigma = Some(dir);
+                    app.salvar_config();
+                    app.mensagem = Some(format!("programa ligado para {}", me.name));
+                }
+                Err(e) => app.mensagem = Some(format!("não foi possível ligar: {e}")),
+            }
+        }
+    });
+    let Some(prog) = app.config.programa_seis_sigma.clone() else {
+        return;
+    };
+    ui.label(format!("Ligado a {}", prog.display()));
+    ui.horizontal(|ui| {
+        if ui.button("Registrar as missões já resolvidas").clicked() {
+            let r = match &app.pacote {
+                Some(p) => utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
+                    utsim_ensino_store::seis_sigma::registrar_competencias(
+                        &prog,
+                        &me,
+                        &utsim_lss_store::SystemClock,
+                        p,
+                        &app.progresso,
+                        None,
+                    )
+                }),
+                None => Err("nenhum pacote aberto".into()),
+            };
+            app.mensagem = Some(match r {
+                Ok(x) if x.erros.is_empty() => format!(
+                    "{} competência(s) enviadas ao programa (as que já estavam lá não se repetem)",
+                    x.gravadas.len()
+                ),
+                Ok(x) => format!("algumas não foram: {}", x.erros.join("; ")),
+                Err(e) => format!("não foi possível registrar: {e}"),
+            });
+        }
+        if ui.button("Desligar").clicked() {
+            app.config.programa_seis_sigma = None;
+            app.salvar_config();
+        }
+    });
 }
