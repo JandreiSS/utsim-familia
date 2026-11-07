@@ -1,0 +1,176 @@
+// Biblioteca da linha Serviços e atendimento (docs/plano_linhas_especializadas.md, seção 7):
+// as predefinições sobre os objetos comuns do UTSim. Agências e lojas, balcões de serviço
+// público, recepção de clínicas, centrais de atendimento por telefone, chat e e-mail.
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "servicos/<id>".
+//
+// Unidade de tempo: minuto. Rótulos dos clientes lidos pelos indicadores da linha:
+// - tipo: tipo da senha, 1 normal, 2 preferencial, 3 agendado (a fila com
+//   order: Desc("tipo") chama primeiro o maior);
+// - abandonou: 1 quando o cliente desistiu de esperar (gravado pela fila com patience).
+Library(
+    line: "servicos",
+    name: "Serviços e atendimento",
+    description: "Clientes, senhas, filas com desistência, guichês e atendentes, também por canais remotos: nível de serviço, abandono, painel de chamada e dimensionamento por hora.",
+    models: [
+        (
+            file: "examples/agencia_com_senhas.ron",
+            name: "Agência com senhas",
+            description: "Senhas normal e preferencial, pico do almoço, guichês com escala e desistência na fila.",
+        ),
+        (
+            file: "examples/central_multicanal.ron",
+            name: "Central multicanal",
+            description: "Telefone, chat e e-mail na mesma equipe: multitarefa no chat e no e-mail e o telefone interrompendo.",
+        ),
+        (
+            file: "examples/atendimento_ao_cidadao.ron",
+            name: "Atendimento ao cidadão",
+            description: "Triagem, serviços por tipo de senha, agendados com prioridade e meta de espera.",
+        ),
+    ],
+    presets: [
+        (
+            id: "chegada",
+            name: "Chegada de clientes",
+            icon: "porta",
+            role: Entry,
+            description: "Onde os clientes chegam: intervalo (ou taxa por hora), tipos de senha e horário.",
+            name_base: "clientes",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre clientes (min)", default: "Exp(mean: 3.0)"),
+                (key: "rotulos", label: "Tipos de senha", default: "{\"tipo\": Discrete([(1.0, 0.8), (2.0, 0.2)])}",
+                 help: "tipo 1 normal, 2 preferencial, 3 agendado"),
+                (key: "expediente", label: "Horário de chegada", default: "None",
+                 help: "Calendar(\"expediente\") para chegar só no horário de atendimento"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: ${rotulos}),
+                    shifts: ${expediente}, symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "fila",
+            name: "Fila de espera",
+            icon: "fila",
+            role: Inbox,
+            description: "Os clientes esperam a vez; a ordem pode ser pelo tipo da senha, e quem esperar mais que a paciência desiste.",
+            name_base: "fila",
+            fields: [
+                (key: "ordem", label: "Ordem de chamada", default: "Some(Desc(\"tipo\"))",
+                 help: "Some(Desc(\"tipo\")) chama primeiro o tipo maior (preferencial); None é a ordem de chegada"),
+                (key: "paciencia", label: "Paciência do cliente (min)", default: "Some(Exp(mean: 20.0))",
+                 help: "None: ninguém desiste"),
+                (key: "limite", label: "Lugares na fila", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${limite}, order: ${ordem}, patience: ${paciencia}),
+                    symbol: "espera", visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "guiche",
+            name: "Guichê",
+            icon: "balcao",
+            role: Work,
+            description: "Atendimento por uma pessoa da equipe; guichês é quantos clientes podem ser atendidos ao mesmo tempo.",
+            name_base: "guiche",
+            fields: [
+                (key: "tempo", label: "Tempo de atendimento (min)", default: "Exp(mean: 5.0)"),
+                (key: "equipe", label: "Equipe", default: "\"atendentes\""),
+                (key: "guiches", label: "Guichês", default: "2"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${guiches}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao",
+                    visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "canal",
+            name: "Canal remoto",
+            icon: "telefone",
+            role: Work,
+            description: "Telefone, chat ou e-mail: chegadas, fila com desistência e atendimento pela equipe, num só passo. A prioridade maior (telefone) passa à frente dos outros canais e, com a equipe em Interrupções: Full, tira o atendente do chat ou do e-mail.",
+            name_base: "canal",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre contatos (min)", default: "Exp(mean: 4.0)"),
+                (key: "tempo", label: "Tempo de atendimento (min)", default: "Exp(mean: 6.0)"),
+                (key: "paciencia", label: "Paciência do cliente (min)", default: "Some(Exp(mean: 5.0))"),
+                (key: "equipe", label: "Equipe", default: "\"atendentes\""),
+                (key: "prioridade", label: "Prioridade do canal", default: "0",
+                 help: "maior é mais urgente; o telefone costuma ter a maior"),
+                (key: "vagas", label: "Contatos em atendimento ao mesmo tempo", default: "4",
+                 help: "os outros esperam na fila do canal, onde a paciência conta; no chat com multitarefa, atendentes x contatos abertos"),
+                (key: "expediente", label: "Horário do canal", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${vagas}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}, priority: Some(${prioridade})))),
+                    symbol: "operacao", visual: Some((asset: Some("mesa"))))"#,
+                r#"(name: "${name}_contatos", kind: Source(interarrival: ${intervalo}), shifts: ${expediente},
+                    position: (-3.0, 0.0, 0.0), symbol: "inicio")"#,
+                r#"(name: "${name}_fila", kind: Queue(patience: ${paciencia}), position: (-1.5, 0.0, 0.0),
+                    symbol: "espera", visual: Some((asset: Some("area"))))"#,
+                r#"(name: "${name}_fim", kind: Sink, position: (1.5, 0.0, 0.0), symbol: "fim")"#,
+            ],
+            connections: [("${name}_contatos", "${name}_fila"), ("${name}_fila", "${name}"), ("${name}", "${name}_fim")],
+        ),
+        (
+            id: "equipe",
+            name: "Equipe de atendimento",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Atendentes que servem os guichês e os canais; começa com dois (acrescente outros com a predefinição Atendente).",
+            name_base: "atendentes",
+            fields: [
+                (key: "regra", label: "Regra de escolha do atendente", default: "FirstAvailable",
+                 help: "FirstAvailable, RoundRobin, LeastBusy ou LongestIdle"),
+                (key: "expediente", label: "Escala dos atendentes", default: "None",
+                 help: "Calendar(\"expediente\") ou um turno próprio"),
+                (key: "multitarefa", label: "Contatos ao mesmo tempo (canais)", default: "None",
+                 help: "Some((max_open: 3, slice: Exp(mean: 2.0), switch: Const(0.5))): até 3 chats ou e-mails abertos"),
+                (key: "interrupcoes", label: "Interrupções", default: "Never",
+                 help: "Full: o canal de prioridade maior (telefone) tira o atendente do que está fazendo"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: ${regra}, preempt: ${interrupcoes}))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 72.0, multitask: ${multitarefa}), position: (0.0, 1.5, 0.0),
+                    shifts: ${expediente}, visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "servicos/atendente")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 72.0, multitask: ${multitarefa}), position: (0.0, -1.5, 0.0),
+                    shifts: ${expediente}, visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "servicos/atendente")"#,
+            ],
+        ),
+        (
+            id: "atendente",
+            name: "Atendente",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Uma pessoa da equipe de atendimento: escala e contatos ao mesmo tempo.",
+            name_base: "atendente",
+            fields: [
+                (key: "expediente", label: "Escala", default: "None"),
+                (key: "multitarefa", label: "Contatos ao mesmo tempo", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 72.0, multitask: ${multitarefa}), shifts: ${expediente},
+                    visual: Some((asset: Some("pessoa"))), person: Some(()))"#,
+            ],
+        ),
+        (
+            id: "saida",
+            name: "Saída",
+            icon: "porta",
+            role: Done,
+            description: "Onde os clientes atendidos saem.",
+            name_base: "saida",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+    ],
+)

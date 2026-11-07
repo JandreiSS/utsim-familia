@@ -90,6 +90,8 @@ fn turma_de_60_corrigida_em_lote() {
             prazo: None,
         }],
         registro: Registro::Melhor,
+        desafios: Vec::new(),
+        equipes: Vec::new(),
     };
     let pasta = PastaTurma::criar(dir.path(), &turma, &alunos).unwrap();
     let pub_ = pasta.publicar_pacote("campanha", &arquivos()).unwrap();
@@ -285,6 +287,8 @@ fn perfil_registra_e_entrega() {
         chave_professor: String::new(),
         pacotes: vec![],
         registro: Registro::Ultima,
+        desafios: Vec::new(),
+        equipes: Vec::new(),
     };
     let pasta = PastaTurma::criar(turma_dir.path(), &t, std::slice::from_ref(&aluno)).unwrap();
     perfil

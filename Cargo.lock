@@ -7929,6 +7929,7 @@ dependencies = [
  "utsim-diagram",
  "utsim-edit",
  "utsim-model",
+ "utsim-objects",
 ]
 
 [[package]]
