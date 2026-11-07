@@ -585,3 +585,63 @@ fn desafio_e_equipes() {
         img.salvar_png(&d.join("c1_placar_aluno.png")).unwrap();
     }
 }
+
+/// EN11: the 3D client hosts the same `App` with the thread executor (`App::new`, as the
+/// bridge's `UtsimEnsino` does); a mission run there gets the same grade as in the window
+/// tests, run inline.
+#[test]
+fn mesma_nota_nos_dois_hospedeiros() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let jogar = |app: &mut App| {
+        app.salvar_identidade("Ana Lima", "2027001", "");
+        app.abrir_missao(0);
+        let m = app.missao.as_mut().unwrap();
+        let mc = m.missao().missao.clone();
+        m.tentativa.decisoes = mc.completar(&mc.referencia);
+        m.tentativa
+            .previsoes
+            .insert("gargalo".into(), RespostaPrevisao::Escolha(1));
+        m.tentativa.justificativas = vec![Some(0)];
+    };
+    let mut janela = app_em(&dir.path().join("janela"));
+    jogar(&mut janela);
+    janela
+        .missao
+        .as_mut()
+        .unwrap()
+        .simular("2027001".into(), &NaHora, None);
+    frames(&mut janela, &ctx, 2);
+    let nota_janela = janela
+        .missao
+        .as_ref()
+        .unwrap()
+        .resultado
+        .as_ref()
+        .unwrap()
+        .nota;
+
+    let mut ponte = App::new(Perfil::em(&dir.path().join("ponte")));
+    jogar(&mut ponte);
+    let ex = ponte.executor.clone();
+    ponte
+        .missao
+        .as_mut()
+        .unwrap()
+        .simular("2027001".into(), ex.as_ref(), None);
+    let inicio = std::time::Instant::now();
+    while ponte.missao.as_ref().unwrap().resultado.is_none() {
+        assert!(inicio.elapsed().as_secs() < 120, "a rodada não terminou");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        frames(&mut ponte, &ctx, 1);
+    }
+    let nota_ponte = ponte
+        .missao
+        .as_ref()
+        .unwrap()
+        .resultado
+        .as_ref()
+        .unwrap()
+        .nota;
+    assert_eq!(nota_janela, nota_ponte);
+}
