@@ -63,7 +63,13 @@ pub fn modelo_da_tentativa(
     decisoes: &Decisoes,
 ) -> Result<Model, ErroMotor> {
     let base = modelo_base(m, aluno)?;
-    Ok(apply_patches(&base, &m.missao.ajustes(decisoes))?)
+    Ok(apply_patches(&base, &ajustes(m, decisoes))?)
+}
+
+/// The model keys of `decisoes`: the levers and the compiled pieces.
+pub fn ajustes(m: &MissaoCarregada, decisoes: &Decisoes) -> BTreeMap<String, String> {
+    let objetos: Vec<String> = m.modelo.objects.iter().map(|o| o.name.clone()).collect();
+    m.missao.ajustes_completos(decisoes, &objetos)
 }
 
 /// Runs each set of decisions. `progresso(fração)` is called as replications finish;
@@ -80,7 +86,7 @@ pub fn rodar(
         .enumerate()
         .map(|(i, d)| Scenario {
             name: format!("c{i}"),
-            set: m.missao.ajustes(d),
+            set: ajustes(m, d),
         })
         .collect();
     let total = (lista.len() as f32 * base.run.replications.max(1) as f32).max(1.0);
@@ -155,6 +161,11 @@ pub fn avaliar(
         let col: Vec<f64> = match t.chave.as_str() {
             "const" => vec![1.0; n],
             "custo" => vec![cenario.custo; n],
+            k if crate::pecas::e_termo(k) => {
+                let v = crate::pecas::termo(missao, k, &cenario.decisoes)
+                    .ok_or_else(|| ErroMotor::MetricaAusente(k.into()))?;
+                vec![v; n]
+            }
             k if k.starts_with("decisao.") => {
                 let id = &k["decisao.".len()..];
                 let a = missao

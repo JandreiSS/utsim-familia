@@ -81,8 +81,39 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
         }
     }
 
+    // The pieces: their own definition, and the compiled keys patch the model.
+    let objetos: Vec<String> = modelo.objects.iter().map(|o| o.name.clone()).collect();
+    if let Some(b) = &missao.balanceamento {
+        erros.extend(b.validar());
+        if erros.is_empty()
+            && let Err(e) = apply_patches(modelo, &b.ajustes(&b.inicial))
+        {
+            erros.push(format!(
+                "balanceamento: as estações do modelo não aceitam os tempos: {e}"
+            ));
+        }
+    }
+    if let Some(a) = &missao.arranjo {
+        erros.extend(a.validar());
+        if erros.is_empty()
+            && let Err(e) = apply_patches(modelo, &a.ajustes(&a.inicial, &objetos))
+        {
+            erros.push(format!("arranjo: {e}"));
+        }
+    }
+    if missao.tem_pecas() && !missao.alavancas.is_empty() {
+        erros.push(
+            "uma missão com tarefas ou máquinas para posicionar não pode ter outras alavancas"
+                .into(),
+        );
+    }
+
     // Reference: valid decisions inside the budget and the limits.
+    let iniciais = missao.decisoes_iniciais();
     for (k, v) in &missao.referencia {
+        if (k.starts_with("tarefa.") || k.starts_with("pos.")) && iniciais.contains_key(k) {
+            continue;
+        }
         match missao.alavanca(k) {
             None => erros.push(format!("referência: alavanca '{k}' não existe")),
             Some(a) if !a.aceita(*v) => {
@@ -197,5 +228,8 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
 }
 
 fn termo_de_decisao(t: &Termo) -> bool {
-    t.chave == "custo" || t.chave == "const" || t.chave.starts_with("decisao.")
+    t.chave == "custo"
+        || t.chave == "const"
+        || t.chave.starts_with("decisao.")
+        || crate::pecas::e_termo(&t.chave)
 }

@@ -46,7 +46,29 @@ struct Avaliada {
 /// Runs every combination of `m` (without variant) and checks the mission.
 pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
     let missao = &m.missao;
-    let todas = missao.combinacoes();
+    let todas = if missao.tem_pecas() {
+        // Assignments and layouts are too many to enumerate: the candidates are the
+        // stored reference and the optimum of the exact search of the piece.
+        let mut v = vec![missao.completar(&missao.referencia)];
+        match otimo_das_pecas(missao) {
+            Some(o) => v.push(o),
+            None => {
+                return Ok(Conferencia {
+                    missao: missao.id.clone(),
+                    combinacoes: 0,
+                    viaveis: 0,
+                    batem_meta: 0,
+                    melhor: Decisoes::new(),
+                    referencia_confere: false,
+                    erros: vec!["a busca exata das peças não achou solução".into()],
+                    avisos: Vec::new(),
+                });
+            }
+        }
+        v
+    } else {
+        missao.combinacoes()
+    };
     let mut c = Conferencia {
         missao: missao.id.clone(),
         combinacoes: todas.len(),
@@ -168,7 +190,7 @@ pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
     if missao.metricas.iter().any(|mt| mt.meta.is_some()) && c.batem_meta == 0 {
         c.erros.push("nenhuma combinação bate as metas".into());
     }
-    if c.viaveis > 1 && c.batem_meta as f64 > 0.3 * c.viaveis as f64 {
+    if !missao.tem_pecas() && c.viaveis > 1 && c.batem_meta as f64 > 0.3 * c.viaveis as f64 {
         c.avisos.push(format!(
             "{} de {} combinações batem as metas (mais de 30 %): missão fácil",
             c.batem_meta, c.viaveis
@@ -194,9 +216,22 @@ pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
     Ok(c)
 }
 
+/// The optimum of the pieces of a mission (exact search), as decisions.
+pub fn otimo_das_pecas(missao: &crate::missao::Missao) -> Option<Decisoes> {
+    let mut d = missao.decisoes_iniciais();
+    if let Some(b) = missao.balanceamento.as_ref().filter(|b| b.editavel) {
+        d.extend(b.decisoes(&b.otimo()?));
+    }
+    if let Some(a) = &missao.arranjo {
+        d.extend(a.decisoes(&a.otimo()?));
+    }
+    Some(d)
+}
+
 /// `decisoes` as text (`Máquinas na furação = 2, ...`).
 pub fn descrever(m: &MissaoCarregada, decisoes: &Decisoes) -> String {
-    m.missao
+    let mut partes: Vec<String> = m
+        .missao
         .alavancas
         .iter()
         .filter_map(|a| {
@@ -204,8 +239,28 @@ pub fn descrever(m: &MissaoCarregada, decisoes: &Decisoes) -> String {
                 .get(a.id())
                 .map(|v| format!("{} = {}", a.rotulo(), a.descrever(*v)))
         })
-        .collect::<Vec<_>>()
-        .join(", ")
+        .collect();
+    let d = m.missao.completar(decisoes);
+    if let Some(b) = m.missao.balanceamento.as_ref().filter(|b| b.editavel) {
+        let a = b.atribuicao(&d);
+        for s in 1..=b.estacoes {
+            let ts: Vec<&str> = b
+                .tarefas
+                .iter()
+                .filter(|t| a.get(&t.id) == Some(&s))
+                .map(|t| t.id.as_str())
+                .collect();
+            if !ts.is_empty() {
+                partes.push(format!("estação {s}: {}", ts.join(" ")));
+            }
+        }
+    }
+    if let Some(ar) = &m.missao.arranjo {
+        for (mq, c) in ar.posicoes(&d) {
+            partes.push(format!("{mq} na célula {c}"));
+        }
+    }
+    partes.join(", ")
 }
 
 /// The stored numbers of a mission: the means of each measure in the initial state and
