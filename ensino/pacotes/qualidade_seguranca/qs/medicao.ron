@@ -1,0 +1,52 @@
+Missao(
+    id: "qs/medicao",
+    titulo: "Medição ruim",
+    conceitos: ["sistema_de_medicao", "alarme_falso", "escape"],
+    modelo: "../modelos/medicao.ron",
+    texto: "medicao.md",
+    previsao: [
+        Escolha(
+            id: "efeito",
+            pergunta: "Um instrumento com desvio de medição maior, no mesmo processo, faz o quê?",
+            opcoes: [
+                (rotulo: "Rejeita peças boas e deixa passar peças ruins"),
+                (rotulo: "Só deixa passar peças ruins"),
+                (rotulo: "Não muda o refugo"),
+            ],
+            resposta: Fixa(0),
+        ),
+        Valor(
+            id: "refugo",
+            pergunta: "Hoje, quantas peças vão para o refugo no período simulado?",
+            valor: [(chave: "refugo.input")],
+            tolerancia: Relativa(0.25),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "instrumento", rotulo: "Sistema de medição do diâmetro", opcoes: [
+            (rotulo: "Manter o atual (desvio de 0,030 mm)", ajustes: {"inspecao.inspection": "Some((every: 1, detect: 0.0, measure: [(characteristic: \"diametro\", sigma: 0.03)], on_reject: Scrap, cost: Some(0.4)))"}),
+            (rotulo: "Calibrar e padronizar o método (0,020 mm)", ajustes: {"inspecao.inspection": "Some((every: 1, detect: 0.0, measure: [(characteristic: \"diametro\", sigma: 0.02)], on_reject: Scrap, cost: Some(0.4)))"}, custo: 400),
+            (rotulo: "Paquímetro digital (0,010 mm)", ajustes: {"inspecao.inspection": "Some((every: 1, detect: 0.0, measure: [(characteristic: \"diametro\", sigma: 0.01)], on_reject: Scrap, cost: Some(0.4)))"}, custo: 1800),
+            (rotulo: "Micrômetro de bancada (0,004 mm)", ajustes: {"inspecao.inspection": "Some((every: 1, detect: 0.0, measure: [(characteristic: \"diametro\", sigma: 0.004)], on_reject: Scrap, cost: Some(0.4)))"}, custo: 5000),
+        ]),
+    ],
+    orcamento: 2000,
+    metricas: [
+        (nome: "refugo", rotulo: "Peças refugadas no período", unidade: "peças",
+         valor: [(chave: "refugo.input")], objetivo: Menor, meta: 60.0, tolerancia: Relativa(0.05), casas: 0),
+        (nome: "escape", rotulo: "Peças fora do limite que chegam ao cliente", unidade: "",
+         valor: [(chave: "cliente.pct_defeituosas")], objetivo: Menor, meta: 0.005, tolerancia: Absoluta(0.002), casas: 4),
+    ],
+    justificativa: [
+        (pergunta: "Por que um instrumento pior aumenta o refugo mesmo sem piorar o processo?",
+         opcoes: ["Porque o erro da medição joga peças boas para fora dos limites", "Porque ele estraga as peças", "Porque ele mede só as peças ruins"],
+         certa: 0),
+    ],
+    dicas: [
+        "O processo é o mesmo nas quatro opções. O que muda?",
+        "Compare o refugo e o escape de cada instrumento. O erro de medição atua nos dois sentidos perto dos limites.",
+        "Veja o que cabe no orçamento. O melhor instrumento nem sempre cabe.",
+    ],
+    referencia: {"instrumento": 2},
+    animacao: (duracao: 300, unidade: "min"),
+)

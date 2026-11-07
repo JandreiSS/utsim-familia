@@ -1,0 +1,35 @@
+// Usinagem de um eixo com diâmetro nominal de 25 mm (limites de 24,95 a 25,05). A inspeção
+// mede o diâmetro de todas as peças com o desvio de medição do instrumento (sigma). Peça
+// medida fora dos limites vai para o refugo. Tempos em minutos. Veja
+// docs/formato_qualidade_seguranca.md.
+Model(
+    name: "Medição ruim",
+    description: "Característica com limites, instrumento de medição com erro e refugo",
+    run: (stop_time: 4800.0, warmup: 240.0, seed: 33, replications: 10),
+    packs: ["qualidade"],
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 2.0)), position: (0.0, 0.0, 0.0)),
+        (name: "espera", kind: Queue(), position: (2.0, 0.0, 0.0)),
+        (name: "torno", kind: Processor(process: Triangular(min: 1.2, mode: 1.5, max: 1.8)),
+         position: (4.0, 0.0, 0.0),
+         quality: Some((
+            characteristics: [
+                (name: "diametro", value: Normal(mean: 25.0, sd: 0.02), lsl: Some(24.95), usl: Some(25.05)),
+            ],
+         ))),
+        (name: "fila", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "inspecao", kind: Processor(process: Const(0.8)), output: ByLabel("inspecao"),
+         position: (10.0, 0.0, 0.0),
+         inspection: Some((
+            every: 1, detect: 0.0,
+            measure: [(characteristic: "diametro", sigma: 0.03)],
+            on_reject: Scrap, cost: Some(0.4),
+         ))),
+        (name: "cliente", kind: Sink, sink_role: Some(Customer), position: (14.0, 0.0, 0.0)),
+        (name: "refugo", kind: Sink, sink_role: Some(Scrap), position: (14.0, -4.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "espera"), ("espera", "torno"), ("torno", "fila"), ("fila", "inspecao"),
+        ("inspecao", "cliente"), ("inspecao", "refugo"),
+    ],
+)

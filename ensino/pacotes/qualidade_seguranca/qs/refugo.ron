@@ -1,0 +1,46 @@
+Missao(
+    id: "qs/refugo",
+    titulo: "Refugo escondido",
+    conceitos: ["defeito", "inspecao"],
+    modelo: "../modelos/refugo.ron",
+    texto: "refugo.md",
+    previsao: [
+        Valor(
+            id: "escape",
+            pergunta: "Hoje, que fração das peças chega ao cliente com defeito (de 0 a 1)?",
+            valor: [(chave: "cliente.pct_defeituosas")],
+            tolerancia: Absoluta(0.02),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "processo", rotulo: "Posto de inspeção logo depois do torno", opcoes: [
+            (rotulo: "Desligado", ajustes: {"insp_processo.inspection.every": "1000000", "insp_processo.inspection.detect": "0.7"}),
+            (rotulo: "Visual, uma peça a cada 5", ajustes: {"insp_processo.inspection.every": "5", "insp_processo.inspection.detect": "0.7"}, custo: 300),
+            (rotulo: "Visual, todas as peças", ajustes: {"insp_processo.inspection.every": "1", "insp_processo.inspection.detect": "0.7"}, custo: 1000),
+        ]),
+        Escolha(id: "final", rotulo: "Posto de inspeção antes da expedição", opcoes: [
+            (rotulo: "Desligado", ajustes: {"insp_final.inspection.every": "1000000", "insp_final.inspection.detect": "0.95"}),
+            (rotulo: "Calibre, uma peça a cada 5", ajustes: {"insp_final.inspection.every": "5", "insp_final.inspection.detect": "0.95"}, custo: 900),
+            (rotulo: "Calibre, todas as peças", ajustes: {"insp_final.inspection.every": "1", "insp_final.inspection.detect": "0.95"}, custo: 2500),
+        ]),
+    ],
+    orcamento: 3000,
+    metricas: [
+        (nome: "escape", rotulo: "Peças com defeito que chegam ao cliente", unidade: "",
+         valor: [(chave: "cliente.pct_defeituosas")], objetivo: Menor, meta: 0.01, tolerancia: Absoluta(0.003), casas: 3),
+        (nome: "custo", rotulo: "Custo dos postos de inspeção", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 3000.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que o defeito de setup escapa tanto sem inspeção?",
+         opcoes: ["Porque as primeiras peças de cada ciclo têm risco alto e nada as barra antes do cliente", "Porque o torno quebra", "Porque o cliente inspeciona mal"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quando o defeito nasce e onde ele é visto pela primeira vez?",
+        "Compare o escape com cada combinação de postos e o que cada uma custa.",
+        "A inspeção total no fim barra quase tudo. Veja o que sobra do orçamento para o posto do processo.",
+    ],
+    referencia: {"processo": 1, "final": 2},
+    animacao: (duracao: 300, unidade: "min"),
+)

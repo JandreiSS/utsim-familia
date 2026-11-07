@@ -1,0 +1,55 @@
+Missao(
+    id: "qs/posto_pesado",
+    titulo: "Posto pesado",
+    conceitos: ["fadiga", "rodizio"],
+    modelo: "../modelos/posto_pesado.ron",
+    texto: "posto_pesado.md",
+    medicoes: [
+        (rotulo: "Fadiga máxima da ana", valor: [(chave: "ana.person.fatigue_max")], casas: 2),
+        (rotulo: "Fadiga máxima do bruno", valor: [(chave: "bruno.person.fatigue_max")], casas: 2),
+    ],
+    previsao: [
+        Escolha(
+            id: "quem_cansa",
+            pergunta: "Com a regra atual (a primeira pessoa livre da escala), quem acumula mais fadiga?",
+            opcoes: [
+                (rotulo: "Ana", valor: [(chave: "ana.person.fatigue_max")]),
+                (rotulo: "Bruno", valor: [(chave: "bruno.person.fatigue_max")]),
+                (rotulo: "Carla", valor: [(chave: "carla.person.fatigue_max")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "regra", rotulo: "Quem leva a próxima caixa", opcoes: [
+            (rotulo: "A primeira pessoa livre da escala", ajustes: {"equipe.rule": "FirstAvailable"}),
+            (rotulo: "Rodízio entre as pessoas livres", ajustes: {"equipe.rule": "RoundRobin"}),
+        ]),
+        Escolha(id: "metodo", rotulo: "Método de movimentação", opcoes: [
+            (rotulo: "Carregar a caixa de 15 a 25 kg no braço", ajustes: {"chegada.labels": "{\"weight\": Uniform(min: 15.0, max: 25.0)}"}),
+            (rotulo: "Caixas menores, de 8 a 14 kg", ajustes: {"chegada.labels": "{\"weight\": Uniform(min: 8.0, max: 14.0)}"}, custo: 2000),
+            (rotulo: "Mesa elevatória e apoio, caixa efetiva de 4 a 8 kg", ajustes: {"chegada.labels": "{\"weight\": Uniform(min: 4.0, max: 8.0)}"}, custo: 6000),
+        ]),
+    ],
+    orcamento: 6000,
+    metricas: [
+        (nome: "fadiga", rotulo: "Fadiga máxima da ana", unidade: "",
+         valor: [(chave: "ana.person.fatigue_max")], objetivo: Menor, meta: 0.25, tolerancia: Absoluta(0.03), casas: 2),
+        (nome: "vazao", rotulo: "Caixas entregues à expedição", unidade: "caixas",
+         valor: [(chave: "expedicao.input")], objetivo: Maior, meta: 180.0, tolerancia: Relativa(0.03), casas: 0),
+        (nome: "custo", rotulo: "Custo da decisão", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 2000.0, peso: 0.5, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que o rodízio baixa o pico de fadiga sem mudar o total de trabalho?",
+         opcoes: ["Porque divide a carga e deixa cada pessoa descansar entre as viagens", "Porque as caixas ficam mais leves", "Porque as viagens ficam mais curtas"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quem recebe o trabalho quando duas pessoas estão livres?",
+        "Compare a fadiga máxima das três pessoas em cada regra e em cada método.",
+        "O rodízio é de graça. A mesa elevatória custa caro e só vale se o rodízio não bastar.",
+    ],
+    referencia: {"regra": 1, "metodo": 1},
+    animacao: (duracao: 1800, unidade: "s"),
+)

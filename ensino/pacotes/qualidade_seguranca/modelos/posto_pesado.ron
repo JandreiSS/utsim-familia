@@ -1,0 +1,42 @@
+// Posto pesado: caixas de 15 a 25 kg vão do estoque ao posto de montagem, levadas a pé por
+// uma equipe de três pessoas. Com a regra FirstAvailable, quem está primeiro na escala (ana)
+// leva quase tudo e acumula fadiga. A fadiga sobe com o trabalho, a caminhada e o peso e cai
+// no descanso. Os parâmetros são estimativas para o ensino, sem dados medidos. Tempos em
+// segundos, distâncias em metros.
+Model(
+    name: "Posto pesado",
+    description: "Equipe a pé com fadiga dinâmica levando caixas pesadas, com rodízio e mesa elevatória",
+    run: (stop_time: 14400.0, seed: 35, replications: 8),
+    packs: ["seguranca"],
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 60.0),
+            labels: {"weight": Uniform(min: 15.0, max: 25.0)}), position: (0.0, 0.0, 0.0)),
+        (name: "estoque", kind: Queue(), transport: "equipe", position: (4.0, 0.0, 0.0)),
+        (name: "posto", kind: Processor(process: Triangular(min: 30.0, mode: 40.0, max: 55.0)),
+         position: (20.0, 0.0, 0.0)),
+        (name: "expedicao", kind: Sink, position: (24.0, 0.0, 0.0)),
+        (name: "ana", kind: Transporter(speed: 1.3, load_time: Const(5.0), unload_time: Const(5.0)),
+         position: (6.0, 3.0, 0.0), visual: Some((asset: Some("pessoa"))),
+         person: Some((
+            fatigue: Some(Dynamic(work: 5.0e-4, walk: 5.0e-4, carry: 8.0e-5, limit: Some(0.6), target: 0.2)),
+            walk_speed_loaded: Some(()),
+         ))),
+        (name: "bruno", kind: Transporter(speed: 1.3, load_time: Const(5.0), unload_time: Const(5.0)),
+         position: (6.0, -3.0, 0.0), visual: Some((asset: Some("pessoa"))),
+         person: Some((
+            fatigue: Some(Dynamic(work: 5.0e-4, walk: 5.0e-4, carry: 8.0e-5, limit: Some(0.6), target: 0.2)),
+            walk_speed_loaded: Some(()),
+         ))),
+        (name: "carla", kind: Transporter(speed: 1.3, load_time: Const(5.0), unload_time: Const(5.0)),
+         position: (8.0, 0.0, 0.0), visual: Some((asset: Some("pessoa"))),
+         person: Some((
+            fatigue: Some(Dynamic(work: 5.0e-4, walk: 5.0e-4, carry: 8.0e-5, limit: Some(0.6), target: 0.2)),
+            walk_speed_loaded: Some(()),
+         ))),
+        (name: "equipe", kind: Dispatcher(team: ["ana", "bruno", "carla"], rule: FirstAvailable),
+         position: (8.0, 6.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "estoque"), ("estoque", "posto"), ("posto", "expedicao"),
+    ],
+)

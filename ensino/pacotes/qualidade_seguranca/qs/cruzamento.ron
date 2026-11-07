@@ -1,0 +1,57 @@
+Missao(
+    id: "qs/cruzamento",
+    titulo: "Cruzamento perigoso",
+    conceitos: ["quase_conflito", "epi", "zona_de_risco"],
+    modelo: "../modelos/cruzamento.ron",
+    texto: "cruzamento.md",
+    previsao: [
+        Escolha(
+            id: "colete",
+            pergunta: "O colete do operador reduz os quase-conflitos simulados com a empilhadeira?",
+            opcoes: [
+                (rotulo: "Sim, porque o veículo passa a enxergá-lo"),
+                (rotulo: "Não, ele resolve a entrada sem EPI, mas o encontro continua"),
+            ],
+            resposta: Fixa(1),
+        ),
+        Valor(
+            id: "sem_epi",
+            pergunta: "Hoje, quantas vezes o operador entra numa zona sem o EPI que ela pede?",
+            valor: [(chave: "operador.sem_epi")],
+            tolerancia: Relativa(0.3),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "layout", rotulo: "Layout dos postos", opcoes: [
+            (rotulo: "Manter como está"),
+            (rotulo: "Bancada junto da prensa, ambas depois do corredor", ajustes: {"bancada_a.position": "(0.0, 9.0, 0.0)"}, custo: 3000),
+            (rotulo: "Prensa para o lado da bancada, longe do corredor", ajustes: {"prensa.position": "(0.0, -8.0, 0.0)", "saida.position": "(3.0, -8.0, 0.0)"}, custo: 9000),
+        ]),
+        Escolha(id: "epi", rotulo: "EPI do operador", opcoes: [
+            (rotulo: "Os dos postos", ajustes: {"operador.ppe": "[]"}),
+            (rotulo: "Só o colete", ajustes: {"operador.ppe": "[\"colete\"]"}, custo: 200),
+            (rotulo: "Colete e protetor auricular", ajustes: {"operador.ppe": "[\"colete\", \"protetor_auricular\"]"}, custo: 500),
+        ]),
+    ],
+    orcamento: 4000,
+    metricas: [
+        (nome: "quase_conflitos", rotulo: "Quase-conflitos simulados do operador", unidade: "",
+         valor: [(chave: "operador.quase_conflitos")], objetivo: Menor, meta: 2.0, tolerancia: Absoluta(1.0), casas: 1),
+        (nome: "sem_epi", rotulo: "Entradas do operador em zona sem o EPI pedido", unidade: "",
+         valor: [(chave: "operador.sem_epi")], objetivo: Menor, meta: 0.0, tolerancia: Absoluta(1.0), casas: 1),
+        (nome: "custo", rotulo: "Custo da decisão", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 4000.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "O que o número de quase-conflitos simulados permite concluir?",
+         opcoes: ["Comparar layouts e regras do mesmo modelo, sem estimar a chance de acidente real", "A chance de um acidente por ano", "Que a fábrica está em conformidade com a norma"],
+         certa: 0),
+    ],
+    dicas: [
+        "Trace o caminho do operador entre a bancada e a prensa. Ele cruza a rota da empilhadeira?",
+        "Mudar o layout tira o cruzamento. O EPI resolve as entradas sem equipamento, mas não o encontro com o veículo.",
+        "Compare o custo de cada mudança de layout com o que sobra do orçamento e com o que cada uma elimina.",
+    ],
+    referencia: {"layout": 1, "epi": 1},
+    animacao: (duracao: 1800, unidade: "s"),
+)

@@ -1,0 +1,57 @@
+Missao(
+    id: "qs/custo_qualidade",
+    titulo: "Custo da qualidade",
+    conceitos: ["custo_da_qualidade", "prevencao", "escape"],
+    modelo: "../modelos/custo_qualidade.ron",
+    texto: "custo_qualidade.md",
+    previsao: [
+        Escolha(
+            id: "categoria",
+            pergunta: "Por peça, qual destes gastos costuma ser o mais caro?",
+            opcoes: [
+                (rotulo: "Prevenir o defeito"),
+                (rotulo: "Inspecionar a peça"),
+                (rotulo: "Refugar a peça dentro da fábrica"),
+                (rotulo: "Corrigir o defeito que o cliente encontrou"),
+            ],
+            resposta: Fixa(3),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "prevencao", rotulo: "Prevenção no torno", opcoes: [
+            (rotulo: "Nenhuma (6 % de defeitos)", ajustes: {"torno.quality": "Some((defects: [(name: \"trinca\", probability: 0.06)]))"}),
+            (rotulo: "Treinamento e manutenção (3,5 % de defeitos)", ajustes: {"torno.quality": "Some((defects: [(name: \"trinca\", probability: 0.035)]))"}, custo: 1500),
+            (rotulo: "Dispositivo à prova de erro (2 % de defeitos)", ajustes: {"torno.quality": "Some((defects: [(name: \"trinca\", probability: 0.02)]))"}, custo: 4000),
+            (rotulo: "Dispositivo e controle do processo (0,5 % de defeitos)", ajustes: {"torno.quality": "Some((defects: [(name: \"trinca\", probability: 0.005)]))"}, custo: 12000),
+        ]),
+        Escolha(id: "avaliacao", rotulo: "Inspeção", opcoes: [
+            (rotulo: "Todas as peças", ajustes: {"inspecao.inspection.every": "1"}, numero: 3600.0),
+            (rotulo: "Uma peça a cada 5", ajustes: {"inspecao.inspection.every": "5"}, numero: 720.0),
+            (rotulo: "Uma peça a cada 20", ajustes: {"inspecao.inspection.every": "20"}, numero: 180.0),
+        ]),
+    ],
+    metricas: [
+        (nome: "custo_qualidade", rotulo: "Custo da qualidade no período (prevenção, avaliação, refugo e escape)", unidade: "R$",
+         valor: [
+            (chave: "custo"),
+            (chave: "decisao.avaliacao"),
+            (chave: "refugo.input", fator: 30.0),
+            (chave: "cliente.pecas_defeituosas", fator: 400.0),
+         ],
+         objetivo: Menor, meta: 13000.0, tolerancia: Relativa(0.03), casas: 0),
+        (nome: "escape", rotulo: "Peças com defeito que chegam ao cliente", unidade: "",
+         valor: [(chave: "cliente.pct_defeituosas")], objetivo: Menor, meta: 0.01, peso: 0.0, casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Por que gastar em prevenção pode reduzir o custo total, mesmo com a inspeção ligada?",
+         opcoes: ["Porque cada defeito evitado poupa o refugo e o escape, que custam mais que a prevenção", "Porque a prevenção dispensa o cliente", "Porque a prevenção acelera o torno"],
+         certa: 0),
+    ],
+    dicas: [
+        "Some, para cada opção, o que se gasta para prevenir, para inspecionar e com as falhas.",
+        "O defeito que chega ao cliente custa muito mais que o refugado. Veja o que a inspeção por amostragem deixa passar.",
+        "A prevenção mais barata nem sempre vence, e a mais cara também não. Procure o ponto em que o custo total é o menor.",
+    ],
+    referencia: {"prevencao": 2, "avaliacao": 0},
+    animacao: (duracao: 300, unidade: "min"),
+)
