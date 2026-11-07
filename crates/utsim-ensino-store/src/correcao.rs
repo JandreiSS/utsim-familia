@@ -26,6 +26,9 @@ pub struct Correcao {
     pub resultados: BTreeMap<(String, String), Vec<(Tentativa, Resultado)>>,
     pub avisos: Vec<String>,
     pub cancelada: bool,
+    /// Per student record and mission id, the moment (ms) of each graded attempt, in the
+    /// order of `resultados`.
+    pub instantes: BTreeMap<(String, String), Vec<i64>>,
     /// Pairs of students whose attempts look copied (the teacher decides).
     pub semelhancas: Vec<utsim_ensino_core::prova::Semelhanca>,
 }
@@ -84,6 +87,7 @@ pub fn corrigir_turma(
 
     let mut trabalhos = Vec::new();
     let mut rastros = Vec::new();
+    let mut instantes = BTreeMap::new();
     for (reg, (chave, tentativas)) in &por_aluno {
         let v = verificar_diario(chave, reg, tentativas);
         let av = avisos_aluno.entry(reg.clone()).or_default();
@@ -139,6 +143,14 @@ pub fn corrigir_turma(
                 .filter(|r| r.missao == m.missao.id)
                 .map(|r| r.tentativa.clone())
                 .collect();
+            let qs: Vec<i64> = deste
+                .iter()
+                .filter(|r| r.missao == m.missao.id)
+                .map(|r| r.quando)
+                .collect();
+            if !qs.is_empty() {
+                instantes.insert((reg.clone(), m.missao.id.clone()), qs);
+            }
             if !ts.is_empty() {
                 trabalhos.push(Trabalho {
                     registro: reg.clone(),
@@ -169,6 +181,7 @@ pub fn corrigir_turma(
         })
         .collect();
     c.cancelada = cancelar.load(Ordering::Relaxed);
+    c.instantes = instantes;
     for (reg, missao, r) in saidas {
         match r {
             Ok(v) => {

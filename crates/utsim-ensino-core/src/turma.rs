@@ -36,6 +36,12 @@ pub struct Turma {
     pub pacotes: Vec<PacotePublicado>,
     #[serde(default)]
     pub registro: Registro,
+    /// Challenges of the class (scoreboard by nickname).
+    #[serde(default)]
+    pub desafios: Vec<crate::desafio::Desafio>,
+    /// Teams for the team missions.
+    #[serde(default)]
+    pub equipes: Vec<crate::desafio::Equipe>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

@@ -7,6 +7,7 @@
 //! - [`diario`]: the signed attempt journal chained by hash;
 //! - [`pasta`]: the class folder (local or synced by Google Drive for desktop);
 //! - [`correcao`]: batch grading on the teacher's machine;
+//! - [`desafio`]: the class scoreboard and the team solutions;
 //! - [`planilha`]: the grades as `.xlsx`;
 //! - [`prova`]: exams published in the class folder and rebuilt from the seed;
 //! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim Seis Sigma;
@@ -16,6 +17,7 @@ pub mod arquivos;
 pub mod caso;
 pub mod chave;
 pub mod correcao;
+pub mod desafio;
 pub mod diario;
 pub mod pasta;
 pub mod perfil;

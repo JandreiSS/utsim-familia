@@ -449,3 +449,139 @@ fn prova_de_ponta_a_ponta() {
     assert_eq!(ana.celulas[1].as_ref().unwrap().tentativas, 2);
     assert!(ana.celulas[0].is_none());
 }
+
+#[test]
+fn desafio_e_equipes() {
+    use utsim_ensino_core::desafio::{Desafio, comparar_equipes, ler_equipes};
+    let dir = tempfile::tempdir().unwrap();
+    let turma_dir = dir.path().join("turma");
+    let ctx = Context::default();
+    let prof_perfil = Perfil::em(&dir.path().join("prof"));
+    let alunos = utsim_ensino_core::turma::importar_alunos(
+        "nome;registro;apelido\nAna;2027001;raposa\nBeto;2027002;coruja\nCaio;2027003;lontra",
+    )
+    .unwrap();
+    criar_turma(
+        &turma_dir,
+        "Simulação",
+        "2027-1",
+        "notas",
+        &prof_perfil.chave_professor().unwrap().publica(),
+        &alunos,
+    )
+    .unwrap();
+    let c = utsim_ensino_store::arquivos::Convite::ler(&turma_dir.join("convite.utsc")).unwrap();
+    // Ana and Beto find the reference of 1.1, Caio keeps the start.
+    let mut caio_app = None;
+    for (reg, nome, boa) in [
+        ("2027001", "Ana", true),
+        ("2027002", "Beto", true),
+        ("2027003", "Caio", false),
+    ] {
+        let mut a = app_em(&dir.path().join(reg));
+        a.salvar_identidade(nome, reg, "");
+        a.config.turma = Some(utsim_ensino_store::perfil::Vinculo {
+            convite: c.clone(),
+            pasta: Some(turma_dir.clone()),
+        });
+        a.salvar_config();
+        a.abrir_missao(0);
+        let m = a.missao.as_mut().unwrap();
+        let mc = m.missao().missao.clone();
+        if boa {
+            m.tentativa.decisoes = mc.completar(&mc.referencia);
+        }
+        m.tentativa
+            .previsoes
+            .insert("gargalo".into(), RespostaPrevisao::Escolha(1));
+        m.simular(reg.into(), &NaHora, None);
+        frames(&mut a, &ctx, 1);
+        if reg == "2027003" {
+            caio_app = Some(a);
+        }
+    }
+
+    let mut prof = App::com(prof_perfil, Arc::new(NaHora), || 0);
+    prof.salvar_identidade("Professor", "prof", "");
+    prof.config.professor = true;
+    prof.tela = Tela::Professor;
+    prof.professor.abrir(&turma_dir).unwrap();
+    let pacote = prof.pacote.clone().unwrap();
+    prof.professor.corrigir(pacote.clone(), &NaHora, None);
+    frames(&mut prof, &ctx, 3);
+    let c = prof.professor.correcao.clone().unwrap();
+    let missao = pacote.missoes[0].missao.id.clone();
+    let linhas = utsim_ensino_store::desafio::placar_do_desafio(
+        &c,
+        &alunos,
+        &Desafio {
+            missao: missao.clone(),
+            fim: None,
+        },
+        utsim_ensino_core::pacote::Registro::Melhor,
+    );
+    let v: Vec<(usize, bool, &str)> = linhas
+        .iter()
+        .map(|l| (l.posicao, l.empate, l.apelido.as_str()))
+        .collect();
+    assert_eq!(v[2], (3, false, "lontra"), "{linhas:#?}");
+    assert_eq!(
+        (v[0].0, v[0].1, v[1].0, v[1].1),
+        (1, true, 1, true),
+        "{linhas:#?}"
+    );
+    // A deadline before every attempt leaves the scoreboard empty.
+    let antes = utsim_ensino_store::desafio::placar_do_desafio(
+        &c,
+        &alunos,
+        &Desafio {
+            missao: missao.clone(),
+            fim: Some(0),
+        },
+        utsim_ensino_core::pacote::Registro::Melhor,
+    );
+    assert!(antes.is_empty());
+    utsim_ensino_store::desafio::gravar_placar(
+        &utsim_ensino_store::pasta::PastaTurma {
+            dir: turma_dir.clone(),
+        },
+        &missao,
+        &linhas,
+    )
+    .unwrap();
+    let csv = &utsim_ensino_store::desafio::placares(&turma_dir)[0].1;
+    assert!(csv.contains("raposa") && !csv.contains("Ana") && !csv.contains("2027001"));
+
+    // Teams: Ana's solution against Caio's.
+    let eqs = ler_equipes("Azul: 2027001\nVerde: 2027003").unwrap();
+    let (sol, sem) = utsim_ensino_store::desafio::solucoes_das_equipes(
+        &c,
+        &eqs,
+        &missao,
+        utsim_ensino_core::pacote::Registro::Melhor,
+    );
+    assert!(sem.is_empty());
+    let k = comparar_equipes(&pacote.missoes[0], &sol, &|_| true).unwrap();
+    assert_eq!(k.posicoes, [1, 2], "{k:#?}");
+    prof.professor.desafio.placar = Some(linhas);
+    prof.professor.desafio.comparacao = Some(k);
+    frames(&mut prof, &ctx, 2);
+
+    // The student sees the scoreboard in the class tab.
+    let mut caio = caio_app.unwrap();
+    caio.tela = Tela::Turma;
+    frames(&mut caio, &ctx, 2);
+
+    // Pictures for review with `UTSIM_CAPTURAS=<pasta>`.
+    if let Some(d) = std::env::var_os("UTSIM_CAPTURAS") {
+        let d = std::path::PathBuf::from(d);
+        std::fs::create_dir_all(&d).unwrap();
+        let mut cap =
+            utsim_ui_tema::captura::Captura::new(Context::default(), egui::vec2(1180.0, 2400.0));
+        let img = cap.imagem(4, |ui| prof.draw(ui));
+        img.salvar_png(&d.join("c0_desafio_professor.png")).unwrap();
+        cap.size = egui::vec2(1180.0, 900.0);
+        let img = cap.imagem(4, |ui| caio.draw(ui));
+        img.salvar_png(&d.join("c1_placar_aluno.png")).unwrap();
+    }
+}
