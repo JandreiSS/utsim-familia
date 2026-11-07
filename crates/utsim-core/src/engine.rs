@@ -1217,6 +1217,11 @@ impl Simulation {
         self.core.trace.get_or_insert_with(Vec::new);
     }
 
+    /// The trace recorded so far, without taking it (`None`: tracing is off).
+    pub fn trace(&self) -> Option<&[TraceRecord]> {
+        self.core.trace.as_deref()
+    }
+
     pub fn take_trace(&mut self) -> Vec<TraceRecord> {
         self.core.trace.take().unwrap_or_default()
     }

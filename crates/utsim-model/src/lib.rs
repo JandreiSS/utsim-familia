@@ -6,6 +6,7 @@ mod arrivals;
 pub mod csv;
 pub mod dados;
 pub mod experiment;
+pub mod exposure;
 mod format2;
 pub mod html;
 mod items;
@@ -1264,6 +1265,10 @@ impl Model {
             sample_interval: self.run.sample_interval,
             histogram_bins: self.run.histogram_bins,
         });
+        // The exposure of a model with risk zones is measured on the trace.
+        if !self.zones.is_empty() {
+            sim.enable_trace();
+        }
         // Block ids follow object order, so references can be resolved up front.
         let ids: HashMap<&str, BlockId> = self
             .objects
@@ -1423,6 +1428,12 @@ impl Model {
                         .metrics(*metrics),
                 ),
             };
+            // A sink with a quality role also counts what arrives (custom metrics).
+            let behavior: Box<dyn Behavior> = if obj.sink_role.is_some() {
+                Box::new(quality::QualitySink::new(behavior))
+            } else {
+                behavior
+            };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
             sim.set_position(id, obj.position);
             if let Some(t) = &obj.transport {
@@ -1573,6 +1584,18 @@ impl Model {
     /// Runs a built simulation to the end, answering agent decisions with
     /// `run.default_decision` when it is set.
     pub fn drive(&self, sim: &mut Simulation) -> Result<RunReport, ModelError> {
+        let mut report = self.drive_only(sim)?;
+        // A model with risk zones carries the exposure of its people in the report
+        // (custom metrics of each mobile resource, `exposure::add_to_report`).
+        if !self.zones.is_empty() {
+            if let Some(records) = sim.trace() {
+                exposure::add_to_report(self, &mut report, records);
+            }
+        }
+        Ok(report)
+    }
+
+    fn drive_only(&self, sim: &mut Simulation) -> Result<RunReport, ModelError> {
         let Some(choice) = self.run.default_decision else {
             return Ok(sim.run()?);
         };

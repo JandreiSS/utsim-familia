@@ -192,3 +192,30 @@ fn report_always_has_the_legal_notice() {
     let empty = utsim_exposicao::relatorio::html(&model, &[]);
     assert!(empty.contains(utsim_exposicao::relatorio::AVISO_LEGAL));
 }
+
+#[test]
+fn the_report_metrics_carry_the_exposure() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cruzamento_empilhadeira.ron");
+    let model = Model::load(&path).unwrap();
+    let reports = model.run_replications().unwrap();
+    let e = analyze(&model, 0, Options::default()).unwrap();
+    let m = reports[0].metrics();
+    assert_eq!(m["operador.quase_conflitos"], e.near_miss_count() as f64);
+    assert_eq!(
+        m["empilhadeira.quase_conflitos"],
+        e.near_miss_count() as f64
+    );
+    assert_eq!(m["operador.sem_epi"], f64::from(e.entries_without_ppe()));
+    let z = e
+        .zones
+        .iter()
+        .find(|z| z.zone == "corredor_empilhadeira")
+        .unwrap();
+    assert!((m["operador.tempo_zona.corredor_empilhadeira"] - z.time).abs() < 1e-9);
+    // A model without zones has none of these.
+    let simples =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/pessoas_carregando.ron");
+    let r = Model::load(&simples).unwrap().run_replications().unwrap();
+    assert!(!r[0].metrics().keys().any(|k| k.contains("quase_conflitos")));
+}

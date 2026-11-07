@@ -286,3 +286,32 @@ fn quality_blocks_absent_keep_old_models() {
     }
     assert!(seen > 20);
 }
+
+#[test]
+fn patch_keys_reach_the_quality_blocks() {
+    use utsim_model::experiment::patch;
+    let mut m = Model::parse(INSPECTION).unwrap();
+    patch(&mut m, "inspecao.inspection.every", "5").unwrap();
+    patch(&mut m, "inspecao.inspection.detect", "0.95").unwrap();
+    patch(&mut m, "retrabalho.rework.fix", "0.8").unwrap();
+    patch(
+        &mut m,
+        "torno.quality",
+        "Some((defects: [(name: \"risco\", probability: 0.05)]))",
+    )
+    .unwrap();
+    patch(&mut m, "torno.ppe", "[\"oculos\"]").unwrap();
+    let i = m.objects[3].inspection.as_ref().unwrap();
+    assert_eq!((i.every, i.detect), (5, 0.95));
+    assert_eq!(m.objects[5].rework.as_ref().unwrap().fix, 0.8);
+    assert_eq!(
+        m.objects[1].quality.as_ref().unwrap().defects[0].probability,
+        0.05
+    );
+    assert_eq!(m.objects[1].ppe, vec!["oculos".to_string()]);
+    assert!(m.validate().is_ok());
+    let e = patch(&mut m, "torno.inspection.every", "2")
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("não tem `inspection`"), "{e}");
+}
