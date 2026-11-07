@@ -245,3 +245,61 @@ fn telas_do_pacote_de_qualidade_e_seguranca() {
         assert!(distintas(&img) > 10, "{nome}");
     }
 }
+
+#[test]
+fn tela_da_prova() {
+    use utsim_ensino_core::campanha::{arquivos, carregar_campanha};
+    use utsim_ensino_core::prova::{Montagem, Prova, Regra, montar};
+    let dir = tempfile::tempdir().unwrap();
+    let base = carregar_campanha().unwrap();
+    let agora = 1_800_000_000_000;
+    let m = Montagem {
+        id: "prova1".into(),
+        titulo: "Prova 1".into(),
+        pacote_base: base.pacote.id.clone(),
+        hash_base: base.hash.clone(),
+        regras: vec![Regra {
+            ato: Some(2),
+            conceito: None,
+            quantidade: 2,
+        }],
+        prova: Prova {
+            semente: 3,
+            inicio: agora - 600_000,
+            fim: agora + 7_200_000,
+            duracao_min: 50,
+            tentativas: 2,
+            fuso_min: -180,
+        },
+    };
+    let pm = montar(&arquivos(), &base, &m).unwrap();
+    let utse = dir.path().join("prova1.utse");
+    utsim_ensino_store::arquivos::gravar_utse(&pm.aluno, &utse).unwrap();
+    let mut app = App::com(
+        Perfil::em(&dir.path().join("aluno")),
+        Arc::new(NaHora),
+        || 1_800_000_000_000,
+    );
+    app.salvar_identidade("Ana Lima", "2027001", "ana");
+    app.abrir_pacote(&utse).unwrap();
+    let mut cap = Captura::new(Context::default(), vec2(1180.0, 700.0));
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    salvar(&img, "b0_prova_mapa");
+    app.abrir_missao(0);
+    {
+        let e = app.missao.as_mut().unwrap();
+        for pv in &e.missao().missao.previsao.clone() {
+            let r = match pv {
+                utsim_ensino_core::missao::Previsao::Escolha { .. } => RespostaPrevisao::Escolha(0),
+                _ => RespostaPrevisao::Valor(1.0),
+            };
+            e.tentativa.previsoes.insert(pv.id().to_string(), r);
+        }
+        e.simular("2027001".into(), &NaHora, None);
+    }
+    cap.size = vec2(1180.0, 2000.0);
+    let _ = cap.imagem(3, |ui| app.draw(ui));
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    salvar(&img, "b1_prova_missao");
+    assert!(distintas(&img) > 10);
+}

@@ -49,6 +49,9 @@ pub struct Pacote {
     /// company program ([`crate::competencias`]).
     #[serde(default)]
     pub competencias: std::collections::BTreeMap<String, Vec<String>>,
+    /// Exam rules: the package is an exam ([`crate::prova`]), without answer key.
+    #[serde(default)]
+    pub prova: Option<crate::prova::Prova>,
 }
 
 /// An act: a sequence of missions, each one unlocking the next.

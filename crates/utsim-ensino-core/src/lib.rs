@@ -12,6 +12,7 @@
 //! - [`pecas`]: line balancing and grid layout (the pieces of acts 4 and 5);
 //! - [`dicas`]: automatic hints about the attempt;
 //! - [`progresso`]: grades per mission and unlocking;
+//! - [`prova`]: exam mode (seeded draw, package without answer key, similarity);
 //! - [`turma`]: the class, the student list, the matrix and the common mistakes;
 //! - [`conferir`]: the exhaustive reference search, the mission checker and the golden;
 //! - [`campanha`]: the built-in campaign;
@@ -30,6 +31,7 @@ pub mod nota;
 pub mod pacote;
 pub mod pecas;
 pub mod progresso;
+pub mod prova;
 pub mod questoes;
 pub mod turma;
 pub mod validar;
