@@ -8202,6 +8202,7 @@ dependencies = [
  "utsim-ferramentas",
  "utsim-model",
  "utsim-posto",
+ "utsim-quality",
 ]
 
 [[package]]

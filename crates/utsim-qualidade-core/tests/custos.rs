@@ -154,6 +154,10 @@ fn an_8d_becomes_an_idea_in_the_seis_sigma_portfolio() {
     let ideias = portfolio::ideas(pasta.state(), pasta.project_id());
     let i = ideias.iter().find(|i| i.id == envio.ideia).unwrap();
     assert_eq!(i.title, "8D: Trinca na flange");
+    assert_eq!(
+        portfolio::source_of(i).map(|s| s.0),
+        Some(portfolio::SOURCE_8D.to_string())
+    );
     assert!(i.data.contains(&envio.hash));
     let bytes = std::fs::read(caminho.join("anexos").join(&envio.anexo)).unwrap();
     let volta: OitoD = serde_json::from_slice(&bytes).unwrap();

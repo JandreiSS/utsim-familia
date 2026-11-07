@@ -1,13 +1,15 @@
 //! An 8D sent to the portfolio of UTSim Seis Sigma (stage QS13 of
 //! `docs/plano_qualidade_e_seguranca.md`, section 7.1): when the cause does not show up,
-//! the 8D becomes an idea in the portfolio, with the 8D itself attached by its SHA-256
-//! (the same attachment store the Seis Sigma app uses) and the hash checked after writing.
+//! the 8D becomes an idea in the portfolio through the intake of the Seis Sigma store
+//! (`utsim_lss_store::intake::submit_idea`), with the source `qualidade_8d`, the 8D's
+//! number as reference and the 8D itself attached by content. The attachment is read back
+//! and its SHA-256 checked.
 
 use std::path::Path;
 
-use utsim_lss_core::portfolio;
-use utsim_lss_core::{Edit, Id};
-use utsim_lss_store::project::ATTACHMENTS;
+use utsim_lss_core::Id;
+use utsim_lss_core::portfolio::{self, SOURCE_8D, Submission};
+use utsim_lss_store::intake::{attachment_path, submit_idea};
 use utsim_lss_store::{Clock, Identity, ProjectFolder};
 
 use crate::oito_d::OitoD;
@@ -16,7 +18,7 @@ use crate::oito_d::OitoD;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Envio {
     pub ideia: Id,
-    /// Name of the attachment (`<sha256>.json`).
+    /// Name of the attachment in the portfolio's `anexos/`.
     pub anexo: String,
     pub hash: String,
 }
@@ -37,38 +39,49 @@ pub fn enviar(
     oito_d: &OitoD,
     posto: &str,
 ) -> Result<Envio, String> {
-    let mut pasta = ProjectFolder::open(carteira, me, None).map_err(|e| e.to_string())?;
-    if !pasta.is_portfolio() {
-        return Err(format!(
-            "{} não é uma carteira do UTSim Seis Sigma",
-            carteira.display()
-        ));
-    }
     let bytes = serde_json::to_vec_pretty(oito_d).map_err(|e| e.to_string())?;
     let hash = sha256_hex(&bytes);
-    // The attachment store takes a file: write it to a temporary place first.
-    let tmp = std::env::temp_dir().join(format!("utsim-8d-{hash}.json"));
-    std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
-    let anexo = pasta.add_attachment(&tmp).map_err(|e| e.to_string());
-    let _ = std::fs::remove_file(&tmp);
-    let anexo = anexo?;
-    // Read back and check the hash before pointing the idea at it.
-    let gravado =
-        std::fs::read(carteira.join(ATTACHMENTS).join(&anexo)).map_err(|e| e.to_string())?;
-    if sha256_hex(&gravado) != hash || !anexo.starts_with(&hash) {
-        return Err("o anexo gravado na carteira não confere com o 8D".into());
-    }
-    let c = pasta.project_id();
-    let ideia = clock.new_id();
-    let r = portfolio::Idea::entity_ref(ideia);
-    let mut edits = portfolio::new_idea(c, ideia, &format!("8D: {}", oito_d.titulo));
-    edits.push(Edit::new(r, portfolio::fields::PROCESS, posto));
-    edits.push(Edit::new(r, portfolio::fields::PROBLEM, oito_d.resumo()));
-    edits.push(Edit::new(
-        r,
-        portfolio::fields::DATA,
-        format!("8D anexado: {ATTACHMENTS}/{anexo} (SHA-256 {hash}), vindo do UTSim Qualidade"),
+    let referencia = if oito_d.id.is_empty() {
+        oito_d.titulo.clone()
+    } else {
+        format!("8D-{}", oito_d.id)
+    };
+    // The intake copies files: write the 8D to a temporary place first.
+    let dir = std::env::temp_dir().join(format!("utsim-8d-{}", &hash[..16]));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let arquivo = dir.join(format!(
+        "{}.json",
+        referencia.replace(['/', '\\', ':'], "_")
     ));
-    pasta.commit(edits, clock).map_err(|e| e.to_string())?;
-    Ok(Envio { ideia, anexo, hash })
+    std::fs::write(&arquivo, &bytes).map_err(|e| e.to_string())?;
+    let ideia = submit_idea(
+        carteira,
+        me,
+        clock,
+        &Submission {
+            title: format!("8D: {}", oito_d.titulo),
+            process: posto.to_string(),
+            problem: oito_d.resumo(),
+            data: format!("8D anexado (SHA-256 {hash}), vindo do UTSim Qualidade"),
+            rough_gain: 0.0,
+            source: SOURCE_8D.into(),
+            reference: referencia,
+        },
+        std::slice::from_ref(&arquivo),
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let ideia = ideia.map_err(|e| e.to_string())?;
+    // Read back the attachment linked to the idea and check its hash.
+    let pasta = ProjectFolder::open(carteira, me, None).map_err(|e| e.to_string())?;
+    let anexo = portfolio::attachments(pasta.state(), ideia)
+        .into_iter()
+        .find(|a| {
+            std::fs::read(attachment_path(carteira, &a.file)).is_ok_and(|b| sha256_hex(&b) == hash)
+        })
+        .ok_or("o anexo gravado na carteira não confere com o 8D")?;
+    Ok(Envio {
+        ideia,
+        anexo: anexo.file,
+        hash,
+    })
 }
