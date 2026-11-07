@@ -8116,11 +8116,17 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
+ "serde",
+ "serde_json",
  "tempfile",
+ "utsim-ferramentas",
+ "utsim-lss-core",
+ "utsim-lss-store",
  "utsim-model",
  "utsim-posto",
  "utsim-posto-ui",
  "utsim-qualidade-core",
+ "utsim-quality",
  "utsim-ui-tema",
  "winresource",
 ]
@@ -8178,6 +8184,7 @@ name = "utsim-seguranca-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "egui_plot",
  "serde_json",
  "tempfile",
  "utsim-diagram",
