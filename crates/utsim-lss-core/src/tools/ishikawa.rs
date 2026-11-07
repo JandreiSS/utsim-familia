@@ -1,151 +1,36 @@
 //! Cause and effect diagram (`docs/plano_lean_seis_sigma.md`, 2.3): the effect, causes by
 //! category (the 6M or the team's own), subcauses at any depth, each cause marked as open,
-//! probable, verified or ruled out, with the evidence that decided it.
+//! probable, verified or ruled out, with the evidence that decided it. The rules are in
+//! `utsim_ferramentas::ishikawa` (decision G3); this module reads the journal.
 
-use serde::{Deserialize, Serialize};
-
-use super::tree::{Node, forest};
 use super::{ItemRef, items};
 use crate::id::Id;
 use crate::state::State;
 
-pub const ITEM: &str = "causa";
+pub use utsim_ferramentas::ishikawa::{CauseStatus, ITEM, SIX_M, category_name, fields};
 
-pub mod fields {
-    pub const TEXT: &str = "texto";
-    /// One of [`super::SIX_M`] keys, or the name of a category of the team.
-    pub const CATEGORY: &str = "categoria";
-    pub const STATUS: &str = "estado";
-    pub const EVIDENCE: &str = "evidencia";
-    /// Deliverable: the effect (the head of the fish).
-    pub const EFFECT: &str = "efeito";
-}
-
-/// The 6M: key in the file and name on screen.
-pub const SIX_M: [(&str, &str); 6] = [
-    ("mao_de_obra", "Mão de obra"),
-    ("maquina", "Máquina"),
-    ("metodo", "Método"),
-    ("material", "Material"),
-    ("medicao", "Medição"),
-    ("meio_ambiente", "Meio ambiente"),
-];
-
-/// Name on screen of a category key (the team's own categories are their own name).
-pub fn category_name(key: &str) -> String {
-    SIX_M
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map_or_else(|| key.to_string(), |(_, n)| n.to_string())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum CauseStatus {
-    #[default]
-    #[serde(rename = "aberta")]
-    Open,
-    #[serde(rename = "provavel")]
-    Probable,
-    #[serde(rename = "verificada")]
-    Verified,
-    #[serde(rename = "descartada")]
-    RuledOut,
-}
-
-impl CauseStatus {
-    pub const ALL: [CauseStatus; 4] = [
-        CauseStatus::Open,
-        CauseStatus::Probable,
-        CauseStatus::Verified,
-        CauseStatus::RuledOut,
-    ];
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Cause {
-    pub id: Id,
-    pub text: String,
-    /// Category key; subcauses take their root's category.
-    pub category: String,
-    pub status: CauseStatus,
-    pub evidence: String,
-    pub depth: usize,
-    pub parent: Option<Id>,
-}
-
-/// One bone of the fish: a category and its causes in depth-first order.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Bone {
-    pub category: String,
-    pub causes: Vec<Cause>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Diagram {
-    pub effect: String,
-    /// The 6M always (even empty), then the team's categories in order of first use.
-    pub bones: Vec<Bone>,
-    /// Causes whose parent links made a cycle (two people moved them at once).
-    pub cycles: Vec<Id>,
-}
-
-impl Diagram {
-    pub fn causes(&self) -> impl Iterator<Item = &Cause> {
-        self.bones.iter().flat_map(|b| b.causes.iter())
-    }
-
-    pub fn with_status(&self, status: CauseStatus) -> impl Iterator<Item = &Cause> {
-        self.causes().filter(move |c| c.status == status)
-    }
-}
+pub type Cause = utsim_ferramentas::ishikawa::Cause<Id>;
+pub type Bone = utsim_ferramentas::ishikawa::Bone<Id>;
+pub type Diagram = utsim_ferramentas::ishikawa::Diagram<Id>;
 
 /// The diagram of a deliverable.
 pub fn diagram(state: &State, deliverable: Id) -> Diagram {
-    let all = items(state, deliverable, ITEM);
-    let pairs: Vec<(Id, Option<Id>)> = all.iter().map(|i| (i.id, i.parent())).collect();
-    let (nodes, cycles) = forest(&pairs);
-    let find = |id: Id| all.iter().find(|i| i.id == id).expect("node of the items");
-    let mut bones: Vec<Bone> = SIX_M
+    let inputs: Vec<utsim_ferramentas::ishikawa::Input<Id>> = items(state, deliverable, ITEM)
         .iter()
-        .map(|(k, _)| Bone {
-            category: k.to_string(),
-            causes: Vec::new(),
-        })
-        .collect();
-    let mut root_cat = String::new();
-    for Node { id, depth, parent } in nodes {
-        let i: &ItemRef = find(id);
-        if depth == 0 {
-            root_cat = i.text(fields::CATEGORY);
-            if root_cat.trim().is_empty() {
-                root_cat = SIX_M[2].0.to_string();
-            }
-        }
-        let cause = Cause {
-            id,
+        .map(|i: &ItemRef| utsim_ferramentas::ishikawa::Input {
+            id: i.id,
+            parent: i.parent(),
             text: i.text(fields::TEXT),
-            category: root_cat.clone(),
+            category: i.text(fields::CATEGORY),
             status: i.entity.typed(fields::STATUS).unwrap_or_default(),
             evidence: i.text(fields::EVIDENCE),
-            depth,
-            parent,
-        };
-        match bones.iter_mut().find(|b| b.category == root_cat) {
-            Some(b) => b.causes.push(cause),
-            None => bones.push(Bone {
-                category: root_cat.clone(),
-                causes: vec![cause],
-            }),
-        }
-    }
-    Diagram {
-        effect: state
-            .entity(deliverable)
-            .map(|e| e.text(fields::EFFECT))
-            .unwrap_or_default(),
-        bones,
-        cycles,
-    }
+        })
+        .collect();
+    let effect = state
+        .entity(deliverable)
+        .map(|e| e.text(fields::EFFECT))
+        .unwrap_or_default();
+    utsim_ferramentas::ishikawa::diagram(&effect, &inputs)
 }
 
 /// Every cause of the project's Ishikawa diagrams, for the five whys link: `(deliverable,
