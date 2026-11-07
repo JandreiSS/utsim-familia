@@ -48,6 +48,9 @@ pub struct Config {
     /// Mission package opened instead of the built-in campaign (folder or `.utse`).
     #[serde(default)]
     pub pacote_aberto: Option<PathBuf>,
+    /// When the student opened each exam (ms), for the time limit.
+    #[serde(default)]
+    pub provas_abertas: std::collections::BTreeMap<String, i64>,
 }
 
 pub struct Perfil {

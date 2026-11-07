@@ -44,6 +44,14 @@ pub struct Pacote {
     /// Glossary path inside the package.
     #[serde(default)]
     pub glossario: Option<String>,
+    /// Concept of the glossary to tools of the UTSim Seis Sigma curriculum (`msa`,
+    /// `capacidade`...): a solved mission records `praticou` in those tools in the
+    /// company program ([`crate::competencias`]).
+    #[serde(default)]
+    pub competencias: std::collections::BTreeMap<String, Vec<String>>,
+    /// Exam rules: the package is an exam ([`crate::prova`]), without answer key.
+    #[serde(default)]
+    pub prova: Option<crate::prova::Prova>,
 }
 
 /// An act: a sequence of missions, each one unlocking the next.
@@ -219,6 +227,16 @@ pub fn carregar(arquivos: &Arquivos) -> Result<PacoteCarregado, Vec<String>> {
                     m.missao.id
                 ));
             }
+        }
+    }
+    for (c, ferramentas) in &pacote.competencias {
+        if !glossario.termos.iter().any(|t| &t.id == c) {
+            erros.push(format!(
+                "competencias: conceito '{c}' não está no glossário"
+            ));
+        }
+        if ferramentas.iter().any(|f| f.trim().is_empty()) {
+            erros.push(format!("competencias: ferramenta vazia em '{c}'"));
         }
     }
     if !erros.is_empty() {

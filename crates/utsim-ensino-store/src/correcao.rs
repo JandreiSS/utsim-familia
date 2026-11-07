@@ -26,6 +26,8 @@ pub struct Correcao {
     pub resultados: BTreeMap<(String, String), Vec<(Tentativa, Resultado)>>,
     pub avisos: Vec<String>,
     pub cancelada: bool,
+    /// Pairs of students whose attempts look copied (the teacher decides).
+    pub semelhancas: Vec<utsim_ensino_core::prova::Semelhanca>,
 }
 
 /// A graded (student, mission) pair, or why it could not be graded.
@@ -81,15 +83,48 @@ pub fn corrigir_turma(
     }
 
     let mut trabalhos = Vec::new();
+    let mut rastros = Vec::new();
     for (reg, (chave, tentativas)) in &por_aluno {
         let v = verificar_diario(chave, reg, tentativas);
         let av = avisos_aluno.entry(reg.clone()).or_default();
         av.extend(v.avisos);
-        let deste: Vec<&RegistroTentativa> = v
+        let mut deste: Vec<&RegistroTentativa> = v
             .validas
             .iter()
             .filter(|r| r.pacote == pacote.pacote.id)
             .collect();
+        // An exam: only runs inside the window, and only the first ones of each mission.
+        if let Some(pr) = &pacote.pacote.prova {
+            let antes = deste.len();
+            deste.retain(|r| r.quando >= pr.inicio && r.quando <= pr.fim);
+            if deste.len() < antes {
+                av.push(format!(
+                    "{} tentativa(s) fora da janela da prova, ignoradas",
+                    antes - deste.len()
+                ));
+            }
+            deste.sort_by_key(|r| (r.quando, r.sequencia));
+            let mut contagem: BTreeMap<&str, u32> = BTreeMap::new();
+            let antes = deste.len();
+            deste.retain(|r| {
+                let n = contagem.entry(r.missao.as_str()).or_default();
+                *n += 1;
+                *n <= pr.tentativas
+            });
+            if deste.len() < antes {
+                av.push(format!(
+                    "{} tentativa(s) além das {} permitidas por missão, ignoradas",
+                    antes - deste.len(),
+                    pr.tentativas
+                ));
+            }
+        }
+        rastros.extend(deste.iter().map(|r| utsim_ensino_core::prova::Rastro {
+            aluno: reg.clone(),
+            missao: r.missao.clone(),
+            quando: r.quando,
+            decisoes: r.tentativa.decisoes.clone(),
+        }));
         if deste.iter().any(|r| r.pacote_hash != pacote.hash) {
             av.push("tentativas feitas com outra versão do pacote".into());
         }
@@ -145,6 +180,14 @@ pub fn corrigir_turma(
                 .push(format!("{missao}: não foi possível corrigir ({e})")),
         }
     }
+
+    let com_variante = pacote
+        .missoes
+        .iter()
+        .filter(|m| !m.missao.variante.is_empty() || !m.missao.dados.is_empty())
+        .map(|m| m.missao.id.clone())
+        .collect();
+    c.semelhancas = utsim_ensino_core::prova::semelhancas(&rastros, &com_variante, 60_000);
 
     c.matriz.missoes = pacote.missoes.iter().map(|m| m.missao.id.clone()).collect();
     c.matriz.titulos = pacote
