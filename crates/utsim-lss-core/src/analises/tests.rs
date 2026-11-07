@@ -350,3 +350,113 @@ fn attribute_agreement_and_the_medir_check() {
     assert_eq!(analyses(&t.s, p)[0].kappa(), Some(k));
     assert_eq!(rec.key(), "msa_atributos");
 }
+
+#[test]
+fn extended_statistics_match_the_crate() {
+    // Three machines (groups), four shifts (blocks), a second factor (tool) and a predictor.
+    let mut csv = String::from("valor;maquina;turno;ferramenta;temperatura\n");
+    let vals = [
+        [10.1, 11.9, 13.2],
+        [9.8, 12.4, 12.9],
+        [10.4, 12.1, 13.8],
+        [10.0, 12.8, 13.1],
+    ];
+    for (b, row) in vals.iter().enumerate() {
+        for (g, v) in row.iter().enumerate() {
+            let tool = if b % 2 == 0 { "nova" } else { "velha" };
+            let temp = 20.0 + g as f64 * 2.0 + b as f64 * 0.5;
+            csv.push_str(&format!(
+                "{};M{};T{};{tool};{}\n",
+                v.to_string().replace('.', ","),
+                g + 1,
+                b + 1,
+                temp.to_string().replace('.', ",")
+            ));
+        }
+    }
+    let t = table(&csv);
+    let groups: Vec<Vec<f64>> = (0..3)
+        .map(|g| vals.iter().map(|r| r[g]).collect())
+        .collect();
+    let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
+    let o = run(&Recipe::Variances { col: 0, group: 1 }, &t).unwrap();
+    assert_eq!(
+        o.value("valor-p Levene"),
+        Some(utsim_stats::variances::levene(&refs).unwrap().p_value)
+    );
+    assert!(o.value("Bartlett").is_some());
+    let o = run(&Recipe::KruskalWallis { col: 0, group: 1 }, &t).unwrap();
+    assert_eq!(
+        o.value("H"),
+        Some(utsim_stats::ranks::kruskal_wallis(&refs).unwrap().statistic)
+    );
+    assert!(o.value("valor-p").unwrap() < 0.05);
+    let o = run(&Recipe::MoodMedian { col: 0, group: 1 }, &t).unwrap();
+    assert_eq!(o.value("mediana de M2"), Some(12.25));
+    let o = run(
+        &Recipe::Friedman {
+            value: 0,
+            treatment: 1,
+            block: 2,
+        },
+        &t,
+    )
+    .unwrap();
+    // Machine 3 best in every shift, 1 worst: Q = 8 with 4 blocks.
+    assert!((o.value("Q").unwrap() - 8.0).abs() < 1e-9);
+    let o = run(
+        &Recipe::TwoWayAnova {
+            value: 0,
+            a: 1,
+            b: 3,
+        },
+        &t,
+    )
+    .unwrap();
+    assert!(o.value("valor-p maquina").unwrap() < 0.001);
+    assert!(o.value("valor-p maquina × ferramenta").is_some());
+    assert_eq!(o.plots.len(), 1);
+    let o = run(
+        &Recipe::Regression {
+            response: 0,
+            predictors: vec![4],
+        },
+        &t,
+    )
+    .unwrap();
+    assert!(o.value("R²").unwrap() > 0.8);
+    assert!(o.value("coeficiente temperatura").unwrap() > 0.0);
+    assert_eq!(o.series.len(), 12);
+    assert!(
+        run(
+            &Recipe::Regression {
+                response: 0,
+                predictors: vec![]
+            },
+            &t
+        )
+        .is_err()
+    );
+    let o = run(
+        &Recipe::SampleSize {
+            kind: 1,
+            a: 0.5,
+            b: 1.0,
+            target: 0.8,
+            alpha: 0.05,
+        },
+        &t,
+    )
+    .unwrap();
+    let n = utsim_stats::power::sample_size(
+        utsim_stats::power::Design::TwoMeans {
+            delta: 0.5,
+            sd: 1.0,
+        },
+        0.8,
+        0.05,
+    )
+    .unwrap();
+    assert_eq!(o.value("n"), Some(n as f64));
+    assert_eq!(Recipe::Variances { col: 0, group: 1 }.key(), "variancias");
+}
