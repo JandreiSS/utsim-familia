@@ -1,0 +1,44 @@
+Missao(
+    id: "ato6/cronometragem",
+    titulo: "Cronometragem",
+    conceitos: ["tempo_padrao", "cronometragem"],
+    modelo: "../modelos/posto.ron",
+    texto: "cronometragem.md",
+    previsao: [
+        Calculo(
+            id: "normal",
+            pergunta: "Qual é o tempo normal do aperto, em segundos (média dos tempos × ritmo)?",
+            calculo: TempoNormal(tempos: [24.1, 26.3, 25.0, 27.2, 23.8, 25.6, 24.9, 26.8, 25.3, 24.4, 26.1, 25.7], ritmo: 1.1),
+            unidade: "s",
+            tolerancia: Relativa(0.01),
+        ),
+        Calculo(
+            id: "padrao",
+            pergunta: "Qual é o tempo padrão, em segundos, com 15 % de tolerâncias (tempo normal × 1,15)?",
+            calculo: TempoPadrao(tempos: [24.1, 26.3, 25.0, 27.2, 23.8, 25.6, 24.9, 26.8, 25.3, 24.4, 26.1, 25.7], ritmo: 1.1, tolerancia: 0.15),
+            unidade: "s",
+            tolerancia: Relativa(0.01),
+        ),
+        Calculo(
+            id: "ciclos",
+            pergunta: "Quantos ciclos é preciso cronometrar para um erro de 5 % com 95 % de confiança (n = (1,96 × s / (0,05 × média))², arredondado para cima)?",
+            calculo: Ciclos(tempos: [24.1, 26.3, 25.0, 27.2, 23.8, 25.6, 24.9, 26.8, 25.3, 24.4, 26.1, 25.7], erro: 0.05),
+            unidade: "ciclos",
+            tolerancia: Absoluta(0.0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Para que serve o ritmo na cronometragem?",
+         opcoes: ["Para ajustar o tempo observado ao de um operador em ritmo normal", "Para somar as pausas pessoais", "Para corrigir o erro do cronômetro"],
+         certa: 0),
+        (pergunta: "Se os tempos variassem mais de um ciclo para outro, o número de ciclos a cronometrar...",
+         opcoes: ["Aumentaria", "Diminuiria", "Ficaria igual"],
+         certa: 0),
+    ],
+    dicas: [
+        "O ritmo compara o operador observado com um operador em ritmo normal.",
+        "Primeiro a média dos 12 tempos, depois o ritmo, depois as tolerâncias. Para os ciclos, use o desvio padrão da amostra.",
+        "Tempo normal = média × 1,1. Tempo padrão = tempo normal × 1,15.",
+    ],
+    animacao: (duracao: 600, unidade: "s"),
+)

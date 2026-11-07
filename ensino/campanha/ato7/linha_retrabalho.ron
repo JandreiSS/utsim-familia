@@ -1,0 +1,43 @@
+Missao(
+    id: "ato7/linha_retrabalho",
+    titulo: "Linha com inspeção e retrabalho",
+    conceitos: ["modelagem", "retrabalho", "gargalo"],
+    modelo: "../modelos/caso1_inicial.ron",
+    texto: "linha_retrabalho.md",
+    previsao: [
+        Escolha(
+            id: "meta",
+            pergunta: "Com a inspeção, o retrabalho e as quebras da solda, a linha atual entrega 850 controladores aprovados por dia?",
+            opcoes: [
+                (rotulo: "Sim", valor: [(chave: "expedicao.input", fator: 0.1)]),
+                (rotulo: "Não", valor: [(chave: "const", fator: 850.0)]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    modelagem: (
+        gabarito: "../modelos/caso1_gabarito.ron",
+        replicacoes: 5,
+        criterios: [
+            Objetos(rotulo: "A montagem junta 1 base e 3 placas (um combinador)", tipo: "Combiner", minimo: 1),
+            Quebras(rotulo: "A solda quebra (quebras no modelo)"),
+            Retrabalho(rotulo: "As peças reprovadas voltam para a linha (retrabalho)"),
+            Capacidade(rotulo: "A inspeção tem 3 bancadas em paralelo", minimo: 3),
+            Operadores(rotulo: "A inspeção depende dos inspetores (equipe de operadores)"),
+            Medida(rotulo: "Controladores aprovados por dia", valor: [(chave: "expedicao.input", fator: 0.1)], tolerancia: Relativa(0.05), peso: 2.0),
+            Medida(rotulo: "Peças retrabalhadas por dia", valor: [(chave: "retrabalho.input", fator: 0.1)], tolerancia: Relativa(0.1)),
+            Medida(rotulo: "Fração do tempo da solda em quebra", valor: [(chave: "solda.state.down")], tolerancia: Absoluta(0.04)),
+        ],
+    ),
+    justificativa: [
+        (pergunta: "Por que o retrabalho aumenta a carga da calibração e da inspeção?",
+         opcoes: ["Porque as peças retrabalhadas passam de novo por elas", "Porque o retrabalho quebra as máquinas", "Porque as peças retrabalhadas são maiores"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quais objetos faltam no modelo inicial para representar a estação 4 e o caminho das peças reprovadas?",
+        "A inspeção é um processador de capacidade 3 que usa a equipe de inspetores, com saída 88 % para a expedição e 12 % para o retrabalho. A solda ganha quebras.",
+        "Ligue o retrabalho de volta a uma fila antes da calibração e confira os nomes pedidos no enunciado.",
+    ],
+    animacao: (duracao: 7200, unidade: "s"),
+)

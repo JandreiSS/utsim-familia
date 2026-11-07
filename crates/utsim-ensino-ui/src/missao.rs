@@ -8,7 +8,9 @@ use std::sync::mpsc::{Receiver, channel};
 
 use egui::{Color32, RichText, Ui};
 use utsim_ensino_core::missao::{Alavanca, Decisoes, Previsao};
-use utsim_ensino_core::motor::{Cenario, avaliar, modelo_da_tentativa, replay, rodar, simular};
+use utsim_ensino_core::motor::{
+    Cenario, avaliar, modelo_da_tentativa, replay, rodar, simular, valor_metrica,
+};
 use utsim_ensino_core::nota::{
     Intervalo, RespostaPrevisao, Resultado, Situacao, Tentativa, corrigir, dinheiro, fmt_num,
 };
@@ -86,6 +88,10 @@ pub struct EstadoMissao {
     pub erro: Option<String>,
     /// The task or machine picked by a click on the board or the grid.
     pub selecionada: Option<String>,
+    /// The `.ron` file of a modelling mission.
+    pub caminho_modelo: String,
+    /// What happened reading or writing that file.
+    pub aviso_modelo: Option<String>,
 }
 
 impl EstadoMissao {
@@ -108,6 +114,8 @@ impl EstadoMissao {
             animacao: None,
             erro: None,
             selecionada: None,
+            caminho_modelo: String::new(),
+            aviso_modelo: None,
             pacote,
         }
     }
@@ -149,6 +157,30 @@ impl EstadoMissao {
         self.trabalho = Some(Trabalho::iniciar(executor, ctx, move |prog| {
             let m = &pacote.missoes[i];
             let r = (|| {
+                if m.missao.modelagem.is_some() {
+                    let res = utsim_ensino_core::modelagem::corrigir_modelagem(
+                        m,
+                        &pacote.pacote.pesos,
+                        &t,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    // The animation shows the delivered model when it loads.
+                    let entregue = t
+                        .modelo
+                        .as_deref()
+                        .and_then(|txt| utsim_model::Model::parse(txt).ok())
+                        .unwrap_or_else(|| m.modelo.clone());
+                    let mut mo = entregue;
+                    mo.run.stop_time = m
+                        .missao
+                        .animacao
+                        .duracao
+                        .unwrap_or(480.0)
+                        .min(mo.run.stop_time);
+                    mo.run.warmup = 0.0;
+                    let rep = mo.replay(0).map_err(|e| e.to_string())?;
+                    return Ok((t, res, rep));
+                }
                 let sim = simular(m, &aluno, &t.decisoes, prog).map_err(|e| e.to_string())?;
                 let res = corrigir(&m.missao, &pacote.pacote.pesos, &sim, &t)
                     .map_err(|e| e.to_string())?;
@@ -393,7 +425,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                         }
                     });
                 }
-                Previsao::Valor { id, unidade, .. } => {
+                Previsao::Valor { id, unidade, .. } | Previsao::Calculo { id, unidade, .. } => {
                     ui.horizontal(|ui| {
                         let txt = m.previsao_texto.entry(id.clone()).or_default();
                         if ui.text_edit_singleline(txt).changed() {
@@ -463,6 +495,50 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.colored_label(VERMELHO, format!("Restrição: {motivo}"));
     }
     if missao.tem_pecas() {
+        ui.add_space(6.0);
+    }
+
+    if missao.modelagem.is_some() {
+        ui.label(RichText::new("Seu modelo").strong());
+        ui.label(
+            RichText::new(
+                "Monte o modelo no UTSim com os nomes de objeto pedidos no enunciado, grave o arquivo .ron e indique-o aqui. O botão \"Gravar modelo inicial\" grava um ponto de partida.",
+            )
+            .weak(),
+        );
+        ui.horizontal(|ui| {
+            ui.label("Arquivo .ron");
+            ui.text_edit_singleline(&mut m.caminho_modelo);
+            if ui.button("Gravar modelo inicial").clicked() {
+                let r = ron::ser::to_string_pretty(
+                    &mc.modelo,
+                    ron::ser::PrettyConfig::default().struct_names(true),
+                )
+                .map_err(|e| e.to_string())
+                .and_then(|t| {
+                    std::fs::write(m.caminho_modelo.trim(), t).map_err(|e| e.to_string())
+                });
+                m.aviso_modelo = Some(match r {
+                    Ok(()) => format!("modelo inicial gravado em {}", m.caminho_modelo.trim()),
+                    Err(e) => format!("não foi possível gravar: {e}"),
+                });
+            }
+            if ui.button("Ler o modelo").clicked() {
+                match std::fs::read_to_string(m.caminho_modelo.trim()) {
+                    Ok(t) => {
+                        m.aviso_modelo =
+                            Some(format!("modelo lido ({} linhas)", t.lines().count()));
+                        m.tentativa.modelo = Some(t);
+                    }
+                    Err(e) => m.aviso_modelo = Some(format!("não foi possível ler: {e}")),
+                }
+            }
+        });
+        if let Some(a) = &m.aviso_modelo {
+            ui.label(a);
+        } else if m.tentativa.modelo.is_none() {
+            ui.label(RichText::new("Nenhum modelo lido ainda.").weak());
+        }
         ui.add_space(6.0);
     }
 
@@ -591,38 +667,40 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
     if let Some(p) = &r.portao {
         ui.colored_label(VERMELHO, format!("Restrição violada: {p}"));
     }
-    egui::Grid::new("metricas").striped(true).show(ui, |ui| {
-        ui.label(RichText::new("Indicador").strong());
-        ui.label(RichText::new("Estado inicial").strong());
-        ui.label(RichText::new("Sua tentativa").strong());
-        ui.label(RichText::new("Meta").strong());
-        ui.label(RichText::new("Situação").strong());
-        ui.end_row();
-        for m in &r.metricas {
-            let f = |i: &Intervalo| {
-                format!(
-                    "{} ± {} {}",
-                    fmt_num(i.media, m.casas),
-                    fmt_num(i.meia_largura, m.casas),
-                    m.unidade
-                )
-            };
-            ui.label(&m.rotulo);
-            ui.label(f(&m.base));
-            ui.label(f(&m.aluno));
-            let sinal = match m.objetivo {
-                utsim_ensino_core::missao::Objetivo::Menor => "≤",
-                utsim_ensino_core::missao::Objetivo::Maior => "≥",
-            };
-            ui.label(m.meta.map_or_else(
-                || "-".into(),
-                |v| format!("{sinal} {}", fmt_num(v, m.casas)),
-            ));
-            let (t, c) = situacao_texto(m.situacao);
-            ui.colored_label(c, t);
+    if !r.metricas.is_empty() {
+        egui::Grid::new("metricas").striped(true).show(ui, |ui| {
+            ui.label(RichText::new("Indicador").strong());
+            ui.label(RichText::new("Estado inicial").strong());
+            ui.label(RichText::new("Sua tentativa").strong());
+            ui.label(RichText::new("Meta").strong());
+            ui.label(RichText::new("Situação").strong());
             ui.end_row();
-        }
-    });
+            for m in &r.metricas {
+                let f = |i: &Intervalo| {
+                    format!(
+                        "{} ± {} {}",
+                        fmt_num(i.media, m.casas),
+                        fmt_num(i.meia_largura, m.casas),
+                        m.unidade
+                    )
+                };
+                ui.label(&m.rotulo);
+                ui.label(f(&m.base));
+                ui.label(f(&m.aluno));
+                let sinal = match m.objetivo {
+                    utsim_ensino_core::missao::Objetivo::Menor => "≤",
+                    utsim_ensino_core::missao::Objetivo::Maior => "≥",
+                };
+                ui.label(m.meta.map_or_else(
+                    || "-".into(),
+                    |v| format!("{sinal} {}", fmt_num(v, m.casas)),
+                ));
+                let (t, c) = situacao_texto(m.situacao);
+                ui.colored_label(c, t);
+                ui.end_row();
+            }
+        });
+    }
     ui.label(format!(
         "Pontos: desempenho {}, previsão {}, justificativa {} (de {} possíveis) · descontos {} (dicas) e {} (rodadas)",
         fmt_num(r.pontos_desempenho, 1),
@@ -655,6 +733,20 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
             r.justificativas_certas,
             missao.justificativa.len()
         ));
+    }
+    if !r.criterios.is_empty() {
+        ui.label(RichText::new("Critérios do modelo").strong());
+        for k in &r.criterios {
+            let (marca, cor) = if k.ok {
+                ("OK", VERDE)
+            } else {
+                ("Falta", VERMELHO)
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.colored_label(cor, format!("{marca}: {}", k.rotulo));
+                ui.label(RichText::new(&k.detalhe).weak());
+            });
+        }
     }
     if !r.dicas_automaticas.is_empty() {
         ui.label(RichText::new("O que aconteceu").strong());
@@ -772,8 +864,8 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
             ui.end_row();
             for m in &missao.metricas {
                 let (Ok(xa), Ok(xb)) = (
-                    avaliar(missao, &m.valor, &v[0]),
-                    avaliar(missao, &m.valor, &v[1]),
+                    valor_metrica(missao, m, &v[0]),
+                    valor_metrica(missao, m, &v[1]),
                 ) else {
                     continue;
                 };

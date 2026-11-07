@@ -145,6 +145,30 @@ pub fn replay(m: &MissaoCarregada, aluno: &str, decisoes: &Decisoes) -> Result<R
     Ok(modelo.replay(0)?)
 }
 
+/// The value of measure `m` per replication: the sum of its terms, divided by the sum of
+/// its `divisor` when it has one (a cost per piece, a rate).
+pub fn valor_metrica(
+    missao: &Missao,
+    m: &crate::missao::Metrica,
+    cenario: &Cenario,
+) -> Result<Vec<f64>, ErroMotor> {
+    let v = avaliar(missao, &m.valor, cenario)?;
+    if m.divisor.is_empty() {
+        return Ok(v);
+    }
+    let d = avaliar(missao, &m.divisor, cenario)?;
+    Ok(v.iter()
+        .zip(d)
+        .map(|(a, b)| {
+            if b.abs() > 1e-12 {
+                a / b
+            } else {
+                f64::INFINITY
+            }
+        })
+        .collect())
+}
+
 /// `termos` per replication of `cenario`.
 pub fn avaliar(
     missao: &Missao,

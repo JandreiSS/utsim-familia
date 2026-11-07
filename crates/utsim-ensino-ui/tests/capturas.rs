@@ -158,3 +158,44 @@ fn telas_das_pecas() {
         assert!(r.resolvida, "{id}: {r:#?}");
     }
 }
+
+#[test]
+fn tela_da_modelagem() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::com(Perfil::em(dir.path()), Arc::new(NaHora), || 0);
+    app.salvar_identidade("Ana Lima", "2027001", "ana");
+    let mut cap = Captura::new(Context::default(), vec2(1180.0, 2000.0));
+    let p = app.pacote.clone().unwrap();
+    app.abrir_missao(p.indice("ato7/padaria").unwrap());
+    {
+        let m = app.missao.as_mut().unwrap();
+        let caminho = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../ensino/campanha/modelos/padaria_gabarito.ron");
+        // A chamber of 4 places instead of 10: the capacity criterion fails.
+        let txt = std::fs::read_to_string(caminho)
+            .unwrap()
+            .replace("capacity: 10,", "capacity: 4,");
+        m.tentativa.modelo = Some(txt);
+        m.tentativa
+            .previsoes
+            .insert("gargalo".into(), RespostaPrevisao::Escolha(1));
+        m.simular("2027001".into(), &NaHora, None);
+    }
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    salvar(&img, "8_modelagem");
+    let r = app
+        .missao
+        .as_ref()
+        .unwrap()
+        .resultado
+        .as_ref()
+        .expect("resultado");
+    assert!(!r.resolvida);
+    assert!(
+        r.criterios
+            .iter()
+            .any(|c| !c.ok && c.rotulo.contains("câmara")),
+        "{:#?}",
+        r.criterios
+    );
+}
