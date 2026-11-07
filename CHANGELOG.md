@@ -9,6 +9,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ### Mudado
 - UTSim 3D, zonas de risco no editor: a ferramenta Zona (Z) desenha o polígono no chão com encaixe na grade (fecha pelo primeiro ponto, Enter ou duplo clique), seleciona, move a zona ou um canto e exclui com Del; o painel muda nome, tipo, nível (a cor) e o EPI exigido. Cada mudança é um passo de desfazer e grava `zones` no modelo (`Command::SetZone` e `RemoveZone` novos no `utsim-edit`). Roteiro `g4_zonas.json`.
 - UTSim 3D abre um modelo (`.ron`) ou replay (`.json`) passado na linha de comando com `--utsim-abrir=<arquivo>` (para o "Ver em 3D" do UTSim Ensino).
+- UTSim 3D: "Modo missão (UTSim Ensino)" no menu ▼ ao lado de PERT/CPM abre as missões do Ensino no mesmo programa.
 - UTSim 3D, atalhos e grade em Rust (passo 7, parte 3, primeira versão): qual ação cada tecla pede (`shortcuts.rs`) e a grade do piso do Editar e do Simular (`grid.rs`) passaram a ser calculadas em Rust, com testes; o comportamento é o mesmo.
 - UTSim 3D, desenho do editor em Rust (passo 7, parte 2): os nós, os cantos da seleção, as setas das ligações, o × e as zonas de risco são gerados como malha pelo Rust (`overlay_mesh.rs`, com testes, triangulação de polígonos côncavos) e copiados num `ArrayMesh`; a imagem é a mesma.
 - UTSim 3D, painéis das ferramentas em Rust (passo 7, parte 1): os painéis de Rede, Corredor, Zona e da ligação selecionada são montados pelo Rust a partir do modelo (`tool_panels.rs`, com testes) em vez do `principal.gd`; o que aparece é o mesmo.
