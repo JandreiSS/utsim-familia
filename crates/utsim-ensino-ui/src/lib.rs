@@ -15,11 +15,12 @@ pub mod texto;
 pub mod turma;
 pub mod vista2d;
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use egui::{Color32, RichText, Ui};
 use utsim_ensino_core::campanha::carregar_campanha;
-use utsim_ensino_core::pacote::PacoteCarregado;
+use utsim_ensino_core::pacote::{PacoteCarregado, carregar};
 use utsim_ensino_core::progresso::Progresso;
 use utsim_ensino_core::turma::{Aluno, registro_valido};
 use utsim_ensino_store::perfil::{Config, Perfil};
@@ -73,6 +74,8 @@ pub struct App {
     pub executor: Arc<dyn Executor>,
     pub relogio: fn() -> i64,
     pub mensagem: Option<String>,
+    /// Folder or `.utse` typed in the map to open another package.
+    pub caminho_pacote: String,
     nome: String,
     registro: String,
     apelido: String,
@@ -110,7 +113,12 @@ impl App {
             registro: String::new(),
             apelido: String::new(),
         });
-        App {
+        let caminho_pacote = config
+            .pacote_aberto
+            .as_ref()
+            .map(|c| c.display().to_string())
+            .unwrap_or_default();
+        let mut app = App {
             perfil,
             pacote,
             erro_pacote,
@@ -123,11 +131,66 @@ impl App {
             executor,
             relogio,
             mensagem: None,
+            caminho_pacote,
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,
             estilo_aplicado: None,
             config,
+        };
+        // The package opened last time comes back; if it is gone, the campaign stays.
+        if let Some(c) = app.config.pacote_aberto.clone()
+            && let Err(e) = app.abrir_pacote(&c)
+        {
+            app.config.pacote_aberto = None;
+            app.mensagem = Some(format!(
+                "o pacote {} não abriu ({e}); voltei à campanha",
+                c.display()
+            ));
+        }
+        app
+    }
+
+    /// True while a package other than the built-in campaign is open.
+    pub fn pacote_externo(&self) -> bool {
+        self.config.pacote_aberto.is_some()
+    }
+
+    /// Opens a mission package (folder or `.utse`) in place of the campaign. The progress
+    /// is kept per package, so going back to the campaign loses nothing.
+    pub fn abrir_pacote(&mut self, caminho: &Path) -> Result<(), String> {
+        let arquivos =
+            utsim_ensino_store::arquivos::ler_pacote(caminho).map_err(|e| e.to_string())?;
+        let p = carregar(&arquivos).map_err(|e| e.join("; "))?;
+        let caminho = std::fs::canonicalize(caminho).unwrap_or_else(|_| caminho.to_path_buf());
+        self.caminho_pacote = caminho.display().to_string();
+        self.config.pacote_aberto = Some(caminho);
+        self.salvar_config();
+        self.usar_pacote(p);
+        Ok(())
+    }
+
+    /// Back to the campaign built into the app.
+    pub fn voltar_campanha(&mut self) {
+        self.config.pacote_aberto = None;
+        self.salvar_config();
+        match carregar_campanha() {
+            Ok(p) => self.usar_pacote(p),
+            Err(e) => {
+                self.pacote = None;
+                self.erro_pacote = e;
+            }
+        }
+    }
+
+    fn usar_pacote(&mut self, p: PacoteCarregado) {
+        self.progresso = self.perfil.progresso(&p.pacote.id);
+        self.pacote = Some(Arc::new(p));
+        self.erro_pacote.clear();
+        self.missao = None;
+        self.areia = None;
+        if self.tela == Tela::Missao || self.tela == Tela::Areia {
+            self.tela = Tela::Mapa;
         }
     }
 
@@ -348,6 +411,7 @@ impl App {
             for e in &self.erro_pacote {
                 ui.label(e);
             }
+            self.outros_pacotes(ui);
             return;
         };
         ui.heading(&p.pacote.titulo);
@@ -406,11 +470,37 @@ impl App {
                 });
             }
         }
+        self.outros_pacotes(ui);
         if let Some(i) = abrir {
             self.abrir_missao(i);
         }
         if let Some(i) = areia {
             self.abrir_areia(i);
+        }
+    }
+
+    /// Other mission packages: a folder or a `.utse` from the teacher.
+    fn outros_pacotes(&mut self, ui: &mut Ui) {
+        ui.add_space(14.0);
+        ui.separator();
+        ui.label(RichText::new(texto::OUTROS_PACOTES).strong());
+        ui.label(texto::OUTROS_PACOTES_TEXTO);
+        ui.horizontal(|ui| {
+            ui.text_edit_singleline(&mut self.caminho_pacote);
+            if ui.button("Abrir pacote").clicked() {
+                let c = PathBuf::from(self.caminho_pacote.trim().trim_matches('"'));
+                match self.abrir_pacote(&c) {
+                    Ok(()) => self.mensagem = None,
+                    Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+                }
+            }
+            if self.pacote_externo() && ui.button("Voltar à campanha").clicked() {
+                self.voltar_campanha();
+                self.mensagem = None;
+            }
+        });
+        if let Some(m) = &self.mensagem {
+            ui.colored_label(Color32::from_rgb(255, 112, 104), m);
         }
     }
 

@@ -228,3 +228,64 @@ fn construtor_de_casos_na_tela_do_professor() {
             .contains("Fila clássica")
     );
 }
+
+/// A copy of the campaign under another id, as a teacher's package.
+fn pacote_do_professor() -> utsim_ensino_core::pacote::Arquivos {
+    let mut a = utsim_ensino_core::campanha::arquivos();
+    let p = String::from_utf8(a["pacote.ron"].clone()).unwrap();
+    let p = p.replacen(r#"id: "campanha""#, r#"id: "pacote_teste""#, 1);
+    a.insert("pacote.ron".into(), p.into_bytes());
+    a
+}
+
+#[test]
+fn abre_outro_pacote_e_volta_a_campanha() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut app = app_em(dir.path());
+    assert!(app.salvar_identidade("Ana Lima", "2027001", ""));
+    assert!(!app.pacote_externo());
+
+    // A .utse that does not exist: the campaign stays.
+    let falta = dir.path().join("falta.utse");
+    assert!(app.abrir_pacote(&falta).is_err());
+    assert_eq!(app.pacote.as_ref().unwrap().pacote.id, "campanha");
+
+    // A folder.
+    let pasta = dir.path().join("pacote");
+    for (k, v) in pacote_do_professor() {
+        let f = pasta.join(&k);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, v).unwrap();
+    }
+    app.abrir_missao(0);
+    app.abrir_pacote(&pasta).unwrap();
+    assert!(app.pacote_externo());
+    assert_eq!(app.pacote.as_ref().unwrap().pacote.id, "pacote_teste");
+    assert_eq!(app.tela, Tela::Mapa);
+    assert!(app.missao.is_none());
+    frames(&mut app, &ctx, 2);
+
+    // The package comes back when the app opens again.
+    let mut de_novo = app_em(dir.path());
+    assert!(de_novo.pacote_externo());
+    assert_eq!(de_novo.pacote.as_ref().unwrap().pacote.id, "pacote_teste");
+    de_novo.voltar_campanha();
+    assert_eq!(de_novo.pacote.as_ref().unwrap().pacote.id, "campanha");
+    let campanha = app_em(dir.path());
+    assert!(!campanha.pacote_externo());
+
+    // A .utse.
+    let utse = dir.path().join("pacote.utse");
+    utsim_ensino_store::arquivos::gravar_utse(&pacote_do_professor(), &utse).unwrap();
+    let mut app = app_em(dir.path());
+    app.abrir_pacote(&utse).unwrap();
+    assert_eq!(app.pacote.as_ref().unwrap().pacote.id, "pacote_teste");
+
+    // A package that is gone: back to the campaign with a message.
+    std::fs::remove_file(&utse).unwrap();
+    let app = app_em(dir.path());
+    assert!(!app.pacote_externo());
+    assert_eq!(app.pacote.as_ref().unwrap().pacote.id, "campanha");
+    assert!(app.mensagem.as_deref().unwrap().contains("não abriu"));
+}
