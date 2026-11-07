@@ -1,12 +1,12 @@
-// Campanha do UTSim Ensino: atos 1 a 7 (gargalo e fluxo, filas, capacidade, balanceamento,
-// arranjo físico, tempos e métodos, problemas integrados).
+// Campanha do UTSim Ensino: atos 1 a 8 (gargalo e fluxo, filas, capacidade, balanceamento,
+// arranjo físico, tempos e métodos, problemas integrados e o caso Lean Seis Sigma).
 Pacote(
     id: "campanha",
     formato: 1,
     titulo: "Campanha UTSim Ensino",
-    versao: "0.3.0",
+    versao: "0.4.0",
     autor: "UTSim",
-    descricao: "Do gargalo à capacidade: decisões numa fábrica simulada, com previsão, alavancas e nota pela simulação.",
+    descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
     glossario: "glossario.ron",
     atos: [
@@ -49,6 +49,13 @@ Pacote(
         (numero: 7, titulo: "Problemas integrados", missoes: [
             "ato7/linha_retrabalho.ron",
             "ato7/padaria.ron",
+        ]),
+        (numero: 8, titulo: "O caso Lean Seis Sigma", missoes: [
+            "ato8/definir.ron",
+            "ato8/medir.ron",
+            "ato8/analisar.ron",
+            "ato8/melhorar.ron",
+            "ato8/controlar.ron",
         ]),
     ],
 )

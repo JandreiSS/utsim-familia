@@ -1,0 +1,27 @@
+Missao(
+    id: "ato8/medir",
+    titulo: "Medir: dá para confiar no instrumento?",
+    conceitos: ["msa", "capacidade_do_processo"],
+    modelo: "../modelos/eixos.ron",
+    texto: "medir.md",
+    dados: [
+        (id: "rr_micrometro", nome: "Estudo de R&R do micrômetro",
+         gerador: Msa(pecas: 10, operadores: 3, repeticoes: 2, media: 25.0, sd_peca: 0.012, sd_operador: 0.004, sd_repetibilidade: 0.008)),
+        (id: "diametros", nome: "Diâmetros da retífica (mm)",
+         gerador: Tempos(dist: Normal(mean: 25.004, sd: 0.006), n: 100)),
+    ],
+    previsao: [
+        Dados(id: "rr", pergunta: "Qual é o %R&R do micrômetro (porcentagem da variação do estudo, método ANOVA)?",
+              conjunto: "rr_micrometro", questao: RrPercentual, unidade: "%", tolerancia: Absoluta(1.5)),
+        Dados(id: "veredito", pergunta: "O sistema de medição serve para o projeto?",
+              conjunto: "rr_micrometro", questao: RrVeredito, tolerancia: Absoluta(0.0)),
+        Dados(id: "ppk", pergunta: "Qual é o Ppk dos diâmetros, com especificação de 24,985 a 25,015 mm?",
+              conjunto: "diametros", questao: Ppk(lie: Some(24.985), lse: Some(25.015)), tolerancia: Absoluta(0.05)),
+    ],
+    justificativa: [
+        (pergunta: "Por que o estudo de R&R vem antes da capacidade?",
+         opcoes: ["Porque, com um instrumento ruim, a variação medida mistura o processo com o erro de medição", "Porque a capacidade é mais difícil", "Porque o R&R dispensa a capacidade"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

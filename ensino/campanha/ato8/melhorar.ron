@@ -1,0 +1,46 @@
+Missao(
+    id: "ato8/melhorar",
+    titulo: "Melhorar: testar as soluções",
+    conceitos: ["dmaic", "lote"],
+    modelo: "../modelos/eixos.ron",
+    texto: "melhorar.md",
+    previsao: [
+        Escolha(
+            id: "lote",
+            pergunta: "O que acontece com o lead time se o lote do acabamento cair de 40 para 10 peças?",
+            opcoes: [(rotulo: "Cai bastante"), (rotulo: "Sobe"), (rotulo: "Não muda")],
+            resposta: Fixa(0),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "ferramenta", rotulo: "Troca preventiva da ferramenta na retífica 2 à noite", opcoes: [
+            (rotulo: "Como está (refugo de cerca de 10 %)", ajustes: {"inspecao.output": "Weighted([0.90, 0.10])"}),
+            (rotulo: "A cada 200 peças (refugo de cerca de 4 %)", ajustes: {"inspecao.output": "Weighted([0.96, 0.04])"}, custo: 2000),
+            (rotulo: "A cada 100 peças (refugo de cerca de 3 %)", ajustes: {"inspecao.output": "Weighted([0.97, 0.03])"}, custo: 5000),
+        ]),
+        Escolha(id: "lote", rotulo: "Lote do acabamento", opcoes: [
+            (rotulo: "40 peças", ajustes: {"fila_acabamento.batch": "Some(Batch(size: 40, max_wait: 480.0))"}, numero: 40),
+            (rotulo: "20 peças", ajustes: {"fila_acabamento.batch": "Some(Batch(size: 20, max_wait: 480.0))"}, custo: 1000, numero: 20),
+            (rotulo: "10 peças", ajustes: {"fila_acabamento.batch": "Some(Batch(size: 10, max_wait: 480.0))"}, custo: 2500, numero: 10),
+        ]),
+    ],
+    orcamento: 6000,
+    metricas: [
+        (nome: "custo", rotulo: "Custo semanal do refugo e das mudanças", unidade: "R$",
+         valor: [(chave: "refugo.input", fator: 60.0), (chave: "custo")], objetivo: Menor, meta: 9500.0, peso: 0.5, casas: 0),
+        (nome: "lead_time", rotulo: "Lead time do eixo", unidade: "min",
+         valor: [(chave: "expedicao.time_in_system.mean")], objetivo: Menor, meta: 100.0, peso: 0.5, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que testar as soluções no modelo antes de mudar a fábrica?",
+         opcoes: ["Para comparar as opções com os mesmos números aleatórios, sem parar a produção", "Porque o modelo dispensa o piloto", "Porque a fábrica não deixa mudar"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto custa cada eixo refugado e quanto custa cada mudança?",
+        "Compare o custo semanal e o lead time das combinações.",
+        "A troca preventiva ataca o refugo e o lote menor ataca o lead time. Veja quais cabem no orçamento.",
+    ],
+    referencia: {"ferramenta": 1, "lote": 1},
+    animacao: (duracao: 960, unidade: "min"),
+)

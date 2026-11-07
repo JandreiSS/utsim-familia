@@ -15,6 +15,11 @@ thiserror.workspace = true
 # Hash of a package and of the student's variant seed (the same sha2 as the launcher).
 # Work measurement formulas (man-machine, standard time) for the computed questions.
 utsim-diagram.workspace = true
+# Gauge study, capability and control chart rules for the questions about data (act 8).
+utsim-quality.workspace = true
 sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+# The recovery tests use the same analyses the student will use.
+utsim-fit.workspace = true
+utsim-stats.workspace = true

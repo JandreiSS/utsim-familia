@@ -7,6 +7,10 @@ rust-version.workspace = true
 
 [dependencies]
 utsim-ensino-core = { path = "../utsim-ensino-core" }
+utsim-model.workspace = true
+# The training project of the Lean Six Sigma case for UTSim Seis Sigma (act 8).
+utsim-lss-core = { path = "../utsim-lss-core" }
+utsim-lss-store = { path = "../utsim-lss-store" }
 serde.workspace = true
 serde_json.workspace = true
 ron.workspace = true
@@ -22,3 +26,4 @@ rust_xlsxwriter = { version = "=0.102.0", default-features = false }
 
 [dev-dependencies]
 tempfile = "=3.27.0"
+utsim-quality.workspace = true

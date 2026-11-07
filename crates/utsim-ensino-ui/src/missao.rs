@@ -92,6 +92,9 @@ pub struct EstadoMissao {
     pub caminho_modelo: String,
     /// What happened reading or writing that file.
     pub aviso_modelo: Option<String>,
+    /// Where the data of the mission are written (CSV or the Seis Sigma project).
+    pub pasta_dados: String,
+    pub aviso_dados: Option<String>,
 }
 
 impl EstadoMissao {
@@ -116,6 +119,8 @@ impl EstadoMissao {
             selecionada: None,
             caminho_modelo: String::new(),
             aviso_modelo: None,
+            pasta_dados: String::new(),
+            aviso_dados: None,
             pacote,
         }
     }
@@ -151,6 +156,7 @@ impl EstadoMissao {
         }
         let mut t = self.tentativa.clone();
         t.rodada = self.rodadas + 1;
+        t.aluno = aluno.clone();
         let pacote = self.pacote.clone();
         let i = self.indice;
         self.erro = None;
@@ -350,6 +356,12 @@ fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
 
 pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     let aluno = app.aluno();
+    let nome_aluno = app
+        .config
+        .identidade
+        .as_ref()
+        .map(|a| a.nome.clone())
+        .unwrap_or_default();
     let ctx = ui.ctx().clone();
     let executor = app.executor.clone();
     let Some(m) = app.missao.as_mut() else {
@@ -403,6 +415,82 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.add_space(6.0);
     }
 
+    if !missao.dados.is_empty() {
+        ui.label(RichText::new("Dados da sua fábrica").strong());
+        ui.label(
+            RichText::new(
+                "Os dados foram gerados para você: outro aluno recebe outros números. Analise com as ferramentas do jogo ou leve para o UTSim Seis Sigma, e responda abaixo.",
+            )
+            .weak(),
+        );
+        for cj in &missao.dados {
+            let c = cj.gerar(&missao.id, &aluno);
+            ui.collapsing(format!("{} ({} linhas)", cj.nome, c.linhas.len()), |ui| {
+                egui::Grid::new(("dados", &cj.id))
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for h in &c.cabecalho {
+                            ui.label(RichText::new(h).strong());
+                        }
+                        ui.end_row();
+                        for l in c.linhas.iter().take(12) {
+                            for v in l {
+                                ui.label(v);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                if c.linhas.len() > 12 {
+                    ui.label(
+                        RichText::new(format!(
+                            "... e mais {} linhas no arquivo",
+                            c.linhas.len() - 12
+                        ))
+                        .weak(),
+                    );
+                }
+                ui.label(RichText::new("Ferramentas do jogo").strong());
+                for l in utsim_ensino_core::questoes::ferramenta(cj, &c) {
+                    ui.label(l);
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.label("Pasta");
+            ui.text_edit_singleline(&mut m.pasta_dados);
+            if ui.button("Gravar os dados (.csv)").clicked() {
+                let pasta = std::path::PathBuf::from(m.pasta_dados.trim());
+                let r = std::fs::create_dir_all(&pasta).map_err(|e| e.to_string()).and_then(|_| {
+                    for cj in &missao.dados {
+                        let c = cj.gerar(&missao.id, &aluno);
+                        std::fs::write(pasta.join(format!("{}.csv", cj.id)), c.csv()).map_err(|e| e.to_string())?;
+                    }
+                    Ok(missao.dados.len())
+                });
+                m.aviso_dados = Some(match r {
+                    Ok(n) => format!("{n} arquivo(s) gravado(s) em {}", pasta.display()),
+                    Err(e) => format!("não foi possível gravar: {e}"),
+                });
+            }
+            if ui.button("Levar para o UTSim Seis Sigma").clicked() {
+                let pasta = std::path::PathBuf::from(m.pasta_dados.trim());
+                m.aviso_dados = Some(
+                    match utsim_ensino_store::seis_sigma::exportar(&pasta, &mc, &aluno, &nome_aluno) {
+                        Ok(p) => format!(
+                            "projeto de treino criado em {}: abra no UTSim Seis Sigma, analise e responda aqui",
+                            p.display()
+                        ),
+                        Err(e) => format!("não foi possível criar o projeto: {e}"),
+                    },
+                );
+            }
+        });
+        if let Some(a) = &m.aviso_dados {
+            ui.label(a);
+        }
+        ui.add_space(6.0);
+    }
+
     if !missao.previsao.is_empty() {
         ui.label(RichText::new("Previsão").strong());
         ui.label(RichText::new(texto::PREVER_ANTES).weak());
@@ -425,7 +513,35 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                         }
                     });
                 }
-                Previsao::Valor { id, unidade, .. } | Previsao::Calculo { id, unidade, .. } => {
+                Previsao::Dados {
+                    id,
+                    conjunto,
+                    questao,
+                    unidade,
+                    ..
+                } if questao.e_escolha() => {
+                    let opcoes = missao
+                        .conjunto(conjunto)
+                        .map(|c| questao.opcoes(c))
+                        .unwrap_or_default();
+                    let atual = match m.tentativa.previsoes.get(id) {
+                        Some(RespostaPrevisao::Escolha(i)) => Some(*i),
+                        _ => None,
+                    };
+                    ui.horizontal_wrapped(|ui| {
+                        for (i, o) in opcoes.iter().enumerate() {
+                            if ui.radio(atual == Some(i), o).clicked() {
+                                m.tentativa
+                                    .previsoes
+                                    .insert(id.clone(), RespostaPrevisao::Escolha(i));
+                            }
+                        }
+                        let _ = unidade;
+                    });
+                }
+                Previsao::Valor { id, unidade, .. }
+                | Previsao::Calculo { id, unidade, .. }
+                | Previsao::Dados { id, unidade, .. } => {
                     ui.horizontal(|ui| {
                         let txt = m.previsao_texto.entry(id.clone()).or_default();
                         if ui.text_edit_singleline(txt).changed() {

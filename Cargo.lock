@@ -7754,7 +7754,10 @@ dependencies = [
  "thiserror 2.0.21",
  "utsim-core",
  "utsim-diagram",
+ "utsim-fit",
  "utsim-model",
+ "utsim-quality",
+ "utsim-stats",
 ]
 
 [[package]]
@@ -7772,6 +7775,10 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "utsim-ensino-core",
+ "utsim-lss-core",
+ "utsim-lss-store",
+ "utsim-model",
+ "utsim-quality",
  "zip 2.6.1",
 ]
 

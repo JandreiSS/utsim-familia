@@ -199,3 +199,16 @@ fn tela_da_modelagem() {
         r.criterios
     );
 }
+
+#[test]
+fn tela_do_caso_final() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::com(Perfil::em(dir.path()), Arc::new(NaHora), || 0);
+    app.salvar_identidade("Ana Lima", "2027001", "ana");
+    let mut cap = Captura::new(Context::default(), vec2(1180.0, 1500.0));
+    let p = app.pacote.clone().unwrap();
+    app.abrir_missao(p.indice("ato8/medir").unwrap());
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    salvar(&img, "9_caso_final");
+    assert!(distintas(&img) > 10);
+}

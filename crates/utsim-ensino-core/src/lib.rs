@@ -18,6 +18,8 @@
 
 pub mod campanha;
 pub mod conferir;
+pub mod construtor;
+pub mod dados;
 pub mod dicas;
 pub mod missao;
 pub mod modelagem;
@@ -26,6 +28,7 @@ pub mod nota;
 pub mod pacote;
 pub mod pecas;
 pub mod progresso;
+pub mod questoes;
 pub mod turma;
 pub mod validar;
 pub mod variante;

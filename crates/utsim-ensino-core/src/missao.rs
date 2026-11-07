@@ -81,6 +81,10 @@ pub struct Missao {
     /// The student delivers the model (the third step): what the check looks at.
     #[serde(default)]
     pub modelagem: Option<crate::modelagem::Modelagem>,
+    /// Data sets generated for each student (planted effects), for the questions about
+    /// data.
+    #[serde(default)]
+    pub dados: Vec<crate::questoes::ConjuntoMissao>,
 }
 
 /// The decisions of an attempt: lever id to number (a quantity, the index of a choice or
@@ -141,6 +145,17 @@ pub enum Previsao {
         unidade: String,
         tolerancia: Tolerancia,
     },
+    /// A question about a data set of the mission, generated for the student; the right
+    /// answer is computed from the student's own data.
+    Dados {
+        id: String,
+        pergunta: String,
+        conjunto: String,
+        questao: crate::questoes::QuestaoDados,
+        #[serde(default)]
+        unidade: String,
+        tolerancia: Tolerancia,
+    },
     /// A number, right when within the tolerance of the value of the initial state.
     Valor {
         id: String,
@@ -157,14 +172,16 @@ impl Previsao {
         match self {
             Previsao::Escolha { id, .. }
             | Previsao::Valor { id, .. }
-            | Previsao::Calculo { id, .. } => id,
+            | Previsao::Calculo { id, .. }
+            | Previsao::Dados { id, .. } => id,
         }
     }
     pub fn pergunta(&self) -> &str {
         match self {
             Previsao::Escolha { pergunta, .. }
             | Previsao::Valor { pergunta, .. }
-            | Previsao::Calculo { pergunta, .. } => pergunta,
+            | Previsao::Calculo { pergunta, .. }
+            | Previsao::Dados { pergunta, .. } => pergunta,
         }
     }
 }
@@ -535,6 +552,10 @@ pub struct Animacao {
 }
 
 impl Missao {
+    pub fn conjunto(&self, id: &str) -> Option<&crate::questoes::ConjuntoMissao> {
+        self.dados.iter().find(|c| c.id == id)
+    }
+
     pub fn alavanca(&self, id: &str) -> Option<&Alavanca> {
         self.alavancas.iter().find(|a| a.id() == id)
     }
