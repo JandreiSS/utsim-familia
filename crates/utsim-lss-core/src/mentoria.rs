@@ -62,7 +62,7 @@ pub mod fields {
 /// The tools of the competence map: the deliverable tools of the app (section 2, their
 /// file keys) and the analyses and methods of the later stages, so the map, the
 /// curriculum (L7) and the exercises (L8) share one list.
-pub const EXTRA_TOOLS: [&str; 12] = [
+pub const EXTRA_TOOLS: [&str; 11] = [
     "termo",
     "cronograma",
     "msa",
@@ -71,7 +71,6 @@ pub const EXTRA_TOOLS: [&str; 12] = [
     "testes_hipotese",
     "regressao",
     "doe",
-    "vsm",
     "kaizen",
     "acoes",
     "cinco_s",

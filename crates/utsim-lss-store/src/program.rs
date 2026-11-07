@@ -333,10 +333,31 @@ pub enum TeachingError {
     Denied(String),
 }
 
+/// Whether `me` can record from UTSim Ensino in the program at `program_root`: the folder
+/// opens, is a program, and `me` is in its people list. Writes nothing.
+pub fn teaching_check(
+    program_root: &Path,
+    me: &Identity,
+) -> std::result::Result<(), TeachingError> {
+    let pf = ProjectFolder::open(program_root, me, None)?;
+    if !pf.is_program() {
+        return Err(TeachingError::NotAProgram);
+    }
+    if !programa::members(pf.state())
+        .iter()
+        .any(|m| m.id == me.person)
+    {
+        return Err(TeachingError::NotAMember(me.name.clone()));
+    }
+    Ok(())
+}
+
 /// Records in the program at `program_root`, as `me`, the level of a tool reached in the
 /// final case of UTSim Ensino (origin `ensino`, by the person themselves). The person must
 /// be in the program's people list; the level is `estudou` or `praticou`; the tool is a key
-/// of [`utsim_lss_core::mentoria::all_tools`]. Returns the id of the entry.
+/// of [`utsim_lss_core::mentoria::all_tools`]. Returns the id of the entry; when the same
+/// entry is already there (same person, tool, level, origin `ensino` and evidence),
+/// nothing is written and its id is returned.
 pub fn record_teaching(
     program_root: &Path,
     me: &Identity,
@@ -361,6 +382,15 @@ pub fn record_teaching(
         .any(|m| m.id == me.person)
     {
         return Err(TeachingError::NotAMember(me.name.clone()));
+    }
+    if let Some(old) = mentoria::entries(pf.state()).into_iter().find(|e| {
+        e.person == Some(me.person)
+            && e.tool == tool
+            && e.level == level
+            && e.source == mentoria::Source::Teaching
+            && e.evidence.trim() == evidence.trim()
+    }) {
+        return Ok(old.id);
     }
     let id = clock.new_id();
     let today = Date::from_unix_ms(clock.now_ms(), clock.utc_offset_minutes());

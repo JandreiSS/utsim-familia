@@ -257,9 +257,14 @@ fn ensino_records_own_practice_in_the_program() {
             .unwrap()
             .root()
             .to_path_buf();
+    assert!(matches!(
+        program::teaching_check(&root, &bia),
+        Err(TeachingError::NotAMember(_))
+    ));
     // Bia opened the program once: she is in the people list.
     let mut b = ProjectFolder::open(&root, &bia, None).unwrap();
     b.register_me(&cb).unwrap();
+    program::teaching_check(&root, &bia).unwrap();
     let id = program::record_teaching(
         &root,
         &bia,
@@ -269,8 +274,20 @@ fn ensino_records_own_practice_in_the_program() {
         "Caso final do UTSim Ensino, nota 8,5",
     )
     .unwrap();
+    // Sent twice: one entry.
+    let again = program::record_teaching(
+        &root,
+        &bia,
+        &cb,
+        "fmea",
+        mentoria::Level::Practiced,
+        "Caso final do UTSim Ensino, nota 8,5",
+    )
+    .unwrap();
+    assert_eq!(again, id);
     let pf = ProjectFolder::open(&root, &ana, None).unwrap();
     let e = mentoria::entries(pf.state());
+    assert_eq!(e.iter().filter(|x| x.tool == "fmea").count(), 1);
     let got = e.iter().find(|x| x.id == id).unwrap();
     assert_eq!(got.source, mentoria::Source::Teaching);
     assert_eq!(got.person, Some(bia.person));
@@ -343,4 +360,25 @@ fn ensino_records_own_practice_in_the_program() {
         ),
         Err(TeachingError::Store(_))
     ));
+}
+
+#[test]
+fn local_identity_and_the_tools_of_ensino() {
+    use utsim_lss_store::user::{AppDirs, UserConfig};
+    let dir = tempfile::tempdir().unwrap();
+    let dirs = AppDirs::under(dir.path());
+    assert_eq!(Identity::local_in(&dirs), None);
+    let ana = who(1, "Ana Souza", "ana@empresa.com");
+    UserConfig {
+        identity: Some(ana.clone()),
+        ..UserConfig::default()
+    }
+    .save(&dirs.config_file)
+    .unwrap();
+    assert_eq!(Identity::local_in(&dirs), Some(ana));
+    // The keys of the campaign 0.5.0 of UTSim Ensino, each once in the map.
+    let all = mentoria::all_tools();
+    for k in ["voc_ctq", "msa", "capacidade", "doe", "cep", "vsm"] {
+        assert_eq!(all.iter().filter(|t| *t == k).count(), 1, "{k}");
+    }
 }
