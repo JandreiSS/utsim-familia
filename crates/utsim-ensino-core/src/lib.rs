@@ -10,6 +10,7 @@
 //! - [`motor`]: the runs with common random numbers and the replay for the 2D view;
 //! - [`nota`]: gate, performance, prediction, justification, tolerance and stars;
 //! - [`pecas`]: line balancing and grid layout (the pieces of acts 4 and 5);
+//! - [`desafio`]: class scoreboard with statistical ties and the paired team comparison;
 //! - [`dicas`]: automatic hints about the attempt;
 //! - [`progresso`]: grades per mission and unlocking;
 //! - [`prova`]: exam mode (seeded draw, package without answer key, similarity);
@@ -23,6 +24,7 @@ pub mod competencias;
 pub mod conferir;
 pub mod construtor;
 pub mod dados;
+pub mod desafio;
 pub mod dicas;
 pub mod missao;
 pub mod modelagem;
