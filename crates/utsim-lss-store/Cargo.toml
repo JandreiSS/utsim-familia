@@ -10,6 +10,8 @@ name = "utsim_lss_store"
 path = "src/lib.rs"
 
 [dependencies]
+# File primitives shared with the quality and safety apps (decision G6).
+utsim-pasta.workspace = true
 utsim-lss-core = { path = "../utsim-lss-core" }
 serde.workspace = true
 serde_json.workspace = true

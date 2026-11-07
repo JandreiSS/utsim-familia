@@ -50,6 +50,10 @@ fn io(p: &Path, e: std::io::Error) -> UnidadeErro {
 pub struct Manifesto {
     pub formato: u32,
     pub nome: String,
+    /// Restricted folder for personal data, relative to the unit or absolute (absent:
+    /// `restrita/` inside the unit). See [`crate::restrita`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restrita: Option<String>,
 }
 
 /// A unit folder opened by one person.
@@ -107,6 +111,7 @@ impl Unidade {
         let m = Manifesto {
             formato: FORMATO,
             nome: nome.to_string(),
+            restrita: None,
         };
         let texto = serde_json::to_string_pretty(&m).expect("manifesto");
         fs::write(raiz.join(MANIFESTO), texto).map_err(|e| io(raiz, e))?;
@@ -159,7 +164,7 @@ impl Unidade {
         for e in entradas.flatten() {
             let p = e.path();
             let nome = e.file_name().to_string_lossy().to_string();
-            if nome.starts_with('.') || nome.starts_with('~') || !nome.ends_with(".json") {
+            if !utsim_pasta::is_candidate(&nome) {
                 continue;
             }
             if self.lidos.contains(&p) {
@@ -204,11 +209,10 @@ impl Unidade {
         };
         let dir = self.raiz.join(OPS);
         let nome = format!("{}-{}-{}.json", op.instante_ms, seguro(&op.autor), op.id);
-        let tmp = dir.join(format!(".{nome}.tmp"));
         let fim = dir.join(&nome);
         let texto = serde_json::to_string_pretty(&op).expect("operação");
-        fs::write(&tmp, texto).map_err(|e| io(&tmp, e))?;
-        fs::rename(&tmp, &fim).map_err(|e| io(&fim, e))?;
+        // Written once and never replaced (G6: the same primitive as the Seis Sigma).
+        utsim_pasta::write_new(&fim, texto.as_bytes()).map_err(|e| UnidadeErro(e.to_string()))?;
         self.lidos.insert(fim);
         self.ops.insert(op.id.clone(), op.clone());
         self.estado = Estado::reproduzir(self.ops.values());
@@ -261,6 +265,22 @@ impl Unidade {
         let p = dir.join(nome);
         fs::write(&p, bytes).map_err(|e| io(&p, e))?;
         Ok(p)
+    }
+
+    /// Writes `unidade.json` again (the manifest has a single writer: whoever creates or
+    /// moves the restricted folder).
+    pub fn gravar_manifesto(&self) -> R<()> {
+        let texto = serde_json::to_string_pretty(&self.manifesto).expect("manifesto");
+        utsim_pasta::write_replace(&self.raiz.join(MANIFESTO), texto.as_bytes())
+            .map_err(|e| UnidadeErro(e.to_string()))
+    }
+
+    /// Forgets the operations matching `apagar` (their files were deleted on purpose, as in
+    /// an anonymisation) and rebuilds the state.
+    pub fn esquecer(&mut self, apagar: impl Fn(&Operacao) -> bool) {
+        self.ops.retain(|_, op| !apagar(op));
+        self.lidos.retain(|p| p.exists());
+        self.estado = Estado::reproduzir(self.ops.values());
     }
 
     pub fn total_operacoes(&self) -> usize {

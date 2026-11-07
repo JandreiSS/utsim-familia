@@ -31,6 +31,7 @@ default-members = [
     "crates/utsim-nav",
     "crates/utsim-objects",
     "crates/utsim-opt",
+    "crates/utsim-pasta",
     "crates/utsim-pert",
     "crates/utsim-posto",
     "crates/utsim-quality",
@@ -66,6 +67,7 @@ utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
 utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
+utsim-pasta = { path = "crates/utsim-pasta" }
 utsim-posto-ui = { path = "crates/utsim-posto-ui" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }

@@ -1,0 +1,13 @@
+[package]
+name = "utsim-pasta"
+description = "Primitivas de arquivo seguras numa pasta sincronizada pelo Drive (gravação única e atômica, nomes que valem a leitura), comuns ao Seis Sigma e aos apps de qualidade e de segurança"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+getrandom = { version = "=0.2.17", features = ["std"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
