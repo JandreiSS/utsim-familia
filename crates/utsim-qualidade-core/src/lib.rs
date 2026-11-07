@@ -4,6 +4,7 @@
 //! UTSim Qualidade app.
 
 pub mod amostragem;
+pub mod cep;
 pub mod custos;
 pub mod oito_d;
 pub mod planos;
