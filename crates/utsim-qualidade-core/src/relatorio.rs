@@ -224,3 +224,117 @@ pub fn html(r: &RelatorioQualidade) -> String {
 pub fn csv(medicoes: &[Medicao]) -> String {
     crate::simulado::csv_medicoes(medicoes)
 }
+
+/// Report of a sampling plan: the plan, the risks, the OC curve and, with a lot size, the
+/// AOQ and ATI curves and the AOQL.
+pub fn html_amostragem(
+    plano: crate::amostragem::Plano,
+    dist: crate::amostragem::Distribuicao,
+    lote: Option<u64>,
+    riscos: Option<&crate::amostragem::Riscos>,
+) -> String {
+    use crate::amostragem::{Plano, aoql, curva, desempenho};
+    let p_max = riscos.map_or(0.2, |r| (r.p2 * 2.0).min(1.0));
+    let pts = curva(plano, dist, lote, p_max, 101);
+    let descricao = match plano {
+        Plano::Simples { n, c } => {
+            format!("plano simples: amostra de {n}, aceita com até {c} defeituosa(s)")
+        }
+        Plano::Duplo { n1, c1, r1, n2, c2 } => format!(
+            "plano duplo: primeira amostra de {n1} (aceita com até {c1}, rejeita com {r1} ou mais), \
+             segunda amostra de {n2} (aceita com total até {c2})"
+        ),
+    };
+    let mut s = format!(
+        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\"><title>Plano de amostragem</title>\
+         <style>body{{font-family:system-ui,sans-serif;margin:24px;max-width:960px;color:#222}}\
+         table{{border-collapse:collapse;margin:8px 0 20px}}td,th{{border:1px solid #ccc;padding:4px 10px;text-align:right}}</style>\
+         </head><body><h1>Plano de amostragem por atributos</h1><p>{}. Distribuição: {:?}.</p>",
+        esc(&descricao),
+        dist
+    );
+    if let Some(r) = riscos {
+        let a = desempenho(plano, r.p1, dist, lote).pa;
+        let b = desempenho(plano, r.p2, dist, lote).pa;
+        let _ = write!(
+            s,
+            "<p>Risco do produtor: em p1 = {} aceita {} (pedido pelo menos {}). Risco do consumidor: \
+             em p2 = {} aceita {} (pedido no máximo {}).</p>",
+            fmt(r.p1),
+            fmt(a),
+            fmt(1.0 - r.alfa),
+            fmt(r.p2),
+            fmt(b),
+            fmt(r.beta)
+        );
+    }
+    if let Some(n) = lote {
+        let (l, p) = aoql(plano, dist, n);
+        let _ = write!(
+            s,
+            "<p>Lote de {n}. AOQL (pior qualidade média que sai com inspeção retificadora): {} em p = {}.</p>",
+            fmt(l),
+            fmt(p)
+        );
+    }
+    let linha = |s: &mut String,
+                 titulo: &str,
+                 v: &dyn Fn(&crate::amostragem::Desempenho) -> f64| {
+        let max = pts.iter().map(v).fold(0.0, f64::max).max(1e-12);
+        let pontos: Vec<String> = pts
+            .iter()
+            .map(|d| {
+                format!(
+                    "{:.1},{:.1}",
+                    50.0 + 560.0 * d.p / p_max,
+                    210.0 - 190.0 * v(d) / max
+                )
+            })
+            .collect();
+        let _ = write!(
+            s,
+            "<h2>{titulo}</h2><svg viewBox=\"0 0 640 240\" width=\"640\" height=\"240\" role=\"img\">\
+             <line x1=\"50\" y1=\"210\" x2=\"610\" y2=\"210\" stroke=\"#888\"/>\
+             <line x1=\"50\" y1=\"20\" x2=\"50\" y2=\"210\" stroke=\"#888\"/>\
+             <text x=\"610\" y=\"230\" font-size=\"11\" text-anchor=\"end\">p = {}</text>\
+             <text x=\"46\" y=\"24\" font-size=\"11\" text-anchor=\"end\">{}</text>\
+             <polyline points=\"{}\" fill=\"none\" stroke=\"#3b6ea5\" stroke-width=\"2\"/></svg>",
+            fmt(p_max),
+            fmt(max),
+            pontos.join(" ")
+        );
+    };
+    linha(
+        &mut s,
+        "Curva característica de operação (probabilidade de aceitar)",
+        &|d| d.pa,
+    );
+    if lote.is_some() {
+        linha(&mut s, "Qualidade média que sai (AOQ)", &|d| {
+            d.aoq.unwrap_or(0.0)
+        });
+        linha(&mut s, "Inspeção total média por lote (ATI)", &|d| {
+            d.ati.unwrap_or(0.0)
+        });
+    }
+    if matches!(plano, Plano::Duplo { .. }) {
+        linha(&mut s, "Tamanho médio da amostra (ASN)", &|d| d.asn);
+    }
+    s.push_str("<table><tr><th>p</th><th>Pa</th><th>AOQ</th><th>ATI</th><th>ASN</th></tr>");
+    for d in pts.iter().step_by(10) {
+        let _ = write!(
+            s,
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            fmt(d.p),
+            fmt(d.pa),
+            d.aoq.map_or("–".into(), fmt),
+            d.ati.map_or("–".into(), fmt),
+            fmt(d.asn)
+        );
+    }
+    s.push_str(
+        "</table><p>Planos calculados pelo próprio programa a partir das distribuições. As tabelas \
+         das normas de amostragem não são embutidas: quem tem direito de uso cadastra os planos por CSV.</p></body></html>",
+    );
+    s
+}
