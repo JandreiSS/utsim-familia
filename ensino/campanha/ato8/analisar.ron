@@ -1,0 +1,29 @@
+Missao(
+    id: "ato8/analisar",
+    titulo: "Analisar: onde está a causa",
+    conceitos: ["estratificacao", "doe"],
+    modelo: "../modelos/eixos.ron",
+    texto: "analisar.md",
+    dados: [
+        (id: "estratos", nome: "Diâmetros por máquina e turno (mm)",
+         gerador: MediaDeslocada(grupos: ["Retífica 1, dia", "Retífica 1, noite", "Retífica 2, dia", "Retífica 2, noite"], n_por_grupo: 30, media: 25.0, sd: 0.005, afetado: 3, deslocamento: 1.6),
+         sortear_afetado: true),
+        (id: "experimento", nome: "Experimento do acabamento (atraso em horas)",
+         gerador: Fatorial(fatores: ["lote", "velocidade", "operador"], replicas: 3, media: 20.0, sd: 1.5, efeitos: [9.0, -2.0, 0.5], interacao_ab: 1.0)),
+    ],
+    previsao: [
+        Dados(id: "estrato", pergunta: "Em qual máquina e turno a média do diâmetro se desloca?",
+              conjunto: "estratos", questao: GrupoDeslocado, tolerancia: Absoluta(0.0)),
+        Dados(id: "efeito_lote", pergunta: "No experimento, qual é o efeito do lote (grande menos pequeno) sobre o atraso, em horas?",
+              conjunto: "experimento", questao: Efeito(fator: 0), unidade: "h", tolerancia: Absoluta(0.5)),
+    ],
+    justificativa: [
+        (pergunta: "Por que separar os dados por máquina e turno antes de concluir?",
+         opcoes: ["Porque um deslocamento num só estrato se dilui na média geral", "Porque cada máquina tem um cliente", "Porque o turno da noite trabalha menos"],
+         certa: 0),
+        (pergunta: "Qual fator do experimento mais pesa no atraso?",
+         opcoes: ["O tamanho do lote", "A velocidade", "O operador"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

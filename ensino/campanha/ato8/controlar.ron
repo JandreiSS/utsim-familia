@@ -1,0 +1,27 @@
+Missao(
+    id: "ato8/controlar",
+    titulo: "Controlar: a deriva da noite",
+    conceitos: ["carta_de_controle", "dmaic"],
+    modelo: "../modelos/eixos.ron",
+    texto: "controlar.md",
+    dados: [
+        (id: "acompanhamento", nome: "Diâmetro de um eixo por hora depois da melhoria (mm)",
+         gerador: Serie(n: 80, media: 25.0, sd: 0.004, padrao: Deslocamento(inicio: 52, tamanho: 2.0))),
+    ],
+    previsao: [
+        Escolha(
+            id: "carta",
+            pergunta: "Qual carta usar para uma medida por hora?",
+            opcoes: [(rotulo: "Carta de valores individuais e amplitude móvel (I-AM)"), (rotulo: "Carta de média e amplitude com subgrupos de 5"), (rotulo: "Carta p")],
+            resposta: Fixa(0),
+        ),
+        Dados(id: "sinal", pergunta: "Com os limites calculados pelos 30 primeiros pontos e as regras de Nelson, em qual ponto aparece o primeiro sinal?",
+              conjunto: "acompanhamento", questao: PrimeiroSinal(base: 30), unidade: "", tolerancia: Absoluta(0.0)),
+    ],
+    justificativa: [
+        (pergunta: "O que o plano de reação deve dizer quando a carta dá sinal?",
+         opcoes: ["Quem para a máquina, quem verifica a ferramenta e o que fazer com as peças do período", "Que se deve recalcular os limites", "Que basta anotar e seguir"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

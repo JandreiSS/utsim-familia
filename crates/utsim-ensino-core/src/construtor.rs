@@ -171,6 +171,7 @@ pub fn rascunho(
         balanceamento: None,
         arranjo: None,
         modelagem: None,
+        dados: Vec::new(),
     }
 }
 

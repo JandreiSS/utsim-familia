@@ -193,6 +193,24 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
                     erros.push(format!("previsão '{id}': o cálculo não dá um número"));
                 }
             }
+            Previsao::Dados {
+                id,
+                conjunto,
+                questao,
+                ..
+            } => match missao.conjunto(conjunto) {
+                None => erros.push(format!("previsão '{id}': conjunto '{conjunto}' não existe")),
+                Some(cj) => {
+                    if let Err(e) = questao.resposta(&cj.gerar(&missao.id, "")) {
+                        erros.push(format!("previsão '{id}': {e}"));
+                    }
+                    if questao.e_escolha() && questao.opcoes(cj).len() < 2 {
+                        erros.push(format!(
+                            "previsão '{id}': a pergunta precisa de grupos no conjunto"
+                        ));
+                    }
+                }
+            },
         }
     }
     for r in &missao.restricoes {

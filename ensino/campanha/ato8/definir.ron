@@ -1,0 +1,33 @@
+Missao(
+    id: "ato8/definir",
+    titulo: "Definir: o problema dos eixos",
+    conceitos: ["dmaic", "ctq"],
+    modelo: "../modelos/eixos.ron",
+    texto: "definir.md",
+    previsao: [
+        Escolha(
+            id: "ctq",
+            pergunta: "Qual característica crítica para o cliente (CTQ) o projeto deve atacar primeiro?",
+            opcoes: [(rotulo: "O diâmetro do eixo, que gera refugo e atraso"), (rotulo: "A cor da embalagem"), (rotulo: "O número de turnos")],
+            resposta: Fixa(0),
+        ),
+        Escolha(
+            id: "meta",
+            pergunta: "Qual é uma boa meta para o projeto?",
+            opcoes: [(rotulo: "Reduzir o refugo de 10 % para 3 % e o lead time pela metade em 4 meses"), (rotulo: "Melhorar a qualidade"), (rotulo: "Zerar todos os defeitos amanhã")],
+            resposta: Fixa(0),
+        ),
+        Escolha(
+            id: "escopo",
+            pergunta: "O que fica fora do escopo do projeto?",
+            opcoes: [(rotulo: "A troca do fornecedor de barras, que é outro projeto"), (rotulo: "A retífica"), (rotulo: "A inspeção do diâmetro")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que a meta precisa de número e prazo?",
+         opcoes: ["Para saber, no fim, se o projeto atingiu o que prometeu", "Para o relatório ficar mais longo", "Porque o cliente exige números redondos"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

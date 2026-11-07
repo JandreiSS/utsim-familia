@@ -30,6 +30,10 @@ pub struct Tentativa {
     /// The delivered model (`.ron` text) of a modelling mission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modelo: Option<String>,
+    /// The student the data of the questions are generated for (the teacher's grading
+    /// sets it from the signed record).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub aluno: String,
 }
 
 fn um() -> u32 {
@@ -458,6 +462,37 @@ pub fn corrigir_previsoes(
                     esperado_numero: i as f64,
                 });
             }
+            Previsao::Dados {
+                id,
+                conjunto,
+                questao,
+                unidade,
+                tolerancia,
+                ..
+            } => {
+                let cj = missao.conjunto(conjunto).ok_or_else(|| {
+                    ErroMotor::Modelo(format!("conjunto '{conjunto}' não existe"))
+                })?;
+                let dados = cj.gerar(&missao.id, &tentativa.aluno);
+                let v = questao.resposta(&dados).map_err(ErroMotor::Modelo)?;
+                let certa = if questao.e_escolha() {
+                    resposta == Some(&RespostaPrevisao::Escolha(v as usize))
+                } else {
+                    let faixa = tolerancia.faixa(v);
+                    matches!(resposta, Some(RespostaPrevisao::Valor(x)) if (x - v).abs() <= faixa + 1e-12)
+                };
+                let txt = questao.texto(cj, v);
+                out.push(ResultadoPrevisao {
+                    id: id.clone(),
+                    certa,
+                    esperado: if unidade.is_empty() || questao.e_escolha() {
+                        txt
+                    } else {
+                        format!("{txt} {unidade}")
+                    },
+                    esperado_numero: v,
+                });
+            }
             Previsao::Valor { .. } | Previsao::Calculo { .. } => {
                 let (id, unidade, tolerancia) = match p {
                     Previsao::Valor {
@@ -472,14 +507,18 @@ pub fn corrigir_previsoes(
                         tolerancia,
                         ..
                     } => (id, unidade, tolerancia),
-                    Previsao::Escolha { .. } => unreachable!("matched above"),
+                    Previsao::Escolha { .. } | Previsao::Dados { .. } => {
+                        unreachable!("matched above")
+                    }
                 };
                 let v = match p {
                     Previsao::Valor { valor, .. } => {
                         Intervalo::de(&avaliar(missao, valor, base)?).media
                     }
                     Previsao::Calculo { calculo, .. } => calculo.valor(),
-                    Previsao::Escolha { .. } => unreachable!("matched above"),
+                    Previsao::Escolha { .. } | Previsao::Dados { .. } => {
+                        unreachable!("matched above")
+                    }
                 };
                 let faixa = tolerancia.faixa(v);
                 let certa = matches!(resposta, Some(RespostaPrevisao::Valor(x)) if (x - v).abs() <= faixa + 1e-12);

@@ -1,0 +1,26 @@
+// Ato 8: a fábrica de eixos usinados do caso Lean Seis Sigma. Tempo em minutos.
+// Torneamento, retífica, acabamento em lotes e inspeção do diâmetro. As peças reprovadas
+// vão para o refugo. A fila do acabamento junta lotes de 40 peças (ou espera 8 horas).
+Model(
+    name: "Fábrica de eixos usinados",
+    run: (stop_time: 10560.0, warmup: 480.0, seed: 81, replications: 10),
+    objects: [
+        (name: "barras", kind: Source(interarrival: Exp(mean: 4.0)), position: (0.0, 0.0, 0.0)),
+        (name: "fila_torno", kind: Queue(), position: (4.0, 0.0, 0.0)),
+        (name: "torno", kind: Processor(process: Triangular(min: 2.5, mode: 3.0, max: 4.0)), position: (8.0, 0.0, 0.0)),
+        (name: "fila_retifica", kind: Queue(), position: (12.0, 0.0, 0.0)),
+        (name: "retifica", kind: Processor(process: Triangular(min: 2.8, mode: 3.2, max: 4.2)), position: (16.0, 0.0, 0.0)),
+        (name: "fila_acabamento", kind: Queue(batch: Some(Batch(size: 40, max_wait: 480.0))), position: (20.0, 0.0, 0.0)),
+        (name: "acabamento", kind: Processor(process: Uniform(min: 1.5, max: 2.5)), position: (24.0, 0.0, 0.0)),
+        (name: "fila_inspecao", kind: Queue(), position: (28.0, 0.0, 0.0)),
+        (name: "inspecao", kind: Processor(process: Const(1.0)), output: Weighted([0.9, 0.1]), position: (32.0, 0.0, 0.0)),
+        (name: "expedicao", kind: Sink, position: (36.0, 0.0, 0.0)),
+        (name: "refugo", kind: Sink, position: (32.0, 4.0, 0.0)),
+    ],
+    connections: [
+        ("barras", "fila_torno"), ("fila_torno", "torno"), ("torno", "fila_retifica"),
+        ("fila_retifica", "retifica"), ("retifica", "fila_acabamento"),
+        ("fila_acabamento", "acabamento"), ("acabamento", "fila_inspecao"),
+        ("fila_inspecao", "inspecao"), ("inspecao", "expedicao"), ("inspecao", "refugo"),
+    ],
+)

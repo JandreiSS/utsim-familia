@@ -105,12 +105,18 @@ fn n4(v: f64) -> String {
     fmt_num(v, 4)
 }
 
+/// Every stored value has the 4 decimals of the CSV, so an analysis of the exported file
+/// gives exactly the number the game computes.
+fn r4(v: f64) -> f64 {
+    (v * 1e4).round() / 1e4
+}
+
 impl Receita {
     pub fn gerar(&self) -> Conjunto {
         let mut rng = stream(self.semente, 0, 0x656E_7369_6E6F);
         match &self.gerador {
             Gerador::Tempos { dist, n } => {
-                let xs: Vec<f64> = (0..*n).map(|_| dist.sample(&mut rng)).collect();
+                let xs: Vec<f64> = (0..*n).map(|_| r4(dist.sample(&mut rng))).collect();
                 Conjunto {
                     cabecalho: vec!["observacao".into(), "tempo".into()],
                     linhas: xs
@@ -142,7 +148,7 @@ impl Receita {
                 for r in 0..*repeticoes {
                     for (j, oj) in o.iter().enumerate() {
                         for (i, pi) in p.iter().enumerate() {
-                            let y = media + pi + oj + normal(&mut rng, 0.0, *sd_repetibilidade);
+                            let y = r4(media + pi + oj + normal(&mut rng, 0.0, *sd_repetibilidade));
                             linhas.push(vec![
                                 format!("P{:02}", i + 1),
                                 format!("Op{}", j + 1),
@@ -187,7 +193,7 @@ impl Receita {
                         *media
                     };
                     for _ in 0..*n_por_grupo {
-                        let y = normal(&mut rng, m, *sd);
+                        let y = r4(normal(&mut rng, m, *sd));
                         linhas.push(vec![nome.clone(), n4(y)]);
                         valores.push(vec![g as f64, y]);
                     }
@@ -220,7 +226,7 @@ impl Receita {
                             }
                             _ => 0.0,
                         };
-                        normal(&mut rng, media + extra, *sd)
+                        r4(normal(&mut rng, media + extra, *sd))
                     })
                     .collect();
                 let resposta = match padrao {
@@ -271,7 +277,7 @@ impl Receita {
                         if k >= 2 {
                             y += interacao_ab / 2.0 * x[0] * x[1];
                         }
-                        y += normal(&mut rng, 0.0, *sd);
+                        y = r4(y + normal(&mut rng, 0.0, *sd));
                         let mut l: Vec<String> =
                             x.iter().map(|v| format!("{}", *v as i32)).collect();
                         l.push(n4(y));

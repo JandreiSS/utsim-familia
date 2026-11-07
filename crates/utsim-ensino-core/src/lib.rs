@@ -28,6 +28,7 @@ pub mod nota;
 pub mod pacote;
 pub mod pecas;
 pub mod progresso;
+pub mod questoes;
 pub mod turma;
 pub mod validar;
 pub mod variante;

@@ -8,6 +8,7 @@
 //! - [`pasta`]: the class folder (local or synced by Google Drive for desktop);
 //! - [`correcao`]: batch grading on the teacher's machine;
 //! - [`planilha`]: the grades as `.xlsx`;
+//! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim Seis Sigma;
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 
 pub mod arquivos;
@@ -18,6 +19,7 @@ pub mod diario;
 pub mod pasta;
 pub mod perfil;
 pub mod planilha;
+pub mod seis_sigma;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Erro {

@@ -370,4 +370,43 @@
         base: [],
         ref_valores: [],
     ),
+    (
+        missao: "ato8/definir",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
+    (
+        missao: "ato8/medir",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
+    (
+        missao: "ato8/analisar",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
+    (
+        missao: "ato8/melhorar",
+        referencia: {
+            "ferramenta": 1.0,
+            "lote": 1.0,
+        },
+        base: [
+            ("custo", 15060.0),
+            ("lead_time", 137.24056645341653),
+        ],
+        ref_valores: [
+            ("custo", 8976.0),
+            ("lead_time", 77.07016442977766),
+        ],
+    ),
+    (
+        missao: "ato8/controlar",
+        referencia: {},
+        base: [],
+        ref_valores: [],
+    ),
 ]

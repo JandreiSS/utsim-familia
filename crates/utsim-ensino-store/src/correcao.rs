@@ -192,6 +192,20 @@ fn corrigir_trabalho(
     t: &Trabalho,
 ) -> Result<Vec<(Tentativa, Resultado)>, String> {
     let m = pacote.missao(&t.missao).ok_or("missão não encontrada")?;
+    // The data of the questions are those of the student of the signed record.
+    let tentativas: Vec<Tentativa> = t
+        .tentativas
+        .iter()
+        .map(|x| Tentativa {
+            aluno: t.registro.clone(),
+            ..x.clone()
+        })
+        .collect();
+    let t = &Trabalho {
+        registro: t.registro.clone(),
+        missao: t.missao.clone(),
+        tentativas,
+    };
     if m.missao.modelagem.is_some() {
         return t
             .tentativas
