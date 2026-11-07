@@ -339,7 +339,8 @@ fn turma_de_60_com_todas_as_missoes() {
         .map(|(i, a)| {
             let chave = Chave::de_semente(seed(i));
             let mut d: Vec<TentativaAssinada> = Vec::new();
-            for m in &p.missoes {
+            // Missions decided by levers or pieces (questions and models are graded apart).
+            for m in p.missoes.iter().filter(|m| !m.missao.metricas.is_empty()) {
                 for decisoes in [m.missao.decisoes_iniciais(), m.missao.referencia.clone()] {
                     let mut r = registro(&p, &a.registro, Tentativa::default(), None);
                     r.missao = m.missao.id.clone();
@@ -381,7 +382,13 @@ fn turma_de_60_com_todas_as_missoes() {
         .count();
     // The reference of each student's variant solves almost every mission.
     assert!(
-        resolvidas as f64 >= 0.9 * (60 * p.missoes.len()) as f64,
+        resolvidas as f64
+            >= 0.9
+                * (60
+                    * p.missoes
+                        .iter()
+                        .filter(|m| !m.missao.metricas.is_empty())
+                        .count()) as f64,
         "{resolvidas}"
     );
 }

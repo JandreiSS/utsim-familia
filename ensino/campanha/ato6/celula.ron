@@ -1,0 +1,43 @@
+Missao(
+    id: "ato6/celula",
+    titulo: "Célula com operadores",
+    conceitos: ["relacao_homem_maquina", "lead_time", "utilizacao"],
+    modelo: "../modelos/celula.ron",
+    texto: "celula.md",
+    variante: [
+        (chave: "chegada.interarrival", de: 39.0, ate: 41.0, modelo: "Exp(mean: {})"),
+    ],
+    previsao: [
+        Valor(
+            id: "ocupacao",
+            pergunta: "Com um operador, qual é a utilização dele (de 0 a 1)?",
+            valor: [(chave: "ana.utilization")],
+            tolerancia: Absoluta(0.08),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "operadores", rotulo: "Operadores de preparação", opcoes: [
+            (rotulo: "1", ajustes: {"equipe.team": r#"["ana"]"#}, numero: 1),
+            (rotulo: "2", ajustes: {"equipe.team": r#"["ana", "bruno"]"#}, custo: 4000, numero: 2),
+            (rotulo: "3", ajustes: {"equipe.team": r#"["ana", "bruno", "carla"]"#}, custo: 8000, numero: 3),
+        ]),
+    ],
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time da peça", unidade: "s",
+         valor: [(chave: "saida.time_in_system.mean")], objetivo: Menor, meta: 400.0, peso: 0.0, casas: 0),
+        (nome: "operadores", rotulo: "Operadores na equipe", unidade: "",
+         valor: [(chave: "decisao.operadores")], objetivo: Menor, peso: 1.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a célula atrasa com um só operador, mesmo com as três máquinas livres boa parte do tempo?",
+         opcoes: ["Porque cada preparação espera o operador, que atende uma máquina por vez", "Porque as máquinas são lentas", "Porque a fila é pequena"],
+         certa: 0),
+    ],
+    dicas: [
+        "O que acontece com uma máquina pronta para preparar quando o operador está em outra?",
+        "Veja a utilização do operador e o tempo das máquinas esperando operador.",
+        "Use a menor equipe que mantém o lead time na meta.",
+    ],
+    referencia: {"operadores": 1},
+    animacao: (duracao: 1800, unidade: "s"),
+)

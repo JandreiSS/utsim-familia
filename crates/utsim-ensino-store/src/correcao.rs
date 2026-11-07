@@ -192,6 +192,17 @@ fn corrigir_trabalho(
     t: &Trabalho,
 ) -> Result<Vec<(Tentativa, Resultado)>, String> {
     let m = pacote.missao(&t.missao).ok_or("missão não encontrada")?;
+    if m.missao.modelagem.is_some() {
+        return t
+            .tentativas
+            .iter()
+            .map(|tent| {
+                utsim_ensino_core::modelagem::corrigir_modelagem(m, &pacote.pacote.pesos, tent)
+                    .map(|r| (tent.clone(), r))
+                    .map_err(|e| e.to_string())
+            })
+            .collect();
+    }
     let mut lista: Vec<Decisoes> = vec![
         m.missao.decisoes_iniciais(),
         m.missao.completar(&m.missao.referencia),

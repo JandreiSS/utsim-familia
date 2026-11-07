@@ -17,6 +17,7 @@ fn metrica(objetivo: Objetivo, meta: f64, tol: Tolerancia) -> Metrica {
             chave: "x".into(),
             fator: 1.0,
         }],
+        divisor: Vec::new(),
         objetivo,
         meta: Some(meta),
         peso: 1.0,

@@ -494,3 +494,117 @@ mod tests {
         assert_eq!(parse_number("inf"), None);
     }
 }
+
+/// Projects saved before the tools moved to `utsim-ferramentas` (decision G3) open the
+/// same: the items are written here with the names as they are on disk (literals, not the
+/// constants), and read through the modules that now delegate to the common crate.
+#[cfg(test)]
+mod saved_format {
+    use super::testing::Fixture;
+    use super::*;
+
+    #[test]
+    fn tools_saved_before_the_move_read_the_same() {
+        let mut f = Fixture::new();
+        // FMEA.
+        let fm = f.deliverable(Tool::Fmea);
+        let row = f.item(
+            fm,
+            "linha_fmea",
+            None,
+            vec![
+                ("etapa", "Furar".into()),
+                ("modo", "Furo fora de posição".into()),
+                ("s", 9.into()),
+                ("o", 6.into()),
+                ("d", 6.into()),
+                ("o_revista", 2.into()),
+                ("acao", "Trocar o gabarito".into()),
+            ],
+        );
+        f.set(fm, "severidade_critica", 8);
+        let r = &fmea::rows(&f.state, fm)[0];
+        assert_eq!(
+            (r.id, r.step.as_str(), r.sod()),
+            (row, "Furar", Some((9, 6, 6)))
+        );
+        assert_eq!(r.sod_after(), Some((9, 2, 6)));
+        assert_eq!(fmea::critical_from(&f.state, fm), 8);
+        // Control plan covering the row, and a response signal.
+        let cp = f.deliverable(Tool::ControlPlan);
+        f.item(
+            cp,
+            "caracteristica",
+            None,
+            vec![
+                ("caracteristica", "Posição do furo".into()),
+                ("linha_fmea", row.to_string().into()),
+                ("critica", true.into()),
+            ],
+        );
+        let l = &plans::control_lines(&f.state, cp)[0];
+        assert_eq!((l.fmea_row, l.critical), (Some(row), true));
+        assert!(fmea::critical_without_control(&f.state, f.project).is_empty());
+        // Ishikawa with a subcause.
+        let ik = f.deliverable(Tool::Ishikawa);
+        f.set(ik, "efeito", "Furo fora");
+        let c = f.item(
+            ik,
+            "causa",
+            None,
+            vec![
+                ("texto", "Gabarito gasto".into()),
+                ("categoria", "maquina".into()),
+                ("estado", "verificada".into()),
+                ("evidencia", "Medição de 30 peças".into()),
+            ],
+        );
+        f.item(ik, "causa", Some(c), vec![("texto", "Sem troca".into())]);
+        let d = ishikawa::diagram(&f.state, ik);
+        assert_eq!(d.effect, "Furo fora");
+        let maq: Vec<_> = d.causes().filter(|x| x.category == "maquina").collect();
+        assert_eq!(maq.len(), 2);
+        assert_eq!(maq[0].status, ishikawa::CauseStatus::Verified);
+        assert_eq!(maq[0].evidence, "Medição de 30 peças");
+        // Five whys from the cause.
+        let w5 = f.deliverable(Tool::FiveWhys);
+        let ch = f.item(
+            w5,
+            "cadeia",
+            None,
+            vec![
+                ("texto", "Furo fora".into()),
+                ("causa_ishikawa", c.to_string().into()),
+            ],
+        );
+        let w1 = f.item(
+            w5,
+            "porque",
+            Some(ch),
+            vec![("texto", "Gabarito gasto".into())],
+        );
+        f.item(
+            w5,
+            "porque",
+            Some(w1),
+            vec![
+                ("texto", "Sem plano de troca".into()),
+                ("causa_raiz", true.into()),
+            ],
+        );
+        let chain = &whys::chains(&f.state, w5)[0];
+        assert_eq!(
+            chain.cause.as_ref().map(|x| x.1.as_str()),
+            Some("Gabarito gasto")
+        );
+        assert_eq!(chain.depth(), 2);
+        assert_eq!(chain.root_causes()[0].text, "Sem plano de troca");
+        // Data collection plan line and A3 notes.
+        let dc = f.deliverable(Tool::DataCollection);
+        let m = f.item(dc, "medida", None, vec![("nome", "Diâmetro".into())]);
+        let e = f.state.entity(m).unwrap();
+        let issues = plans::collection_issues(&ItemRef { id: m, entity: e });
+        assert!(issues.contains(&plans::CollectionIssue::NoDefinition));
+        assert_eq!(a3::Section::Plan.note_field(), "notas_plano");
+    }
+}

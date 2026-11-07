@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use utsim_ensino_core::conferir::{conferir, descrever};
-use utsim_ensino_core::motor::{avaliar, rodar};
+use utsim_ensino_core::motor::{avaliar, rodar, valor_metrica};
 use utsim_ensino_core::nota::{Intervalo, portao, situacao};
 use utsim_ensino_core::pacote::{Arquivos, carregar};
 
@@ -79,7 +79,7 @@ fn main() {
             );
             let mut bate = true;
             for mt in &missao.metricas {
-                let v = Intervalo::de(&avaliar(missao, &mt.valor, c).expect("métrica"));
+                let v = Intervalo::de(&valor_metrica(missao, mt, c).expect("métrica"));
                 let s = situacao(mt, &v);
                 bate &= s.ok();
                 linha.push_str(&format!(
@@ -89,7 +89,12 @@ fn main() {
             }
             println!("{linha} {}", if bate { "META" } else { "" });
         }
-        for pv in &missao.previsao {
+        // A modelling mission asks about the reference model, not the starting one.
+        for pv in missao
+            .previsao
+            .iter()
+            .filter(|_| missao.modelagem.is_none())
+        {
             if let utsim_ensino_core::missao::Previsao::Valor { id, valor, .. } = pv {
                 let v = Intervalo::de(&avaliar(missao, valor, &cen[0]).expect("previsão"));
                 println!("previsão {id}: {:.3} ± {:.3}", v.media, v.meia_largura);

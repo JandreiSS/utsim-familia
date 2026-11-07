@@ -1,0 +1,12 @@
+// Missão 6.4: o posto de aperto cronometrado. Tempo em segundos.
+Model(
+    name: "Posto de aperto",
+    run: (stop_time: 3600.0, warmup: 0.0, seed: 64, replications: 2),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Const(30.0)), position: (0.0, 0.0, 0.0)),
+        (name: "fila", kind: Queue(), position: (4.0, 0.0, 0.0)),
+        (name: "aperto", kind: Processor(process: Normal(mean: 25.5, sd: 1.6)), position: (8.0, 0.0, 0.0)),
+        (name: "saida", kind: Sink, position: (12.0, 0.0, 0.0)),
+    ],
+    connections: [("chegada", "fila"), ("fila", "aperto"), ("aperto", "saida")],
+)

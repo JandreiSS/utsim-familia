@@ -15,8 +15,13 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
     if missao.id.trim().is_empty() {
         erros.push("a missão não tem id".into());
     }
-    if missao.metricas.is_empty() {
-        erros.push("a missão não tem métricas".into());
+    let so_perguntas =
+        missao.alavancas.is_empty() && !missao.tem_pecas() && !missao.previsao.is_empty();
+    if missao.metricas.is_empty() && !so_perguntas && missao.modelagem.is_none() {
+        erros.push(
+            "a missão não tem métricas (só uma missão de perguntas ou de modelagem pode não ter)"
+                .into(),
+        );
     }
     if missao.dicas.len() > 3 {
         erros.push("no máximo três níveis de dica".into());
@@ -168,6 +173,7 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
     let mut termos: Vec<(&str, &Termo)> = Vec::new();
     for m in &missao.metricas {
         termos.extend(m.valor.iter().map(|t| (m.nome.as_str(), t)));
+        termos.extend(m.divisor.iter().map(|t| (m.nome.as_str(), t)));
     }
     for m in &missao.medicoes {
         termos.extend(m.valor.iter().map(|t| (m.rotulo.as_str(), t)));
@@ -180,6 +186,11 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
             Previsao::Escolha { id, opcoes, .. } => {
                 for o in opcoes {
                     termos.extend(o.valor.iter().map(|t| (id.as_str(), t)));
+                }
+            }
+            Previsao::Calculo { id, calculo, .. } => {
+                if !calculo.valor().is_finite() {
+                    erros.push(format!("previsão '{id}': o cálculo não dá um número"));
                 }
             }
         }

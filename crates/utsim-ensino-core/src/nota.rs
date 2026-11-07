@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use utsim_core::stats::Summary;
 
 use crate::missao::{Decisoes, Metrica, Missao, Objetivo, Previsao, Resposta};
-use crate::motor::{Cenario, ErroMotor, Simulacao, avaliar};
+use crate::motor::{Cenario, ErroMotor, Simulacao, avaliar, valor_metrica};
 use crate::pacote::Pesos;
 
 /// What the student sends: decisions and answers, never the grade.
@@ -27,6 +27,9 @@ pub struct Tentativa {
     /// Number of this run in the mission (1 for the first).
     #[serde(default = "um")]
     pub rodada: u32,
+    /// The delivered model (`.ron` text) of a modelling mission.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modelo: Option<String>,
 }
 
 fn um() -> u32 {
@@ -190,6 +193,10 @@ pub struct Resultado {
     pub selo: bool,
     /// Automatic hints about what happened (no discount).
     pub dicas_automaticas: Vec<String>,
+    /// The criteria of a modelling mission (the delivered model), what matched and what
+    /// did not.
+    #[serde(default)]
+    pub criterios: Vec<crate::modelagem::ResultadoCriterio>,
 }
 
 /// Why `decisoes` break a constraint of `missao` (`None` when they pass).
@@ -284,9 +291,9 @@ pub fn corrigir(
     let mut metricas = Vec::new();
     let (mut soma, mut soma_bruta, mut soma_pesos) = (0.0, 0.0, 0.0);
     for m in &missao.metricas {
-        let base = Intervalo::de(&avaliar(missao, &m.valor, &sim.base)?);
-        let aluno = Intervalo::de(&avaliar(missao, &m.valor, &sim.aluno)?);
-        let referencia = Intervalo::de(&avaliar(missao, &m.valor, &sim.referencia)?);
+        let base = Intervalo::de(&valor_metrica(missao, m, &sim.base)?);
+        let aluno = Intervalo::de(&valor_metrica(missao, m, &sim.aluno)?);
+        let referencia = Intervalo::de(&valor_metrica(missao, m, &sim.referencia)?);
         let tol = m.tolerancia.faixa(m.meta.unwrap_or(referencia.media));
         let (d, bruta) = fracao(m.objetivo, aluno.media, base.media, referencia.media, tol);
         soma += m.peso * d;
@@ -307,7 +314,14 @@ pub fn corrigir(
             peso: m.peso,
         });
     }
-    let desempenho = if soma_pesos > 0.0 {
+    let previsoes = corrigir_previsoes(missao, &sim.base, tentativa)?;
+    let certas_prev = previsoes.iter().filter(|p| p.certa).count();
+    // A mission of questions only (no measure): the performance is the share of right
+    // answers, and it is solved when every answer is right.
+    let so_perguntas = missao.metricas.is_empty();
+    let desempenho = if so_perguntas {
+        certas_prev as f64 / missao.previsao.len().max(1) as f64
+    } else if soma_pesos > 0.0 {
         soma / soma_pesos
     } else {
         0.0
@@ -318,8 +332,6 @@ pub fn corrigir(
         0.0
     };
 
-    let previsoes = corrigir_previsoes(missao, &sim.base, tentativa)?;
-    let certas_prev = previsoes.iter().filter(|p| p.certa).count();
     let justificativas_certas = missao
         .justificativa
         .iter()
@@ -327,7 +339,7 @@ pub fn corrigir(
         .filter(|(i, q)| tentativa.justificativas.get(*i).copied().flatten() == Some(q.certa))
         .count();
 
-    let pontos_desempenho = if portao.is_none() {
+    let pontos_desempenho = if portao.is_none() && !so_perguntas {
         pesos.desempenho * desempenho
     } else {
         0.0
@@ -342,7 +354,7 @@ pub fn corrigir(
     } else {
         pesos.justificativa * justificativas_certas as f64 / missao.justificativa.len() as f64
     };
-    let mut pontos_possiveis = pesos.desempenho;
+    let mut pontos_possiveis = if so_perguntas { 0.0 } else { pesos.desempenho };
     if !missao.previsao.is_empty() {
         pontos_possiveis += pesos.previsao;
     }
@@ -366,7 +378,9 @@ pub fn corrigir(
     };
     let nota =
         ((bruta - desconto_dicas - desconto_rodadas).clamp(0.0, 100.0) * 10.0).round() / 10.0;
-    let resolvida = portao.is_none() && metricas.iter().all(|m| m.situacao.ok());
+    let resolvida = portao.is_none()
+        && metricas.iter().all(|m| m.situacao.ok())
+        && (!so_perguntas || certas_prev == missao.previsao.len());
     let estrelas = if !resolvida {
         0
     } else if desempenho >= 0.95 {
@@ -395,6 +409,7 @@ pub fn corrigir(
         estrelas,
         selo: resolvida && bruto > 1.0 + 1e-9,
         dicas_automaticas,
+        criterios: Vec::new(),
     })
 }
 
@@ -443,14 +458,29 @@ pub fn corrigir_previsoes(
                     esperado_numero: i as f64,
                 });
             }
-            Previsao::Valor {
-                id,
-                valor,
-                unidade,
-                tolerancia,
-                ..
-            } => {
-                let v = Intervalo::de(&avaliar(missao, valor, base)?).media;
+            Previsao::Valor { .. } | Previsao::Calculo { .. } => {
+                let (id, unidade, tolerancia) = match p {
+                    Previsao::Valor {
+                        id,
+                        unidade,
+                        tolerancia,
+                        ..
+                    }
+                    | Previsao::Calculo {
+                        id,
+                        unidade,
+                        tolerancia,
+                        ..
+                    } => (id, unidade, tolerancia),
+                    Previsao::Escolha { .. } => unreachable!("matched above"),
+                };
+                let v = match p {
+                    Previsao::Valor { valor, .. } => {
+                        Intervalo::de(&avaliar(missao, valor, base)?).media
+                    }
+                    Previsao::Calculo { calculo, .. } => calculo.valor(),
+                    Previsao::Escolha { .. } => unreachable!("matched above"),
+                };
                 let faixa = tolerancia.faixa(v);
                 let certa = matches!(resposta, Some(RespostaPrevisao::Valor(x)) if (x - v).abs() <= faixa + 1e-12);
                 let txt = fmt_num(v, 2);
