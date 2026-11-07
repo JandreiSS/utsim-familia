@@ -1,0 +1,37 @@
+// Vocabulário da linha Serviços e atendimento: termo do núcleo -> termo do atendimento,
+// aplicado na interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam
+// de nome.
+Vocabulary(
+    line: "servicos",
+    terms: {
+        // Coisas e objetos.
+        "item": "cliente",
+        "itens": "clientes",
+        "Source": "chegada de clientes",
+        "Queue": "fila de espera",
+        "Processor": "guichê",
+        "Sink": "saída",
+        "Transporter": "atendente",
+        "Dispatcher": "equipe de atendimento",
+        "operador": "atendente",
+        "operadores": "atendentes",
+        // Medidas.
+        "time_in_system": "tempo no atendimento",
+        "process_time": "tempo de atendimento",
+        "content": "clientes esperando",
+        "throughput": "clientes atendidos por dia",
+        "staytime": "tempo no guichê",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "livre",
+        "processing": "atendendo",
+        "setup": "trocando de canal",
+        "blocked": "sem espaço adiante",
+        "waiting_operator": "esperando o atendente",
+        "off_shift": "fora do expediente",
+        "utilize": "atendendo",
+        "travel_empty": "indo ao guichê",
+        "releasing": "com clientes esperando",
+        "empty": "vazia",
+    },
+)

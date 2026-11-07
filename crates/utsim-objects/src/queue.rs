@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
-use utsim_core::{Behavior, BlockState, Ctx, Item, ItemId, State};
+use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, Time, Value};
 
 use crate::timer::PausableTimer;
 
 const MAX_WAIT: u32 = 0;
+/// An item's patience ran out (the item is the event's).
+const PATIENCE: u32 = 1;
+
+/// Label set to 1 on an item that gave up waiting (read by the reports before it leaves).
+pub const ABANDONED_LABEL: &str = "abandonou";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Discipline {
@@ -48,6 +53,13 @@ pub struct Batch {
 
 /// Buffer that releases every item as soon as it enters, or, with a [`Batch`],
 /// holds items and releases them in groups.
+///
+/// **Patience** ([`Queue::patience`]). Each item draws its patience when it enters; if it
+/// is still here when that time is over (it did not get into the next object), it gives up:
+/// it gets the label `abandonou = 1` and leaves the model. The patience runs also while the
+/// queue is off shift (the customer waits all the same). An item already promised to a
+/// transporter never gives up. The report gets `abandoned.count` and the tally
+/// `abandon_wait` (time waited before giving up).
 pub struct Queue {
     capacity: Option<usize>,
     discipline: Discipline,
@@ -58,6 +70,11 @@ pub struct Queue {
     /// Released batch items that have not left yet.
     outstanding: usize,
     timer: PausableTimer,
+    patience: Option<Dist>,
+    /// The patience event of each waiting item.
+    giving_up: Vec<(ItemId, EventId)>,
+    /// Items that gave up since the warm-up.
+    abandoned: u64,
 }
 
 impl Queue {
@@ -71,7 +88,31 @@ impl Queue {
             held: Vec::new(),
             outstanding: 0,
             timer: PausableTimer::default(),
+            patience: None,
+            giving_up: Vec::new(),
+            abandoned: 0,
         }
+    }
+
+    /// How long an item waits before giving up (see [`Queue`]); `None`: forever.
+    pub fn patience(mut self, patience: Option<Dist>) -> Self {
+        self.patience = patience;
+        self
+    }
+
+    /// The item gives up waiting, unless it already left or a transporter was promised it.
+    fn give_up(&mut self, cx: &mut Ctx, item: ItemId) {
+        self.giving_up.retain(|(i, _)| *i != item);
+        if !cx.contents().contains(&item) || cx.item(item).awaiting_transport {
+            return;
+        }
+        let waited: Time = cx.now() - cx.item(item).entered_at;
+        cx.item_mut(item)
+            .set_label(ABANDONED_LABEL, Value::Num(1.0));
+        cx.record("abandon_wait", waited);
+        self.abandoned += 1;
+        self.held.retain(|i| *i != item);
+        cx.destroy(item);
     }
 
     pub fn discipline(mut self, discipline: Discipline) -> Self {
@@ -129,6 +170,8 @@ impl Behavior for Queue {
         self.held.clear();
         self.outstanding = 0;
         self.timer = PausableTimer::default();
+        self.giving_up.clear();
+        self.abandoned = 0;
         cx.set_state(State::Empty);
     }
 
@@ -180,6 +223,12 @@ impl Behavior for Queue {
     }
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
+        if let Some(p) = &self.patience {
+            let p = p.clone();
+            let wait = cx.sample_duration(&p);
+            let event = cx.schedule(wait, PATIENCE, Some(item));
+            self.giving_up.push((item, event));
+        }
         let Some(batch) = self.batch else {
             self.release_one(cx, item);
             cx.set_state(State::Releasing);
@@ -194,7 +243,14 @@ impl Behavior for Queue {
         self.update_state(cx);
     }
 
-    fn on_event(&mut self, cx: &mut Ctx, tag: u32, _item: Option<ItemId>) {
+    fn on_event(&mut self, cx: &mut Ctx, tag: u32, item: Option<ItemId>) {
+        if tag == PATIENCE {
+            if let Some(item) = item {
+                self.give_up(cx, item);
+                self.update_state(cx);
+            }
+            return;
+        }
         self.timer.clear();
         if tag == MAX_WAIT && !self.held.is_empty() {
             self.release_held(cx);
@@ -202,9 +258,25 @@ impl Behavior for Queue {
         }
     }
 
-    fn on_exit(&mut self, cx: &mut Ctx, _item: ItemId) {
+    fn on_exit(&mut self, cx: &mut Ctx, item: ItemId) {
+        if let Some(at) = self.giving_up.iter().position(|(i, _)| *i == item) {
+            let (_, event) = self.giving_up.remove(at);
+            cx.cancel(event);
+        }
         self.outstanding = self.outstanding.saturating_sub(1);
         self.update_state(cx);
+    }
+
+    fn on_warmup(&mut self, _cx: &mut Ctx) {
+        self.abandoned = 0;
+    }
+
+    /// With patience: `abandoned.count` (items that gave up since the warm-up).
+    fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
+        if self.patience.is_none() {
+            return Vec::new();
+        }
+        vec![("abandoned.count".to_string(), self.abandoned as f64)]
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {

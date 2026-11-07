@@ -380,6 +380,10 @@ pub enum ObjectKind {
         /// `discipline`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         order: Option<LabelOrder>,
+        /// How long an item waits before giving up and leaving the model (abandonment,
+        /// drawn per item when it enters); absent: it waits forever.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        patience: Option<Dist>,
     },
     Processor {
         #[serde(default = "one_usize")]
@@ -693,7 +697,11 @@ impl Model {
                     batch,
                     order,
                     discipline,
+                    patience,
                 } => {
+                    if let Some(p) = patience {
+                        dists.push(("patience".into(), p));
+                    }
                     if let Some(o) = order {
                         if o.label().trim().is_empty() {
                             errors
@@ -1336,8 +1344,10 @@ impl Model {
                     discipline,
                     batch,
                     order,
+                    patience,
                 } => Box::new(
                     Queue::new(*capacity)
+                        .patience(patience.clone())
                         .discipline(*discipline)
                         .batch(*batch)
                         .order(order.clone()),

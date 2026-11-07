@@ -914,6 +914,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             discipline: Default::default(),
             batch: None,
             order: None,
+            patience: None,
         },
         "Processor" => ObjectKind::Processor {
             capacity: 1,
