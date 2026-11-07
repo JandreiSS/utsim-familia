@@ -1,0 +1,27 @@
+// Linha com inspeção de todas as peças no fim. O posto de inspeção leva 1,6 min por peça
+// inspecionada e 0,1 min para só deixar passar a que não é amostrada. Por isso o tempo médio
+// do posto é 0,1 + 1,5 / n com amostragem de uma peça em cada n (o aluno ajusta os dois
+// juntos). Tempos em minutos. Veja docs/formato_qualidade_seguranca.md.
+Model(
+    name: "Inspeção que atrapalha",
+    description: "Inspeção total como gargalo, amostragem e segundo posto",
+    run: (stop_time: 4800.0, warmup: 240.0, seed: 32, replications: 10),
+    packs: ["qualidade"],
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 1.5)), position: (0.0, 0.0, 0.0)),
+        (name: "espera", kind: Queue(), position: (2.0, 0.0, 0.0)),
+        (name: "torno", kind: Processor(process: Triangular(min: 0.9, mode: 1.2, max: 1.5)),
+         position: (4.0, 0.0, 0.0),
+         quality: Some((defects: [(name: "rebarba", probability: 0.04)]))),
+        (name: "fila", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "inspecao", kind: Processor(process: Const(1.6)), output: ByLabel("inspecao"),
+         position: (10.0, 0.0, 0.0),
+         inspection: Some((every: 1, detect: 0.9, on_reject: Scrap, cost: Some(0.5)))),
+        (name: "cliente", kind: Sink, sink_role: Some(Customer), position: (14.0, 0.0, 0.0)),
+        (name: "refugo", kind: Sink, sink_role: Some(Scrap), position: (14.0, -4.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "espera"), ("espera", "torno"), ("torno", "fila"), ("fila", "inspecao"),
+        ("inspecao", "cliente"), ("inspecao", "refugo"),
+    ],
+)

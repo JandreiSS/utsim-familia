@@ -1,0 +1,27 @@
+// Torneamento com defeito de processo, inspeção por amostragem e refugo. Serve para somar os
+// custos da qualidade: prevenção (probabilidade do defeito), avaliação (inspeção) e falhas
+// (refugo e defeito que chega ao cliente). Tempos em minutos. Veja
+// docs/formato_qualidade_seguranca.md.
+Model(
+    name: "Custo da qualidade",
+    description: "Defeito de processo, inspeção, refugo e escape para comparar prevenção e falha",
+    run: (stop_time: 4800.0, warmup: 240.0, seed: 36, replications: 10),
+    packs: ["qualidade"],
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 2.0)), position: (0.0, 0.0, 0.0)),
+        (name: "espera", kind: Queue(), position: (2.0, 0.0, 0.0)),
+        (name: "torno", kind: Processor(process: Triangular(min: 1.2, mode: 1.5, max: 1.8)),
+         position: (4.0, 0.0, 0.0),
+         quality: Some((defects: [(name: "trinca", probability: 0.06)]))),
+        (name: "fila", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "inspecao", kind: Processor(process: Const(0.4)), output: ByLabel("inspecao"),
+         position: (10.0, 0.0, 0.0),
+         inspection: Some((every: 1, detect: 0.8, on_reject: Scrap, cost: Some(1.5)))),
+        (name: "cliente", kind: Sink, sink_role: Some(Customer), position: (14.0, 0.0, 0.0)),
+        (name: "refugo", kind: Sink, sink_role: Some(Scrap), position: (14.0, -4.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "espera"), ("espera", "torno"), ("torno", "fila"), ("fila", "inspecao"),
+        ("inspecao", "cliente"), ("inspecao", "refugo"),
+    ],
+)

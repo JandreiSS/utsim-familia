@@ -1,0 +1,48 @@
+Missao(
+    id: "qs/gargalo",
+    titulo: "Inspeção que atrapalha",
+    conceitos: ["inspecao", "gargalo", "escape"],
+    modelo: "../modelos/gargalo.ron",
+    texto: "gargalo.md",
+    previsao: [
+        Escolha(
+            id: "gargalo",
+            pergunta: "Qual posto está mais ocupado hoje?",
+            opcoes: [
+                (rotulo: "Torno", valor: [(chave: "torno.utilization")]),
+                (rotulo: "Inspeção", valor: [(chave: "inspecao.utilization")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "amostragem", rotulo: "Amostragem da inspeção", opcoes: [
+            (rotulo: "Todas as peças", ajustes: {"inspecao.inspection.every": "1", "inspecao.process": "Const(1.6)"}),
+            (rotulo: "Uma peça a cada 2", ajustes: {"inspecao.inspection.every": "2", "inspecao.process": "Const(0.85)"}),
+            (rotulo: "Uma peça a cada 5", ajustes: {"inspecao.inspection.every": "5", "inspecao.process": "Const(0.4)"}),
+            (rotulo: "Uma peça a cada 10", ajustes: {"inspecao.inspection.every": "10", "inspecao.process": "Const(0.25)"}),
+        ]),
+        Quantidade(id: "postos", rotulo: "Postos de inspeção", chave: "inspecao.capacity", de: 1, ate: 2, custo_unitario: 4000),
+    ],
+    orcamento: 4000,
+    metricas: [
+        (nome: "vazao", rotulo: "Peças entregues ao cliente", unidade: "peças",
+         valor: [(chave: "cliente.input")], objetivo: Maior, meta: 2900.0, tolerancia: Relativa(0.02), casas: 0),
+        (nome: "escape", rotulo: "Peças com defeito que chegam ao cliente", unidade: "",
+         valor: [(chave: "cliente.pct_defeituosas")], objetivo: Menor, meta: 0.03, tolerancia: Absoluta(0.004), casas: 3),
+        (nome: "custo", rotulo: "Custo da decisão", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 1000.0, peso: 0.5, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a inspeção de todas as peças pode reduzir a vazão?",
+         opcoes: ["Porque o posto é o recurso mais ocupado e limita o que sai da linha", "Porque inspecionar quebra a peça", "Porque o cliente recusa peça inspecionada"],
+         certa: 0),
+    ],
+    dicas: [
+        "Compare a utilização da inspeção com a do torno.",
+        "Amostrar menos libera o posto, mas deixa passar mais defeitos. Veja o escape de cada opção.",
+        "Procure a amostragem que tira o gargalo e mantém o escape abaixo de 3 %. Um segundo posto custa caro.",
+    ],
+    referencia: {"amostragem": 1, "postos": 1},
+    animacao: (duracao: 300, unidade: "min"),
+)

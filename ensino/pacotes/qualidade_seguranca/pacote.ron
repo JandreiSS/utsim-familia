@@ -1,0 +1,21 @@
+// Pacote de missões de qualidade e de segurança do trabalho do UTSim Ensino.
+Pacote(
+    id: "qualidade_seguranca",
+    formato: 1,
+    titulo: "Qualidade e segurança do trabalho",
+    versao: "0.1.0",
+    autor: "UTSim",
+    descricao: "Seis casos de fábrica: onde inspecionar, o custo da inspeção, a medição, o cruzamento de pessoas e empilhadeiras, o posto pesado e o custo da qualidade.",
+    requer: ["nucleo >= 0.1"],
+    glossario: "glossario.ron",
+    atos: [
+        (numero: 1, titulo: "Qualidade e segurança do trabalho", missoes: [
+            "qs/refugo.ron",
+            "qs/gargalo.ron",
+            "qs/medicao.ron",
+            "qs/cruzamento.ron",
+            "qs/posto_pesado.ron",
+            "qs/custo_qualidade.ron",
+        ]),
+    ],
+)
