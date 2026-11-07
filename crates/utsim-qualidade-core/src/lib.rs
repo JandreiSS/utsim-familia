@@ -3,7 +3,9 @@
 //! ([`simulado`]) and their self-contained HTML report ([`relatorio`]). Base of the
 //! UTSim Qualidade app.
 
+pub mod amostragem;
 pub mod custos;
+pub mod planos;
 pub mod relatorio;
 pub mod simulado;
 

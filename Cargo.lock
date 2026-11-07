@@ -8131,6 +8131,7 @@ dependencies = [
  "utsim-core",
  "utsim-model",
  "utsim-quality",
+ "utsim-stats",
 ]
 
 [[package]]
