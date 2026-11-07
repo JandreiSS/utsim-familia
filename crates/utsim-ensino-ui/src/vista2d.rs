@@ -5,7 +5,8 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use egui::{
-    Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2,
+    Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2, pos2,
+    vec2,
 };
 use utsim_core::{State, TraceEvent};
 use utsim_model::replay::Replay;
@@ -179,13 +180,21 @@ impl Animacao {
             if !setas.insert((base(*a).to_string(), base(*b).to_string())) {
                 continue;
             }
+            // Boxes too close for an arrow between them get none.
             let (pa, pb) = (pos[*a], pos[*b]);
-            let dir = (pb - pa).normalized();
-            painter.arrow(
-                pa + dir * 44.0,
-                (pb - pa) - dir * 88.0,
-                Stroke::new(1.5, fraco),
-            );
+            let comprimento = (pb - pa).length();
+            if comprimento < 100.0 {
+                continue;
+            }
+            let dir = (pb - pa) / comprimento;
+            let (inicio, ponta) = (pa + dir * 44.0, pb - dir * 44.0);
+            let traco = Stroke::new(1.5, fraco);
+            painter.line_segment([inicio, ponta], traco);
+            // A tip of fixed size (egui's arrow grows with the length).
+            let lado = egui::vec2(-dir.y, dir.x);
+            for s in [-1.0, 1.0] {
+                painter.line_segment([ponta, ponta - dir * 9.0 + lado * (5.0 * s)], traco);
+            }
         }
         let dur = self.duracao_movimento();
         for (a, b, t0) in &self.movimentos {
@@ -226,7 +235,7 @@ impl Animacao {
         }
         for (nome, i, conteudo, estado, kind) in &caixas {
             let c = pos[*i];
-            let r = Rect::from_center_size(c, vec2(84.0, 46.0));
+            let r = Rect::from_center_size(c, CAIXA);
             let (cor, nome_estado) = cor_estado(kind, *estado, *conteudo);
             painter.rect_filled(r, CornerRadius::same(4), cor);
             painter.rect_stroke(
@@ -319,15 +328,72 @@ impl Animacao {
             f32::INFINITY
         });
         let centro_mundo = pos2((min.x + max.x) / 2.0, (min.y + max.y) / 2.0);
-        self.posicoes
+        let mut tela: Vec<Pos2> = self
+            .posicoes
             .iter()
             .map(|p| {
                 let d = *p - centro_mundo;
                 area.center() + vec2(d.x * s, -d.y * s) - vec2(0.0, 10.0)
             })
-            .collect()
+            .collect();
+        self.separar(&mut tela, rect);
+        tela
+    }
+
+    /// Objects closer than a box on the floor plan (a press beside its exit, a dock beside
+    /// its arrivals) would hide each other: the boxes are pushed apart a little, and the
+    /// copies of one machine (`<maquina>__<fluxo>`) move together.
+    fn separar(&self, tela: &mut [Pos2], rect: Rect) {
+        let mut grupos: Vec<(String, Vec<usize>)> = Vec::new();
+        for (i, b) in self.replay.blocks.iter().enumerate() {
+            if !desenhavel(&b.kind) || i >= tela.len() {
+                continue;
+            }
+            let base = b.name.split("__").next().unwrap_or(&b.name).to_string();
+            match grupos.iter_mut().find(|g| g.0 == base) {
+                Some(g) => g.1.push(i),
+                None => grupos.push((base, vec![i])),
+            }
+        }
+        let mut c: Vec<Pos2> = grupos.iter().map(|g| tela[g.1[0]]).collect();
+        let (lx, ly) = (CAIXA.x + 8.0, CAIXA.y + 8.0);
+        for _ in 0..60 {
+            let mut mexeu = false;
+            for i in 0..c.len() {
+                for j in i + 1..c.len() {
+                    let d = c[j] - c[i];
+                    let (fx, fy) = (lx - d.x.abs(), ly - d.y.abs());
+                    if fx <= 0.0 || fy <= 0.0 {
+                        continue;
+                    }
+                    mexeu = true;
+                    // Along the axis that needs the smaller move (ties to the side).
+                    let m = if fx * ly <= fy * lx {
+                        vec2(fx / 2.0 * if d.x < 0.0 { -1.0 } else { 1.0 }, 0.0)
+                    } else {
+                        vec2(0.0, fy / 2.0 * if d.y < 0.0 { -1.0 } else { 1.0 })
+                    };
+                    c[i] -= m;
+                    c[j] += m;
+                }
+            }
+            if !mexeu {
+                break;
+            }
+        }
+        let dentro = rect.shrink2(CAIXA / 2.0 + vec2(4.0, 4.0));
+        for (g, p) in grupos.iter().zip(&c) {
+            let p = dentro.clamp(*p);
+            let d = p - tela[g.1[0]];
+            for &i in &g.1 {
+                tela[i] += d;
+            }
+        }
     }
 }
+
+/// Size of a station box.
+const CAIXA: Vec2 = vec2(84.0, 46.0);
 
 pub const COR_TRABALHANDO: Color32 = Color32::from_rgb(46, 140, 80);
 pub const COR_OCIOSA: Color32 = Color32::from_rgb(88, 92, 100);

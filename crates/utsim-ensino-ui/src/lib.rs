@@ -162,7 +162,7 @@ impl App {
         let arquivos =
             utsim_ensino_store::arquivos::ler_pacote(caminho).map_err(|e| e.to_string())?;
         let p = carregar(&arquivos).map_err(|e| e.join("; "))?;
-        let caminho = std::fs::canonicalize(caminho).unwrap_or_else(|_| caminho.to_path_buf());
+        let caminho = absoluto(caminho);
         self.caminho_pacote = caminho.display().to_string();
         self.config.pacote_aberto = Some(caminho);
         self.salvar_config();
@@ -578,6 +578,21 @@ impl App {
                 .weak(),
             );
         }
+    }
+}
+
+/// The full path without the `\\?\` prefix that `canonicalize` gives on Windows, so the
+/// field shows a path the student recognizes.
+fn absoluto(caminho: &Path) -> PathBuf {
+    match std::fs::canonicalize(caminho) {
+        Ok(c) => {
+            let t = c.to_string_lossy();
+            match t.strip_prefix(r"\\?\") {
+                Some(r) if !r.starts_with("UNC") => PathBuf::from(r),
+                _ => c,
+            }
+        }
+        Err(_) => caminho.to_path_buf(),
     }
 }
 

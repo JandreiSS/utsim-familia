@@ -212,3 +212,36 @@ fn tela_do_caso_final() {
     salvar(&img, "9_caso_final");
     assert!(distintas(&img) > 10);
 }
+
+#[test]
+fn telas_do_pacote_de_qualidade_e_seguranca() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::com(Perfil::em(dir.path()), Arc::new(NaHora), || 0);
+    app.salvar_identidade("Ana Lima", "2027001", "ana");
+    let pasta = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../ensino/pacotes/qualidade_seguranca");
+    app.abrir_pacote(&pasta).unwrap();
+    let mut cap = Captura::new(Context::default(), vec2(1180.0, 800.0));
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    salvar(&img, "a0_pacote_qs");
+    assert!(distintas(&img) > 3);
+    let p = app.pacote.clone().unwrap();
+    cap.size = vec2(1180.0, 2300.0);
+    for (i, m) in p.missoes.iter().enumerate() {
+        app.abrir_missao(i);
+        {
+            let e = app.missao.as_mut().unwrap();
+            e.tentativa.decisoes = m.missao.completar(&m.missao.referencia);
+            e.simular("2027001".into(), &NaHora, None);
+        }
+        let _ = cap.imagem(3, |ui| app.draw(ui));
+        if let Some(a) = app.missao.as_mut().and_then(|m| m.animacao.as_mut()) {
+            a.ir_para(120.0);
+            a.pausado = true;
+        }
+        let img = cap.imagem(3, |ui| app.draw(ui));
+        let nome = m.missao.id.replace('/', "_");
+        salvar(&img, &format!("a{}_{nome}", i + 1));
+        assert!(distintas(&img) > 10, "{nome}");
+    }
+}
