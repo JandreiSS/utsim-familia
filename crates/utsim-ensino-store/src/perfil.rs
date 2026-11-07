@@ -45,6 +45,9 @@ pub struct Config {
     /// Text size multiplier (1.0 is the default).
     #[serde(default)]
     pub escala_texto: Option<f32>,
+    /// Mission package opened instead of the built-in campaign (folder or `.utse`).
+    #[serde(default)]
+    pub pacote_aberto: Option<PathBuf>,
 }
 
 pub struct Perfil {
