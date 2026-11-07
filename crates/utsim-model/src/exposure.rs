@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize};
 use utsim_core::TraceEvent;
 use utsim_nav::Role;
 
+/// Most sampling instants of the proximity and of the heat map per replication.
+pub const MAX_SAMPLES: usize = 2_000_000;
+
 /// Default distance of a simulated near-conflict (m), decision S4 of the plan.
 pub const NEAR_MISS_DISTANCE: f64 = 1.5;
 
@@ -430,8 +433,21 @@ pub fn measure(
         }
     }
     let mut heat = empty_heat(model, tracks, options.cell);
-    let step = options.step.max(1e-9);
-    let samples = ((to - from) / step).floor() as usize;
+    // At most MAX_SAMPLES instants per pair: a longer window takes a longer step.
+    let janela = (to - from).max(0.0);
+    let mut step = if options.step.is_finite() {
+        options.step.max(1e-9)
+    } else {
+        1.0
+    };
+    if janela.is_finite() && janela / step > MAX_SAMPLES as f64 {
+        step = janela / MAX_SAMPLES as f64;
+    }
+    let samples = if janela.is_finite() {
+        (janela / step).floor().min(MAX_SAMPLES as f64) as usize
+    } else {
+        0
+    };
     let mut near_misses = Vec::new();
     for p in &people {
         for k in 0..samples {
@@ -510,13 +526,20 @@ fn empty_heat(model: &Model, tracks: &[Track], cell: f64) -> HeatMap {
         lo = [0.0, 0.0];
         hi = [0.0, 0.0];
     }
-    let cell = if cell > 0.0 { cell } else { 1.0 };
+    let cell = if cell > 0.0 && cell.is_finite() {
+        cell
+    } else {
+        1.0
+    };
     let origin = [
         (lo[0] / cell).floor() * cell - cell,
         (lo[1] / cell).floor() * cell - cell,
     ];
-    let nx = (((hi[0] - origin[0]) / cell).ceil() as usize + 1).min(2000);
-    let ny = (((hi[1] - origin[1]) / cell).ceil() as usize + 1).min(2000);
+    // At most 2000 cells per side, clamped before the conversion: huge or non-finite
+    // coordinates must not overflow (NaN becomes 0).
+    let lado = |d: f64| ((d / cell).ceil().clamp(0.0, 1999.0) as usize) + 1;
+    let nx = lado(hi[0] - origin[0]);
+    let ny = lado(hi[1] - origin[1]);
     HeatMap {
         origin,
         cell,

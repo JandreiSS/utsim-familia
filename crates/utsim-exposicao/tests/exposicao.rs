@@ -219,3 +219,27 @@ fn the_report_metrics_carry_the_exposure() {
     let r = Model::load(&simples).unwrap().run_replications().unwrap();
     assert!(!r[0].metrics().keys().any(|k| k.contains("quase_conflitos")));
 }
+
+#[test]
+fn huge_coordinates_do_not_overflow_the_heat_map() {
+    let mut model = empty_model();
+    model.zones.push(ZoneDef {
+        name: "enorme".into(),
+        kind: ZoneKind::Other,
+        polygon: vec![[-1e300, -1e300], [1e300, -1e300], [1e300, 1e300]],
+        level: None,
+        ppe: Vec::new(),
+    });
+    let p = track(
+        "pessoa",
+        Role::Person,
+        vec![Move {
+            t0: 0.0,
+            t1: 10.0,
+            p0: [0.0, 0.0],
+            p1: [1e308, 1e308],
+        }],
+    );
+    let e = measure(&model, &[p], 0, 0.0, 10.0, Options::default());
+    assert!(e.heat.nx <= 2000 && e.heat.ny <= 2000);
+}
