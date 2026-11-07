@@ -7875,6 +7875,8 @@ dependencies = [
  "utsim-assets",
  "utsim-core",
  "utsim-edit",
+ "utsim-ensino-store",
+ "utsim-ensino-ui",
  "utsim-exposicao",
  "utsim-fit",
  "utsim-flow",

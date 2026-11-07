@@ -212,7 +212,7 @@ pub const PHASES: [Phase; 5] = [
                     t("Qui-quadrado", Analysis("qui_quadrado")),
                     t("Proporções", Analysis("duas_proporcoes")),
                     t("Mann-Whitney", Analysis("mann_whitney")),
-                    t("Correlação e regressão", Soon),
+                    t("Correlação e regressão", Analysis("regressao")),
                 ],
                 check: None,
             },
@@ -403,6 +403,13 @@ mod tests {
             "msa_linearidade",
             "msa_atributos",
             "experimento_fatorial",
+            "variancias",
+            "kruskal_wallis",
+            "mediana_mood",
+            "friedman",
+            "anova_dois_fatores",
+            "regressao",
+            "tamanho_amostra",
         ];
         for t in all_tools() {
             match t.target {
