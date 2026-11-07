@@ -60,6 +60,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             if ui.button("Sair da turma").clicked() {
                 app.config.turma = None;
                 app.salvar_config();
+                app.atualizar_pacotes();
             }
         }
         None => {
@@ -80,6 +81,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                             .map(PathBuf::from);
                         app.config.turma = Some(Vinculo { convite: c, pasta });
                         app.salvar_config();
+                        app.atualizar_pacotes();
                         if let Err(e) = app.perfil.sincronizar_pasta() {
                             app.mensagem = Some(format!("não foi possível gravar na pasta: {e}"));
                         }
@@ -140,6 +142,78 @@ pub struct EstadoProfessor {
     pub caso_pasta: String,
     pub caso_trabalho: Option<Trabalho<Result<String, String>>>,
     pub caso_relatorio: Option<String>,
+    /// The package of the last grading (the open one, or an exam rebuilt from its seed).
+    pub pacote_corrigido: Option<Arc<PacoteCarregado>>,
+    pub prova: EstadoProva,
+}
+
+/// The exam form of the teacher's panel.
+#[derive(Default)]
+pub struct EstadoProva {
+    pub id: String,
+    pub titulo: String,
+    /// Missions drawn per act.
+    pub por_ato: std::collections::BTreeMap<u32, usize>,
+    pub inicio: String,
+    pub fim: String,
+    pub duracao_min: u32,
+    pub tentativas: u32,
+    pub semente: String,
+    /// Exam whose deliveries the next grading takes (`None`: the open package).
+    pub corrigir: Option<String>,
+}
+
+impl EstadoProva {
+    /// The assembly from the form (`agora` seeds the draw when the seed is empty).
+    pub fn montagem(
+        &self,
+        base: &PacoteCarregado,
+        agora: i64,
+    ) -> Result<utsim_ensino_core::prova::Montagem, String> {
+        use utsim_ensino_core::prova::{Montagem, Prova, Regra, ler_data_hora};
+        let fuso = -180;
+        let inicio =
+            ler_data_hora(&self.inicio, fuso).ok_or("início no formato AAAA-MM-DD HH:MM")?;
+        let fim = ler_data_hora(&self.fim, fuso).ok_or("fim no formato AAAA-MM-DD HH:MM")?;
+        let semente = if self.semente.trim().is_empty() {
+            agora as u64
+        } else {
+            self.semente
+                .trim()
+                .parse()
+                .map_err(|_| "a semente é um número inteiro")?
+        };
+        let regras: Vec<Regra> = self
+            .por_ato
+            .iter()
+            .filter(|(_, n)| **n > 0)
+            .map(|(a, n)| Regra {
+                ato: Some(*a),
+                conceito: None,
+                quantidade: *n,
+            })
+            .collect();
+        let id = utsim_ensino_store::pasta::slug(self.id.trim());
+        Ok(Montagem {
+            titulo: if self.titulo.trim().is_empty() {
+                id.clone()
+            } else {
+                self.titulo.trim().to_string()
+            },
+            id,
+            pacote_base: base.pacote.id.clone(),
+            hash_base: base.hash.clone(),
+            regras,
+            prova: Prova {
+                semente,
+                inicio,
+                fim,
+                duracao_min: self.duracao_min,
+                tentativas: self.tentativas.max(1),
+                fuso_min: fuso,
+            },
+        })
+    }
 }
 
 impl EstadoProfessor {
@@ -217,6 +291,7 @@ impl EstadoProfessor {
             avisos.extend(a);
         }
         self.avisos_leitura = avisos;
+        self.pacote_corrigido = Some(pacote.clone());
         let registro = turma.registro;
         self.trabalho = Some(Trabalho::iniciar(executor, ctx, move |prog| {
             let cancelar = AtomicBool::new(false);
@@ -281,6 +356,9 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     let Some(pacote) = app.pacote.clone() else {
         return;
     };
+    let pacote_aberto = app.config.pacote_aberto.clone();
+    let perfil = utsim_ensino_store::perfil::Perfil::em(&app.perfil.dir);
+    let agora = (app.relogio)();
     ui.heading("Professor");
     let s = &mut app.professor;
 
@@ -482,7 +560,23 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             )
             .clicked()
         {
-            s.corrigir(pacote.clone(), executor.as_ref(), Some(ctx.clone()));
+            let alvo = match s.prova.corrigir.clone() {
+                None => Ok(pacote.clone()),
+                Some(id) => utsim_ensino_store::prova::provas_salvas(&perfil)
+                    .into_iter()
+                    .find(|m| m.id == id)
+                    .ok_or_else(|| format!("prova {id} não encontrada"))
+                    .and_then(|m| {
+                        let base = crate::arquivos_de(pacote_aberto.as_deref())
+                            .ok_or("não foi possível ler o pacote aberto")?;
+                        utsim_ensino_store::prova::pacote_da_prova(&base, &pacote, &m)
+                    })
+                    .map(Arc::new),
+            };
+            match alvo {
+                Ok(p) => s.corrigir(p, executor.as_ref(), Some(ctx.clone())),
+                Err(e) => app.mensagem = Some(format!("não foi possível corrigir: {e}")),
+            }
         }
         if let Some(t) = &s.trabalho {
             ui.add(
@@ -497,6 +591,19 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     for a in &s.avisos_leitura {
         ui.colored_label(AMARELO, a);
     }
+    if let Some(m) = secao_prova(
+        ui,
+        s,
+        &dir,
+        &perfil,
+        &pacote,
+        pacote_aberto.as_deref(),
+        agora,
+    ) {
+        app.mensagem = Some(m);
+    }
+    let s = &mut app.professor;
+    let pacote = s.pacote_corrigido.clone().unwrap_or(pacote);
     let Some(c) = &s.correcao else { return };
     ui.separator();
     ui.label(RichText::new("Matriz aluno por missão").strong());
@@ -537,6 +644,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             }
         });
     });
+    if !c.semelhancas.is_empty() {
+        ui.separator();
+        ui.label(RichText::new("Pares para olhar de perto").strong());
+        ui.label(RichText::new("Semelhança não é prova de cópia: a decisão é sua.").weak());
+        for x in &c.semelhancas {
+            ui.label(format!("• {} e {} em {}: {}", x.a, x.b, x.missao, x.motivo));
+        }
+    }
     ui.separator();
     ui.label(RichText::new("Erros mais comuns").strong());
     if c.erros_comuns.values().all(Vec::is_empty) {
@@ -574,4 +689,99 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             });
         }
     });
+}
+
+/// The exam: draw, window and runs, published in the class folder; and which exam the
+/// next grading takes. Returns a message for the status line.
+fn secao_prova(
+    ui: &mut Ui,
+    s: &mut EstadoProfessor,
+    dir: &Path,
+    perfil: &utsim_ensino_store::perfil::Perfil,
+    pacote: &Arc<PacoteCarregado>,
+    pacote_aberto: Option<&Path>,
+    agora: i64,
+) -> Option<String> {
+    let mut msg = None;
+    ui.collapsing("Prova", |ui| {
+        ui.label(texto::PROVA_TEXTO);
+        let p = &mut s.prova;
+        if p.tentativas == 0 {
+            p.tentativas = 1;
+        }
+        egui::Grid::new("prova").num_columns(2).show(ui, |ui| {
+            ui.label("Id da prova");
+            ui.text_edit_singleline(&mut p.id);
+            ui.end_row();
+            ui.label("Título");
+            ui.text_edit_singleline(&mut p.titulo);
+            ui.end_row();
+            ui.label("Início (AAAA-MM-DD HH:MM, Brasília)");
+            ui.text_edit_singleline(&mut p.inicio);
+            ui.end_row();
+            ui.label("Fim");
+            ui.text_edit_singleline(&mut p.fim);
+            ui.end_row();
+            ui.label("Tempo máximo (min, 0 para só a janela)");
+            ui.add(egui::DragValue::new(&mut p.duracao_min).range(0..=600));
+            ui.end_row();
+            ui.label("Rodadas por missão");
+            ui.add(egui::DragValue::new(&mut p.tentativas).range(1..=20));
+            ui.end_row();
+            ui.label("Semente (vazia: sorteada agora)");
+            ui.text_edit_singleline(&mut p.semente);
+            ui.end_row();
+        });
+        ui.label("Missões sorteadas por ato (as de entregar modelo ficam de fora):");
+        ui.horizontal_wrapped(|ui| {
+            for ato in &pacote.pacote.atos {
+                let n = p.por_ato.entry(ato.numero).or_default();
+                ui.label(format!("Ato {}", ato.numero));
+                ui.add(egui::DragValue::new(n).range(0..=ato.missoes.len()));
+            }
+        });
+        if ui.button("Sortear e publicar na pasta da turma").clicked() {
+            let r = p.montagem(pacote, agora).and_then(|m| {
+                let base = crate::arquivos_de(pacote_aberto)
+                    .ok_or("não foi possível ler o pacote aberto")?;
+                let caminho = utsim_ensino_store::prova::publicar_prova(
+                    &PastaTurma {
+                        dir: dir.to_path_buf(),
+                    },
+                    perfil,
+                    &base,
+                    pacote,
+                    &m,
+                )
+                .map_err(|e| e.to_string())?;
+                Ok((m, caminho))
+            });
+            msg = Some(match r {
+                Ok((m, c)) => {
+                    p.semente = m.prova.semente.to_string();
+                    p.corrigir = Some(m.id.clone());
+                    format!(
+                        "prova {} publicada em {} (semente {}). A montagem fica só no seu perfil.",
+                        m.id,
+                        c.display(),
+                        m.prova.semente
+                    )
+                }
+                Err(e) => format!("prova não publicada: {e}"),
+            });
+        }
+        let salvas = utsim_ensino_store::prova::provas_salvas(perfil);
+        ui.horizontal_wrapped(|ui| {
+            ui.label("A correção usa:");
+            ui.selectable_value(&mut p.corrigir, None, "o pacote aberto");
+            for m in &salvas {
+                ui.selectable_value(
+                    &mut p.corrigir,
+                    Some(m.id.clone()),
+                    format!("a prova {}", m.id),
+                );
+            }
+        });
+    });
+    msg
 }

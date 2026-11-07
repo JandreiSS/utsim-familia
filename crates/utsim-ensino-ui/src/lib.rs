@@ -78,6 +78,8 @@ pub struct App {
     pub caminho_pacote: String,
     /// Packages installed beside the program (`../pacotes` from the executable).
     pub pacotes_instalados: Vec<utsim_ensino_store::arquivos::PacoteEncontrado>,
+    /// Folder of the packages installed with the program.
+    pub pasta_instalada: Option<PathBuf>,
     nome: String,
     registro: String,
     apelido: String,
@@ -93,15 +95,43 @@ fn agora_ms() -> i64 {
 impl App {
     pub fn new(perfil: Perfil) -> App {
         let mut app = App::com(perfil, Arc::new(Fios), agora_ms);
-        if let Some(dir) = pasta_de_pacotes() {
-            app.procurar_pacotes(&dir);
+        match pasta_de_pacotes() {
+            Some(dir) => app.procurar_pacotes(&dir),
+            None => app.atualizar_pacotes(),
         }
         app
     }
 
     /// Lists the packages of `dir` in the map, so the student opens them with one click.
     pub fn procurar_pacotes(&mut self, dir: &Path) {
-        self.pacotes_instalados = utsim_ensino_store::arquivos::pacotes_em(dir);
+        self.pasta_instalada = Some(dir.to_path_buf());
+        self.atualizar_pacotes();
+    }
+
+    /// The packages installed with the program and those the teacher published in the
+    /// class folder (`pacotes/`), such as an exam.
+    pub fn atualizar_pacotes(&mut self) {
+        let mut v = Vec::new();
+        if let Some(d) = &self.pasta_instalada {
+            v.extend(utsim_ensino_store::arquivos::pacotes_em(d));
+        }
+        if let Some(d) = self.config.turma.as_ref().and_then(|t| t.pasta.as_ref()) {
+            v.extend(utsim_ensino_store::arquivos::pacotes_em(&d.join("pacotes")));
+        }
+        self.pacotes_instalados = v;
+    }
+
+    /// The files of the open package (the built-in campaign or the one opened from disk).
+    pub fn arquivos_do_pacote(&self) -> Option<utsim_ensino_core::pacote::Arquivos> {
+        arquivos_de(self.config.pacote_aberto.as_deref())
+    }
+
+    /// The exam rules of the open package and when the student opened it.
+    pub fn prova(&self) -> Option<(utsim_ensino_core::prova::Prova, Option<i64>)> {
+        let p = self.pacote.as_ref()?;
+        let pr = p.pacote.prova.clone()?;
+        let aberta = self.config.provas_abertas.get(&p.pacote.id).copied();
+        Some((pr, aberta))
     }
 
     pub fn com(perfil: Perfil, executor: Arc<dyn Executor>, relogio: fn() -> i64) -> App {
@@ -144,6 +174,7 @@ impl App {
             mensagem: None,
             caminho_pacote,
             pacotes_instalados: Vec::new(),
+            pasta_instalada: None,
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,
@@ -275,6 +306,18 @@ impl App {
                 // No attempt on record (another computer): the predictions stay open.
                 estado.previsao_travada = false;
             }
+            // The time limit of an exam counts from the first mission opened.
+            if let Some(pr) = &p.pacote.prova {
+                let agora = (self.relogio)();
+                if pr.pode_rodar(agora, None).is_ok()
+                    && !self.config.provas_abertas.contains_key(&p.pacote.id)
+                {
+                    self.config
+                        .provas_abertas
+                        .insert(p.pacote.id.clone(), agora);
+                    self.salvar_config();
+                }
+            }
             self.missao = Some(estado);
             self.tela = Tela::Missao;
         }
@@ -379,7 +422,13 @@ impl App {
                 ui.label(format!("{} ({})", a.nome, a.registro));
             }
             ui.separator();
-            ui.label(format!("★ {}", self.progresso.estrelas()));
+            if self
+                .pacote
+                .as_ref()
+                .is_none_or(|p| p.pacote.prova.is_none())
+            {
+                ui.label(format!("★ {}", self.progresso.estrelas()));
+            }
         });
     }
 
@@ -428,6 +477,12 @@ impl App {
         };
         ui.heading(&p.pacote.titulo);
         ui.label(&p.pacote.descricao);
+        if let Some((pr, aberta)) = self.prova() {
+            ui.colored_label(
+                Color32::from_rgb(242, 163, 58),
+                texto_prova(&pr, aberta, (self.relogio)()),
+            );
+        }
         self.atalhos_de_pacotes(ui);
         ui.add_space(8.0);
         let mut abrir = None;
@@ -445,7 +500,8 @@ impl App {
                 .enumerate()
                 .filter(|(_, m)| m.ato == ato.numero)
             {
-                let liberada = self.progresso.liberada(&p, i);
+                // In an exam every mission is open from the start.
+                let liberada = p.pacote.prova.is_some() || self.progresso.liberada(&p, i);
                 let reg = self.progresso.registro(&m.missao.id);
                 ui.horizontal(|ui| {
                     let estrelas = reg.map_or(0, |r| r.estrelas);
@@ -454,7 +510,10 @@ impl App {
                         "★".repeat(estrelas as usize),
                         "☆".repeat(3 - estrelas.min(3) as usize)
                     );
-                    ui.label(RichText::new(marca).monospace());
+                    // An exam shows no grade before the teacher's correction.
+                    if p.pacote.prova.is_none() {
+                        ui.label(RichText::new(marca).monospace());
+                    }
                     let titulo = format!("{} {}", numero_missao(&p, i), m.missao.titulo);
                     if ui
                         .add_enabled(liberada, egui::Button::new(titulo))
@@ -471,7 +530,7 @@ impl App {
                         };
                         ui.label(RichText::new(txt).weak());
                     }
-                    if let Some(r) = reg {
+                    if let Some(r) = reg.filter(|_| p.pacote.prova.is_none()) {
                         ui.label(format!(
                             "melhor nota {:.1} em {} tentativa(s)",
                             r.melhor_nota, r.tentativas
@@ -647,6 +706,44 @@ impl App {
             );
         }
     }
+}
+
+/// The files of a package opened from disk, or of the campaign when `None`.
+pub fn arquivos_de(caminho: Option<&Path>) -> Option<utsim_ensino_core::pacote::Arquivos> {
+    match caminho {
+        Some(c) => utsim_ensino_store::arquivos::ler_pacote(c).ok(),
+        None => Some(utsim_ensino_core::campanha::arquivos()),
+    }
+}
+
+/// The exam line: window, time limit and runs per mission.
+pub fn texto_prova(
+    pr: &utsim_ensino_core::prova::Prova,
+    aberta: Option<i64>,
+    agora: i64,
+) -> String {
+    use utsim_ensino_core::prova::data_hora;
+    let mut t = format!(
+        "Prova de {} a {}, {} rodada(s) por missão",
+        data_hora(pr.inicio, pr.fuso_min),
+        data_hora(pr.fim, pr.fuso_min),
+        pr.tentativas
+    );
+    if pr.duracao_min > 0 {
+        t.push_str(&format!(
+            ", {} min a partir da primeira missão aberta",
+            pr.duracao_min
+        ));
+    }
+    match pr.pode_rodar(agora, aberta) {
+        Ok(()) => t.push_str(&format!(
+            ". Restam {} min.",
+            (pr.restante(agora, aberta) + 59_999) / 60_000
+        )),
+        Err(e) => t.push_str(&format!(". Agora não dá para simular: {e}.")),
+    }
+    t.push_str(" Sem dicas, sem nota na tela e sem caixa de areia: o professor corrige.");
+    t
 }
 
 /// `pacotes` beside the program folder: the launcher installs `bin/utsim-ensino` and

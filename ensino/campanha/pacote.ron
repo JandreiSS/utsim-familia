@@ -4,11 +4,23 @@ Pacote(
     id: "campanha",
     formato: 1,
     titulo: "Campanha UTSim Ensino",
-    versao: "0.4.0",
+    versao: "0.5.0",
     autor: "UTSim",
     descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
     glossario: "glossario.ron",
+    // Conceito do glossário para ferramentas do currículo do UTSim Seis Sigma: a missão
+    // resolvida vira "praticou" nessas ferramentas no programa da empresa.
+    competencias: {
+        "ctq": ["voc_ctq"],
+        "msa": ["msa"],
+        "capacidade_do_processo": ["capacidade"],
+        "doe": ["doe"],
+        "carta_de_controle": ["cep"],
+        "lead_time": ["vsm"],
+        "wip": ["vsm"],
+        "takt": ["vsm"],
+    },
     atos: [
         (numero: 1, titulo: "Gargalo e fluxo", missoes: [
             "ato1/furadeira.ron",
