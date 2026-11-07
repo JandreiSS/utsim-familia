@@ -588,6 +588,49 @@ pub fn metricas(e: &Exposure) -> std::collections::BTreeMap<String, f64> {
     out
 }
 
+/// Puts the exposure of one replication into its report, as custom metrics of each mobile
+/// resource (`<recurso>.quase_conflitos`, and for people `<pessoa>.sem_epi`,
+/// `<pessoa>.tempo_zona.<zona>` and `<pessoa>.entradas_zona.<zona>`), with the default
+/// [`Options`] (decision S4: 1.5 m). Called by `Model::drive` for models with zones.
+pub fn add_to_report(
+    model: &Model,
+    report: &mut utsim_core::RunReport,
+    records: &[utsim_core::TraceRecord],
+) {
+    let tracks = tracks(model, records, report.end_time);
+    let e = measure(
+        model,
+        &tracks,
+        report.replication,
+        report.stats_from,
+        report.end_time,
+        Options::default(),
+    );
+    for t in &tracks {
+        let Some(b) = report.blocks.get_mut(t.object) else {
+            continue;
+        };
+        let n = e
+            .near_misses
+            .iter()
+            .filter(|m| m.person == t.name || m.vehicle == t.name)
+            .count();
+        b.custom.insert("quase_conflitos".into(), n as f64);
+        if t.is_person() {
+            let mine: Vec<&ZoneExposure> = e.zones.iter().filter(|z| z.person == t.name).collect();
+            b.custom.insert(
+                "sem_epi".into(),
+                f64::from(mine.iter().map(|z| z.entries_without_ppe).sum::<u32>()),
+            );
+            for z in mine {
+                b.custom.insert(format!("tempo_zona.{}", z.zone), z.time);
+                b.custom
+                    .insert(format!("entradas_zona.{}", z.zone), f64::from(z.entries));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -683,48 +726,5 @@ mod tests {
         let i = interval(&[2.0, 2.0, 2.0]);
         assert_eq!(i.mean, 2.0);
         assert_eq!(i.half_width, 0.0);
-    }
-}
-
-/// Puts the exposure of one replication into its report, as custom metrics of each mobile
-/// resource (`<recurso>.quase_conflitos`, and for people `<pessoa>.sem_epi`,
-/// `<pessoa>.tempo_zona.<zona>` and `<pessoa>.entradas_zona.<zona>`), with the default
-/// [`Options`] (decision S4: 1.5 m). Called by `Model::drive` for models with zones.
-pub fn add_to_report(
-    model: &Model,
-    report: &mut utsim_core::RunReport,
-    records: &[utsim_core::TraceRecord],
-) {
-    let tracks = tracks(model, records, report.end_time);
-    let e = measure(
-        model,
-        &tracks,
-        report.replication,
-        report.stats_from,
-        report.end_time,
-        Options::default(),
-    );
-    for t in &tracks {
-        let Some(b) = report.blocks.get_mut(t.object) else {
-            continue;
-        };
-        let n = e
-            .near_misses
-            .iter()
-            .filter(|m| m.person == t.name || m.vehicle == t.name)
-            .count();
-        b.custom.insert("quase_conflitos".into(), n as f64);
-        if t.is_person() {
-            let mine: Vec<&ZoneExposure> = e.zones.iter().filter(|z| z.person == t.name).collect();
-            b.custom.insert(
-                "sem_epi".into(),
-                f64::from(mine.iter().map(|z| z.entries_without_ppe).sum::<u32>()),
-            );
-            for z in mine {
-                b.custom.insert(format!("tempo_zona.{}", z.zone), z.time);
-                b.custom
-                    .insert(format!("entradas_zona.{}", z.zone), f64::from(z.entries));
-            }
-        }
     }
 }
