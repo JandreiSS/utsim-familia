@@ -114,3 +114,52 @@ fn the_report_metrics_carry_the_quality_counts() {
     assert!(m["cliente.retrabalhadas"] > 0.0);
     assert!(m.contains_key("cliente.defeitos.risco"));
 }
+
+#[test]
+fn an_8d_becomes_an_idea_in_the_seis_sigma_portfolio() {
+    use utsim_lss_core::portfolio;
+    use utsim_lss_store::{Clock, Identity, ProjectFolder, SystemClock};
+    use utsim_qualidade_core::oito_d::{OitoD, Problema};
+    let dir = tempfile::tempdir().unwrap();
+    let me = Identity {
+        person: SystemClock.new_id(),
+        name: "Ana".into(),
+        email: "ana@exemplo.org".into(),
+    };
+    let caminho = dir.path().join("Carteira.lss");
+    ProjectFolder::create_portfolio(
+        &caminho,
+        "Carteira",
+        "Planta 1",
+        "Programa",
+        &me,
+        &SystemClock,
+        None,
+    )
+    .unwrap();
+    let d = OitoD {
+        titulo: "Trinca na flange".into(),
+        problema: Problema {
+            o_que: "Trinca na flange".into(),
+            quanto: "3 %".into(),
+            ..Problema::default()
+        },
+        ..OitoD::default()
+    };
+    let envio =
+        utsim_qualidade_core::seis_sigma::enviar(&caminho, &me, &SystemClock, &d, "torno 2")
+            .unwrap();
+    // Someone else opens the portfolio: the idea is there with the attachment and its hash.
+    let pasta = ProjectFolder::open(&caminho, &me, None).unwrap();
+    let ideias = portfolio::ideas(pasta.state(), pasta.project_id());
+    let i = ideias.iter().find(|i| i.id == envio.ideia).unwrap();
+    assert_eq!(i.title, "8D: Trinca na flange");
+    assert!(i.data.contains(&envio.hash));
+    let bytes = std::fs::read(caminho.join("anexos").join(&envio.anexo)).unwrap();
+    let volta: OitoD = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(volta, d);
+    // A project folder (not a portfolio) is refused.
+    assert!(
+        utsim_qualidade_core::seis_sigma::enviar(dir.path(), &me, &SystemClock, &d, "x").is_err()
+    );
+}
