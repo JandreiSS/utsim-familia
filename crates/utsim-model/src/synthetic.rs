@@ -73,6 +73,7 @@ fn queue() -> ObjectKind {
         discipline: Discipline::Fifo,
         batch: None,
         order: None,
+        patience: None,
     }
 }
 

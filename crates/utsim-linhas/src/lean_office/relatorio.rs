@@ -8,7 +8,7 @@ use utsim_core::stats::Summary;
 use super::{CAUSES, DAY, Indicadores, mhw, num, num1, pct_hw};
 use crate::pacote::Vocabulary;
 
-const CSS: &str = r#"
+pub(crate) const CSS: &str = r#"
 :root{--bg:#fff;--fg:#1c1f24;--muted:#5d6672;--line:#d8dde3;--accent:#2563eb;--hot:#c2410c;--ok:#16a34a;--card:#f5f7fa}
 @media(prefers-color-scheme:dark){:root{--bg:#14171b;--fg:#e6e9ee;--muted:#9aa4b0;--line:#2d343c;--accent:#6ea0ff;--hot:#fb923c;--ok:#4ade80;--card:#1d2228}}
 body{font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:1100px;margin:2rem auto;padding:0 1rem}
@@ -32,7 +32,7 @@ svg .sla{stroke:var(--hot);stroke-width:2;stroke-dasharray:5 3}
 td.calor{text-align:center;font-size:.75rem}
 "#;
 
-fn esc(s: &str) -> String {
+pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

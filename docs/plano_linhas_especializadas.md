@@ -516,3 +516,111 @@ aprovado.
 9. **L9 Dados reais de sistemas de chamados.** Aceitar exportações CSV genéricas com
    mapeamento de colunas (proposta) ou conectores para sistemas específicos (só se a empresa
    piloto pedir, sem nomear produto no repositório).
+
+---
+
+## 7. Segunda linha: Serviços e atendimento
+
+Plano curto, no formato da seção 1, escrito em 2026-11-07 quando o Lean Office ficou completo
+(decisão L8: serviços e atendimento como segunda linha). A linha reaproveita quase toda a
+infraestrutura do Lean Office: pacote em `linhas/servicos/`, predefinições, vocabulário,
+indicadores com IC, relatório HTML, Biblioteca na interface, multitarefa e preempção `Full`.
+
+### 7.1 O que se estuda num serviço de atendimento
+
+Agências e lojas, cartórios e balcões de serviço público, recepção de clínicas, centrais de
+atendimento por telefone, chat e e-mail, balcões de pós-venda. O cliente chega (com horário de
+pico), tira uma senha pelo tipo (normal, preferencial, agendado), espera, às vezes desiste, é
+chamado num guichê ou atendido num canal. As perguntas típicas:
+
+- quanto o cliente espera e que fração é atendida dentro da meta (nível de serviço, "80 % em
+  até 15 minutos");
+- quantos desistem e depois de quanto tempo (abandono);
+- quantos atendentes são precisos em cada hora do dia (dimensionamento) e qual o efeito de
+  mudar a escala, abrir um guichê só no pico, separar preferenciais ou juntar filas;
+- o efeito de atender vários canais ao mesmo tempo e de deixar o telefone interromper o chat.
+
+### 7.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Cliente | item, com rótulos `tipo`, `prioridade` e o canal | existe |
+| Chegadas por hora do dia | `Source` com `schedule` (taxa por período) | existe |
+| Senha por tipo | rótulo `tipo` na chegada; fila com `order: Desc("prioridade")`; número da senha pela ordem de chegada de cada tipo, no relatório | existe (o número é novo, só no relatório) |
+| Fila de espera com desistência | `Queue` com **`patience: Dist`**: cada cliente sorteia a paciência ao entrar e, se ainda estiver na fila quando ela acaba, sai do modelo e conta como abandono | **novo no núcleo** |
+| Guichê, mesa de atendimento | `Processor` com `operators` da equipe | existe |
+| Atendentes e escala | `Dispatcher` com pessoas e `shifts` | existe |
+| Atendimento por canais | multitarefa da pessoa (`multitask`) e telefone com prioridade maior e `preempt: Full` | existe (passos 10 e 16) |
+| Painel de chamada | sequência de chamadas (senha, guichê, hora) tirada do rastro da replicação 0 | novo, no relatório |
+
+### 7.3 Biblioteca
+
+Entrada de clientes (com tipos e prioridade), fila de espera (com paciência e ordem por
+prioridade), guichê (atendimento por uma pessoa da equipe), canal (entrada, fila e
+atendimento de um canal remoto num só passo), equipe de atendentes (com multitarefa e
+interrupções), atendente e saída. Visual: guichê como mesa, fila como área no chão.
+
+### 7.4 Vocabulário
+
+item → cliente; `Queue` → fila de espera; `Processor` → guichê; `Transporter` → atendente;
+`Dispatcher` → equipe de atendimento; `time_in_system` → tempo no atendimento; `idle` →
+livre; `waiting_operator` → esperando o atendente.
+
+### 7.5 Indicadores
+
+Por replicação, com IC de 95 %: clientes atendidos e abandonos (contagem e %), tempo médio
+de espera (TME) e de atendimento (TMA), espera do 90º percentil, **nível de serviço** (% dos
+atendidos que esperaram até a meta; a meta é uma opção do relatório, padrão 15 min), por tipo
+de senha; tempo até o abandono; ocupação dos atendentes por hora; **dimensionamento por
+hora**: chegadas por hora, TMA e o número de atendentes que o modelo de fila M/M/c (Erlang C)
+pede para cumprir a meta em cada hora, ao lado da ocupação simulada.
+
+### 7.6 Relatórios
+
+`utsim linha servicos relatorio` com texto e HTML: cartões, tabela por tipo de senha,
+histograma da espera com a linha da meta, abandonos por tempo de espera, ocupação por hora,
+tabela de dimensionamento e o **painel de chamada** (as primeiras chamadas da replicação 0:
+hora, senha, guichê, espera).
+
+### 7.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| Agência com senhas | guichês, senha normal e preferencial, pico do almoço, abandono |
+| Central multicanal | telefone, chat e e-mail na mesma equipe, multitarefa, telefone interrompendo o chat |
+| Atendimento ao cidadão | triagem, serviços por tipo de senha, agendados com prioridade, meta legal de espera |
+
+### 7.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| S1 | `patience` na `Queue` (abandono), testes à mão, golden inalterados | 4–6 | Opus |
+| S2 | Pacote `linhas/servicos/` (predefinições e vocabulário) | 3–4 | Sonnet |
+| S3 | Indicadores, nível de serviço, painel de chamada e dimensionamento (Erlang C) | 8–12 | Opus |
+| S4 | Relatório da linha e `utsim linha servicos relatorio` / `--linha servicos` | 4–6 | Sonnet |
+| S5 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Situação em 2026-11-07:** feitos os passos S1 a S5 com as propostas das decisões abaixo
+(o dono ainda não respondeu; mudar qualquer uma é pequeno). `patience` na `Queue` (abandono,
+`crates/utsim-model/tests/abandono.rs` com casos à mão); pacote `linhas/servicos/` com 7
+predefinições e o vocabulário; módulo `utsim_linhas::servicos` com os indicadores, o painel de
+chamada e o dimensionamento por Erlang C (testes à mão, inclusive a fórmula); `utsim linha
+servicos relatorio [--meta M] [--alvo A] [--html] [--json]` e `utsim run --linha servicos`; os
+três modelos prontos com golden novos; capítulo `docs/manual/src/linhas/servicos/index.md`. A
+espera do cliente é o tempo no modelo menos o atendimento sorteado (conta a espera no guichê
+por um atendente e a interrupção, não só a fila). Os atendentes dos modelos prontos saem de
+turno com `Finish` e ficam meia hora depois de fechar a porta.
+
+### 7.9 Decisões do dono
+
+1. **S-D1 Nome exibido.** "Serviços e atendimento" (proposta) ou outro.
+2. **S-D2 Meta padrão do nível de serviço.** 80 % em até 15 min no presencial (proposta), com
+   a meta mudável no relatório; ou outra.
+3. **S-D3 Quem desiste.** Sai do modelo e conta como abandono (proposta) ou vai a uma saída
+   ligável ("desistiu"), para modelar quem volta outro dia.
+4. **S-D4 Painel de chamada na interface.** Só no relatório agora (proposta) ou também um
+   painel ao vivo na interface Godot (pede trabalho na frente da interface).
+5. **S-D5 Dimensionamento.** Erlang C, sem abandono, que é conservador (proposta), ou
+   Erlang A, com abandono, depois.
+6. **S-D6 Modelos prontos.** Os três da seção 7.7 (proposta) ou outros (clínica, loja,
+   cartório).
