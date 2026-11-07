@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc a6b0ec7abca2b25ffd40c6048a8771c0f8711d26078dffd3c31741ab09a7155d # shrinks to pick = 26, ops = [(106, 37515, 19007)]
+cc a384956398890909023a6081cbc945c30ea0b16aa68b1225f1d7a9155e781475 # shrinks to pick = 39, ops = [(178, 19558, 45582)]

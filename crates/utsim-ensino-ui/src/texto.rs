@@ -15,7 +15,7 @@ pub const CANCELAR: &str = "Cancelar";
 pub const AREIA_TEXTO: &str = "Sem meta e sem orçamento. Compare dois cenários com os mesmos números aleatórios. Nada aqui conta nota.";
 pub const LIMITE_COLA: &str = "Sem servidor, nada impede a consulta. A entrega leva as decisões e as tentativas assinadas, e o professor simula de novo: editar o arquivo não muda a nota e deixa a alteração visível.";
 pub const OUTROS_PACOTES: &str = "Outros pacotes de missões";
-pub const OUTROS_PACOTES_TEXTO: &str = "Abra uma pasta ou um arquivo .utse que o professor passou. O progresso fica guardado por pacote, e a campanha continua onde parou.";
+pub const OUTROS_PACOTES_TEXTO: &str = "Também dá para abrir uma pasta ou um arquivo .utse que o professor passou. O progresso fica guardado por pacote, e a campanha continua onde parou.";
 
 /// Draws a statement: `#` headings, `-` and `1.` lists, `**bold**` as strong text.
 pub fn markdown(ui: &mut Ui, md: &str) {

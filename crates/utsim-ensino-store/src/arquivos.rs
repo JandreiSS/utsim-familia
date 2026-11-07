@@ -2,7 +2,7 @@
 //! Deliveries (`.utsr`) and invitations (`.utsc`) are JSON files.
 
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use utsim_ensino_core::pacote::Arquivos;
@@ -91,6 +91,45 @@ pub fn ler_pacote(path: &Path) -> Result<Arquivos> {
     } else {
         ler_utse(path)
     }
+}
+
+/// A package found in a folder of packages.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PacoteEncontrado {
+    pub caminho: PathBuf,
+    pub id: String,
+    pub titulo: String,
+    pub descricao: String,
+}
+
+/// The packages inside `dir` (each subfolder with a `pacote.ron` and each `.utse`), by
+/// title. Reads only the manifests, and skips what does not read.
+pub fn pacotes_em(dir: &Path) -> Vec<PacoteEncontrado> {
+    let Ok(entradas) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut v: Vec<PacoteEncontrado> = entradas
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            if p.is_dir() {
+                p.join("pacote.ron").is_file()
+            } else {
+                p.extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("utse"))
+            }
+        })
+        .filter_map(|p| {
+            let m = utsim_ensino_core::pacote::manifesto(&ler_pacote(&p).ok()?).ok()?;
+            Some(PacoteEncontrado {
+                caminho: p,
+                id: m.id,
+                titulo: m.titulo,
+                descricao: m.descricao,
+            })
+        })
+        .collect();
+    v.sort_by(|a, b| a.titulo.cmp(&b.titulo));
+    v
 }
 
 /// Delivery format read by this version.

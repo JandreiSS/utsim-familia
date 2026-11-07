@@ -164,11 +164,17 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 }
 
 /// Reads and validates a package. Every problem is reported, each with the file it is in.
-pub fn carregar(arquivos: &Arquivos) -> Result<PacoteCarregado, Vec<String>> {
-    let manifesto = texto(arquivos, "pacote.ron").map_err(|e| vec![e])?;
-    let pacote: Pacote = ron_options()
+/// Only the manifest (`pacote.ron`): title and description for a list of packages, with
+/// no mission run.
+pub fn manifesto(arquivos: &Arquivos) -> Result<Pacote, String> {
+    let manifesto = texto(arquivos, "pacote.ron")?;
+    ron_options()
         .from_str(&manifesto)
-        .map_err(|e| vec![format!("pacote.ron: erro de sintaxe: {e}")])?;
+        .map_err(|e| format!("pacote.ron: erro de sintaxe: {e}"))
+}
+
+pub fn carregar(arquivos: &Arquivos) -> Result<PacoteCarregado, Vec<String>> {
+    let pacote = manifesto(arquivos).map_err(|e| vec![e])?;
     if pacote.formato > FORMATO_PACOTE {
         return Err(vec![format!(
             "pacote.ron: formato {}; esta versão lê até o formato {FORMATO_PACOTE}",

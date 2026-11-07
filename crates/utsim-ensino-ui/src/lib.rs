@@ -76,6 +76,8 @@ pub struct App {
     pub mensagem: Option<String>,
     /// Folder or `.utse` typed in the map to open another package.
     pub caminho_pacote: String,
+    /// Packages installed beside the program (`../pacotes` from the executable).
+    pub pacotes_instalados: Vec<utsim_ensino_store::arquivos::PacoteEncontrado>,
     nome: String,
     registro: String,
     apelido: String,
@@ -90,7 +92,16 @@ fn agora_ms() -> i64 {
 
 impl App {
     pub fn new(perfil: Perfil) -> App {
-        App::com(perfil, Arc::new(Fios), agora_ms)
+        let mut app = App::com(perfil, Arc::new(Fios), agora_ms);
+        if let Some(dir) = pasta_de_pacotes() {
+            app.procurar_pacotes(&dir);
+        }
+        app
+    }
+
+    /// Lists the packages of `dir` in the map, so the student opens them with one click.
+    pub fn procurar_pacotes(&mut self, dir: &Path) {
+        self.pacotes_instalados = utsim_ensino_store::arquivos::pacotes_em(dir);
     }
 
     pub fn com(perfil: Perfil, executor: Arc<dyn Executor>, relogio: fn() -> i64) -> App {
@@ -132,6 +143,7 @@ impl App {
             relogio,
             mensagem: None,
             caminho_pacote,
+            pacotes_instalados: Vec::new(),
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,
@@ -416,6 +428,7 @@ impl App {
         };
         ui.heading(&p.pacote.titulo);
         ui.label(&p.pacote.descricao);
+        self.atalhos_de_pacotes(ui);
         ui.add_space(8.0);
         let mut abrir = None;
         let mut areia = None;
@@ -479,11 +492,66 @@ impl App {
         }
     }
 
+    /// One line at the top of the map with the installed packages and the campaign, so a
+    /// long campaign does not hide them at the bottom.
+    fn atalhos_de_pacotes(&mut self, ui: &mut Ui) {
+        if self.pacotes_instalados.is_empty() {
+            return;
+        }
+        let aberto = self.config.pacote_aberto.as_deref().map(absoluto);
+        let mut abrir = None;
+        let mut campanha = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Pacotes:").weak());
+            if ui.selectable_label(aberto.is_none(), "Campanha").clicked() && aberto.is_some() {
+                campanha = true;
+            }
+            for p in &self.pacotes_instalados {
+                let atual = aberto.as_ref() == Some(&absoluto(&p.caminho));
+                if ui.selectable_label(atual, &p.titulo).clicked() && !atual {
+                    abrir = Some(p.caminho.clone());
+                }
+            }
+        });
+        if campanha {
+            self.voltar_campanha();
+            self.mensagem = None;
+        }
+        if let Some(c) = abrir {
+            match self.abrir_pacote(&c) {
+                Ok(()) => self.mensagem = None,
+                Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+            }
+        }
+    }
+
     /// Other mission packages: a folder or a `.utse` from the teacher.
     fn outros_pacotes(&mut self, ui: &mut Ui) {
         ui.add_space(14.0);
         ui.separator();
         ui.label(RichText::new(texto::OUTROS_PACOTES).strong());
+        let aberto = self.config.pacote_aberto.clone();
+        let mut abrir = None;
+        for p in &self.pacotes_instalados {
+            ui.horizontal(|ui| {
+                let atual = aberto
+                    .as_deref()
+                    .is_some_and(|a| absoluto(a) == absoluto(&p.caminho));
+                if ui
+                    .add_enabled(!atual, egui::Button::new(&p.titulo))
+                    .clicked()
+                {
+                    abrir = Some(p.caminho.clone());
+                }
+                ui.add(egui::Label::new(RichText::new(&p.descricao).weak()).truncate());
+            });
+        }
+        if let Some(c) = abrir {
+            match self.abrir_pacote(&c) {
+                Ok(()) => self.mensagem = None,
+                Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+            }
+        }
         ui.label(texto::OUTROS_PACOTES_TEXTO);
         ui.horizontal(|ui| {
             ui.text_edit_singleline(&mut self.caminho_pacote);
@@ -579,6 +647,14 @@ impl App {
             );
         }
     }
+}
+
+/// `pacotes` beside the program folder: the launcher installs `bin/utsim-ensino` and
+/// `pacotes/` side by side.
+fn pasta_de_pacotes() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.parent()?.join("pacotes");
+    dir.is_dir().then_some(dir)
 }
 
 /// The full path without the `\\?\` prefix that `canonicalize` gives on Windows, so the

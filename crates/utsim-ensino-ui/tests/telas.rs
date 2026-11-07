@@ -289,3 +289,30 @@ fn abre_outro_pacote_e_volta_a_campanha() {
     assert_eq!(app.pacote.as_ref().unwrap().pacote.id, "campanha");
     assert!(app.mensagem.as_deref().unwrap().contains("não abriu"));
 }
+
+#[test]
+fn lista_os_pacotes_instalados() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut app = app_em(dir.path());
+    assert!(app.salvar_identidade("Ana Lima", "2027001", ""));
+    // As the launcher installs it: bin/utsim-ensino and pacotes/ side by side.
+    let pacotes = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ensino/pacotes");
+    app.procurar_pacotes(&pacotes);
+    let qs = app
+        .pacotes_instalados
+        .iter()
+        .find(|p| p.id == "qualidade_seguranca")
+        .expect("pacote de qualidade e segurança")
+        .clone();
+    frames(&mut app, &ctx, 2);
+    app.abrir_pacote(&qs.caminho).unwrap();
+    assert_eq!(
+        app.pacote.as_ref().unwrap().pacote.id,
+        "qualidade_seguranca"
+    );
+    frames(&mut app, &ctx, 2);
+    // A folder with nothing readable lists nothing.
+    app.procurar_pacotes(dir.path());
+    assert!(app.pacotes_instalados.is_empty());
+}
