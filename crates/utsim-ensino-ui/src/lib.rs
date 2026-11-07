@@ -80,6 +80,8 @@ pub struct App {
     pub pacotes_instalados: Vec<utsim_ensino_store::arquivos::PacoteEncontrado>,
     /// Folder of the packages installed with the program.
     pub pasta_instalada: Option<PathBuf>,
+    /// The UTSim client is installed by the launcher ("Ver em 3D").
+    pub cliente_3d: bool,
     nome: String,
     registro: String,
     apelido: String,
@@ -95,6 +97,7 @@ fn agora_ms() -> i64 {
 impl App {
     pub fn new(perfil: Perfil) -> App {
         let mut app = App::com(perfil, Arc::new(Fios), agora_ms);
+        app.cliente_3d = utsim_ensino_store::tres_d::cliente().is_some();
         match pasta_de_pacotes() {
             Some(dir) => app.procurar_pacotes(&dir),
             None => app.atualizar_pacotes(),
@@ -175,6 +178,7 @@ impl App {
             caminho_pacote,
             pacotes_instalados: Vec::new(),
             pasta_instalada: None,
+            cliente_3d: false,
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,

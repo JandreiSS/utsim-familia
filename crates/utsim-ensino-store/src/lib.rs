@@ -11,6 +11,7 @@
 //! - [`planilha`]: the grades as `.xlsx`;
 //! - [`prova`]: exams published in the class folder and rebuilt from the seed;
 //! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim Seis Sigma;
+//! - [`tres_d`]: "Ver em 3D", the attempt opened in the UTSim client of the launcher;
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 
 pub mod arquivos;
@@ -24,6 +25,7 @@ pub mod perfil;
 pub mod planilha;
 pub mod prova;
 pub mod seis_sigma;
+pub mod tres_d;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Erro {
