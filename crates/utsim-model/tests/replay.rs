@@ -437,9 +437,10 @@ fn replay_is_deterministic_and_tracing_changes_nothing() {
         if a.records != b.records {
             return Err(format!("{name}: dois replays da mesma replicação diferem"));
         }
+        // Through `drive`, as the replay: a model with risk zones adds the exposure of its
+        // people to the report (computed on the trace, never changing the run).
         let direct: RunReport = model
-            .build(0)
-            .run()
+            .drive(&mut model.build(0))
             .map_err(|e| format!("{name}: execução direta falhou: {e}"))?;
         same_metrics(&a.report.metrics(), &direct.metrics())
             .map_err(|e| format!("{name}: rastrear mudou o resultado: {e}"))

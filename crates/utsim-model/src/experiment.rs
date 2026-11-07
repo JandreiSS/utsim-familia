@@ -326,6 +326,60 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         "transfer.speed" | "transfer.delay" => {
             return patch_transfer(&mut obj.transfer, key, field, text);
         }
+        // Quality and safety blocks (`docs/formato_qualidade_seguranca.md`): the whole
+        // block, or the numbers a teaching mission or an experiment varies.
+        "quality" => {
+            set!(obj.quality);
+            return Ok(());
+        }
+        "inspection" => {
+            set!(obj.inspection);
+            return Ok(());
+        }
+        "rework" => {
+            set!(obj.rework);
+            return Ok(());
+        }
+        "sink_role" => {
+            set!(obj.sink_role);
+            return Ok(());
+        }
+        "ppe" => {
+            set!(obj.ppe);
+            return Ok(());
+        }
+        "inspection.every"
+        | "inspection.detect"
+        | "inspection.false_reject"
+        | "inspection.max_rework"
+        | "inspection.cost" => {
+            let Some(i) = obj.inspection.as_deref_mut() else {
+                return Err(invalid(format!(
+                    "'{key}': '{target}' não tem `inspection`; defina o bloco primeiro"
+                )));
+            };
+            match field {
+                "inspection.every" => set!(i.every),
+                "inspection.detect" => set!(i.detect),
+                "inspection.false_reject" => set!(i.false_reject),
+                "inspection.max_rework" => set!(i.max_rework),
+                _ => set!(i.cost),
+            }
+            return Ok(());
+        }
+        "rework.fix" | "rework.cost" => {
+            let Some(r) = obj.rework.as_mut() else {
+                return Err(invalid(format!(
+                    "'{key}': '{target}' não tem `rework`; defina o bloco primeiro"
+                )));
+            };
+            if field == "rework.fix" {
+                set!(r.fix);
+            } else {
+                set!(r.cost);
+            }
+            return Ok(());
+        }
         _ => {}
     }
     let (kind_name, kind_fields): (&str, &[&str]) = match &obj.kind {
@@ -476,6 +530,18 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                     "transfer",
                     "transfer.speed",
                     "transfer.delay",
+                    "quality",
+                    "inspection",
+                    "inspection.every",
+                    "inspection.detect",
+                    "inspection.false_reject",
+                    "inspection.max_rework",
+                    "inspection.cost",
+                    "rework",
+                    "rework.fix",
+                    "rework.cost",
+                    "sink_role",
+                    "ppe",
                 ])
                 .collect();
             return Err(invalid(format!(
