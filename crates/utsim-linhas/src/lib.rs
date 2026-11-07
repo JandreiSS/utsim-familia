@@ -8,6 +8,7 @@
 pub mod lean_office;
 pub mod pacote;
 pub mod registro;
+pub mod servicos;
 
 pub use pacote::{Field, Library, ModelRef, Pack, Placement, Preset, Role, Vocabulary};
-pub use registro::{LEAN_OFFICE, QUALIDADE, SEGURANCA, active, builtin, find};
+pub use registro::{LEAN_OFFICE, QUALIDADE, SEGURANCA, SERVICOS, active, builtin, find};

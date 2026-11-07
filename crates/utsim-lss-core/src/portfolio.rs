@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::date::Date;
 use crate::domain::{Approach, ProjectStatus, enum_value, fields as dfields};
 use crate::id::Id;
 use crate::op::{Edit, EntityRef, Kind};
@@ -47,6 +48,19 @@ pub mod fields {
     pub const SCORE_PREFIX: &str = "nota_";
     pub const ALIGN_PREFIX: &str = "alinhamento_";
     pub const ANSWER_PREFIX: &str = "resposta_";
+    /// Where an idea came from when another app sent it (`qualidade_8d`...); empty when
+    /// typed in the portfolio.
+    pub const SOURCE_APP: &str = "origem_app";
+    /// The record in that app (number of the 8D...), and who sent it.
+    pub const SOURCE_REF: &str = "origem_referencia";
+    pub const SENT_BY: &str = "enviada_por";
+    pub const SENT_ON: &str = "enviada_em";
+    // Attachment of an idea (`anexo`).
+    pub const IDEA: &str = "ideia";
+    /// File name in the portfolio folder's `anexos/` (by content).
+    pub const FILE: &str = "arquivo";
+    /// Name of the file as sent.
+    pub const ORIGINAL: &str = "nome_original";
     // Criterion and objective.
     pub const WEIGHT: &str = "peso";
     pub const SCALE: &str = "escala";
@@ -419,6 +433,88 @@ pub fn new_idea(portfolio: Id, id: Id, title: &str) -> Vec<Edit> {
         Edit::new(r, fields::TITLE, title.trim()),
         Edit::new(r, fields::STATUS, enum_value(ProjectStatus::Idea)),
     ]
+}
+
+/// An idea's origin key when it comes from the 8D of UTSim Qualidade (QS13).
+pub const SOURCE_8D: &str = "qualidade_8d";
+
+/// An idea sent by another app of the family.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Submission {
+    pub title: String,
+    pub process: String,
+    pub problem: String,
+    pub data: String,
+    pub rough_gain: f64,
+    /// The app (`qualidade_8d`...).
+    pub source: String,
+    /// The record in that app (the 8D's number).
+    pub reference: String,
+}
+
+/// Edits that register an idea sent by another app, with its origin, who sent it and when
+/// (anyone may, as any idea).
+pub fn submitted_idea(portfolio: Id, id: Id, s: &Submission, by: Id, on: Date) -> Vec<Edit> {
+    let r = Idea::entity_ref(id);
+    let mut e = new_idea(portfolio, id, &s.title);
+    for (f, v) in [
+        (fields::PROCESS, &s.process),
+        (fields::PROBLEM, &s.problem),
+        (fields::DATA, &s.data),
+        (fields::SOURCE_APP, &s.source),
+        (fields::SOURCE_REF, &s.reference),
+    ] {
+        if !v.trim().is_empty() {
+            e.push(Edit::new(r, f, v.trim()));
+        }
+    }
+    if s.rough_gain.is_finite() && s.rough_gain > 0.0 {
+        e.push(Edit::new(r, fields::ROUGH_GAIN, s.rough_gain));
+    }
+    e.push(Edit::new(r, fields::SENT_BY, by.to_string()));
+    e.push(Edit::new(r, fields::SENT_ON, on.to_string()));
+    e
+}
+
+/// An attachment of an idea.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Attachment {
+    pub id: Id,
+    pub idea: Option<Id>,
+    pub file: String,
+    pub name: String,
+}
+
+/// Edits that attach a file (already copied into `anexos/` as `file`) to an idea.
+pub fn attach(idea: Id, id: Id, file: &str, original: &str) -> Vec<Edit> {
+    let r = EntityRef::new(Kind::Attachment, id);
+    vec![
+        Edit::new(r, fields::IDEA, idea.to_string()),
+        Edit::new(r, fields::FILE, file),
+        Edit::new(r, fields::ORIGINAL, original.trim()),
+    ]
+}
+
+/// The attachments of an idea, in the order they were added.
+pub fn attachments(state: &State, idea: Id) -> Vec<Attachment> {
+    let mut v: Vec<Attachment> = state
+        .of_kind(Kind::Attachment)
+        .filter(|(_, e)| !e.is_deleted() && e.id(fields::IDEA) == Some(idea))
+        .map(|(id, e)| Attachment {
+            id,
+            idea: e.id(fields::IDEA),
+            file: e.text(fields::FILE),
+            name: e.text(fields::ORIGINAL),
+        })
+        .collect();
+    v.sort_by_key(|a| a.id);
+    v
+}
+
+/// The origin of an idea sent by another app: `(app, reference)`.
+pub fn source_of(idea: &Idea) -> Option<(String, String)> {
+    let app = idea.entity.text(fields::SOURCE_APP);
+    (!app.trim().is_empty()).then(|| (app, idea.entity.text(fields::SOURCE_REF)))
 }
 
 /// Quadrant of the impact × effort matrix (impact and effort ≥ 3 count as high).

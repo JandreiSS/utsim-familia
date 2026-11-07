@@ -13,6 +13,8 @@ utsim-lss-core = { path = "../utsim-lss-core" }
 utsim-lss-store = { path = "../utsim-lss-store" }
 serde.workspace = true
 serde_json.workspace = true
+# "Ver em 3D": the UTSim client installed by the launcher.
+utsim-launcher-core = { path = "../utsim-launcher-core" }
 ron.workspace = true
 thiserror.workspace = true
 rayon.workspace = true

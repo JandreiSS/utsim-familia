@@ -10,16 +10,21 @@
 //! - [`motor`]: the runs with common random numbers and the replay for the 2D view;
 //! - [`nota`]: gate, performance, prediction, justification, tolerance and stars;
 //! - [`pecas`]: line balancing and grid layout (the pieces of acts 4 and 5);
+//! - [`desafio`]: class scoreboard with statistical ties and the paired team comparison;
 //! - [`dicas`]: automatic hints about the attempt;
 //! - [`progresso`]: grades per mission and unlocking;
+//! - [`prova`]: exam mode (seeded draw, package without answer key, similarity);
 //! - [`turma`]: the class, the student list, the matrix and the common mistakes;
 //! - [`conferir`]: the exhaustive reference search, the mission checker and the golden;
-//! - [`campanha`]: the built-in campaign.
+//! - [`campanha`]: the built-in campaign;
+//! - [`competencias`]: the solved missions as practice in the Seis Sigma curriculum.
 
 pub mod campanha;
+pub mod competencias;
 pub mod conferir;
 pub mod construtor;
 pub mod dados;
+pub mod desafio;
 pub mod dicas;
 pub mod missao;
 pub mod modelagem;
@@ -28,6 +33,7 @@ pub mod nota;
 pub mod pacote;
 pub mod pecas;
 pub mod progresso;
+pub mod prova;
 pub mod questoes;
 pub mod turma;
 pub mod validar;

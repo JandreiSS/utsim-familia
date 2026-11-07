@@ -127,7 +127,10 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
             _ => {}
         }
     }
-    if let Some(motivo) = crate::nota::portao(missao, &missao.referencia) {
+    // An exam mission has no reference ([`crate::prova::sem_gabarito`]).
+    if !missao.referencia.is_empty()
+        && let Some(motivo) = crate::nota::portao(missao, &missao.referencia)
+    {
         erros.push(format!("a referência não passa nas restrições: {motivo}"));
     }
     if !missao.alavancas.is_empty()

@@ -28,6 +28,7 @@ use utsim_lss_core::Id;
 use utsim_lss_core::format::FormatError;
 
 pub mod fsio;
+pub mod intake;
 pub mod lssz;
 pub mod planilha;
 pub mod program;

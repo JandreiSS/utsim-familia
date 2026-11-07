@@ -242,3 +242,143 @@ fn program_folder_scan_permissions_and_anonymisation() {
     assert_eq!(m.name, privacidade::placeholder(ana.person));
     let _ = EntityRef::new(Kind::Person, ana.person);
 }
+
+#[test]
+fn ensino_records_own_practice_in_the_program() {
+    use utsim_lss_store::program::TeachingError;
+    let dir = tempfile::tempdir().unwrap();
+    let ana = who(1, "Ana Souza", "ana@empresa.com");
+    let bia = who(2, "Bia Reis", "bia@empresa.com");
+    let carla = who(3, "Carla Lima", "carla@empresa.com");
+    let ca = TestClock::new(1);
+    let cb = TestClock::new(2);
+    let root =
+        ProjectFolder::create_program(&dir.path().join("Programa"), "Programa LSS", &ana, &ca)
+            .unwrap()
+            .root()
+            .to_path_buf();
+    assert!(matches!(
+        program::teaching_check(&root, &bia),
+        Err(TeachingError::NotAMember(_))
+    ));
+    // Bia opened the program once: she is in the people list.
+    let mut b = ProjectFolder::open(&root, &bia, None).unwrap();
+    b.register_me(&cb).unwrap();
+    program::teaching_check(&root, &bia).unwrap();
+    let id = program::record_teaching(
+        &root,
+        &bia,
+        &cb,
+        "fmea",
+        mentoria::Level::Practiced,
+        "Caso final do UTSim Ensino, nota 8,5",
+    )
+    .unwrap();
+    // Sent twice: one entry.
+    let again = program::record_teaching(
+        &root,
+        &bia,
+        &cb,
+        "fmea",
+        mentoria::Level::Practiced,
+        "Caso final do UTSim Ensino, nota 8,5",
+    )
+    .unwrap();
+    assert_eq!(again, id);
+    let pf = ProjectFolder::open(&root, &ana, None).unwrap();
+    let e = mentoria::entries(pf.state());
+    assert_eq!(e.iter().filter(|x| x.tool == "fmea").count(), 1);
+    let got = e.iter().find(|x| x.id == id).unwrap();
+    assert_eq!(got.source, mentoria::Source::Teaching);
+    assert_eq!(got.person, Some(bia.person));
+    assert_eq!(got.by, Some(bia.person));
+    // On the map, with the origin, and the replay keeps it (no unauthorized op).
+    let map = mentoria::competence_map(&e, &[], |p| p == ana.person);
+    assert_eq!(
+        map.level(bia.person, "fmea"),
+        Some(mentoria::Level::Practiced)
+    );
+    let rep = perfis::replay(pf.all_ops(), ana.person);
+    assert!(rep.unauthorized.is_empty(), "{:?}", rep.unauthorized);
+    // Written by hand past the app (no check before writing): an Ensino entry raised to
+    // `demonstrou` is listed by the replay and never reaches the map at that level.
+    let forged = Id::v7(1_793_000_100_000, [9; 10]);
+    let r = EntityRef::new(Kind::Competence, forged);
+    b.refresh(&cb).unwrap();
+    b.commit(
+        vec![
+            Edit::new(
+                r,
+                mentoria::fields::SOURCE,
+                enum_value(mentoria::Source::Teaching),
+            ),
+            Edit::new(r, mentoria::fields::PERSON, bia.person.to_string()),
+            Edit::new(
+                r,
+                mentoria::fields::LEVEL,
+                enum_value(mentoria::Level::Demonstrated),
+            ),
+            Edit::new(r, mentoria::fields::TOOL, "a3"),
+        ],
+        &cb,
+    )
+    .unwrap();
+    let pf = ProjectFolder::open(&root, &ana, None).unwrap();
+    let rep = perfis::replay(pf.all_ops(), ana.person);
+    assert!(
+        rep.unauthorized
+            .iter()
+            .any(|u| u.field == mentoria::fields::LEVEL)
+    );
+    let e = mentoria::entries(&rep.state);
+    let map = mentoria::competence_map(&e, &[], |p| p == ana.person);
+    assert_ne!(
+        map.level(bia.person, "a3"),
+        Some(mentoria::Level::Demonstrated)
+    );
+    // Refusals: someone not in the program, a level Ensino may not give, an unknown tool.
+    assert!(matches!(
+        program::record_teaching(&root, &carla, &ca, "fmea", mentoria::Level::Studied, ""),
+        Err(TeachingError::NotAMember(_))
+    ));
+    assert!(matches!(
+        program::record_teaching(&root, &bia, &cb, "fmea", mentoria::Level::Demonstrated, ""),
+        Err(TeachingError::Level)
+    ));
+    assert!(matches!(
+        program::record_teaching(&root, &bia, &cb, "xyz", mentoria::Level::Studied, ""),
+        Err(TeachingError::Tool(_))
+    ));
+    assert!(matches!(
+        program::record_teaching(
+            &dir.path().join("nada"),
+            &bia,
+            &cb,
+            "fmea",
+            mentoria::Level::Studied,
+            ""
+        ),
+        Err(TeachingError::Store(_))
+    ));
+}
+
+#[test]
+fn local_identity_and_the_tools_of_ensino() {
+    use utsim_lss_store::user::{AppDirs, UserConfig};
+    let dir = tempfile::tempdir().unwrap();
+    let dirs = AppDirs::under(dir.path());
+    assert_eq!(Identity::local_in(&dirs), None);
+    let ana = who(1, "Ana Souza", "ana@empresa.com");
+    UserConfig {
+        identity: Some(ana.clone()),
+        ..UserConfig::default()
+    }
+    .save(&dirs.config_file)
+    .unwrap();
+    assert_eq!(Identity::local_in(&dirs), Some(ana));
+    // The keys of the campaign 0.5.0 of UTSim Ensino, each once in the map.
+    let all = mentoria::all_tools();
+    for k in ["voc_ctq", "msa", "capacidade", "doe", "cep", "vsm"] {
+        assert_eq!(all.iter().filter(|t| *t == k).count(), 1, "{k}");
+    }
+}

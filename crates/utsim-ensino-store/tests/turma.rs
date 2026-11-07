@@ -90,6 +90,8 @@ fn turma_de_60_corrigida_em_lote() {
             prazo: None,
         }],
         registro: Registro::Melhor,
+        desafios: Vec::new(),
+        equipes: Vec::new(),
     };
     let pasta = PastaTurma::criar(dir.path(), &turma, &alunos).unwrap();
     let pub_ = pasta.publicar_pacote("campanha", &arquivos()).unwrap();
@@ -285,6 +287,8 @@ fn perfil_registra_e_entrega() {
         chave_professor: String::new(),
         pacotes: vec![],
         registro: Registro::Ultima,
+        desafios: Vec::new(),
+        equipes: Vec::new(),
     };
     let pasta = PastaTurma::criar(turma_dir.path(), &t, std::slice::from_ref(&aluno)).unwrap();
     perfil
@@ -391,4 +395,34 @@ fn turma_de_60_com_todas_as_missoes() {
                         .count()) as f64,
         "{resolvidas}"
     );
+}
+
+#[test]
+fn ver_em_3d_grava_modelo_e_replay() {
+    use utsim_ensino_store::tres_d::{argumentos, gravar_tentativa};
+    let p = utsim_ensino_core::campanha::carregar_campanha().unwrap();
+    let m = p.missao("ato1/furadeira").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let d = m.missao.completar(&m.missao.referencia);
+    let (pm, pr) = gravar_tentativa(dir.path(), m, "ra042", &d).unwrap();
+    // The files read back as the 3D client and the viewer read them.
+    let modelo = utsim_model::Model::parse(&std::fs::read_to_string(&pm).unwrap()).unwrap();
+    assert_eq!(
+        modelo,
+        utsim_ensino_core::motor::modelo_da_tentativa(m, "ra042", &d).unwrap()
+    );
+    let r: utsim_model::replay::Replay =
+        serde_json::from_str(&std::fs::read_to_string(&pr).unwrap()).unwrap();
+    assert!(!r.blocks.is_empty());
+    // The 3D client opens the replay after `--`; the viewer opens the model.
+    let a = argumentos(
+        std::path::Path::new("3d/utsim-3d.exe"),
+        &["--main-pack".into(), "x.pck".into()],
+        &pm,
+        &pr,
+    );
+    assert_eq!(&a[..3], ["--main-pack", "x.pck", "--"]);
+    assert!(a[3].starts_with("--utsim-abrir=") && a[3].ends_with(".replay.json"));
+    let v = argumentos(std::path::Path::new("bin/utsim-view.exe"), &[], &pm, &pr);
+    assert_eq!(v, [pm.display().to_string()]);
 }

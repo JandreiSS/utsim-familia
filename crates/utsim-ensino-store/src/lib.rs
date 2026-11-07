@@ -7,19 +7,25 @@
 //! - [`diario`]: the signed attempt journal chained by hash;
 //! - [`pasta`]: the class folder (local or synced by Google Drive for desktop);
 //! - [`correcao`]: batch grading on the teacher's machine;
+//! - [`desafio`]: the class scoreboard and the team solutions;
 //! - [`planilha`]: the grades as `.xlsx`;
+//! - [`prova`]: exams published in the class folder and rebuilt from the seed;
 //! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim Seis Sigma;
+//! - [`tres_d`]: "Ver em 3D", the attempt opened in the UTSim client of the launcher;
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 
 pub mod arquivos;
 pub mod caso;
 pub mod chave;
 pub mod correcao;
+pub mod desafio;
 pub mod diario;
 pub mod pasta;
 pub mod perfil;
 pub mod planilha;
+pub mod prova;
 pub mod seis_sigma;
+pub mod tres_d;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Erro {

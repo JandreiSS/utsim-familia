@@ -60,6 +60,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             if ui.button("Sair da turma").clicked() {
                 app.config.turma = None;
                 app.salvar_config();
+                app.atualizar_pacotes();
             }
         }
         None => {
@@ -80,6 +81,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                             .map(PathBuf::from);
                         app.config.turma = Some(Vinculo { convite: c, pasta });
                         app.salvar_config();
+                        app.atualizar_pacotes();
                         if let Err(e) = app.perfil.sincronizar_pasta() {
                             app.mensagem = Some(format!("não foi possível gravar na pasta: {e}"));
                         }
@@ -115,6 +117,50 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             );
         }
     });
+    // The scoreboards the teacher published in the class folder.
+    if let Some(pasta) = app.config.turma.as_ref().and_then(|t| t.pasta.clone()) {
+        let ps = utsim_ensino_store::desafio::placares(&pasta);
+        if !ps.is_empty() {
+            ui.separator();
+            ui.label(RichText::new("Placares da turma").strong());
+            for (missao, csv) in ps {
+                // The mission title, when the open package has it.
+                let titulo = app
+                    .pacote
+                    .as_ref()
+                    .and_then(|p| {
+                        p.missoes
+                            .iter()
+                            .find(|m| utsim_ensino_store::pasta::slug(&m.missao.id) == missao)
+                    })
+                    .map_or(missao.clone(), |m| m.missao.titulo.clone());
+                ui.collapsing(format!("Desafio: {titulo}"), |ui| {
+                    egui::Grid::new(format!("pl_{missao}"))
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for (i, l) in csv.lines().enumerate() {
+                                let c: Vec<&str> = l.split(';').collect();
+                                if c.len() < 5 {
+                                    continue;
+                                }
+                                let pos = if i == 0 {
+                                    "Posição".to_string()
+                                } else if c[4] == "sim" {
+                                    format!("{}º =", c[0])
+                                } else {
+                                    format!("{}º", c[0])
+                                };
+                                ui.label(pos);
+                                for x in &c[1..4] {
+                                    ui.label(*x);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                });
+            }
+        }
+    }
     ui.add_space(6.0);
     ui.label(RichText::new(texto::LIMITE_COLA).weak());
 }
@@ -140,6 +186,94 @@ pub struct EstadoProfessor {
     pub caso_pasta: String,
     pub caso_trabalho: Option<Trabalho<Result<String, String>>>,
     pub caso_relatorio: Option<String>,
+    /// The package of the last grading (the open one, or an exam rebuilt from its seed).
+    pub pacote_corrigido: Option<Arc<PacoteCarregado>>,
+    pub prova: EstadoProva,
+    pub desafio: EstadoDesafio,
+}
+
+/// Challenges and teams in the teacher's panel.
+#[derive(Default)]
+pub struct EstadoDesafio {
+    /// Index of the mission in the graded package.
+    pub missao: usize,
+    /// Deadline `AAAA-MM-DD HH:MM` (Brasília), empty for none.
+    pub fim: String,
+    pub placar: Option<Vec<utsim_ensino_core::desafio::Linha>>,
+    /// Teams, one per line: `Name: record, record`.
+    pub equipes: String,
+    pub trabalho: Option<Trabalho<Result<utsim_ensino_core::desafio::ComparacaoEquipes, String>>>,
+    pub comparacao: Option<utsim_ensino_core::desafio::ComparacaoEquipes>,
+    pub sem_solucao: Vec<String>,
+}
+
+/// The exam form of the teacher's panel.
+#[derive(Default)]
+pub struct EstadoProva {
+    pub id: String,
+    pub titulo: String,
+    /// Missions drawn per act.
+    pub por_ato: std::collections::BTreeMap<u32, usize>,
+    pub inicio: String,
+    pub fim: String,
+    pub duracao_min: u32,
+    pub tentativas: u32,
+    pub semente: String,
+    /// Exam whose deliveries the next grading takes (`None`: the open package).
+    pub corrigir: Option<String>,
+}
+
+impl EstadoProva {
+    /// The assembly from the form (`agora` seeds the draw when the seed is empty).
+    pub fn montagem(
+        &self,
+        base: &PacoteCarregado,
+        agora: i64,
+    ) -> Result<utsim_ensino_core::prova::Montagem, String> {
+        use utsim_ensino_core::prova::{Montagem, Prova, Regra, ler_data_hora};
+        let fuso = -180;
+        let inicio =
+            ler_data_hora(&self.inicio, fuso).ok_or("início no formato AAAA-MM-DD HH:MM")?;
+        let fim = ler_data_hora(&self.fim, fuso).ok_or("fim no formato AAAA-MM-DD HH:MM")?;
+        let semente = if self.semente.trim().is_empty() {
+            agora as u64
+        } else {
+            self.semente
+                .trim()
+                .parse()
+                .map_err(|_| "a semente é um número inteiro")?
+        };
+        let regras: Vec<Regra> = self
+            .por_ato
+            .iter()
+            .filter(|(_, n)| **n > 0)
+            .map(|(a, n)| Regra {
+                ato: Some(*a),
+                conceito: None,
+                quantidade: *n,
+            })
+            .collect();
+        let id = utsim_ensino_store::pasta::slug(self.id.trim());
+        Ok(Montagem {
+            titulo: if self.titulo.trim().is_empty() {
+                id.clone()
+            } else {
+                self.titulo.trim().to_string()
+            },
+            id,
+            pacote_base: base.pacote.id.clone(),
+            hash_base: base.hash.clone(),
+            regras,
+            prova: Prova {
+                semente,
+                inicio,
+                fim,
+                duracao_min: self.duracao_min,
+                tentativas: self.tentativas.max(1),
+                fuso_min: fuso,
+            },
+        })
+    }
 }
 
 impl EstadoProfessor {
@@ -154,6 +288,18 @@ impl EstadoProfessor {
                 Ok(t) => t,
                 Err(e) => format!("erro: {e}"),
             });
+        }
+        if let Some(r) = self
+            .desafio
+            .trabalho
+            .as_ref()
+            .and_then(|t| t.rx.try_recv().ok())
+        {
+            self.desafio.trabalho = None;
+            match r {
+                Ok(c) => self.desafio.comparacao = Some(c),
+                Err(e) => self.desafio.sem_solucao.push(format!("erro: {e}")),
+            }
         }
         let Some(c) = self.trabalho.as_ref().and_then(|t| t.rx.try_recv().ok()) else {
             return;
@@ -217,6 +363,7 @@ impl EstadoProfessor {
             avisos.extend(a);
         }
         self.avisos_leitura = avisos;
+        self.pacote_corrigido = Some(pacote.clone());
         let registro = turma.registro;
         self.trabalho = Some(Trabalho::iniciar(executor, ctx, move |prog| {
             let cancelar = AtomicBool::new(false);
@@ -265,6 +412,8 @@ pub fn criar_turma(
             prazo: None,
         }],
         registro: Registro::Melhor,
+        desafios: Vec::new(),
+        equipes: Vec::new(),
     };
     let p = PastaTurma::criar(dir, &turma, alunos).map_err(|e| e.to_string())?;
     p.publicar_pacote("campanha", &arquivos())
@@ -281,6 +430,9 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     let Some(pacote) = app.pacote.clone() else {
         return;
     };
+    let pacote_aberto = app.config.pacote_aberto.clone();
+    let perfil = utsim_ensino_store::perfil::Perfil::em(&app.perfil.dir);
+    let agora = (app.relogio)();
     ui.heading("Professor");
     let s = &mut app.professor;
 
@@ -482,7 +634,23 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             )
             .clicked()
         {
-            s.corrigir(pacote.clone(), executor.as_ref(), Some(ctx.clone()));
+            let alvo = match s.prova.corrigir.clone() {
+                None => Ok(pacote.clone()),
+                Some(id) => utsim_ensino_store::prova::provas_salvas(&perfil)
+                    .into_iter()
+                    .find(|m| m.id == id)
+                    .ok_or_else(|| format!("prova {id} não encontrada"))
+                    .and_then(|m| {
+                        let base = crate::arquivos_de(pacote_aberto.as_deref())
+                            .ok_or("não foi possível ler o pacote aberto")?;
+                        utsim_ensino_store::prova::pacote_da_prova(&base, &pacote, &m)
+                    })
+                    .map(Arc::new),
+            };
+            match alvo {
+                Ok(p) => s.corrigir(p, executor.as_ref(), Some(ctx.clone())),
+                Err(e) => app.mensagem = Some(format!("não foi possível corrigir: {e}")),
+            }
         }
         if let Some(t) = &s.trabalho {
             ui.add(
@@ -497,6 +665,19 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     for a in &s.avisos_leitura {
         ui.colored_label(AMARELO, a);
     }
+    if let Some(m) = secao_prova(
+        ui,
+        s,
+        &dir,
+        &perfil,
+        &pacote,
+        pacote_aberto.as_deref(),
+        agora,
+    ) {
+        app.mensagem = Some(m);
+    }
+    let s = &mut app.professor;
+    let pacote = s.pacote_corrigido.clone().unwrap_or(pacote);
     let Some(c) = &s.correcao else { return };
     ui.separator();
     ui.label(RichText::new("Matriz aluno por missão").strong());
@@ -537,6 +718,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             }
         });
     });
+    if !c.semelhancas.is_empty() {
+        ui.separator();
+        ui.label(RichText::new("Pares para olhar de perto").strong());
+        ui.label(RichText::new("Semelhança não é prova de cópia: a decisão é sua.").weak());
+        for x in &c.semelhancas {
+            ui.label(format!("• {} e {} em {}: {}", x.a, x.b, x.missao, x.motivo));
+        }
+    }
     ui.separator();
     ui.label(RichText::new("Erros mais comuns").strong());
     if c.erros_comuns.values().all(Vec::is_empty) {
@@ -574,4 +763,361 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             });
         }
     });
+    let alunos_turma = alunos.clone();
+    if let Some(m) = secao_desafio(
+        ui,
+        &mut app.professor,
+        &dir,
+        &turma,
+        &alunos_turma,
+        &pacote,
+        executor.as_ref(),
+        &ctx,
+    ) {
+        app.mensagem = Some(m);
+    }
+}
+
+/// The scoreboard of a challenge and the paired comparison of the teams, from the last
+/// grading. Returns a message for the status line.
+#[allow(clippy::too_many_arguments)]
+fn secao_desafio(
+    ui: &mut Ui,
+    s: &mut EstadoProfessor,
+    dir: &Path,
+    turma: &Turma,
+    alunos: &[Aluno],
+    pacote: &Arc<PacoteCarregado>,
+    executor: &dyn crate::Executor,
+    ctx: &egui::Context,
+) -> Option<String> {
+    use utsim_ensino_core::desafio::{Desafio, comparar_equipes, ler_equipes};
+    let mut msg = None;
+    let c = s.correcao.as_ref()?;
+    ui.separator();
+    let aberto = s.desafio.placar.is_some() || s.desafio.comparacao.is_some();
+    egui::CollapsingHeader::new("Desafio da turma e equipes")
+        .default_open(aberto)
+        .show(ui, |ui| {
+            ui.label(texto::DESAFIO_TEXTO);
+            let d = &mut s.desafio;
+            if d.equipes.is_empty() && !turma.equipes.is_empty() {
+                d.equipes = turma
+                    .equipes
+                    .iter()
+                    .map(|e| format!("{}: {}", e.nome, e.membros.join(", ")))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            }
+            d.missao = d.missao.min(pacote.missoes.len().saturating_sub(1));
+            let rotulo = |i: usize| {
+                format!(
+                    "{} {}",
+                    numero_missao(pacote, i),
+                    pacote.missoes[i].missao.titulo
+                )
+            };
+            egui::ComboBox::from_label("Missão")
+                .selected_text(rotulo(d.missao))
+                .show_ui(ui, |ui| {
+                    for i in 0..pacote.missoes.len() {
+                        ui.selectable_value(&mut d.missao, i, rotulo(i));
+                    }
+                });
+            let missao = pacote.missoes[d.missao].missao.id.clone();
+            ui.horizontal(|ui| {
+                ui.label("Prazo (AAAA-MM-DD HH:MM, Brasília, opcional)");
+                ui.text_edit_singleline(&mut d.fim);
+            });
+            ui.horizontal(|ui| {
+                if ui.button("Montar o placar").clicked() {
+                    let fim = if d.fim.trim().is_empty() {
+                        Ok(None)
+                    } else {
+                        utsim_ensino_core::prova::ler_data_hora(&d.fim, -180)
+                            .map(Some)
+                            .ok_or("prazo no formato AAAA-MM-DD HH:MM")
+                    };
+                    match fim {
+                        Ok(fim) => {
+                            let desafio = Desafio {
+                                missao: missao.clone(),
+                                fim,
+                            };
+                            d.placar = Some(utsim_ensino_store::desafio::placar_do_desafio(
+                                c,
+                                alunos,
+                                &desafio,
+                                turma.registro,
+                            ));
+                            let mut t = turma.clone();
+                            t.desafios.retain(|x| x.missao != missao);
+                            t.desafios.push(desafio);
+                            if let Err(e) = (PastaTurma {
+                                dir: dir.to_path_buf(),
+                            })
+                            .salvar_turma(&t)
+                            {
+                                msg = Some(format!("erro: {e}"));
+                            }
+                        }
+                        Err(e) => msg = Some(e.to_string()),
+                    }
+                }
+                if let Some(linhas) = &d.placar
+                    && ui.button("Publicar o placar na pasta da turma").clicked()
+                {
+                    msg = Some(
+                        match utsim_ensino_store::desafio::gravar_placar(
+                            &PastaTurma {
+                                dir: dir.to_path_buf(),
+                            },
+                            &missao,
+                            linhas,
+                        ) {
+                            Ok(p) => format!("placar publicado em {} (só apelidos)", p.display()),
+                            Err(e) => format!("não foi possível publicar: {e}"),
+                        },
+                    );
+                }
+            });
+            if let Some(linhas) = &d.placar {
+                placar_tabela(ui, linhas);
+            }
+            ui.separator();
+            ui.label("Equipes, uma por linha (Equipe: registro, registro):");
+            ui.add(egui::TextEdit::multiline(&mut d.equipes).desired_rows(3));
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        d.trabalho.is_none(),
+                        egui::Button::new("Comparar as equipes nesta missão"),
+                    )
+                    .clicked()
+                {
+                    match ler_equipes(&d.equipes) {
+                        Ok(eqs) => {
+                            let mut t = turma.clone();
+                            t.equipes = eqs.clone();
+                            let _ = (PastaTurma {
+                                dir: dir.to_path_buf(),
+                            })
+                            .salvar_turma(&t);
+                            let (sol, sem) = utsim_ensino_store::desafio::solucoes_das_equipes(
+                                c,
+                                &eqs,
+                                &missao,
+                                turma.registro,
+                            );
+                            d.sem_solucao = sem;
+                            d.comparacao = None;
+                            if sol.len() < 2 {
+                                msg = Some(
+                                    "é preciso ao menos duas equipes com tentativas corrigidas"
+                                        .into(),
+                                );
+                            } else {
+                                let m = pacote.missoes[d.missao].clone();
+                                d.trabalho = Some(Trabalho::iniciar(
+                                    executor,
+                                    Some(ctx.clone()),
+                                    move |prog| {
+                                        comparar_equipes(&m, &sol, prog).map_err(|e| e.to_string())
+                                    },
+                                ));
+                            }
+                        }
+                        Err(e) => msg = Some(e),
+                    }
+                }
+                if let Some(t) = &d.trabalho {
+                    ui.add(egui::ProgressBar::new(t.fracao()).desired_width(160.0));
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(100));
+                }
+            });
+            for e in &d.sem_solucao {
+                ui.colored_label(
+                    AMARELO,
+                    format!("{e}: sem tentativa corrigida nesta missão"),
+                );
+            }
+            if let Some(k) = &d.comparacao {
+                comparacao_tabela(ui, k);
+            }
+        });
+    msg
+}
+
+/// A scoreboard: position (= for ties), nickname, grade and cost.
+pub fn placar_tabela(ui: &mut Ui, linhas: &[utsim_ensino_core::desafio::Linha]) {
+    egui::Grid::new("placar").striped(true).show(ui, |ui| {
+        for h in ["Posição", "Apelido", "Nota", "Custo"] {
+            ui.label(RichText::new(h).strong());
+        }
+        ui.end_row();
+        for l in linhas {
+            ui.label(if l.empate {
+                format!("{}º =", l.posicao)
+            } else {
+                format!("{}º", l.posicao)
+            });
+            ui.label(&l.apelido);
+            ui.label(fmt_num(l.nota, 1));
+            ui.label(fmt_num(l.custo, 0));
+            ui.end_row();
+        }
+    });
+    if linhas.iter().any(|l| l.empate) {
+        ui.label(
+            RichText::new(
+                "= empate estatístico: os intervalos se sobrepõem, a diferença pode ser ruído.",
+            )
+            .weak(),
+        );
+    }
+}
+
+fn comparacao_tabela(ui: &mut Ui, k: &utsim_ensino_core::desafio::ComparacaoEquipes) {
+    ui.label(
+        RichText::new(format!(
+            "{} ({}), mesma fábrica e mesmos números aleatórios para todas as equipes",
+            k.metrica, k.unidade
+        ))
+        .strong(),
+    );
+    egui::Grid::new("equipes").striped(true).show(ui, |ui| {
+        ui.label(RichText::new("Posição").strong());
+        ui.label(RichText::new("Equipe").strong());
+        ui.label(RichText::new("Média").strong());
+        for n in &k.equipes {
+            ui.label(RichText::new(format!("menos {n}")).strong());
+        }
+        ui.end_row();
+        for i in 0..k.equipes.len() {
+            let empate = k.posicoes.iter().filter(|p| **p == k.posicoes[i]).count() > 1;
+            ui.label(if empate {
+                format!("{}º =", k.posicoes[i])
+            } else {
+                format!("{}º", k.posicoes[i])
+            });
+            ui.label(&k.equipes[i]);
+            ui.label(format!(
+                "{} ± {}",
+                fmt_num(k.medias[i].media, 2),
+                fmt_num(k.medias[i].meia_largura, 2)
+            ));
+            for j in 0..k.equipes.len() {
+                if i == j {
+                    ui.label("");
+                } else {
+                    let d = &k.diferencas[i][j];
+                    ui.label(format!(
+                        "{} ± {}",
+                        fmt_num(d.media, 2),
+                        fmt_num(d.meia_largura, 2)
+                    ));
+                }
+            }
+            ui.end_row();
+        }
+    });
+    ui.label(
+        RichText::new("Uma equipe só fica à frente de outra quando o intervalo da diferença pareada não contém o zero.").weak(),
+    );
+}
+
+/// The exam: draw, window and runs, published in the class folder; and which exam the
+/// next grading takes. Returns a message for the status line.
+fn secao_prova(
+    ui: &mut Ui,
+    s: &mut EstadoProfessor,
+    dir: &Path,
+    perfil: &utsim_ensino_store::perfil::Perfil,
+    pacote: &Arc<PacoteCarregado>,
+    pacote_aberto: Option<&Path>,
+    agora: i64,
+) -> Option<String> {
+    let mut msg = None;
+    ui.collapsing("Prova", |ui| {
+        ui.label(texto::PROVA_TEXTO);
+        let p = &mut s.prova;
+        if p.tentativas == 0 {
+            p.tentativas = 1;
+        }
+        egui::Grid::new("prova").num_columns(2).show(ui, |ui| {
+            ui.label("Id da prova");
+            ui.text_edit_singleline(&mut p.id);
+            ui.end_row();
+            ui.label("Título");
+            ui.text_edit_singleline(&mut p.titulo);
+            ui.end_row();
+            ui.label("Início (AAAA-MM-DD HH:MM, Brasília)");
+            ui.text_edit_singleline(&mut p.inicio);
+            ui.end_row();
+            ui.label("Fim");
+            ui.text_edit_singleline(&mut p.fim);
+            ui.end_row();
+            ui.label("Tempo máximo (min, 0 para só a janela)");
+            ui.add(egui::DragValue::new(&mut p.duracao_min).range(0..=600));
+            ui.end_row();
+            ui.label("Rodadas por missão");
+            ui.add(egui::DragValue::new(&mut p.tentativas).range(1..=20));
+            ui.end_row();
+            ui.label("Semente (vazia: sorteada agora)");
+            ui.text_edit_singleline(&mut p.semente);
+            ui.end_row();
+        });
+        ui.label("Missões sorteadas por ato (as de entregar modelo ficam de fora):");
+        ui.horizontal_wrapped(|ui| {
+            for ato in &pacote.pacote.atos {
+                let n = p.por_ato.entry(ato.numero).or_default();
+                ui.label(format!("Ato {}", ato.numero));
+                ui.add(egui::DragValue::new(n).range(0..=ato.missoes.len()));
+            }
+        });
+        if ui.button("Sortear e publicar na pasta da turma").clicked() {
+            let r = p.montagem(pacote, agora).and_then(|m| {
+                let base = crate::arquivos_de(pacote_aberto)
+                    .ok_or("não foi possível ler o pacote aberto")?;
+                let caminho = utsim_ensino_store::prova::publicar_prova(
+                    &PastaTurma {
+                        dir: dir.to_path_buf(),
+                    },
+                    perfil,
+                    &base,
+                    pacote,
+                    &m,
+                )
+                .map_err(|e| e.to_string())?;
+                Ok((m, caminho))
+            });
+            msg = Some(match r {
+                Ok((m, c)) => {
+                    p.semente = m.prova.semente.to_string();
+                    p.corrigir = Some(m.id.clone());
+                    format!(
+                        "prova {} publicada em {} (semente {}). A montagem fica só no seu perfil.",
+                        m.id,
+                        c.display(),
+                        m.prova.semente
+                    )
+                }
+                Err(e) => format!("prova não publicada: {e}"),
+            });
+        }
+        let salvas = utsim_ensino_store::prova::provas_salvas(perfil);
+        ui.horizontal_wrapped(|ui| {
+            ui.label("A correção usa:");
+            ui.selectable_value(&mut p.corrigir, None, "o pacote aberto");
+            for m in &salvas {
+                ui.selectable_value(
+                    &mut p.corrigir,
+                    Some(m.id.clone()),
+                    format!("a prova {}", m.id),
+                );
+            }
+        });
+    });
+    msg
 }

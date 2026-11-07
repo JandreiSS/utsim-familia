@@ -364,6 +364,8 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         .unwrap_or_default();
     let ctx = ui.ctx().clone();
     let executor = app.executor.clone();
+    let agora = (app.relogio)();
+    let prova = app.prova();
     let Some(m) = app.missao.as_mut() else {
         app.tela = Tela::Mapa;
         return;
@@ -677,7 +679,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.add_space(6.0);
     }
 
-    if !missao.dicas.is_empty() {
+    if !missao.dicas.is_empty() && prova.is_none() {
         ui.collapsing("Dicas", |ui| {
             let pesos = &m.pacote.pacote.pesos;
             for (i, d) in missao.dicas.iter().enumerate() {
@@ -701,8 +703,27 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     ui.separator();
+    // An exam: inside the window and the time, and up to the runs allowed.
+    let bloqueio = prova.as_ref().and_then(|(pr, aberta)| {
+        pr.pode_rodar(agora, *aberta).err().or_else(|| {
+            (m.rodadas >= pr.tentativas).then(|| {
+                format!(
+                    "as {} rodada(s) desta missão já foram usadas",
+                    pr.tentativas
+                )
+            })
+        })
+    });
+    if let Some((pr, aberta)) = &prova {
+        ui.colored_label(AMARELO, crate::texto_prova(pr, *aberta, agora));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs(20));
+    }
+    if let Some(b) = &bloqueio {
+        ui.colored_label(VERMELHO, format!("Simular está bloqueado: {b}."));
+    }
     ui.horizontal(|ui| {
-        let pode = m.trabalho.is_none() && m.previsoes_completas();
+        let pode = m.trabalho.is_none() && m.previsoes_completas() && bloqueio.is_none();
         if ui
             .add_enabled(
                 pode,
@@ -715,7 +736,9 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         if !m.previsoes_completas() {
             ui.label(RichText::new("Responda às previsões para simular.").weak());
         }
-        if let Some(o) = missao.rodadas.orcamento {
+        if let Some((pr, _)) = &prova {
+            ui.label(format!("Rodadas: {} de {}", m.rodadas, pr.tentativas));
+        } else if let Some(o) = missao.rodadas.orcamento {
             ui.label(format!("Rodadas: {} de {o} sem desconto", m.rodadas));
         } else {
             ui.label(format!("Rodadas feitas: {}", m.rodadas));
@@ -738,14 +761,25 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
     if let Some(r) = m.resultado.clone() {
         ui.separator();
-        resultado(ui, &r, missao);
+        resultado(ui, &r, missao, prova.is_some());
     }
     if let Some(a) = m.animacao.as_mut() {
         ui.separator();
         ui.label(RichText::new("A sua fábrica (uma replicação)").strong());
         a.mostrar(ui);
     }
-    if m.resultado.as_ref().is_some_and(|r| r.resolvida) {
+    if app.cliente_3d && m.animacao.is_some() && ui.button("Ver em 3D").clicked() {
+        let dir = app.perfil.dir.join("3d");
+        // The client opens in its own window; only a failure is said here.
+        m.erro = utsim_ensino_store::tres_d::abrir_em_3d(&dir, &mc, &aluno, &m.tentativa.decisoes)
+            .err()
+            .map(|e| format!("não foi possível abrir em 3D: {e}"));
+    }
+    if let Some(e) = m.erro.as_ref().filter(|e| e.contains("em 3D")) {
+        ui.colored_label(VERMELHO, e);
+    }
+    let Some(m) = app.missao.as_mut() else { return };
+    if prova.is_none() && m.resultado.as_ref().is_some_and(|r| r.resolvida) {
         let i = m.indice;
         let proxima = i + 1 < m.pacote.missoes.len() && app.progresso.liberada(&m.pacote, i + 1);
         ui.horizontal(|ui| {
@@ -758,7 +792,19 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 }
 
-fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Missao) {
+fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Missao, prova: bool) {
+    if prova {
+        // No grade in an exam: the indicators only (the goals are in the statement).
+        ui.label(RichText::new("Resultado da rodada").strong());
+        ui.label(
+            RichText::new(
+                "A nota sai da correção do professor, que simula de novo as suas decisões.",
+            )
+            .weak(),
+        );
+        tabela_metricas(ui, r, false);
+        return;
+    }
     let estrelas = format!(
         "{}{}",
         "★".repeat(r.estrelas as usize),
@@ -783,13 +829,30 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
     if let Some(p) = &r.portao {
         ui.colored_label(VERMELHO, format!("Restrição violada: {p}"));
     }
+    tabela_metricas(ui, r, true);
+    ui.label(format!(
+        "Pontos: desempenho {}, previsão {}, justificativa {} (de {} possíveis) · descontos {} (dicas) e {} (rodadas)",
+        fmt_num(r.pontos_desempenho, 1),
+        fmt_num(r.pontos_previsao, 1),
+        fmt_num(r.pontos_justificativa, 1),
+        fmt_num(r.pontos_possiveis, 0),
+        fmt_num(r.desconto_dicas, 0),
+        fmt_num(r.desconto_rodadas, 0),
+    ));
+    resto_do_resultado(ui, r, missao);
+}
+
+/// The indicators of a run, with the situation against the goal when `situacao`.
+fn tabela_metricas(ui: &mut Ui, r: &Resultado, situacao: bool) {
     if !r.metricas.is_empty() {
         egui::Grid::new("metricas").striped(true).show(ui, |ui| {
             ui.label(RichText::new("Indicador").strong());
             ui.label(RichText::new("Estado inicial").strong());
             ui.label(RichText::new("Sua tentativa").strong());
             ui.label(RichText::new("Meta").strong());
-            ui.label(RichText::new("Situação").strong());
+            if situacao {
+                ui.label(RichText::new("Situação").strong());
+            }
             ui.end_row();
             for m in &r.metricas {
                 let f = |i: &Intervalo| {
@@ -811,21 +874,17 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
                     || "-".into(),
                     |v| format!("{sinal} {}", fmt_num(v, m.casas)),
                 ));
-                let (t, c) = situacao_texto(m.situacao);
-                ui.colored_label(c, t);
+                if situacao {
+                    let (t, c) = situacao_texto(m.situacao);
+                    ui.colored_label(c, t);
+                }
                 ui.end_row();
             }
         });
     }
-    ui.label(format!(
-        "Pontos: desempenho {}, previsão {}, justificativa {} (de {} possíveis) · descontos {} (dicas) e {} (rodadas)",
-        fmt_num(r.pontos_desempenho, 1),
-        fmt_num(r.pontos_previsao, 1),
-        fmt_num(r.pontos_justificativa, 1),
-        fmt_num(r.pontos_possiveis, 0),
-        fmt_num(r.desconto_dicas, 0),
-        fmt_num(r.desconto_rodadas, 0),
-    ));
+}
+
+fn resto_do_resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Missao) {
     for (p, q) in r.previsoes.iter().zip(&missao.previsao) {
         if p.certa {
             ui.colored_label(
