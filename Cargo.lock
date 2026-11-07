@@ -7793,6 +7793,7 @@ dependencies = [
  "utsim-core",
  "utsim-ensino-core",
  "utsim-ensino-store",
+ "utsim-lss-store",
  "utsim-model",
  "utsim-ui-tema",
 ]

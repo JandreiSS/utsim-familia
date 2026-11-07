@@ -88,3 +88,66 @@ pub fn exportar(
         .map_err(e)?;
     Ok(caminho)
 }
+
+/// What [`registrar_competencias`] did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegistroCompetencias {
+    /// `ferramenta (missão)` of each entry sent (an entry already there is not repeated).
+    pub gravadas: Vec<String>,
+    pub erros: Vec<String>,
+}
+
+/// Records in the company program (decision N2 of the Seis Sigma plan) the practice of the
+/// solved missions: `praticou`, origin `ensino`, in the tools the package ties to their
+/// concepts, by the student themself (`me`, the identity of UTSim Seis Sigma on this
+/// computer). `so_missao` limits it to one mission (the one just solved).
+pub fn registrar_competencias(
+    programa: &Path,
+    me: &Identity,
+    clock: &dyn Clock,
+    p: &utsim_ensino_core::pacote::PacoteCarregado,
+    progresso: &utsim_ensino_core::progresso::Progresso,
+    so_missao: Option<&str>,
+) -> std::result::Result<RegistroCompetencias, String> {
+    use utsim_lss_store::program::{record_teaching, teaching_check};
+    teaching_check(programa, me).map_err(|e| e.to_string())?;
+    let resolvidas: std::collections::BTreeSet<String> = p
+        .missoes
+        .iter()
+        .map(|m| m.missao.id.clone())
+        .filter(|id| progresso.resolvida(id))
+        .filter(|id| so_missao.is_none_or(|s| s == id))
+        .collect();
+    let mut por = std::collections::BTreeMap::new();
+    por.insert(me.person.to_string(), resolvidas);
+    let mut r = RegistroCompetencias::default();
+    for c in utsim_ensino_core::competencias::competencias(p, &por) {
+        let nota = progresso.registro(&c.missao).map_or(0.0, |x| x.melhor_nota);
+        let evidencia = format!(
+            "{}, melhor nota {}",
+            c.evidencia,
+            utsim_ensino_core::nota::fmt_num(nota, 1)
+        );
+        match record_teaching(
+            programa,
+            me,
+            clock,
+            &c.ferramenta,
+            utsim_lss_core::mentoria::Level::Practiced,
+            &evidencia,
+        ) {
+            Ok(_) => r.gravadas.push(format!("{} ({})", c.ferramenta, c.missao)),
+            Err(e) => r
+                .erros
+                .push(format!("{} ({}): {e}", c.ferramenta, c.missao)),
+        }
+    }
+    Ok(r)
+}
+
+/// The identity of UTSim Seis Sigma on this computer, or why there is none.
+pub fn identidade_local() -> std::result::Result<Identity, String> {
+    Identity::local().ok_or_else(|| {
+        "abra o UTSim Seis Sigma uma vez neste computador e preencha nome e e-mail".to_string()
+    })
+}

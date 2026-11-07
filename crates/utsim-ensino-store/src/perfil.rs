@@ -51,6 +51,10 @@ pub struct Config {
     /// When the student opened each exam (ms), for the time limit.
     #[serde(default)]
     pub provas_abertas: std::collections::BTreeMap<String, i64>,
+    /// Folder of the company's Lean Six Sigma program: solved missions record practice
+    /// in its competence map.
+    #[serde(default)]
+    pub programa_seis_sigma: Option<PathBuf>,
 }
 
 pub struct Perfil {

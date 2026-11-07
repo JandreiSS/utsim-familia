@@ -183,3 +183,82 @@ fn caminho_pelo_seis_sigma_da_os_mesmos_numeros() {
         }
     }
 }
+
+#[test]
+fn missoes_resolvidas_viram_pratica_no_programa() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use utsim_ensino_core::progresso::{Progresso, RegistroMissao};
+    use utsim_ensino_store::seis_sigma::registrar_competencias;
+    use utsim_lss_core::mentoria;
+    use utsim_lss_store::Clock;
+
+    struct Relogio(AtomicU64, u8);
+    impl Clock for Relogio {
+        fn now_ms(&self) -> i64 {
+            self.0.fetch_add(1, Ordering::Relaxed) as i64
+        }
+        fn random(&self) -> [u8; 10] {
+            let n = self.0.load(Ordering::Relaxed);
+            let mut r = [self.1; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            r
+        }
+    }
+    let pessoa = |n: u8, nome: &str| Identity {
+        person: utsim_lss_core::Id::v7(1_700_000_000_000, [n; 10]),
+        name: nome.into(),
+        email: format!("{n}@empresa.com"),
+    };
+    let (mbb, ana, beto) = (pessoa(1, "MBB"), pessoa(2, "Ana"), pessoa(3, "Beto"));
+    let (c1, c2) = (
+        Relogio(AtomicU64::new(1_793_000_000_000), 1),
+        Relogio(AtomicU64::new(1_793_000_000_000), 2),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let raiz = ProjectFolder::create_program(&dir.path().join("Programa"), "Programa", &mbb, &c1)
+        .unwrap()
+        .root()
+        .to_path_buf();
+    ProjectFolder::open(&raiz, &ana, None)
+        .unwrap()
+        .register_me(&c2)
+        .unwrap();
+
+    let p = carregar_campanha().unwrap();
+    let mut progresso = Progresso::default();
+    for id in ["ato8/medir", "ato1/furadeira"] {
+        progresso.missoes.insert(
+            id.into(),
+            RegistroMissao {
+                tentativas: 1,
+                melhor_nota: 92.0,
+                ultima_nota: 92.0,
+                estrelas: 2,
+                resolvida: true,
+                ..Default::default()
+            },
+        );
+    }
+    let r = registrar_competencias(&raiz, &ana, &c2, &p, &progresso, None).unwrap();
+    assert!(r.erros.is_empty(), "{:?}", r.erros);
+    assert_eq!(
+        r.gravadas,
+        [
+            "capacidade (ato8/medir)",
+            "msa (ato8/medir)",
+            "vsm (ato1/furadeira)"
+        ]
+    );
+    // Sent again: nothing repeats.
+    registrar_competencias(&raiz, &ana, &c2, &p, &progresso, None).unwrap();
+    let pf = ProjectFolder::open(&raiz, &mbb, None).unwrap();
+    let e = mentoria::entries(pf.state());
+    let dela: Vec<_> = e.iter().filter(|x| x.person == Some(ana.person)).collect();
+    assert_eq!(dela.len(), 3, "{dela:#?}");
+    assert!(dela.iter().all(|x| x.source == mentoria::Source::Teaching
+        && x.level == mentoria::Level::Practiced
+        && x.evidence.contains("UTSim Ensino")));
+    // Someone outside the program is refused with the reason.
+    let err = registrar_competencias(&raiz, &beto, &c2, &p, &progresso, None).unwrap_err();
+    assert!(err.contains("Beto"), "{err}");
+}

@@ -16,6 +16,7 @@ pub const AREIA_TEXTO: &str = "Sem meta e sem orçamento. Compare dois cenários
 pub const LIMITE_COLA: &str = "Sem servidor, nada impede a consulta. A entrega leva as decisões e as tentativas assinadas, e o professor simula de novo: editar o arquivo não muda a nota e deixa a alteração visível.";
 pub const PROVA_TEXTO: &str = "O sorteio usa a semente registrada, entre as missões do pacote aberto. O aluno recebe a prova sem referência, sem dicas e sem gabarito, com janela de horário, tempo máximo e rodadas contadas. A correção acontece aqui, com a prova reconstruída pela semente.";
 pub const DESAFIO_TEXTO: &str = "O placar usa a última correção: a tentativa que conta de cada aluno até o prazo, pela nota e depois pelo custo. Quando os intervalos dos indicadores se sobrepõem, os alunos aparecem empatados. A turma vê só o apelido. As equipes entregam uma solução cada (a tentativa que conta entre as dos membros) e rodam na mesma fábrica, com os mesmos números aleatórios.";
+pub const PROGRAMA_TEXTO: &str = "Se você está num programa Lean Seis Sigma da empresa, indique a pasta do programa. Cada missão resolvida passa a registrar \"praticou\" no seu mapa de competências, nas ferramentas ligadas a ela. O registro usa a sua identidade do UTSim Seis Sigma neste computador.";
 pub const OUTROS_PACOTES: &str = "Outros pacotes de missões";
 pub const OUTROS_PACOTES_TEXTO: &str = "Também dá para abrir uma pasta ou um arquivo .utse que o professor passou. O progresso fica guardado por pacote, e a campanha continua onde parou.";
 
