@@ -6,7 +6,7 @@ Pacote(
     titulo: "Campanha UTSim Ensino",
     versao: "0.3.0",
     autor: "UTSim",
-    descricao: "Do gargalo à capacidade: decisões numa fábrica simulada, com previsão, alavancas e nota pela simulação.",
+    descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
     glossario: "glossario.ron",
     atos: [
