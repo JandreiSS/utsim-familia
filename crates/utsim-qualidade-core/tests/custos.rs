@@ -99,3 +99,18 @@ fn flat_keys_for_the_missions() {
     assert!(m["qualidade.pct_escape"] > 0.0 && m["qualidade.pct_escape"] < 0.2);
     assert!(m.contains_key("qualidade.defeitos.risco"));
 }
+
+#[test]
+fn the_report_metrics_carry_the_quality_counts() {
+    let model = Model::parse(&MODELO.replace("DETECT", "0.75")).unwrap();
+    let (report, items) = model.run_item_log(2).unwrap();
+    let m = report.metrics();
+    let k = utsim_qualidade_core::simulado::de_itens(&model, &items);
+    // Warm-up is zero here, so the sink counts match the per-item log.
+    assert_eq!(m["cliente.input"], k.entregues);
+    assert_eq!(m["cliente.pecas_defeituosas"], k.escapados);
+    assert!((m["cliente.pct_defeituosas"] - k.pct_escape).abs() < 1e-12);
+    assert_eq!(m["refugo.input"], k.refugados);
+    assert!(m["cliente.retrabalhadas"] > 0.0);
+    assert!(m.contains_key("cliente.defeitos.risco"));
+}

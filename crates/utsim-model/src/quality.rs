@@ -629,3 +629,138 @@ impl ItemScript for QualityHook {
         Ok(())
     }
 }
+
+/// A sink with a quality role (`sink_role`): the inner sink plus counts of what arrives,
+/// reported as custom metrics of the block, so they reach `RunReport::metrics`
+/// (`<sink>.pecas_defeituosas`, `<sink>.pct_defeituosas`, `<sink>.retrabalhadas`,
+/// `<sink>.defeitos.<tipo>`). Counted in the statistics window only, like `input`.
+pub(crate) struct QualitySink {
+    inner: Box<dyn utsim_core::Behavior>,
+    entradas: u64,
+    defeituosas: u64,
+    retrabalhadas: u64,
+    por_tipo: BTreeMap<String, u64>,
+}
+
+impl QualitySink {
+    pub fn new(inner: Box<dyn utsim_core::Behavior>) -> Self {
+        QualitySink {
+            inner,
+            entradas: 0,
+            defeituosas: 0,
+            retrabalhadas: 0,
+            por_tipo: BTreeMap::new(),
+        }
+    }
+}
+
+impl utsim_core::Behavior for QualitySink {
+    fn kind(&self) -> &'static str {
+        self.inner.kind()
+    }
+
+    fn reset(&mut self, cx: &mut utsim_core::Ctx) {
+        self.inner.reset(cx);
+    }
+
+    fn accepts(&self, item: &Item, content: usize, port: usize) -> bool {
+        self.inner.accepts(item, content, port)
+    }
+
+    fn on_entry(&mut self, cx: &mut utsim_core::Ctx, item: utsim_core::ItemId, port: usize) {
+        let it = cx.item(item);
+        self.entradas += 1;
+        let tipos = present(it);
+        if !tipos.is_empty() {
+            self.defeituosas += 1;
+        }
+        for t in tipos {
+            *self.por_tipo.entry(t).or_default() += 1;
+        }
+        if it
+            .label(PASSES_LABEL)
+            .and_then(Value::as_num)
+            .unwrap_or(0.0)
+            > 0.0
+        {
+            self.retrabalhadas += 1;
+        }
+        self.inner.on_entry(cx, item, port);
+    }
+
+    fn on_exit(&mut self, cx: &mut utsim_core::Ctx, item: utsim_core::ItemId) {
+        self.inner.on_exit(cx, item);
+    }
+
+    fn on_event(&mut self, cx: &mut utsim_core::Ctx, tag: u32, item: Option<utsim_core::ItemId>) {
+        self.inner.on_event(cx, tag, item);
+    }
+
+    fn on_stop(&mut self, cx: &mut utsim_core::Ctx) {
+        self.inner.on_stop(cx);
+    }
+
+    fn on_resume(&mut self, cx: &mut utsim_core::Ctx) {
+        self.inner.on_resume(cx);
+    }
+
+    fn on_task(&mut self, cx: &mut utsim_core::Ctx, request: utsim_core::TaskRequest) {
+        self.inner.on_task(cx, request);
+    }
+
+    fn work_in_progress(&self, cx: &utsim_core::Ctx) -> bool {
+        self.inner.work_in_progress(cx)
+    }
+
+    fn on_warmup(&mut self, cx: &mut utsim_core::Ctx) {
+        self.entradas = 0;
+        self.defeituosas = 0;
+        self.retrabalhadas = 0;
+        self.por_tipo.clear();
+        self.inner.on_warmup(cx);
+    }
+
+    fn custom_metrics(&self, now: f64) -> Vec<(String, f64)> {
+        let mut v = self.inner.custom_metrics(now);
+        v.push(("pecas_defeituosas".into(), self.defeituosas as f64));
+        v.push((
+            "pct_defeituosas".into(),
+            if self.entradas > 0 {
+                self.defeituosas as f64 / self.entradas as f64
+            } else {
+                0.0
+            },
+        ));
+        v.push(("retrabalhadas".into(), self.retrabalhadas as f64));
+        for (t, n) in &self.por_tipo {
+            v.push((format!("defeitos.{t}"), *n as f64));
+        }
+        v
+    }
+
+    fn on_message(
+        &mut self,
+        cx: &mut utsim_core::Ctx,
+        from: utsim_core::BlockId,
+        tag: u32,
+        payload: u64,
+    ) {
+        self.inner.on_message(cx, from, tag, payload);
+    }
+
+    fn restore(
+        &mut self,
+        cx: &mut utsim_core::Ctx,
+        state: &utsim_core::BlockState,
+    ) -> Result<(), String> {
+        self.inner.restore(cx, state)
+    }
+
+    fn save_state(
+        &self,
+        cx: &utsim_core::Ctx,
+        state: &mut utsim_core::BlockState,
+    ) -> Option<String> {
+        self.inner.save_state(cx, state)
+    }
+}
