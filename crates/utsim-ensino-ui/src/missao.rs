@@ -768,6 +768,17 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new("A sua fábrica (uma replicação)").strong());
         a.mostrar(ui);
     }
+    if app.cliente_3d && m.animacao.is_some() && ui.button("Ver em 3D").clicked() {
+        let dir = app.perfil.dir.join("3d");
+        // The client opens in its own window; only a failure is said here.
+        m.erro = utsim_ensino_store::tres_d::abrir_em_3d(&dir, &mc, &aluno, &m.tentativa.decisoes)
+            .err()
+            .map(|e| format!("não foi possível abrir em 3D: {e}"));
+    }
+    if let Some(e) = m.erro.as_ref().filter(|e| e.contains("em 3D")) {
+        ui.colored_label(VERMELHO, e);
+    }
+    let Some(m) = app.missao.as_mut() else { return };
     if prova.is_none() && m.resultado.as_ref().is_some_and(|r| r.resolvida) {
         let i = m.indice;
         let proxima = i + 1 < m.pacote.missoes.len() && app.progresso.liberada(&m.pacote, i + 1);
