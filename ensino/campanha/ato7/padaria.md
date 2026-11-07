@@ -4,7 +4,7 @@ Uma padaria industrial quer um modelo da linha de pães. Você vai construir o m
 
 - As massas chegam em média a cada 6 minutos (exponencial) e esperam numa fila antes da divisora.
 - A **divisora** leva de 3 a 5,5 minutos por massa, com moda de 4 (triangular).
-- A **câmara** de fermentação recebe até 10 massas ao mesmo tempo e segura cada uma por 45 minutos exatos.
+- A câmara de fermentação (**camara**) recebe até 10 massas ao mesmo tempo e segura cada uma por 45 minutos exatos.
 - Depois da câmara, as massas esperam numa fila antes do **forno**, que assa 2 massas ao mesmo tempo, de 10 a 16 minutos cada, com moda de 12 (triangular). O forno quebra em média a cada 300 minutos (exponencial) e o conserto leva em média 20 minutos (exponencial).
 - As massas assadas esperam numa fila antes da **embalagem**, que leva de 4 a 6 minutos (uniforme), e vão para a **expedicao**.
 
