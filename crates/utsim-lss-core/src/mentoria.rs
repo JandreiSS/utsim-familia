@@ -421,6 +421,44 @@ pub enum Source {
     #[default]
     #[serde(rename = "mbb")]
     Mbb,
+    /// The final case of UTSim Ensino, recorded by the person themselves (`estudou` or
+    /// `praticou` only; see [`teaching_level`]).
+    #[serde(rename = "ensino")]
+    Teaching,
+}
+
+/// The levels UTSim Ensino may record: `estudou` and `praticou` (`aplicou` comes from a
+/// real project and `demonstrou` from the MBB).
+pub fn teaching_level(level: Level) -> bool {
+    matches!(level, Level::Studied | Level::Practiced)
+}
+
+/// Edits of an entry recorded by the person themselves from UTSim Ensino: origin
+/// `ensino`, `by` the person. `None` when the level is not one Ensino may record.
+pub fn record_teaching(
+    program: Id,
+    id: Id,
+    person: Id,
+    tool: &str,
+    level: Level,
+    evidence: &str,
+    date: Date,
+) -> Option<Vec<Edit>> {
+    if !teaching_level(level) {
+        return None;
+    }
+    // The origin first: the permission rule of an own Ensino entry reads it (perfis).
+    let r = EntityRef::new(Kind::Competence, id);
+    Some(vec![
+        Edit::new(r, fields::SOURCE, enum_value(Source::Teaching)),
+        Edit::new(r, fields::PERSON, person.to_string()),
+        Edit::new(r, fields::BY, person.to_string()),
+        Edit::new(r, fields::LEVEL, enum_value(level)),
+        Edit::new(r, fields::PROGRAM, program.to_string()),
+        Edit::new(r, fields::TOOL, tool),
+        Edit::new(r, fields::EVIDENCE, evidence.trim()),
+        Edit::new(r, fields::DATE, date.to_string()),
+    ])
 }
 
 /// An entry of the program journal that sets a level (all but `aplicou`, which comes from
@@ -489,7 +527,12 @@ pub fn record_level(
 #[derive(Debug, Clone, PartialEq)]
 pub enum Evidence {
     /// An entry of the program journal.
-    Entry { id: Id, level: Level, text: String },
+    Entry {
+        id: Id,
+        level: Level,
+        source: Source,
+        text: String,
+    },
     /// An approved deliverable of a real project.
     Deliverable { project: Id, deliverable: Id },
 }
@@ -576,6 +619,7 @@ pub fn competence_map(
             Evidence::Entry {
                 id: e.id,
                 level: e.level,
+                source: e.source,
                 text: e.evidence.clone(),
             },
         );

@@ -364,6 +364,20 @@ pub fn required(
         Kind::Competence => {
             let level: Option<mentoria::Level> = lookup(entity, mentoria::fields::LEVEL)
                 .and_then(|v| serde_json::from_value(v).ok());
+            let source: Option<mentoria::Source> = lookup(entity, mentoria::fields::SOURCE)
+                .and_then(|v| serde_json::from_value(v).ok());
+            // UTSim Ensino: the person records their own `estudou` or `praticou`. Checked
+            // op by op (the replay sees the fields written so far), so the origin is
+            // written first and the person, the author and the level, once written, must
+            // keep it an own entry of a level Ensino may give.
+            let own = id_of(mentoria::fields::PERSON).is_none_or(|p| p == author)
+                && id_of(mentoria::fields::BY).is_none_or(|b| b == author);
+            if source == Some(mentoria::Source::Teaching)
+                && own
+                && level.is_none_or(mentoria::teaching_level)
+            {
+                return None;
+            }
             if level == Some(mentoria::Level::Demonstrated) {
                 Action::ConfirmCompetence
             } else {
@@ -819,6 +833,50 @@ mod tests {
         );
         assert!(check_edits(&t.s, founder, ins, &demo).is_err());
         assert!(check_edits(&t.s, founder, founder, &demo).is_ok());
+        // UTSim Ensino: the belt records their own `praticou`, never someone else's, never
+        // `demonstrou`.
+        let own = mentoria::record_teaching(
+            p,
+            t.id(),
+            belt,
+            "fmea",
+            mentoria::Level::Practiced,
+            "Caso final, nota 8,5",
+            today,
+        )
+        .unwrap();
+        assert!(check_edits(&t.s, founder, belt, &own).is_ok());
+        let other = t.id();
+        let theirs = mentoria::record_teaching(
+            p,
+            t.id(),
+            other,
+            "fmea",
+            mentoria::Level::Studied,
+            "",
+            today,
+        )
+        .unwrap();
+        assert!(check_edits(&t.s, founder, belt, &theirs).is_err());
+        assert!(
+            mentoria::record_teaching(
+                p,
+                t.id(),
+                belt,
+                "fmea",
+                mentoria::Level::Demonstrated,
+                "",
+                today
+            )
+            .is_none()
+        );
+        let mut forged = own.clone();
+        for e in &mut forged {
+            if e.field == mentoria::fields::LEVEL {
+                e.value = enum_value(mentoria::Level::Demonstrated);
+            }
+        }
+        assert!(check_edits(&t.s, founder, belt, &forged).is_err());
         assert_eq!(units_without_champion(&t.s, p), vec![u2]);
     }
 
