@@ -64,7 +64,34 @@ Cada ferramenta tem um tipo serde estável em `utsim-ferramentas` (ou `utsim-qua
 
 O que é do nó é editado no arquivo do modelo. O UTSim mostra as abas Qualidade, Segurança e Manutenção no painel de propriedades do nó. O UTSim Qualidade e o UTSim Segurança do Trabalho leem os mesmos campos do `.ron` e gravam neles por comandos de edição (`utsim-edit`), com desfazer. Para não haver dois escritores ao mesmo tempo no mesmo modelo, o app que abre o modelo para editar grava uma trava ao lado do arquivo (`.<modelo>.trava`, com app, pessoa e hora). O outro abre só para leitura e avisa, e recarrega quando a trava some.
 
-## 3. Mapa por par de apps
+## 3. Campos por nó e edição nos dois sentidos
+
+### 3.1 O que o nó guarda
+
+Tudo no próprio objeto do `.ron`, usando o que já existe e completando o resto. Campos ausentes deixam o modelo igual ao de antes.
+
+| Aba no painel do nó | Campo do objeto | Já existe | O que guarda |
+|---|---|---|---|
+| Qualidade | `quality` | sim | defeitos (probabilidade, fator do ciclo ou do rótulo), características medidas com limites, custos unitários |
+| Qualidade | `inspection` | sim | frequência, detecção, alarme falso, medição com desvio, destino da rejeitada, limite de retrabalho, custo |
+| Qualidade | `rework` | sim | chance de corrigir por tipo, custo |
+| Qualidade | `sink_role` | sim | cliente ou refugo |
+| Qualidade | `quality.controle` | **novo** | linhas do plano de controle da característica (método, frequência, amostra, carta, reação) e plano de amostragem da inspeção |
+| Segurança | `ppe` | sim | EPI exigido no posto |
+| Segurança | `zones` do modelo | sim | zonas de risco desenhadas no piso (o nó só mostra as zonas que o tocam) |
+| Segurança | `safety` | **novo** | perigos do posto (grupo, descrição, fonte, probabilidade, severidade, controles, ações) e marcações de ergonomia por elemento |
+| Manutenção | `downtime` | sim | MTBF, MTTR, desgaste, preventivas, equipe de reparo, custos, OEE |
+
+O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde (pasta restrita), incidentes, 8D, inventário da organização inteira. O registro da unidade guarda só a referência ao modelo e ao nó, nunca uma cópia dos campos acima. Os perigos e as marcações que hoje estão na pasta de unidade migram para o `safety` do nó, e a pasta passa a guardar só o que não tem nó.
+
+### 3.2 Fluxo de edição
+
+1. **No UTSim:** o painel de propriedades do nó ganha as abas Qualidade, Segurança e Manutenção, editadas pelos comandos de `utsim-edit` (com desfazer). A interface implementa as abas. O formato e os comandos são comuns.
+2. **No UTSim Qualidade e no UTSim Segurança do Trabalho:** o app abre o mesmo `.ron`, mostra os resultados da simulação por nó e por fluxo, e edita os mesmos campos pelos mesmos comandos de `utsim-edit`, gravando o modelo inteiro de uma vez (gravação atômica).
+3. **Um escritor por vez:** quem abre o modelo para editar grava `.<modelo>.trava` ao lado do arquivo (app, pessoa, hora, renovada a cada minuto). O outro app abre só para ver, avisa quem está editando e recarrega quando o arquivo muda ou a trava some. Trava com mais de cinco minutos sem renovar é considerada abandonada.
+4. **Mesmos comandos nos três apps:** `SetQuality`, `SetInspection`, `SetRework`, `SetPpe`, `SetSafety`, `SetDowntime` e `SetZone` (este já existe), cada um trocando o bloco inteiro do nó, um passo de desfazer.
+
+## 4. Mapa por par de apps
 
 | De | Para | Vai | Volta |
 |---|---|---|---|
@@ -82,7 +109,7 @@ O que é do nó é editado no arquivo do modelo. O UTSim mostra as abas Qualidad
 | Ensino | Qualidade | missão que pede uma ferramenta (Pareto dos defeitos, carta) | a ferramenta feita pelo aluno, para conferir |
 | launcher | todos | onde cada app está instalado, versão ativa | nada |
 
-## 4. Ordem proposta
+## 5. Ordem proposta
 
 1. Crate `utsim-troca` com pedido, resposta, busca do app e vigia da resposta, mais testes de ida e volta entre dois processos de teste.
 2. Formato de troca das ferramentas que já existem em `utsim-ferramentas` e `utsim-quality`.
@@ -91,7 +118,7 @@ O que é do nó é editado no arquivo do modelo. O UTSim mostra as abas Qualidad
 5. Abas Qualidade, Segurança e Manutenção no painel do nó do UTSim, com a trava de edição (com a sessão da interface).
 6. Os demais pares da seção 3, na ordem que o dono preferir.
 
-## 5. Decisões do dono
+## 6. Decisões do dono
 
 | # | Pergunta | Proposta |
 |---|---|---|
@@ -100,3 +127,5 @@ O que é do nó é editado no arquivo do modelo. O UTSim mostra as abas Qualidad
 | I3 | O Seis Sigma mantém as telas próprias de FMEA, Ishikawa e Pareto durante a transição? | Sim, até a tela do Qualidade cobrir tudo o que a dele faz. Depois o botão passa a abrir no Qualidade. |
 | I4 | Dado do nó editado em dois apps ao mesmo tempo? | Um escritor por modelo, com trava ao lado do arquivo, e o outro só lê. |
 | I5 | Sem o Qualidade instalado, o Seis Sigma faz o quê? | Mostra o que falta e abre o launcher para instalar. Não cai para uma cópia local. |
+| I6 | Perigos e ergonomia do posto moram no nó ou na pasta de unidade? | No nó (`safety`), como o dono pediu. A pasta de unidade guarda o que não tem nó (incidentes, pessoas, 8D). |
+| I7 | Plano de controle mora no nó? | Sim, a linha da característica fica em `quality.controle`. Planos de postos sem modelo ficam na unidade. |
