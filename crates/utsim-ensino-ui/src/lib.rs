@@ -352,6 +352,7 @@ impl App {
         let escala = self.config.escala_texto.unwrap_or(1.0).clamp(0.8, 1.6);
         if self.estilo_aplicado != Some(escala) {
             utsim_ui_tema::install(ctx);
+            utsim_ui_tema::usar_cor_do_app(ctx, abertura::COR);
             ctx.all_styles_mut(|s| {
                 for f in s.text_styles.values_mut() {
                     f.size *= escala;
