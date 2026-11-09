@@ -29,7 +29,8 @@ impl TelaInicial {
         ui.heading("Pasta de unidade");
         ui.label(
             "A unidade é uma pasta (da fábrica ou do laboratório) que a equipe compartilha \
-             pelo Drive. Os dois apps, Qualidade e Segurança do Trabalho, abrem a mesma pasta.",
+             pelo Drive. Os apps da família que trabalham com unidade (Qualidade, Segurança do \
+             Trabalho e Estatística) abrem a mesma pasta.",
         );
         ui.add_space(8.0);
         egui::Grid::new("inicial").num_columns(2).show(ui, |ui| {

@@ -190,9 +190,24 @@ pub struct Document {
     pub cover: Option<Cover>,
     /// A table of contents of the headings, with their pages, after the cover.
     pub toc: bool,
+    /// The app that made the document (`UTSim Qualidade`...), shown in the header when the
+    /// template has no company. When empty, the cover's app is used.
+    pub app: String,
 }
 
 impl Document {
+    /// The name of the app that made the document: `app`, else the cover's, else `UTSim`.
+    pub fn app_name(&self) -> &str {
+        [
+            self.app.as_str(),
+            self.cover.as_ref().map_or("", |c| c.app.as_str()),
+        ]
+        .into_iter()
+        .map(str::trim)
+        .find(|s| !s.is_empty())
+        .unwrap_or("UTSim")
+    }
+
     pub fn new(title: &str, subtitle: &str) -> Self {
         Self {
             title: title.into(),
