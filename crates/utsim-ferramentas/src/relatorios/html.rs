@@ -519,7 +519,7 @@ fn ishikawa(effect: &str, cats: &[(String, Vec<String>)], accent: Rgb) -> String
         .unwrap_or(0)
         .clamp(2, 6);
     let half = 30.0 + max_causes as f64 * 11.0;
-    let h = 2.0 * half + 20.0;
+    let h = 2.0 * half + 50.0;
     let mut s = Svg::new(h);
     let mid = h / 2.0;
     let head_w = (W * 0.22).clamp(90.0, 170.0);
@@ -788,7 +788,7 @@ fn cover(c: &Cover, t: &Template) -> String {
 
 const CSS: &str = "\
 *{box-sizing:border-box}body{margin:0;font-family:Helvetica,Arial,sans-serif;color:#000;background:#fff;font-size:10pt;line-height:1.35}\
-.frame{width:100%;max-width:190mm;margin:0 auto;border-collapse:collapse}.frame>thead>tr>td,.frame>tfoot>tr>td,.frame>tbody>tr>td{padding:0;vertical-align:top}\
+.frame{width:100%;max-width:210mm;margin:0 auto;border-collapse:collapse}.frame>thead>tr>td,.frame>tfoot>tr>td,.frame>tbody>tr>td{padding:0 20mm;vertical-align:top}\
 .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.8pt solid var(--a);padding:8mm 0 2mm;margin-bottom:4mm}\
 .hd b{color:var(--a);font-size:9pt}.hd small{display:block;color:#595959;font-size:7.5pt}.hd span{color:#595959;font-size:8pt}\
 .ft{display:flex;justify-content:space-between;border-top:.4pt solid #b3b3b3;padding:2mm 0 6mm;margin-top:4mm;color:#595959;font-size:7.5pt}\
@@ -808,13 +808,13 @@ figure.chart,div.chart{margin:0 0 8pt;break-inside:avoid}.fig{width:100%;height:
 table.risk{border-collapse:collapse;font-size:8pt}table.risk th{font-weight:normal;padding:2pt 6pt;text-align:left}table.risk th.col{text-align:center}\
 table.risk td{border:.4pt solid #999;width:80pt;height:34pt;padding:2pt 3pt;font-weight:bold;font-size:7pt;vertical-align:top}\
 nav.toc h2{font-size:16pt;border:0}nav.toc ol{list-style:none;padding:0}nav.toc li{padding:2pt 0}nav.toc a{color:#000;text-decoration:none}nav.toc a:hover{text-decoration:underline}\
-.cover{break-after:page}.band{padding:60pt 42pt 36pt;min-height:42vh}.band .icon{width:48pt;height:48pt;display:block;margin-bottom:10pt}\
+.cover{break-after:page;height:270mm;overflow:hidden}.band{padding:60pt 42pt 36pt;height:40%;overflow:hidden}.band .icon{width:48pt;height:48pt;display:block;margin-bottom:10pt}\
 .band .app{font-weight:bold;font-size:12pt}.band .co{font-size:10pt}.band h1{font-size:26pt;margin:60pt 0 0}\
 .cbody{padding:20pt 42pt}.cbody .sub{font-size:14pt;color:#595959}.cbody dl{display:grid;grid-template-columns:120pt 1fr;gap:4pt 0;font-size:10pt}.cbody dt{font-weight:bold}.cbody dd{margin:0}\
 .pb{break-after:page}\
 @page{size:A4;margin:12mm}\
-@media print{.cover{height:270mm;overflow:hidden}.frame{max-width:none}}\
-@media screen{body{background:#eef0f3}.frame{background:#fff;padding:0 12mm;box-shadow:0 0 8px #0003;margin:12px auto}.cover{max-width:190mm;margin:12px auto;background:#fff;box-shadow:0 0 8px #0003}}";
+@media print{.frame{max-width:none}.frame>thead>tr>td,.frame>tfoot>tr>td,.frame>tbody>tr>td{padding:0 8mm}}\
+@media screen{body{background:#eef0f3}.frame{background:#fff;box-shadow:0 0 8px #0003;margin:12px auto}.cover{max-width:210mm;margin:12px auto;background:#fff;box-shadow:0 0 8px #0003}}";
 
 /// The document as one HTML page. `generated` goes in the footer (who and when printed it).
 pub fn render(doc: &Document, t: &Template, generated: &str) -> String {
