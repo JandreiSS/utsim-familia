@@ -165,7 +165,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
         }
     }
     ui.add_space(6.0);
-    ui.label(RichText::new(texto::LIMITE_COLA).weak());
+    ui.label(RichText::new(texto::limite_cola()).weak());
 }
 
 /// The teacher's panel.
@@ -802,7 +802,7 @@ fn secao_desafio(
     egui::CollapsingHeader::new("Desafio da turma e equipes")
         .default_open(aberto)
         .show(ui, |ui| {
-            ui.label(texto::DESAFIO_TEXTO);
+            ui.label(texto::desafio_texto());
             let d = &mut s.desafio;
             if d.equipes.is_empty() && !turma.equipes.is_empty() {
                 d.equipes = turma
@@ -1043,7 +1043,7 @@ fn secao_prova(
 ) -> Option<String> {
     let mut msg = None;
     ui.collapsing("Prova", |ui| {
-        ui.label(texto::PROVA_TEXTO);
+        ui.label(texto::prova_texto());
         let p = &mut s.prova;
         if p.tentativas == 0 {
             p.tentativas = 1;
@@ -1130,7 +1130,7 @@ fn secao_prova(
 fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
     ui.separator();
     ui.label(RichText::new("Programa Lean Seis Sigma da empresa").strong());
-    ui.label(texto::PROGRAMA_TEXTO);
+    ui.label(texto::programa_texto());
     ui.horizontal(|ui| {
         ui.label("Pasta do programa");
         ui.text_edit_singleline(&mut app.turma.programa);

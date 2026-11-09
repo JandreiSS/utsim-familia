@@ -259,7 +259,7 @@ impl App {
     pub fn salvar_identidade(&mut self, nome: &str, registro: &str, apelido: &str) -> bool {
         let (nome, registro) = (nome.trim(), registro.trim());
         if nome.len() < 2 || !registro_valido(registro) {
-            self.mensagem = Some(texto::SEM_IDENTIDADE.into());
+            self.mensagem = Some(texto::sem_identidade().into());
             return false;
         }
         self.config.identidade = Some(Aluno {
@@ -445,10 +445,10 @@ impl App {
         ui.add_space(30.0);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(texto::NOME_APP).size(28.0).strong());
-            ui.label(texto::SUBTITULO);
+            ui.label(texto::subtitulo());
             ui.add_space(20.0);
-            ui.label(RichText::new(texto::IDENTIDADE_TITULO).size(18.0));
-            ui.label(texto::IDENTIDADE_TEXTO);
+            ui.label(RichText::new(texto::identidade_titulo()).size(18.0));
+            ui.label(texto::identidade_texto());
         });
         ui.add_space(10.0);
         egui::Grid::new("identidade").num_columns(2).show(ui, |ui| {
@@ -597,7 +597,7 @@ impl App {
     fn outros_pacotes(&mut self, ui: &mut Ui) {
         ui.add_space(14.0);
         ui.separator();
-        ui.label(RichText::new(texto::OUTROS_PACOTES).strong());
+        ui.label(RichText::new(texto::outros_pacotes()).strong());
         let aberto = self.config.pacote_aberto.clone();
         let mut abrir = None;
         for p in &self.pacotes_instalados {
@@ -624,7 +624,7 @@ impl App {
                 Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
             }
         }
-        ui.label(texto::OUTROS_PACOTES_TEXTO);
+        ui.label(texto::outros_pacotes_texto());
         ui.horizontal(|ui| {
             ui.text_edit_singleline(&mut self.caminho_pacote);
             if ui.button("Abrir pacote").clicked() {

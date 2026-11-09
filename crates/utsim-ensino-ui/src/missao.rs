@@ -433,7 +433,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
             }
             None => {
                 if ui
-                    .add_enabled(m.trabalho.is_none(), egui::Button::new(texto::MEDIR))
+                    .add_enabled(m.trabalho.is_none(), egui::Button::new(texto::medir()))
                     .clicked()
                 {
                     m.medir(aluno.clone(), executor.as_ref(), Some(ctx.clone()));
@@ -521,7 +521,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
 
     if !missao.previsao.is_empty() {
         ui.label(RichText::new("Previsão").strong());
-        ui.label(RichText::new(texto::PREVER_ANTES).weak());
+        ui.label(RichText::new(texto::prever_antes()).weak());
         let travada = m.previsao_travada;
         for p in &missao.previsao {
             ui.label(p.pergunta());
@@ -753,7 +753,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         if ui
             .add_enabled(
                 pode,
-                egui::Button::new(RichText::new(texto::SIMULAR).strong()),
+                egui::Button::new(RichText::new(texto::simular()).strong()),
             )
             .clicked()
         {
@@ -775,7 +775,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                     .desired_width(160.0)
                     .show_percentage(),
             );
-            if ui.button(texto::CANCELAR).clicked() {
+            if ui.button(texto::cancelar()).clicked() {
                 t.cancelar.store(true, Ordering::Relaxed);
             }
             ui.ctx()
@@ -1026,7 +1026,7 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
         return;
     }
     ui.heading(format!("Caixa de areia: {}", missao.titulo));
-    ui.label(texto::AREIA_TEXTO);
+    ui.label(texto::areia_texto());
     ui.columns(2, |cols| {
         for (k, (nome, d)) in [("Cenário A", &mut s.a), ("Cenário B", &mut s.b)]
             .into_iter()
