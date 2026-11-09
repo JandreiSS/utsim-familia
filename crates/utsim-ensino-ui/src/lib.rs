@@ -23,6 +23,7 @@ use utsim_ensino_core::campanha::carregar_campanha;
 use utsim_ensino_core::pacote::{PacoteCarregado, carregar};
 use utsim_ensino_core::progresso::Progresso;
 use utsim_ensino_core::turma::{Aluno, registro_valido};
+use utsim_ensino_store::diario::LerRegistro;
 use utsim_ensino_store::perfil::{Config, Perfil};
 
 /// The color of UTSim Ensino in the family (`#8A5CE6`, the launcher icon).

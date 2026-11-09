@@ -4,7 +4,8 @@
 //! - [`arquivos`]: packages (folder or `.utse`), deliveries (`.utsr`), invitations (`.utsc`);
 //! - [`caso`]: the case builder on disk (draft package, check, `.utse`);
 //! - [`chave`]: ed25519 keys of the student and the teacher;
-//! - [`diario`]: the signed attempt journal chained by hash;
+//! - [`diario`]: the signed attempt journal chained by hash (both on the shared crate
+//!   `utsim-diario`, decision E12);
 //! - [`pasta`]: the class folder (local or synced by Google Drive for desktop);
 //! - [`correcao`]: batch grading on the teacher's machine;
 //! - [`desafio`]: the class scoreboard and the team solutions;
@@ -37,19 +38,11 @@ pub enum Erro {
 
 pub type Result<T> = std::result::Result<T, Erro>;
 
-pub(crate) fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-pub(crate) fn unhex(s: &str) -> Result<Vec<u8>> {
-    if s.len() % 2 != 0 {
-        return Err(Erro::Invalido("hexadecimal de tamanho ímpar".into()));
+impl From<utsim_diario::Erro> for Erro {
+    fn from(e: utsim_diario::Erro) -> Erro {
+        match e {
+            utsim_diario::Erro::Io(e) => Erro::Io(e),
+            utsim_diario::Erro::Invalido(s) => Erro::Invalido(s),
+        }
     }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(s.get(i..i + 2).unwrap_or("zz"), 16)
-                .map_err(|_| Erro::Invalido("hexadecimal inválido".into()))
-        })
-        .collect()
 }
