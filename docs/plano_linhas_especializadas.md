@@ -913,6 +913,12 @@ operadores.
 | M3 | Indicadores e relatório da linha, `utsim linha manufatura relatorio` | 8–10 | Opus |
 | M4 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
 
+**Estado em 2026-11-09: M1 a M4 feitos.** O `changeover` serve a qualquer processo; o laço de
+cartões usa só peças que já existiam (a ordem leva o cartão dentro dela, então as máquinas
+leem os rótulos da ordem). O modelo com CONWIP parte de uma carteira sempre cheia, para
+mostrar a vazão parando no ritmo do gargalo enquanto o atravessamento cresce com os cartões.
+Manual em `docs/manual/src/linhas/manufatura/index.md`.
+
 ### 10.9 Decisões do dono
 
 As propostas seguem no código até o dono responder.
