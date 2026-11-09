@@ -1,0 +1,30 @@
+Missao(
+    id: "eq/alternativas",
+    titulo: "A troca vale a pena?",
+    conceitos: ["numeros_aleatorios_comuns", "teste_t_pareado"],
+    modelo: "../modelos/linha.ron",
+    texto: "alternativas.md",
+    dados: [
+        (id: "comparacao", nome: "Peças por semana com a furadeira atual (A) e com a nova (B)",
+         gerador: Pareado(n: 12, media: 380.0, sd: 25.0, diferenca: 6.0, sd_diferenca: 7.0)),
+    ],
+    analisar_em: ["estatistica"],
+    previsao: [
+        Dados(id: "diferenca", pergunta: "Qual é a diferença média de produção, B menos A?",
+              conjunto: "comparacao", questao: DiferencaMedia, unidade: "peças", tolerancia: Absoluta(0.3)),
+        Dados(id: "significativa", pergunta: "Pelo teste t pareado a 5 %, a furadeira nova produz diferente da atual?",
+              conjunto: "comparacao", questao: DiferencaSignificativa, tolerancia: Absoluta(0.0)),
+        Escolha(
+            id: "independentes",
+            pergunta: "Se A e B fossem comparados como amostras independentes (teste t de duas amostras), o intervalo da diferença ficaria...",
+            opcoes: [(rotulo: "Bem mais largo, porque a variação de uma semana para outra entra na conta"), (rotulo: "Igual"), (rotulo: "Mais estreito")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que rodar A e B com os mesmos números aleatórios em cada replicação?",
+         opcoes: ["Para que as duas enfrentem os mesmos imprevistos e a diferença mostre só o efeito da troca", "Para que as duas deem o mesmo resultado", "Porque o simulador não aceita sementes diferentes"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

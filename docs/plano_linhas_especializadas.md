@@ -733,3 +733,103 @@ depois.
 5. **G-D5 Meta do tempo de doca.** 60 minutos por caminhão (proposta), mudável no relatório.
 6. **G-D6 Modelos prontos.** Os três da seção 8.7 (proposta) ou outros (armazém frigorífico,
    centro de distribuição de varejo com loja, armazém com AGV).
+
+---
+
+## 9. Quarta linha: Saúde e hospital
+
+Plano curto, no formato das seções 7 e 8, escrito em 2026-11-09 (ordem da seção 3: depois de
+logística, saúde). Vale a direção do dono de 2026-11-08 (`docs/plano_integracao_familia.md`,
+seção 3): a parada dos equipamentos (tomógrafo, raio X) fica no `downtime` do próprio nó, o EPI
+da equipe no `ppe` e nas `zones`, a conferência (dupla checagem de medicação) no `quality` do
+nó. A linha não cria dados paralelos.
+
+### 9.1 O que se estuda num serviço de saúde
+
+Pronto-socorro (chegada, recepção, classificação de risco, consulta, exames, medicação e
+observação, alta ou internação), ambulatório (consultas agendadas, faltas e encaixes) e
+internação (leitos, tempo de permanência, giro de leito). Perguntas típicas: quanto o paciente
+espera até o médico em cada cor da classificação e quantos ficam dentro do tempo-alvo; quantos
+vão embora sem atendimento; quantos médicos e enfermeiros por turno; quantos leitos para a
+ocupação ficar abaixo de 85 %; o efeito das faltas e dos encaixes na agenda.
+
+### 9.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Paciente | item com rótulos (`gravidade` 1 a 5, `agendado`) | existe |
+| Chegada espontânea por hora do dia | `Source` com `schedule` (taxa por período) | existe |
+| Agenda de consultas | `Source` com `table` | existe |
+| Classificação de risco | processo de triagem com a enfermagem; a cor é sorteada na chegada (rótulo `gravidade`) e a triagem só consome tempo | existe |
+| Fila por gravidade | `order: Asc("gravidade")` na `Queue` (1 vermelho primeiro) | existe |
+| Saiu sem atendimento | `patience` na `Queue` (rótulo `abandonou`) | existe |
+| Médico e enfermagem | `Transporter` (pessoa) e `Dispatcher` com habilidades (`requires`) e prioridade pelo rótulo (`priority_label`) | existe |
+| Sala com médico e enfermeiro ao mesmo tempo | **`also` no `Processor`**: outras equipes pedidas junto com `operators`; a etapa começa quando todas chegam | **novo** |
+| Tempo diferente por cor | roteamento `ByLabel("gravidade")` para salas com tempos próprios, a mesma equipe | existe |
+| Exames | processos com `downtime` do equipamento | existe |
+| Leito | `Processor` com `capacity` = leitos e tempo de permanência | existe |
+
+### 9.3 Biblioteca
+
+Chegada de pacientes (com as cores), agenda de consultas, recepção, classificação de risco,
+fila por gravidade (com a desistência), consultório, sala de procedimento (médico e
+enfermagem juntos), exame (laboratório e imagem, com parada do equipamento), medicação e
+observação, leitos de internação, alta, transferência; equipes de médicos e de enfermagem
+(equipe e pessoa, com EPI).
+
+### 9.4 Vocabulário
+
+item → paciente; `Source` → chegada; `Queue` → espera; `Processor` → atendimento;
+`Transporter` → profissional; `Dispatcher` → equipe; `Sink` → alta; `time_in_system` →
+permanência.
+
+### 9.5 Indicadores
+
+Com IC de 95 % entre replicações: pacientes atendidos por dia; **espera até o médico** (porta
+ao médico) média e por cor; **% dentro do tempo-alvo por cor** (padrão: vermelho 0, laranja
+10, amarelo 60, verde 120, azul 240 min); **saída sem atendimento** (% e por cor);
+**permanência** no serviço por cor; ocupação dos médicos e da enfermagem; **ocupação dos
+leitos** e permanência na internação; pacientes no serviço por hora do dia (censo).
+
+### 9.6 Relatório
+
+`utsim linha saude relatorio` com texto, HTML e JSON: cartões, tabela por cor (espera, % no
+alvo, saídas sem atendimento, permanência), gráfico do censo por hora do dia, equipes e
+leitos.
+
+### 9.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| Pronto-socorro com classificação de risco | chegada por hora do dia, cinco cores, consulta, exames com parada do tomógrafo, medicação, sala de procedimento com médico e enfermagem, internação |
+| Ambulatório com agenda | consultas agendadas com faltas, encaixes, especialidades por habilidade |
+| Internação e leitos | entradas do pronto-socorro e eletivas, tempo de permanência, ocupação e espera por leito |
+
+### 9.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| H1 | `also` no `Processor` (várias equipes ao mesmo tempo), com testes à mão; golden inalterados; painel 3D | 6–8 | Opus |
+| H2 | Pacote `linhas/saude/` (predefinições com parada, EPI e conferência nos campos do nó) | 3–4 | Sonnet |
+| H3 | Indicadores e relatório da linha, `utsim linha saude relatorio` | 8–10 | Opus |
+| H4 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Estado em 2026-11-09: H1 a H4 feitos.** O `also` serve a qualquer processo; quem chega
+primeiro espera os outros na estação, então o modelo pronto dá prioridade ao pedido do médico
+na sala de procedimento. Manual em `docs/manual/src/linhas/saude/index.md`.
+
+### 9.9 Decisões do dono
+
+As propostas seguem no código até o dono responder.
+
+1. **H-D1 Nome exibido.** "Saúde e hospital" (proposta).
+2. **H-D2 Classificação de risco.** Cinco cores com os tempos-alvo da seção 9.5 (proposta,
+   mudáveis no relatório) ou outra escala.
+3. **H-D3 Cor do paciente.** Sorteada na chegada, a triagem só consome tempo (proposta,
+   simples) ou decidida na triagem (precisa de rótulo gravado por um processo).
+4. **H-D4 Leito durante os exames.** O leito é o tempo de permanência, exames antes da
+   internação (proposta) ou o paciente segura o leito enquanto sai para exames (recurso
+   preso, mais trabalho no núcleo).
+5. **H-D5 Ocupação-alvo dos leitos.** 85 % (proposta).
+6. **H-D6 Modelos prontos.** Os três da seção 9.7 (proposta) ou outros (centro cirúrgico,
+   UTI, laboratório de análises).

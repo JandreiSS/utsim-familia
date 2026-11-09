@@ -357,7 +357,7 @@ Nome, registro acadêmico e notas são dados pessoais sob a LGPD. O app registra
 | Crate | Papel | Depende de |
 |---|---|---|
 | `utsim-ensino-core` | pura e testada. Missão, alavanca, tradução para chaves de `patch`, execução das rodadas, nota, tolerância, dicas automáticas, progresso, turma, prova, variante por semente, balanceamento e grade de arranjo (decisão E11) | `utsim-model`, `utsim-stats`, `utsim-opt`, `utsim-diagram`, `utsim-quality`, `utsim-linhas` |
-| `utsim-ensino-store` | pacotes `.utse`, entregas `.utsr`, convites `.utsc`, pasta da turma, diário assinado, cache local | `utsim-ensino-core`, o mecanismo de diário de `utsim-lss-store` (decisão E12) |
+| `utsim-ensino-store` | pacotes `.utse`, entregas `.utsr`, convites `.utsc`, pasta da turma, diário assinado, cache local | `utsim-ensino-core`, o crate comum `utsim-diario` (decisão E12) |
 | `utsim-ensino-ui` | telas egui sem backend: mapa da campanha, missão, vista 2D, resultados, painel do professor | `egui =0.36.2`, `egui_plot =0.37.0`, `utsim-ui-tema` |
 | `utsim-ensino-app` | binário `utsim-ensino` com eframe (glow), fios de trabalho, janela de arquivos | as três acima |
 
@@ -485,6 +485,18 @@ Essa frente está em planejamento paralelo. Este plano só fixa o contrato. A fr
 
 "Levar para o UTSim" grava o `.ron` da tentativa e abre o editor. "Ver em 3D" abre o `Replay` no cliente Godot. Os dois só aparecem quando o produto está instalado pelo launcher, como no Seis Sigma.
 
+### 7.6 UTSim Estatística e UTSim Qualidade
+
+O pacote "Estatística e qualidade na fábrica" (`ensino/pacotes/estatistica_qualidade`, feito em 2026-11-09) liga o jogo aos dois apps. Ele traz seis missões de análise:
+- replicações e intervalo de confiança;
+- comparação pareada com números aleatórios comuns;
+- carta X̄-R com deriva plantada;
+- Cpk antes e depois;
+- R&R com a fonte dominante;
+- estratificação.
+
+Os geradores `Pareado` e `Subgrupos` e as questões `MeiaLargura`, `Replicacoes`, `DiferencaMedia`, `DiferencaSignificativa`, `PrimeiroSubgrupoFora`, `Cpk` e `FonteDominante` entram no núcleo. A missão diz em `analisar_em` para qual app os dados vão. O botão grava os `.csv` no perfil e abre o app com `--utsim-abrir=<arquivo.csv>`, um por conjunto, na convenção da família. Para o UTSim Qualidade, o conjunto diz também a ferramenta e os limites (`ferramenta`, `lie`, `lse`), que vão como `--utsim-ferramenta`, `--utsim-lie` e `--utsim-lse`. O contrato foi combinado com a sessão Qualidade e Segurança e registrado por ela na seção 2.2 de `docs/plano_integracao_familia.md`: vários arquivos num só estudo, subgrupos em formato largo, colunas do R&R achadas pelo cabeçalho e, na capacidade, a última coluna numérica. A leitura do `.csv` como conjunto de dados fica com os dois apps. Até lá, o app só abre, e os arquivos ficam no perfil para a importação manual.
+
 ### 7.5 Placas com microcontrolador
 
 O protocolo próprio para placas (ESP32, Arduino) ainda será conversado com o dono (backlog). Quando existir, o app de ensino pode usá-lo de duas formas.
@@ -580,7 +592,7 @@ Propostas, a aceitar ou mudar.
 9. **E9 Caso final.** Proposta: análise no UTSim Seis Sigma com volta das respostas-chave ao jogo, mais uma versão reduzida dentro do jogo para quem não tem o Seis Sigma. Os tollgates são avaliados pelo professor no Seis Sigma, se ele quiser.
 10. **E10 Missões de modelo.** Proposta: o degrau 3 (o aluno entrega o `.ron`) entra no ato 7 e no modo sala de aula. Alternativa: deixar a modelagem só para a disciplina de simulação, fora da campanha.
 11. **E11 Lugar do balanceamento.** Proposta: módulo em `utsim-ensino-core` agora, movido para uma crate comum quando o Seis Sigma fizer o balanceamento da P6. Alternativa: crate `utsim-metodos` desde já, usada pelos dois apps.
-12. **E12 Diário das entregas.** Proposta: extrair o diário de operações de `utsim-lss-store` para uma crate comum pequena, usada pelos dois apps. Alternativa: copiar o desenho na `utsim-ensino-store`.
+12. **E12 Diário das entregas.** (**decidida** em 2026-11-09, de acordo com a sessão Seis Sigma) Crate comum `utsim-diario`, criado pelo Ensino e usado pelo Seis Sigma na P7. Ele só tem primitivas: chave ed25519 com a pública em hex, `sha256_hex`, `Elo {corpo, hash, assinatura}` com o corpo guardado como texto, cadeia por autor dentro do corpo (trait `Encadeado`: autor, sequência e hash do anterior), `conferir` e `conferir_desde` (conferência incremental a partir do último elo conferido) e `Selo` para assinatura avulsa, com várias assinaturas possíveis sobre o mesmo corpo. A conferência devolve problemas sem texto (`Problema`), e cada app escreve a mensagem no seu catálogo. Um buraco no meio da cadeia é apontado, e um final faltando não é, porque a pasta sincroniza com atraso. Dois elos do mesmo autor com a mesma sequência e hashes diferentes são uma bifurcação (backup restaurado). `Selo.publica` é sempre a chave de quem assinou, e `quando` vem de quem chama, nunca do relógio do crate. Ficam no Seis Sigma o formato do `Op` com `sequencia` e `anterior`, o chaveiro pessoa→chave, a troca de chave e os textos. Os arquivos já gravados pelo Ensino continuam válidos.
 13. **E13 Binário do professor.** Proposta: um só binário com modo professor ligado por perfil local. Alternativa: produto `ensino-professor` separado, em canal com código.
 14. **E14 Conteúdo pelo launcher.** Proposta: campanha embutida no app e pacotes extras como produto de conteúdo do launcher ou pela pasta da turma. Alternativa: só embutido.
 15. **E15 Público da segunda leva.** Proposta: formação de belts na empresa piloto do Seis Sigma, com registro de competência. Alternativas: pós-graduação ou curso técnico.

@@ -19,7 +19,7 @@ use utsim_ensino_core::turma::{
 };
 
 use crate::arquivos::{Convite, Entrega, FORMATO_ENTREGA, gravar_utse};
-use crate::diario::TentativaAssinada;
+use crate::diario::{LerRegistro, TentativaAssinada};
 use crate::{Erro, Result};
 
 pub struct PastaTurma {

@@ -98,7 +98,14 @@ fn guarded(text: &str) -> Result<(), String> {
         Ok(r) => r.map_err(|e| format!("{e}\n--- entrada ---\n{text}")),
         Err(_) => {
             // The stuck thread cannot be stopped: report and end the whole test process.
-            eprintln!("TRAVOU (> 60 s)\n--- entrada ---\n{text}");
+            // `eprintln!` is captured by the test harness and lost on `exit`, so the input
+            // goes straight to the process stderr and to a file in `target/`.
+            use std::io::Write;
+            let msg = format!("TRAVOU (> 60 s)\n--- entrada ---\n{text}\n");
+            let _ = std::io::stderr().lock().write_all(msg.as_bytes());
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("robustez_travou.ron"), text);
             std::process::exit(101);
         }
     }

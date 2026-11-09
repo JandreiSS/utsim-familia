@@ -14,6 +14,7 @@ default-members = [
     "crates/utsim-core",
     "crates/utsim-dash",
     "crates/utsim-diagram",
+    "crates/utsim-diario",
     "crates/utsim-edit",
     "crates/utsim-ensino-core",
     "crates/utsim-ensino-store",
@@ -84,6 +85,7 @@ utsim-ferramentas = { path = "crates/utsim-ferramentas" }
 utsim-twin = { path = "crates/utsim-twin" }
 utsim-ui-tema = { path = "crates/utsim-ui-tema" }
 utsim-linhas = { path = "crates/utsim-linhas" }
+utsim-diario = { path = "crates/utsim-diario" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }

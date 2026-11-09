@@ -866,6 +866,7 @@ fn object_activity(obj: &ObjectDef, successors: usize) -> Activity {
             setup,
             process,
             operators,
+            also,
         } => {
             let mut notes = Vec::new();
             if *capacity > 1 {
@@ -873,7 +874,7 @@ fn object_activity(obj: &ObjectDef, successors: usize) -> Activity {
                     "capacidade {capacity} não muda a duração de um item"
                 ));
             }
-            if let Some(op) = operators {
+            for op in operators.iter().chain(also) {
                 notes.push(format!(
                     "operadores da equipe {} só no modo simulado",
                     op.team
