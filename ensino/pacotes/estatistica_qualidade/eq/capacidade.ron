@@ -1,0 +1,34 @@
+Missao(
+    id: "eq/capacidade",
+    titulo: "Capacidade antes e depois do ajuste",
+    conceitos: ["capacidade_do_processo"],
+    modelo: "../modelos/eixos.ron",
+    texto: "capacidade.md",
+    dados: [
+        (id: "antes", nome: "Diâmetros antes do ajuste da retífica (mm)",
+         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.006, sd: 0.005),
+         ferramenta: Some("capacidade"), lie: Some(24.985), lse: Some(25.015)),
+        (id: "depois", nome: "Diâmetros depois do ajuste da retífica (mm)",
+         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.001, sd: 0.003),
+         ferramenta: Some("capacidade"), lie: Some(24.985), lse: Some(25.015)),
+    ],
+    analisar_em: ["qualidade"],
+    previsao: [
+        Dados(id: "cpk_antes", pergunta: "Qual era o Cpk antes do ajuste, com especificação de 24,985 a 25,015 mm?",
+              conjunto: "antes", questao: Cpk(lie: Some(24.985), lse: Some(25.015)), tolerancia: Absoluta(0.05)),
+        Dados(id: "cpk_depois", pergunta: "Qual é o Cpk depois do ajuste, com a mesma especificação?",
+              conjunto: "depois", questao: Cpk(lie: Some(24.985), lse: Some(25.015)), tolerancia: Absoluta(0.05)),
+        Escolha(
+            id: "cp_cpk",
+            pergunta: "Antes do ajuste, o Cp era bem maior que o Cpk. O que isso quer dizer?",
+            opcoes: [(rotulo: "Que a média estava fora do centro da especificação"), (rotulo: "Que a variação era grande demais"), (rotulo: "Que o processo estava fora de controle")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que o Cpk só vale para um processo sob controle?",
+         opcoes: ["Porque ele usa a variação dentro dos subgrupos, que só descreve o futuro se o processo não muda de um subgrupo para outro", "Porque ele é calculado com a carta", "Porque fora de controle o Cpk é sempre zero"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

@@ -527,6 +527,46 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                 );
             }
         });
+        // The apps of the family named by the mission, when installed.
+        let apps: Vec<&String> = missao
+            .analisar_em
+            .iter()
+            .filter(|a| app.apps_analise.contains(a))
+            .collect();
+        if !apps.is_empty() {
+            ui.horizontal(|ui| {
+                for produto in apps {
+                    let rotulo = match produto.as_str() {
+                        "estatistica" => texto::missao_analisar_estatistica(),
+                        _ => texto::missao_analisar_qualidade(),
+                    };
+                    if ui
+                        .button(rotulo)
+                        .on_hover_text(texto::missao_analisar_dica())
+                        .clicked()
+                    {
+                        let dir = app.perfil.dir.join("dados");
+                        m.aviso_dados = Some(
+                            match utsim_ensino_store::analise::analisar(produto, &dir, &mc, &aluno)
+                            {
+                                Ok(arqs) => texto::f(
+                                    texto::missao_dados_abertos(),
+                                    &[
+                                        &arqs.len(),
+                                        &arqs
+                                            .first()
+                                            .and_then(|p| p.parent())
+                                            .map(|p| p.display().to_string())
+                                            .unwrap_or_default(),
+                                    ],
+                                ),
+                                Err(e) => texto::f(texto::missao_erro_gravar(), &[&e]),
+                            },
+                        );
+                    }
+                }
+            });
+        }
         if let Some(a) = &m.aviso_dados {
             ui.label(a);
         }

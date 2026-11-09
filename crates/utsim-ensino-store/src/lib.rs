@@ -1,6 +1,7 @@
 //! Storage of UTSim Ensino (`docs/plano_ensino_e_jogo.md`, sections 2.3, 4.3 and 4.6). No
 //! server and no Drive API: packages, deliveries and class folders are plain files.
 //!
+//! - [`analise`]: the data of a mission opened in UTSim Estatística or UTSim Qualidade;
 //! - [`arquivos`]: packages (folder or `.utse`), deliveries (`.utsr`), invitations (`.utsc`);
 //! - [`caso`]: the case builder on disk (draft package, check, `.utse`);
 //! - [`chave`]: ed25519 keys of the student and the teacher;
@@ -15,6 +16,7 @@
 //! - [`tres_d`]: "Ver em 3D", the attempt opened in the UTSim client of the launcher;
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 
+pub mod analise;
 pub mod arquivos;
 pub mod caso;
 pub mod chave;

@@ -1,0 +1,30 @@
+Missao(
+    id: "eq/replicacoes",
+    titulo: "Quantas replicações bastam?",
+    conceitos: ["replicacao", "intervalo_de_confianca"],
+    modelo: "../modelos/linha.ron",
+    texto: "replicacoes.md",
+    dados: [
+        (id: "producao", nome: "Peças por semana em 10 replicações",
+         gerador: Tempos(dist: Normal(mean: 412.0, sd: 18.0), n: 10)),
+    ],
+    analisar_em: ["estatistica"],
+    previsao: [
+        Dados(id: "meia_largura", pergunta: "Qual é a meia largura do intervalo de 95 % da produção média, com estas 10 replicações?",
+              conjunto: "producao", questao: MeiaLargura(confianca: 0.95), unidade: "peças", tolerancia: Absoluta(0.5)),
+        Dados(id: "replicacoes", pergunta: "Quantas replicações são precisas para uma meia largura de 5 peças, usando estas 10 como piloto?",
+              conjunto: "producao", questao: Replicacoes(meia_largura: 5.0), unidade: "replicações", tolerancia: Absoluta(1.0)),
+        Escolha(
+            id: "metade",
+            pergunta: "Para cortar a meia largura pela metade, o número de replicações precisa...",
+            opcoes: [(rotulo: "Mais ou menos quadruplicar"), (rotulo: "Dobrar"), (rotulo: "Aumentar 50 %")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que o gerente não deve decidir com o resultado de uma replicação só?",
+         opcoes: ["Porque cada replicação sai diferente, e sem o intervalo não se sabe quanto o número pode estar errado", "Porque uma replicação sempre subestima a produção", "Porque o simulador só acerta depois de dez rodadas"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)
