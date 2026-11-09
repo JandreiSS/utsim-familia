@@ -20,6 +20,21 @@ use utsim_ensino_store::planilha::xlsx;
 
 use crate::missao::Trabalho;
 use crate::{App, numero_missao, texto};
+use utsim_ui_tema::arquivos as seletor;
+
+fn convite() -> seletor::Filtro {
+    seletor::Filtro {
+        nome: texto::sel_filtro_convite(),
+        extensoes: &["utsc"],
+    }
+}
+
+fn entrega() -> seletor::Filtro {
+    seletor::Filtro {
+        nome: texto::sel_filtro_entrega(),
+        extensoes: &["utsr"],
+    }
+}
 
 const VERMELHO: Color32 = Color32::from_rgb(255, 112, 104);
 const AMARELO: Color32 = Color32::from_rgb(236, 196, 76);
@@ -66,10 +81,24 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             ui.label(texto::turma_como_entrar());
             egui::Grid::new("entrar").num_columns(2).show(ui, |ui| {
                 ui.label(texto::turma_convite());
-                ui.text_edit_singleline(&mut app.turma.convite);
+                crate::abertura::campo(
+                    ui,
+                    &mut app.turma.convite,
+                    seletor::Tipo::Abrir,
+                    texto::sel_convite(),
+                    &[convite()],
+                    360.0,
+                );
                 ui.end_row();
                 ui.label(texto::turma_pasta_opcional());
-                ui.text_edit_singleline(&mut app.turma.pasta);
+                crate::abertura::campo(
+                    ui,
+                    &mut app.turma.pasta,
+                    seletor::Tipo::Pasta,
+                    texto::sel_pasta(),
+                    &[],
+                    360.0,
+                );
                 ui.end_row();
             });
             if ui.button(texto::turma_entrar()).clicked() {
@@ -95,7 +124,14 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
     ui.label(texto::turma_entrega_texto());
     ui.horizontal(|ui| {
         ui.label(texto::turma_arquivo());
-        ui.text_edit_singleline(&mut app.turma.destino_entrega);
+        crate::abertura::campo(
+            ui,
+            &mut app.turma.destino_entrega,
+            seletor::Tipo::Salvar,
+            texto::sel_gravar_entrega(),
+            &[entrega()],
+            360.0,
+        );
         if ui.button(texto::turma_gravar_entrega()).clicked() {
             let mut destino = PathBuf::from(app.turma.destino_entrega.trim());
             if destino.extension().is_none() {
@@ -439,13 +475,27 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
         ui.label(texto::turma_construtor_texto());
         egui::Grid::new("caso").num_columns(2).show(ui, |ui| {
             ui.label(texto::turma_modelo());
-            ui.text_edit_singleline(&mut s.caso_modelo);
+            crate::abertura::campo(
+                ui,
+                &mut s.caso_modelo,
+                seletor::Tipo::Abrir,
+                texto::sel_modelo(),
+                &[seletor::RON],
+                360.0,
+            );
             ui.end_row();
             ui.label(texto::turma_titulo_missao());
             ui.text_edit_singleline(&mut s.caso_titulo);
             ui.end_row();
             ui.label(texto::turma_pasta_pacote());
-            ui.text_edit_singleline(&mut s.caso_pasta);
+            crate::abertura::campo(
+                ui,
+                &mut s.caso_pasta,
+                seletor::Tipo::Pasta,
+                texto::sel_pasta_pacote(),
+                &[],
+                360.0,
+            );
             ui.end_row();
         });
         ui.horizontal(|ui| {
@@ -488,7 +538,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     ui.collapsing(texto::turma_nova(), |ui| {
         egui::Grid::new("nova_turma").num_columns(2).show(ui, |ui| {
             ui.label(texto::turma_pasta_local_drive());
-            ui.text_edit_singleline(&mut s.pasta);
+            crate::abertura::campo(
+                ui,
+                &mut s.pasta,
+                seletor::Tipo::Pasta,
+                texto::sel_pasta_turma(),
+                &[],
+                360.0,
+            );
             ui.end_row();
             ui.label(texto::turma_nome());
             ui.text_edit_singleline(&mut s.nome);
@@ -500,7 +557,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             ui.text_edit_singleline(&mut s.finalidade);
             ui.end_row();
             ui.label(texto::turma_lista_csv());
-            ui.text_edit_singleline(&mut s.csv);
+            crate::abertura::campo(
+                ui,
+                &mut s.csv,
+                seletor::Tipo::Abrir,
+                texto::sel_lista_alunos(),
+                &[seletor::CSV],
+                360.0,
+            );
             ui.end_row();
         });
         if ui.button(texto::turma_criar()).clicked() {
@@ -546,7 +610,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
 
     ui.horizontal(|ui| {
         ui.label(texto::turma_abrir_turma());
-        ui.text_edit_singleline(&mut s.pasta);
+        crate::abertura::campo(
+            ui,
+            &mut s.pasta,
+            seletor::Tipo::Pasta,
+            texto::sel_pasta_turma(),
+            &[],
+            360.0,
+        );
         if ui.button(texto::turma_abrir()).clicked() {
             let dir = PathBuf::from(s.pasta.trim());
             if let Err(e) = s.abrir(&dir) {
@@ -586,7 +657,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     ));
     ui.horizontal(|ui| {
         ui.label(texto::turma_importar_lista());
-        ui.text_edit_singleline(&mut s.csv);
+        crate::abertura::campo(
+            ui,
+            &mut s.csv,
+            seletor::Tipo::Abrir,
+            texto::sel_lista_alunos(),
+            &[seletor::CSV],
+            360.0,
+        );
         if ui.button(texto::turma_importar()).clicked() {
             let r = std::fs::read_to_string(s.csv.trim())
                 .map_err(|e| e.to_string())
@@ -623,7 +701,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     }
     ui.horizontal(|ui| {
         ui.label(texto::turma_entregas_utsr());
-        ui.text_edit_singleline(&mut s.pasta_utsr);
+        crate::abertura::campo(
+            ui,
+            &mut s.pasta_utsr,
+            seletor::Tipo::Pasta,
+            texto::sel_pasta_entregas(),
+            &[],
+            360.0,
+        );
     });
     ui.horizontal(|ui| {
         if ui
@@ -1118,7 +1203,14 @@ fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
     ui.label(texto::programa_texto());
     ui.horizontal(|ui| {
         ui.label(texto::turma_pasta_programa());
-        ui.text_edit_singleline(&mut app.turma.programa);
+        crate::abertura::campo(
+            ui,
+            &mut app.turma.programa,
+            seletor::Tipo::Pasta,
+            texto::sel_pasta_programa(),
+            &[],
+            360.0,
+        );
         if ui.button(texto::turma_ligar()).clicked() {
             let dir = PathBuf::from(app.turma.programa.trim().trim_matches('"'));
             let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
