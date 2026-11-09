@@ -233,6 +233,7 @@ pub fn pdf(blocos: &[Bloco], emitido: &str) -> Vec<u8> {
         .unwrap_or_else(|| "Inventário de riscos".into());
     let mut doc = Document::new(&titulo, "UTSim Segurança do Trabalho");
     doc.size = PageSize::A3Landscape;
+    doc.app = "UTSim Segurança do Trabalho".into();
     for b in blocos {
         match b {
             Bloco::Titulo(_) => {}

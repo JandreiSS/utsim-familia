@@ -7812,6 +7812,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-estatistica-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_plot",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "utsim-ferramentas",
+ "utsim-launcher-core",
+ "utsim-lss-core",
+ "utsim-pasta",
+ "utsim-posto",
+ "utsim-posto-ui",
+ "utsim-quality",
+ "utsim-stats",
+ "utsim-ui-tema",
+ "winresource",
+ "zip 2.6.1",
+]
+
+[[package]]
 name = "utsim-exposicao"
 version = "0.1.0"
 dependencies = [

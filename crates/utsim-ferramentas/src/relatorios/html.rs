@@ -835,7 +835,7 @@ nav.toc h2{font-size:16pt;border:0}nav.toc ol{list-style:none;padding:0}nav.toc 
 pub fn render(doc: &Document, t: &Template, generated: &str) -> String {
     let accent = t.rgb();
     let company = if t.company.is_empty() {
-        "UTSim Seis Sigma"
+        doc.app_name()
     } else {
         t.company.as_str()
     };
