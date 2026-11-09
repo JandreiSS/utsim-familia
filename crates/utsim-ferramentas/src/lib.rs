@@ -9,6 +9,12 @@
 //! - [`planos`]: data collection, control and response (reaction) plans;
 //! - [`a3`]: the sections of the A3;
 //! - [`pareto`]: the Pareto analysis;
+//! - [`qfd`]: the house of quality, weights of the technical requirements and findings;
+//! - [`poka_yoke`]: error-proofing devices, their effect on the FMEA and their checks;
+//! - [`selecao`]: weighted criteria and Pugh matrices, effort × impact;
+//! - [`cinco_s`]: 5S audits by sense;
+//! - [`smed`]: quick changeover, internal and external activities;
+//! - [`trabalho_padrao`]: standardised work, combination table and line balancing;
 //! - [`relatorios`]: the report generator with its PDF and CSV.
 //!
 //! The structures are generic over the identifier of the app; the field names are the
@@ -19,11 +25,17 @@ pub mod a3;
 pub mod ap;
 pub mod arvore;
 pub mod cinco_porques;
+pub mod cinco_s;
 pub mod fmea;
 pub mod ishikawa;
 pub mod pareto;
 pub mod planos;
+pub mod poka_yoke;
+pub mod qfd;
 pub mod relatorios;
+pub mod selecao;
+pub mod smed;
+pub mod trabalho_padrao;
 
 /// A number typed by a person: `1,5`, `1.5`, ` 2 `; `None` when empty or not a number.
 pub fn parse_number(text: &str) -> Option<f64> {

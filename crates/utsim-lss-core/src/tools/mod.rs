@@ -13,6 +13,10 @@
 //! - [`plans`]: data collection, control and response plans;
 //! - [`vsm`]: value stream map, current and future state, with the lead time ladder;
 //! - [`a3`]: the one page report composed of the other deliverables;
+//! - [`lean`]: selection of solutions (weighted, Pugh, effort × impact), 5S, SMED and
+//!   standardised work with line balancing (etapa P6);
+//! - [`kaizen`]: the quick kaizen event, its agenda, open items and follow-ups;
+//! - [`pdca`]: chained PDCA cycles;
 //! - [`tree`]: forests of items (parent links) robust to cycles.
 
 pub mod a3;
@@ -20,7 +24,10 @@ pub use utsim_ferramentas::ap;
 pub mod cause_effect;
 pub mod fmea;
 pub mod ishikawa;
+pub mod kaizen;
+pub mod lean;
 pub mod pareto;
+pub mod pdca;
 pub mod plans;
 pub mod sipoc;
 pub mod tree;
@@ -77,10 +84,22 @@ pub enum Tool {
     A3,
     #[serde(rename = "vsm")]
     Vsm,
+    #[serde(rename = "selecao_solucoes")]
+    Selection,
+    #[serde(rename = "cinco_s")]
+    FiveS,
+    #[serde(rename = "smed")]
+    Smed,
+    #[serde(rename = "trabalho_padrao")]
+    StandardWork,
+    #[serde(rename = "evento_kaizen")]
+    KaizenEvent,
+    #[serde(rename = "ciclos_pdca")]
+    Pdca,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 12] = [
+    pub const ALL: [Tool; 18] = [
         Tool::Voc,
         Tool::Sipoc,
         Tool::Pareto,
@@ -93,14 +112,21 @@ impl Tool {
         Tool::ResponsePlan,
         Tool::A3,
         Tool::Vsm,
+        Tool::Selection,
+        Tool::FiveS,
+        Tool::Smed,
+        Tool::StandardWork,
+        Tool::KaizenEvent,
+        Tool::Pdca,
     ];
 
     /// Index of the DMAIC phase where the tool usually lives (Definir 0 ... Controlar 4).
     pub fn usual_phase(self) -> usize {
         match self {
-            Tool::Voc | Tool::Sipoc | Tool::Pareto | Tool::A3 => 0,
-            Tool::DataCollection | Tool::Vsm => 1,
+            Tool::Voc | Tool::Sipoc | Tool::Pareto | Tool::A3 | Tool::Pdca => 0,
+            Tool::DataCollection | Tool::Vsm | Tool::KaizenEvent => 1,
             Tool::Ishikawa | Tool::FiveWhys | Tool::CauseEffect | Tool::Fmea => 2,
+            Tool::Selection | Tool::FiveS | Tool::Smed | Tool::StandardWork => 3,
             Tool::ControlPlan | Tool::ResponsePlan => 4,
         }
     }
