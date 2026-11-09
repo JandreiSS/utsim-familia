@@ -20,3 +20,5 @@ docs/guia/*.fls
 docs/guia/*.fdb_latexmk
 docs/guia/main.pdf
 dist/
+# One-writer lock of an open model (utsim_pasta::trava).
+.*.trava
