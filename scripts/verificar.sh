@@ -41,6 +41,15 @@ for modelo in examples/*.ron; do
     "$BIN" check "$modelo" || falha "modelo inválido: $modelo"
 done
 
+# Elementos 3D do Blender: os testes do passo 3 conferem os arquivos versionados; com
+# UTSIM_BLENDER=1, gera tudo de novo e exige que nada mude (precisa do Blender 5.2).
+if [ "${UTSIM_BLENDER:-}" = "1" ]; then
+    echo
+    echo "==> Elementos 3D do Blender (UTSIM_BLENDER=1)"
+    bash scripts/blender.sh >/dev/null || falha "scripts/blender.sh falhou"
+    git diff --quiet -- assets/modelos3d || falha "assets/modelos3d mudou ao gerar de novo: versione o resultado"
+fi
+
 passo "6/7 Visualizador 3D (opcional: UTSIM_VIEWER=1)"
 if [ "${UTSIM_VIEWER:-}" = "1" ]; then
     cargo clippy -p utsim-viewer --all-targets -- -D warnings || falha "clippy do utsim-viewer encontrou avisos ou erros"

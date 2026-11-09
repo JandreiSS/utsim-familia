@@ -7626,6 +7626,7 @@ dependencies = [
  "gltf",
  "ron 0.8.1",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
