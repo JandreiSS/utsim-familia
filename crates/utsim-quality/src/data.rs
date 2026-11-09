@@ -13,6 +13,8 @@
 //! - **attribute study** ([`ratings`]): `item, avaliador, resposta[, padrão]`;
 //! - **bias and linearity** ([`reference_pairs`]): `referência, valor`.
 
+pub mod xlsx;
+
 use crate::attribute::Rating;
 use crate::msa::Measurement;
 

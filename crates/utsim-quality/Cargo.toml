@@ -11,3 +11,8 @@ serde.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 rand_pcg.workspace = true
+# Reading .xlsx sheets (data::xlsx): the same zip as the other crates.
+zip = { version = "=2.6.1", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+rust_xlsxwriter = { version = "=0.102.0", default-features = false }

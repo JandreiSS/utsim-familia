@@ -96,6 +96,61 @@ impl Tabela {
         )
     }
 
+    /// Importa uma aba de um xlsx (`None`: a primeira), com os números escritos com vírgula
+    /// decimal, e devolve a tabela com a origem (arquivo, aba e hash).
+    pub fn importar_xlsx(
+        arquivo: &str,
+        bytes: &[u8],
+        aba: Option<&str>,
+    ) -> Result<(Tabela, Origem), String> {
+        let t = utsim_quality::data::xlsx::read(bytes, aba)?;
+        let nome_aba = match aba {
+            Some(a) => a.to_string(),
+            None => utsim_quality::data::xlsx::sheets(bytes)?
+                .into_iter()
+                .next()
+                .unwrap_or_default(),
+        };
+        let linhas = t
+            .rows
+            .into_iter()
+            .map(|l| {
+                l.into_iter()
+                    .map(|c| match utsim_quality::data::number(&c, false) {
+                        Some(v) => crate::num(v, 10),
+                        None => c,
+                    })
+                    .collect()
+            })
+            .collect();
+        Ok((
+            Tabela::de_linhas(t.header, linhas),
+            Origem::Importado {
+                arquivo: arquivo.into(),
+                hash: sha256(bytes),
+                aba: nome_aba,
+            },
+        ))
+    }
+
+    /// As abas de um xlsx, para a pessoa escolher.
+    pub fn abas_xlsx(bytes: &[u8]) -> Result<Vec<String>, String> {
+        utsim_quality::data::xlsx::sheets(bytes)
+    }
+
+    /// Importa pelo nome do arquivo: `.xlsx` (com a aba) ou texto (CSV, TSV, TXT).
+    pub fn importar(
+        arquivo: &str,
+        bytes: &[u8],
+        aba: Option<&str>,
+    ) -> Result<(Tabela, Origem), String> {
+        if arquivo.to_lowercase().ends_with(".xlsx") {
+            Tabela::importar_xlsx(arquivo, bytes, aba)
+        } else {
+            Ok(Tabela::importar_csv(arquivo, bytes))
+        }
+    }
+
     /// A tabela como CSV com `;` e vírgula decimal, para abrir na planilha.
     pub fn csv(&self) -> String {
         let cel = |c: &str| {
@@ -202,6 +257,33 @@ mod tests {
         assert_eq!(hash.len(), 64);
         let back = Tabela::de_csv(t.csv().as_bytes());
         assert_eq!(back, t);
+    }
+
+    #[test]
+    fn xlsx_by_extension_with_the_sheet_in_the_origin() {
+        let mut wb = rust_xlsxwriter::Workbook::new();
+        let w = wb.add_worksheet();
+        w.set_name("Semana 45").unwrap();
+        w.write_string(0, 0, "Diâmetro").unwrap();
+        w.write_number(1, 0, 10.25).unwrap();
+        w.write_number(2, 0, 9.5).unwrap();
+        let b = wb.save_to_buffer().unwrap();
+        let (t, o) = Tabela::importar("medidas.XLSX", &b, None).unwrap();
+        assert_eq!(t.colunas, ["Diâmetro"]);
+        assert_eq!(t.celula(0, 0), "10,25");
+        assert_eq!(t.numeros(0), [10.25, 9.5]);
+        assert!(o.descricao().contains("aba Semana 45"), "{}", o.descricao());
+        assert!(Tabela::importar("x.xlsx", b"nada", None).is_err());
+        assert!(
+            Tabela::importar(
+                "x.csv",
+                b"a;b
+1;2
+",
+                None
+            )
+            .is_ok()
+        );
     }
 
     #[test]

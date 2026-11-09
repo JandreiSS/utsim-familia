@@ -7839,6 +7839,7 @@ dependencies = [
 name = "utsim-estudo"
 version = "0.1.0"
 dependencies = [
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "sha2",
@@ -8204,8 +8205,10 @@ dependencies = [
  "rand 0.9.5",
  "rand_distr 0.5.1",
  "rand_pcg",
+ "rust_xlsxwriter",
  "serde",
  "utsim-stats",
+ "zip 2.6.1",
 ]
 
 [[package]]
