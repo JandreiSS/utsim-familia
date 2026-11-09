@@ -1423,6 +1423,10 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                         for (k, c) in colunas.iter().enumerate() {
                             ui.selectable_value(&mut sel, k, c);
                         }
+                        // O custo unitário do Pareto é opcional.
+                        if f == Ferramenta::Pareto && i == 2 {
+                            ui.selectable_value(&mut sel, usize::MAX, "nenhuma");
+                        }
                     });
                 if sel != p.colunas.get(i).copied().unwrap_or(i) {
                     while p.colunas.len() <= i {

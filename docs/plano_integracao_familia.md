@@ -136,7 +136,7 @@ Ordem:
 3. Tela "Modelo" como entrada dos dois apps: lista de nós com indicadores, resultados por nó primeiro, edição dos campos do nó com a trava.
 4. As telas atuais passam a abrir pelo nó: o Pareto, a carta e a capacidade da característica do nó selecionado, o inventário do posto lido de `safety.hazards`, a ergonomia gravada em `safety.ergonomics`, os incidentes com o nó. Os perigos e as marcações que estão na pasta de unidade migram para o nó, com um assistente que mostra o que vai mudar antes de gravar.
 5. Crate `utsim-troca` (pedido e resposta entre apps) e formato de troca das ferramentas.
-6. Área "Ferramentas" no UTSim Qualidade e no UTSim Segurança do Trabalho, com relatórios bonitos (seção 5.1).
+6. Área "Ferramentas" no UTSim Qualidade e no UTSim Segurança do Trabalho, com relatórios bonitos (seção 5.1). Feito: crate `utsim-estudo`, tela comum em `utsim-posto-ui`, dados simulados em `utsim_qualidade_core::estudo`, leitura de xlsx em `utsim_quality::data::xlsx`. Estudos na pasta de unidade, como propõe a I8.
 7. Seis Sigma abre Pareto, Ishikawa e FMEA no Qualidade e recebe o resultado como entregável.
 8. Os demais pares da seção 4.
 

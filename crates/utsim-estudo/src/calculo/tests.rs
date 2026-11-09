@@ -131,3 +131,18 @@ fn reports_per_tool_and_consolidated_in_pdf_and_html() {
     let d = relatorio::documento_estudo(&e, &["a3".into(), "a9".into()], &ctx);
     assert_eq!(d.headings().len(), 4);
 }
+
+#[test]
+fn pareto_without_the_cost_column() {
+    let e = estudo_demonstracao();
+    let mut a = e
+        .aplicacoes
+        .iter()
+        .find(|a| a.ferramenta == Ferramenta::Pareto)
+        .unwrap()
+        .clone();
+    a.parametros.colunas = vec![0, 1, usize::MAX];
+    let r = calcular(&a, "");
+    assert_eq!(r.graficos.len(), 1);
+    assert!(r.avisos.is_empty());
+}
