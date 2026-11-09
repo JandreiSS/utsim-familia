@@ -40,6 +40,18 @@ utsim-qualidade --utsim-pedido <caminho do pedido>
 | `resposta` | caminho onde gravar a resposta |
 | `somente_leitura` | abre só para ver |
 
+**Abrir um nó do UTSim 3D no Qualidade ou no Segurança (combinado em 2026-11-09, já em uso):** o botão "Abrir no UTSim Qualidade" ou "Abrir no UTSim Segurança" da aba do nó salva o modelo e chama
+
+```text
+utsim-qualidade --utsim-abrir=<modelo .ron, caminho absoluto> --utsim-no=<nome do nó>
+utsim-seguranca --utsim-abrir=<modelo .ron, caminho absoluto> --utsim-no=<nome do nó>
+```
+
+- Cada argumento vai inteiro para o processo, sem shell, então espaços e acentos não precisam de aspas. Os apps também aceitam a forma separada (`--utsim-abrir <modelo>`).
+- O app abre na tela Modelo, com o nó selecionado e a aba do app. Se a trava for de outro, abre só para leitura. Se o nó não existir no modelo, avisa. Não há resposta para o 3D.
+- O 3D solta a sua trava e a cede ao app (`TravaModelo::ceder`): durante até 1 minuto não a toma de volta, para o app conseguir pegá-la.
+- Quando o app pega a trava, o 3D fica só de leitura. Quando ele a solta, o 3D a retoma na renovação seguinte e relê o que o app gravou (seção 3.2).
+
 Argumentos diretos continuam valendo para os casos simples: `utsim <modelo.ron>`, `utsim --utsim-no <nome>` para abrir o editor já no nó.
 
 ### 2.3 Resposta
