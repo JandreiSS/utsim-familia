@@ -13,7 +13,7 @@ utsim-ensino-store = { path = "../utsim-ensino-store" }
 utsim-lss-store = { path = "../utsim-lss-store" }
 utsim-core.workspace = true
 utsim-model.workspace = true
-utsim-ui-tema.workspace = true
+utsim-ui-tema = { workspace = true, features = ["abertura", "arquivos"] }
 ron.workspace = true
 # The workspace's single egui, no backend: the host (the eframe app now, the Godot bridge
 # later) gives the window and a task executor.

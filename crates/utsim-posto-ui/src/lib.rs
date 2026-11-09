@@ -16,7 +16,7 @@ pub mod sessao;
 pub mod trabalho;
 pub mod util;
 
-pub use inicial::TelaInicial;
+pub use inicial::{Marca, Saida, TelaInicial};
 pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};
 pub use postos::TelaPostos;
 pub use sessao::{Config, Sessao};
