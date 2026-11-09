@@ -124,7 +124,8 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | Estatística | Qualidade | pedido `abrir_ferramenta` (`carta`, `capacidade`, `msa`, `pareto`) com a coluna escolhida | a ferramenta pronta, citada no histórico de análises |
 | Qualidade | Estatística | pedido `analisar` (teste, ANOVA, regressão) ou `ajustar_distribuicao` sobre uma característica | receita, resultado e relatório com hash; a `Dist` quando pedida |
 | Seis Sigma | Estatística | pedido `analisar` com o conjunto de dados do projeto, ou `planejar_experimento` (decisão 4 do plano do Estatística: migração gradual) | resultado e relatório gravados como entregável do projeto `.lss` |
-| Ensino | Estatística | missão que pede uma análise (teste, regressão) | a análise feita pelo aluno, para conferir |
+| Ensino | Estatística | missão que pede uma análise (teste, regressão): "Analisar no UTSim Estatística" abre o app com `--utsim-abrir=<dados.csv ou .xlsx>`, que carrega o arquivo numa planilha nova (na última unidade usada, se houver) | a análise feita pelo aluno, para conferir |
+| UTSim 3D, Seis Sigma | Estatística | `--utsim-abrir=<dados.csv ou .xlsx>` com o conjunto de dados a analisar (previsto) | nada pela linha de comando; o resultado fica no histórico da unidade |
 | launcher | todos | onde cada app está instalado, versão ativa | nada |
 
 ## 5. Papel dos apps e ordem
