@@ -130,6 +130,9 @@ pub enum Kind {
     /// The answers of a trainee, written by the trainee in the class folder.
     #[serde(rename = "resposta_prova")]
     ExamAnswer,
+    /// The reaction evaluation of a trainee, written by the trainee in the class folder.
+    #[serde(rename = "avaliacao_reacao")]
+    Reaction,
     #[serde(rename = "resultado_prova")]
     ExamResult,
     #[serde(rename = "requisito_certificacao")]
@@ -142,7 +145,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 58] = [
+    pub const ALL: [Kind; 59] = [
         Kind::Portfolio,
         Kind::Project,
         Kind::Phase,
@@ -197,6 +200,7 @@ impl Kind {
         Kind::Question,
         Kind::Exam,
         Kind::ExamAnswer,
+        Kind::Reaction,
         Kind::ExamResult,
         Kind::CertificationRequirement,
         Kind::Certification,
@@ -260,6 +264,7 @@ impl Kind {
             Kind::Question => "questao",
             Kind::Exam => "prova",
             Kind::ExamAnswer => "resposta_prova",
+            Kind::Reaction => "avaliacao_reacao",
             Kind::ExamResult => "resultado_prova",
             Kind::CertificationRequirement => "requisito_certificacao",
             Kind::Certification => "certificacao",
