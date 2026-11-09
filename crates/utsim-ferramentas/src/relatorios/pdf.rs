@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use super::{Block, Chart, Document, Template};
+use super::{Block, Chart, ChartKind, Cover, Document, Kpi, Template, Tone};
 
 const MARGIN: f64 = 42.0;
 const HEADER_H: f64 = 26.0;
@@ -207,13 +207,6 @@ enum Op {
         w: f64,
         rgb: (f64, f64, f64),
     },
-    Fill {
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        grey: f64,
-    },
     Frame {
         x: f64,
         y: f64,
@@ -238,6 +231,10 @@ struct Layout {
     accent: (f64, f64, f64),
     pages: Vec<Vec<Op>>,
     y: f64,
+    /// Pages drawn without the header and the footer (the cover).
+    plain: Vec<bool>,
+    /// Page (from 1) of each heading, in order.
+    heading_pages: Vec<usize>,
 }
 
 impl Layout {
@@ -255,6 +252,7 @@ impl Layout {
 
     fn new_page(&mut self) {
         self.pages.push(Vec::new());
+        self.plain.push(false);
         self.y = self.top();
     }
 
@@ -321,18 +319,28 @@ impl Layout {
         };
         let head = row_lines(header, true);
         let head_h = head.iter().map(Vec::len).max().unwrap_or(1) as f64 * lh + 2.0 * pad;
-        let draw_row = |l: &mut Layout, cells: &[Vec<String>], h: f64, bold: bool, fill: bool| {
+        let accent = self.accent;
+        let draw_row = |l: &mut Layout,
+                        cells: &[Vec<String>],
+                        h: f64,
+                        bold: bool,
+                        fill: Option<(f64, f64, f64)>| {
             let mut x = MARGIN;
             let top = l.y;
-            if fill {
-                l.op(Op::Fill {
+            if let Some(rgb) = fill {
+                l.op(Op::FillRgb {
                     x: MARGIN,
                     y: top - h,
                     w: l.inner(),
                     h,
-                    grey: 0.9,
+                    rgb,
                 });
             }
+            let ink = if bold && fill.is_some_and(dark) {
+                WHITE
+            } else {
+                BLACK
+            };
             for (i, c) in cells.iter().enumerate() {
                 l.op(Op::Frame {
                     x,
@@ -346,7 +354,7 @@ impl Layout {
                         y: top - pad - (k as f64 + 1.0) * lh + 2.0,
                         size,
                         bold,
-                        rgb: BLACK,
+                        rgb: ink,
                         s: s.clone(),
                     });
                 }
@@ -355,15 +363,16 @@ impl Layout {
             l.y -= h;
         };
         self.need(head_h + lh + 2.0 * pad);
-        draw_row(self, &head, head_h, true, true);
-        for r in rows {
+        draw_row(self, &head, head_h, true, Some(accent));
+        for (ri, r) in rows.iter().enumerate() {
             let cells = row_lines(r, false);
             let h = cells.iter().map(Vec::len).max().unwrap_or(1) as f64 * lh + 2.0 * pad;
             if self.y - h < self.bottom() {
                 self.new_page();
-                draw_row(self, &head, head_h, true, true);
+                draw_row(self, &head, head_h, true, Some(accent));
             }
-            draw_row(self, &cells, h, false, false);
+            let stripe = (ri % 2 == 1).then_some((0.955, 0.96, 0.97));
+            draw_row(self, &cells, h, false, stripe);
         }
         self.y -= 6.0;
     }
@@ -435,6 +444,13 @@ impl Layout {
 
     /// A bar or line chart with its axes, reference lines, marked points and legend.
     fn chart(&mut self, c: &Chart) {
+        match c.drawn_kind() {
+            ChartKind::Pareto => return self.pareto(c),
+            ChartKind::Histogram => return self.histogram(c),
+            ChartKind::Scatter => return self.scatter(c),
+            _ => {}
+        }
+        let bars = c.drawn_kind() == ChartKind::Bars;
         let n = c
             .series
             .iter()
@@ -444,8 +460,8 @@ impl Layout {
             .max(c.labels.len());
         let plot_h = 150.0;
         let named = c.series.iter().filter(|(s, _)| !s.is_empty()).count();
-        let legend = named + c.hlines.len();
-        let legend_h = if legend > 1 || !c.hlines.is_empty() {
+        let legend = named + c.hlines.len() + c.bands.len();
+        let legend_h = if legend > 1 || !c.hlines.is_empty() || !c.bands.is_empty() {
             12.0 * legend.div_ceil(3) as f64
         } else {
             0.0
@@ -465,9 +481,10 @@ impl Layout {
             .iter()
             .flat_map(|(_, v)| v.iter().copied())
             .chain(c.hlines.iter().map(|(_, v)| *v))
+            .chain(c.bands.iter().flat_map(|(_, a, b)| [*a, *b]))
             .filter(|v| v.is_finite())
             .collect();
-        if c.bars {
+        if bars {
             vals.push(0.0);
         }
         let mut lo = vals.iter().copied().fold(f64::INFINITY, f64::min);
@@ -480,7 +497,7 @@ impl Layout {
             hi = lo + 1.0;
         }
         let pad = 0.06 * (hi - lo);
-        if !(c.bars && lo == 0.0) {
+        if !(bars && lo == 0.0) {
             lo -= pad;
         }
         hi += pad;
@@ -505,12 +522,24 @@ impl Layout {
             self.text(left - 4.0 - sw, 7.0, false, GREY, &s);
             self.y = keep;
         }
+        for (bi, (_, a, b)) in c.bands.iter().enumerate() {
+            if a.is_finite() && b.is_finite() {
+                let (y0, y1) = (yy(a.min(*b)), yy(a.max(*b)));
+                self.rect(
+                    left,
+                    y0,
+                    w,
+                    y1 - y0,
+                    light(PALETTE[(bi + 2) % PALETTE.len()], 0.16),
+                );
+            }
+        }
         if n > 0 {
             let slot = w / n as f64;
             let ns = c.series.len().max(1);
             for (si, (_, v)) in c.series.iter().enumerate() {
                 let rgb = PALETTE[si % PALETTE.len()];
-                if c.bars {
+                if bars {
                     let group = slot * 0.75;
                     let bw = group / ns as f64;
                     for (i, y) in v.iter().enumerate() {
@@ -586,6 +615,9 @@ impl Layout {
                         .iter()
                         .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE)),
                 )
+                .chain(c.bands.iter().enumerate().map(|(bi, (s, _, _))| {
+                    (s.clone(), light(PALETTE[(bi + 2) % PALETTE.len()], 0.35))
+                }))
                 .collect();
             for (k, (s, rgb)) in entries.into_iter().enumerate() {
                 let x = MARGIN + (k % 3) as f64 * col;
@@ -601,7 +633,616 @@ impl Layout {
     }
 }
 
+/// The fill and the bar colour of a callout's tone.
+fn tone_colours(t: Tone) -> ((f64, f64, f64), (f64, f64, f64)) {
+    match t {
+        Tone::Info => ((0.91, 0.95, 0.99), (0.12, 0.42, 0.68)),
+        Tone::Ok => ((0.91, 0.97, 0.92), (0.18, 0.55, 0.20)),
+        Tone::Warn => ((1.0, 0.96, 0.88), (0.85, 0.55, 0.05)),
+        Tone::Danger => ((0.99, 0.91, 0.91), (0.75, 0.15, 0.15)),
+    }
+}
+
+/// A light version of a colour (for fills).
+fn light((r, g, b): (f64, f64, f64), k: f64) -> (f64, f64, f64) {
+    (
+        1.0 - (1.0 - r) * k,
+        1.0 - (1.0 - g) * k,
+        1.0 - (1.0 - b) * k,
+    )
+}
+
+/// Whether text on a colour should be white (the colour is dark).
+fn dark((r, g, b): (f64, f64, f64)) -> bool {
+    0.299 * r + 0.587 * g + 0.114 * b < 0.55
+}
+
+const WHITE: (f64, f64, f64) = (1.0, 1.0, 1.0);
+
+impl Layout {
+    /// The cover page: a band in the colour with the app and the title, then the subtitle,
+    /// the author, the date and where the data came from.
+    fn cover(&mut self, c: &Cover, t: &Template) {
+        let colour = Template::parse_colour(&c.colour).unwrap_or_else(|| t.rgb());
+        let band = self.h * 0.42;
+        let (w, h) = (self.w, self.h);
+        self.rect(0.0, h - band, w, band, colour);
+        let ink = if dark(colour) { WHITE } else { BLACK };
+        let inner = self.inner();
+        self.y = h - 70.0;
+        let app = if c.app.is_empty() {
+            "UTSim"
+        } else {
+            c.app.as_str()
+        };
+        self.text(MARGIN, 12.0, true, ink, app);
+        if !t.company.is_empty() {
+            self.y -= 16.0;
+            self.text(MARGIN, 10.0, false, ink, &t.company);
+        }
+        self.y = h - band * 0.55;
+        for l in wrap(&c.title, inner, 26.0, true) {
+            self.y -= 31.0;
+            self.text(MARGIN, 26.0, true, ink, &l);
+        }
+        self.y = h - band - 36.0;
+        if !c.subtitle.is_empty() {
+            for l in wrap(&c.subtitle, inner, 14.0, false) {
+                self.y -= 18.0;
+                self.text(MARGIN, 14.0, false, GREY, &l);
+            }
+            self.y -= 18.0;
+        }
+        let kv: Vec<(&str, &str)> = [
+            ("Autor", c.author.as_str()),
+            ("Data", c.date.as_str()),
+            ("Origem dos dados", c.source.as_str()),
+        ]
+        .into_iter()
+        .filter(|(_, v)| !v.trim().is_empty())
+        .collect();
+        for (k, v) in kv {
+            self.y -= 18.0;
+            self.text(MARGIN, 10.0, true, BLACK, k);
+            for (i, l) in wrap(v, inner - 120.0, 10.0, false).iter().enumerate() {
+                if i > 0 {
+                    self.y -= 13.0;
+                }
+                self.text(MARGIN + 120.0, 10.0, false, BLACK, l);
+            }
+        }
+        self.line((MARGIN, 90.0), (w - MARGIN, 90.0), 0.6, colour);
+        let _ = h;
+    }
+
+    /// The table of contents: each heading with its page, with dot leaders.
+    fn toc(&mut self, entries: &[(String, usize)]) {
+        let accent = self.accent;
+        let inner = self.inner();
+        self.lines(MARGIN, inner, 16.0, true, accent, "Sumário");
+        self.y -= 10.0;
+        for (s, p) in entries {
+            self.need(16.0);
+            self.y -= 16.0;
+            let num = p.to_string();
+            let nw = width(&num, 10.0, false);
+            let text = fit(s, inner - nw - 30.0, 10.0);
+            let tw = width(&text, 10.0, false);
+            self.text(MARGIN, 10.0, false, BLACK, &text);
+            let dot = width(".", 10.0, false);
+            let from = MARGIN + tw + 6.0;
+            let to = MARGIN + inner - nw - 6.0;
+            if to > from {
+                let n = ((to - from) / dot).floor() as usize;
+                self.text(from, 10.0, false, GREY, &".".repeat(n));
+            }
+            self.text(MARGIN + inner - nw, 10.0, false, BLACK, &num);
+        }
+    }
+
+    fn callout(&mut self, tone: Tone, title: &str, text: &str) {
+        let inner = self.inner();
+        let (fill, bar) = tone_colours(tone);
+        let lines = wrap(text, inner - 24.0, 9.5, false);
+        let h = 10.0 + if title.is_empty() { 0.0 } else { 14.0 } + lines.len() as f64 * 12.5 + 6.0;
+        self.need(h + 6.0);
+        let top = self.y;
+        self.rect(MARGIN, top - h, inner, h, fill);
+        self.rect(MARGIN, top - h, 4.0, h, bar);
+        self.y = top - 6.0;
+        if !title.is_empty() {
+            self.y -= 12.0;
+            self.text(MARGIN + 14.0, 10.0, true, bar, title);
+        }
+        for l in &lines {
+            self.y -= 12.5;
+            self.text(MARGIN + 14.0, 9.5, false, BLACK, l);
+        }
+        self.y = top - h - 8.0;
+    }
+
+    fn kpi_cards(&mut self, cards: &[Kpi]) {
+        let inner = self.inner();
+        let per = cards.len().clamp(1, 4);
+        let gap = 8.0;
+        let w = (inner - gap * (per as f64 - 1.0)) / per as f64;
+        let h = 62.0;
+        let accent = self.accent;
+        for row in cards.chunks(per) {
+            self.need(h + 8.0);
+            let top = self.y;
+            for (i, k) in row.iter().enumerate() {
+                let x = MARGIN + i as f64 * (w + gap);
+                self.rect(x, top - h, w, h, light(accent, 0.10));
+                self.rect(x, top - 3.0, w, 3.0, accent);
+                self.y = top - 16.0;
+                self.text(x + 8.0, 8.0, false, GREY, &fit(&k.label, w - 16.0, 8.0));
+                self.y = top - 38.0;
+                self.text(x + 8.0, 18.0, true, accent, &fit(&k.value, w - 16.0, 18.0));
+                self.y = top - 53.0;
+                self.text(x + 8.0, 7.5, false, GREY, &fit(&k.note, w - 16.0, 7.5));
+            }
+            self.y = top - h - 8.0;
+        }
+    }
+
+    /// The fishbone: the spine to the head with the effect, a bone per category alternately
+    /// above and below, the causes written along each bone.
+    fn ishikawa(&mut self, effect: &str, cats: &[(String, Vec<String>)]) {
+        let inner = self.inner();
+        let max_causes = cats
+            .iter()
+            .map(|c| c.1.len())
+            .max()
+            .unwrap_or(0)
+            .clamp(2, 6);
+        let half = 30.0 + max_causes as f64 * 11.0;
+        let h = 2.0 * half + 20.0;
+        self.need(h + 24.0);
+        self.y -= 14.0;
+        let accent = self.accent;
+        let top = self.y;
+        let mid = top - h / 2.0;
+        let head_w = (inner * 0.22).clamp(90.0, 170.0);
+        let head_x = MARGIN + inner - head_w;
+        let spine_from = MARGIN + 6.0;
+        self.line((spine_from, mid), (head_x, mid), 1.6, accent);
+        // The head: the effect.
+        let lines = wrap(effect, head_w - 12.0, 9.0, true);
+        let hh = (lines.len() as f64 * 11.0 + 12.0).max(34.0);
+        self.rect(head_x, mid - hh / 2.0, head_w, hh, light(accent, 0.18));
+        self.rect(head_x, mid - hh / 2.0, 3.0, hh, accent);
+        self.y = mid + hh / 2.0 - 4.0;
+        for l in &lines {
+            self.y -= 11.0;
+            self.text(head_x + 8.0, 9.0, true, BLACK, l);
+        }
+        let n_top = cats.len().div_ceil(2);
+        let n_bottom = cats.len() - n_top;
+        let place = |k: usize, n: usize| -> f64 {
+            let span = head_x - spine_from - 40.0;
+            spine_from + 40.0 + span * (k as f64 + 1.0) / (n as f64 + 1.0)
+        };
+        for (i, (cat, causes)) in cats.iter().enumerate() {
+            let up = i % 2 == 0;
+            let (k, n) = if up {
+                (i / 2, n_top)
+            } else {
+                (i / 2, n_bottom)
+            };
+            let x_spine = place(k, n);
+            let dx = half * 0.55;
+            let end_y = if up { mid + half } else { mid - half };
+            let x_end = x_spine - dx;
+            self.line((x_end, end_y), (x_spine, mid), 1.0, accent);
+            // The category at the end of the bone.
+            self.y = if up { end_y + 4.0 } else { end_y - 11.0 };
+            let col_w = (head_x - spine_from) / (n_top.max(1) as f64 + 1.0);
+            self.text(x_end - 4.0, 9.0, true, accent, &fit(cat, col_w + 20.0, 9.0));
+            // The causes, from the end towards the spine.
+            for (j, c) in causes.iter().take(max_causes).enumerate() {
+                let f = (j as f64 + 1.0) / (max_causes as f64 + 1.0);
+                let y = end_y + (mid - end_y) * f;
+                let x = x_end + (x_spine - x_end) * f;
+                self.line((x - 4.0, y), (x, y), 0.5, GREY);
+                self.y = y - 2.5;
+                let txt = fit(c, col_w - 4.0, 7.5);
+                let tw = width(&txt, 7.5, false);
+                self.text(x - 6.0 - tw, 7.5, false, BLACK, &txt);
+            }
+            if causes.len() > max_causes {
+                self.y = mid + if up { 4.0 } else { -10.0 };
+                self.text(
+                    x_spine + 3.0,
+                    7.0,
+                    false,
+                    GREY,
+                    &format!("+{}", causes.len() - max_causes),
+                );
+            }
+        }
+        self.y = top - h - 8.0;
+    }
+
+    /// The risk matrix: a cell per row and column filled with the colour of its level and
+    /// the marks written in it.
+    #[allow(clippy::too_many_arguments)]
+    fn risk_matrix(
+        &mut self,
+        title: &str,
+        rows: &[String],
+        cols: &[String],
+        levels: &[Vec<u8>],
+        colours: &[String],
+        marks: &[(usize, usize, String)],
+    ) {
+        let inner = self.inner();
+        let label_w = (inner * 0.2).min(110.0);
+        let nc = cols.len().max(1);
+        let cw = ((inner - label_w) / nc as f64).min(90.0);
+        let ch = 34.0;
+        let h = ch * rows.len() as f64 + 26.0 + if title.is_empty() { 0.0 } else { 16.0 };
+        self.need(h + 8.0);
+        if !title.is_empty() {
+            self.y -= 12.0;
+            self.text(MARGIN, 9.5, true, BLACK, title);
+            self.y -= 4.0;
+        }
+        let top = self.y;
+        for (r, rname) in rows.iter().enumerate() {
+            let y0 = top - (r as f64 + 1.0) * ch;
+            self.y = y0 + ch / 2.0 - 3.0;
+            self.text(MARGIN, 8.0, false, BLACK, &fit(rname, label_w - 6.0, 8.0));
+            for c in 0..cols.len() {
+                let lvl = levels.get(r).and_then(|v| v.get(c)).copied().unwrap_or(0) as usize;
+                let col = colours
+                    .get(lvl)
+                    .and_then(|h| Template::parse_colour(h))
+                    .unwrap_or((0.9, 0.9, 0.9));
+                let x0 = MARGIN + label_w + c as f64 * cw;
+                self.rect(x0, y0, cw, ch, col);
+                self.op(Op::Frame {
+                    x: x0,
+                    y: y0,
+                    w: cw,
+                    h: ch,
+                });
+                let here: Vec<&str> = marks
+                    .iter()
+                    .filter(|m| m.0 == r && m.1 == c)
+                    .map(|m| m.2.as_str())
+                    .collect();
+                if !here.is_empty() {
+                    let ink = if dark(col) { WHITE } else { BLACK };
+                    let ls = wrap(&here.join(", "), cw - 6.0, 7.0, true);
+                    for (i, l) in ls.iter().take(3).enumerate() {
+                        self.y = y0 + ch - 10.0 - i as f64 * 8.5;
+                        self.text(x0 + 3.0, 7.0, true, ink, l);
+                    }
+                }
+            }
+        }
+        let bottom = top - rows.len() as f64 * ch;
+        for (c, cname) in cols.iter().enumerate() {
+            let x0 = MARGIN + label_w + c as f64 * cw;
+            self.y = bottom - 10.0;
+            let s = fit(cname, cw - 4.0, 7.5);
+            let sw = width(&s, 7.5, false);
+            self.text(x0 + (cw - sw) / 2.0, 7.5, false, BLACK, &s);
+        }
+        self.y = bottom - 22.0;
+    }
+}
+
+/// The plot area of a chart: its edges and the scale of y.
+struct Area {
+    left: f64,
+    right: f64,
+    bottom: f64,
+    top: f64,
+    lo: f64,
+    hi: f64,
+}
+
+impl Area {
+    fn y(&self, v: f64) -> f64 {
+        self.bottom + (v - self.lo) / (self.hi - self.lo) * (self.top - self.bottom)
+    }
+}
+
+/// `lo` and `hi` of the values, padded, never empty.
+fn range(vals: &[f64], from_zero: bool) -> (f64, f64) {
+    let mut lo = vals
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite())
+        .fold(f64::INFINITY, f64::min);
+    let mut hi = vals
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite())
+        .fold(f64::NEG_INFINITY, f64::max);
+    if !lo.is_finite() || !hi.is_finite() {
+        return (0.0, 1.0);
+    }
+    if from_zero {
+        lo = lo.min(0.0);
+    }
+    if hi - lo < 1e-12 {
+        hi = lo + 1.0;
+    }
+    let pad = 0.06 * (hi - lo);
+    if !(from_zero && lo == 0.0) {
+        lo -= pad;
+    }
+    (lo, hi + pad)
+}
+
+impl Layout {
+    /// Room, title, frame, grid and the y labels of a chart; the area to draw in.
+    fn chart_area(&mut self, title: &str, lo: f64, hi: f64, extra: f64) -> Area {
+        let plot_h = 150.0;
+        self.need(plot_h + 44.0 + extra);
+        if !title.is_empty() {
+            self.y -= 12.0;
+            self.text(MARGIN, 9.5, true, BLACK, title);
+        }
+        let inner = self.inner();
+        let a = Area {
+            left: MARGIN + 44.0,
+            right: MARGIN + inner - 30.0,
+            top: self.y - 8.0,
+            bottom: self.y - 8.0 - plot_h,
+            lo,
+            hi,
+        };
+        self.op(Op::Frame {
+            x: a.left,
+            y: a.bottom,
+            w: a.right - a.left,
+            h: plot_h,
+        });
+        for i in 0..=4 {
+            let v = lo + (hi - lo) * f64::from(i) / 4.0;
+            let y = a.y(v);
+            if i > 0 && i < 4 {
+                self.line((a.left, y), (a.right, y), 0.2, (0.85, 0.85, 0.85));
+            }
+            let s = axis(v);
+            let sw = width(&s, 7.0, false);
+            let keep = self.y;
+            self.y = y - 2.5;
+            self.text(a.left - 4.0 - sw, 7.0, false, GREY, &s);
+            self.y = keep;
+        }
+        a
+    }
+
+    /// Numeric labels under the x axis of `x0..x1`, five ticks.
+    fn x_ticks(&mut self, a: &Area, x0: f64, x1: f64) {
+        for i in 0..=4 {
+            let v = x0 + (x1 - x0) * f64::from(i) / 4.0;
+            let x = a.left + (a.right - a.left) * f64::from(i) / 4.0;
+            let s = axis(v);
+            let sw = width(&s, 6.5, false);
+            let keep = self.y;
+            self.y = a.bottom - 9.0;
+            self.text(x - sw / 2.0, 6.5, false, GREY, &s);
+            self.y = keep;
+        }
+    }
+
+    /// A legend line under a chart.
+    fn legend(&mut self, a: &Area, entries: &[(String, (f64, f64, f64))]) {
+        self.y = a.bottom - 16.0;
+        let col = self.inner() / 3.0;
+        for (k, (s, rgb)) in entries.iter().enumerate() {
+            let x = MARGIN + (k % 3) as f64 * col;
+            if k % 3 == 0 {
+                self.y -= 12.0;
+            }
+            let y = self.y;
+            self.rect(x, y, 7.0, 7.0, *rgb);
+            self.text(x + 10.0, 7.5, false, BLACK, &fit(s, col - 14.0, 7.5));
+        }
+        self.y -= 8.0;
+    }
+
+    /// Pareto: bars in the given order on a scale whose top is the total, the cumulative
+    /// line on the same scale (so it reads as a percentage, right axis) and the 80 % line.
+    fn pareto(&mut self, c: &Chart) {
+        let v: Vec<f64> = c
+            .series
+            .first()
+            .map(|s| s.1.iter().map(|x| x.max(0.0)).collect())
+            .unwrap_or_default();
+        let total: f64 = v.iter().filter(|x| x.is_finite()).sum();
+        let total = if total > 0.0 { total } else { 1.0 };
+        let a = self.chart_area(&c.title, 0.0, total, 24.0);
+        let n = v.len().max(1);
+        let slot = (a.right - a.left) / n as f64;
+        let accent = self.accent;
+        let mut cum = 0.0;
+        let mut prev: Option<(f64, f64)> = None;
+        for (i, x) in v.iter().enumerate() {
+            let x0 = a.left + i as f64 * slot;
+            self.rect(
+                x0 + slot * 0.12,
+                a.bottom,
+                slot * 0.76,
+                a.y(*x) - a.bottom,
+                accent,
+            );
+            cum += x;
+            let p = (x0 + slot / 2.0, a.y(cum));
+            if let Some(q) = prev {
+                self.line(q, p, 1.0, PALETTE[1]);
+            }
+            self.rect(p.0 - 1.6, p.1 - 1.6, 3.2, 3.2, PALETTE[1]);
+            prev = Some(p);
+            let s = fit(c.labels.get(i).map_or("", String::as_str), slot - 2.0, 6.5);
+            let sw = width(&s, 6.5, false);
+            let keep = self.y;
+            self.y = a.bottom - 9.0;
+            self.text(x0 + (slot - sw) / 2.0, 6.5, false, GREY, &s);
+            self.y = keep;
+        }
+        let y80 = a.y(0.8 * total);
+        self.line((a.left, y80), (a.right, y80), 0.7, REFERENCE);
+        for pct in [0, 50, 80, 100] {
+            let y = a.y(total * f64::from(pct) / 100.0);
+            let keep = self.y;
+            self.y = y - 2.5;
+            self.text(a.right + 3.0, 7.0, false, GREY, &format!("{pct} %"));
+            self.y = keep;
+        }
+        let name = c.series.first().map_or(String::new(), |s| s.0.clone());
+        self.legend(
+            &a,
+            &[
+                (
+                    if name.is_empty() {
+                        "valor".into()
+                    } else {
+                        name
+                    },
+                    accent,
+                ),
+                ("acumulado (%)".into(), PALETTE[1]),
+                ("80 %".into(), REFERENCE),
+            ],
+        );
+    }
+
+    /// Histogram of the first series by Sturges' rule, with the `hlines` as vertical limits.
+    fn histogram(&mut self, c: &Chart) {
+        let data: Vec<f64> = c
+            .series
+            .first()
+            .map(|s| s.1.iter().copied().filter(|x| x.is_finite()).collect())
+            .unwrap_or_default();
+        let mut xs: Vec<f64> = data.clone();
+        xs.extend(c.hlines.iter().map(|h| h.1).filter(|x| x.is_finite()));
+        let (x0, x1) = range(&xs, false);
+        let k = ((data.len().max(1) as f64).log2().ceil() as usize + 1).clamp(3, 30);
+        let bw = (x1 - x0) / k as f64;
+        let mut counts = vec![0usize; k];
+        for x in &data {
+            let i = (((x - x0) / bw).floor() as usize).min(k - 1);
+            counts[i] += 1;
+        }
+        let top = counts.iter().copied().max().unwrap_or(1).max(1) as f64;
+        let a = self.chart_area(&c.title, 0.0, top * 1.08, 24.0);
+        let px = |v: f64| a.left + (v - x0) / (x1 - x0) * (a.right - a.left);
+        let accent = self.accent;
+        for (i, n) in counts.iter().enumerate() {
+            let l = px(x0 + i as f64 * bw);
+            let r = px(x0 + (i as f64 + 1.0) * bw);
+            if *n > 0 {
+                self.rect(
+                    l + 0.5,
+                    a.bottom,
+                    r - l - 1.0,
+                    a.y(*n as f64) - a.bottom,
+                    accent,
+                );
+            }
+        }
+        self.x_ticks(&a, x0, x1);
+        let mut legend = vec![(
+            c.series
+                .first()
+                .map_or(String::new(), |s| format!("{} (n = {})", s.0, data.len())),
+            accent,
+        )];
+        for (name, v) in &c.hlines {
+            if v.is_finite() {
+                let x = px(*v);
+                self.line((x, a.bottom), (x, a.top), 1.0, REFERENCE);
+                let keep = self.y;
+                self.y = a.top - 9.0;
+                self.text(x + 2.0, 7.0, true, REFERENCE, name);
+                self.y = keep;
+                legend.push((format!("{name} = {}", axis(*v)), REFERENCE));
+            }
+        }
+        self.legend(&a, &legend);
+    }
+
+    /// Scatter of the second series against the first, with the least squares line.
+    fn scatter(&mut self, c: &Chart) {
+        let (Some(xs), Some(ys)) = (c.series.first(), c.series.get(1)) else {
+            return;
+        };
+        let pts: Vec<(f64, f64)> =
+            xs.1.iter()
+                .zip(&ys.1)
+                .filter(|(x, y)| x.is_finite() && y.is_finite())
+                .map(|(x, y)| (*x, *y))
+                .collect();
+        let (x0, x1) = range(&pts.iter().map(|p| p.0).collect::<Vec<_>>(), false);
+        let (lo, hi) = range(&pts.iter().map(|p| p.1).collect::<Vec<_>>(), false);
+        let a = self.chart_area(&c.title, lo, hi, 24.0);
+        let px = |v: f64| a.left + (v - x0) / (x1 - x0) * (a.right - a.left);
+        let accent = self.accent;
+        for (x, y) in &pts {
+            self.rect(px(*x) - 1.8, a.y(*y) - 1.8, 3.6, 3.6, accent);
+        }
+        self.x_ticks(&a, x0, x1);
+        let n = pts.len() as f64;
+        let mut legend = vec![(format!("{} × {}", ys.0, xs.0), accent)];
+        if pts.len() >= 2 {
+            let mx = pts.iter().map(|p| p.0).sum::<f64>() / n;
+            let my = pts.iter().map(|p| p.1).sum::<f64>() / n;
+            let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+            if sxx > 0.0 {
+                let b = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>() / sxx;
+                let b0 = my - b * mx;
+                let clamp = |y: f64| y.clamp(lo, hi);
+                self.line(
+                    (px(x0), a.y(clamp(b0 + b * x0))),
+                    (px(x1), a.y(clamp(b0 + b * x1))),
+                    1.0,
+                    PALETTE[1],
+                );
+                legend.push((format!("y = {} + {}·x", axis(b0), axis(b)), PALETTE[1]));
+            }
+        }
+        self.legend(&a, &legend);
+    }
+}
+
+/// The room the start of a block needs below its heading.
+fn keep_with(next: Option<&Block>) -> f64 {
+    match next {
+        Some(Block::Chart(_)) => 200.0,
+        Some(Block::Ishikawa { .. }) => 220.0,
+        Some(Block::RiskMatrix { rows, .. }) => 40.0 + 34.0 * rows.len() as f64,
+        Some(Block::KpiCards(_)) => 70.0,
+        Some(Block::Table { .. }) | Some(Block::Callout { .. }) => 50.0,
+        Some(_) => 24.0,
+        None => 0.0,
+    }
+}
+
+/// The layout: the cover, the contents (two passes: the first finds the page of each
+/// heading with the contents already taking their room) and the blocks.
 fn lay_out(doc: &Document, t: &Template) -> Layout {
+    if !doc.toc || doc.headings().is_empty() {
+        return lay_out_with(doc, t, None);
+    }
+    let blank: Vec<(String, usize)> = doc.headings().iter().map(|h| (h.to_string(), 0)).collect();
+    let first = lay_out_with(doc, t, Some(&blank));
+    let entries: Vec<(String, usize)> = doc
+        .headings()
+        .iter()
+        .zip(&first.heading_pages)
+        .map(|(h, p)| (h.to_string(), *p))
+        .collect();
+    lay_out_with(doc, t, Some(&entries))
+}
+
+fn lay_out_with(doc: &Document, t: &Template, toc: Option<&[(String, usize)]>) -> Layout {
     let (w, h) = doc.size.points();
     let mut l = Layout {
         w,
@@ -609,8 +1250,19 @@ fn lay_out(doc: &Document, t: &Template) -> Layout {
         accent: t.rgb(),
         pages: Vec::new(),
         y: 0.0,
+        plain: Vec::new(),
+        heading_pages: Vec::new(),
     };
     l.new_page();
+    if let Some(c) = &doc.cover {
+        *l.plain.last_mut().expect("page") = true;
+        l.cover(c, t);
+        l.new_page();
+    }
+    if let Some(entries) = toc {
+        l.toc(entries);
+        l.new_page();
+    }
     let accent = l.accent;
     let inner = l.inner();
     l.lines(MARGIN, inner, 16.0, true, accent, &doc.title);
@@ -618,10 +1270,12 @@ fn lay_out(doc: &Document, t: &Template) -> Layout {
         l.lines(MARGIN, inner, 10.0, false, GREY, &doc.subtitle);
     }
     l.y -= 8.0;
-    for b in &doc.blocks {
+    for (bi, b) in doc.blocks.iter().enumerate() {
         match b {
             Block::Heading(s) => {
-                l.need(40.0);
+                // A heading stays on the page of what follows it.
+                l.need(40.0 + keep_with(doc.blocks.get(bi + 1)));
+                l.heading_pages.push(l.pages.len());
                 l.y -= 8.0;
                 l.lines(MARGIN, inner, 12.0, true, accent, s);
                 l.y -= 3.0;
@@ -702,6 +1356,17 @@ fn lay_out(doc: &Document, t: &Template) -> Layout {
             Block::Space(p) => l.y -= p,
             Block::PageBreak => l.new_page(),
             Block::Chart(c) => l.chart(c),
+            Block::Callout { tone, title, text } => l.callout(*tone, title, text),
+            Block::KpiCards(v) => l.kpi_cards(v),
+            Block::Ishikawa { effect, categories } => l.ishikawa(effect, categories),
+            Block::RiskMatrix {
+                title,
+                rows,
+                cols,
+                levels,
+                colours,
+                marks,
+            } => l.risk_matrix(title, rows, cols, levels, colours, marks),
         }
     }
     l
@@ -740,6 +1405,7 @@ fn page_content(
     w: f64,
     h: f64,
     generated: &str,
+    plain: bool,
 ) -> String {
     let mut c = String::new();
     let text =
@@ -757,41 +1423,43 @@ fn page_content(
                 esc(&encode(s))
             );
         };
-    // Header: the company and the document's title, with the accent rule.
-    let top = h - MARGIN;
-    let company = if t.company.is_empty() {
-        "UTSim Seis Sigma"
-    } else {
-        t.company.as_str()
-    };
-    text(&mut c, MARGIN, top - 9.0, 9.0, true, t.rgb(), company);
-    if !t.header.is_empty() {
-        text(&mut c, MARGIN, top - 19.0, 7.5, false, GREY, &t.header);
-    }
-    let tw = width(&doc.title, 8.0, false);
-    if page > 0 {
-        text(
-            &mut c,
-            w - MARGIN - tw,
-            top - 9.0,
-            8.0,
-            false,
-            GREY,
-            &doc.title,
+    if !plain {
+        // Header: the company and the document's title, with the accent rule.
+        let top = h - MARGIN;
+        let company = if t.company.is_empty() {
+            "UTSim Seis Sigma"
+        } else {
+            t.company.as_str()
+        };
+        text(&mut c, MARGIN, top - 9.0, 9.0, true, t.rgb(), company);
+        if !t.header.is_empty() {
+            text(&mut c, MARGIN, top - 19.0, 7.5, false, GREY, &t.header);
+        }
+        let tw = width(&doc.title, 8.0, false);
+        if page > 0 {
+            text(
+                &mut c,
+                w - MARGIN - tw,
+                top - 9.0,
+                8.0,
+                false,
+                GREY,
+                &doc.title,
+            );
+        }
+        let (r, g, b) = t.rgb();
+        let _ = writeln!(
+            c,
+            "{} {} {} RG 0.8 w {} {} m {} {} l S",
+            num(r),
+            num(g),
+            num(b),
+            num(MARGIN),
+            num(top - HEADER_H + 4.0),
+            num(w - MARGIN),
+            num(top - HEADER_H + 4.0)
         );
     }
-    let (r, g, b) = t.rgb();
-    let _ = writeln!(
-        c,
-        "{} {} {} RG 0.8 w {} {} m {} {} l S",
-        num(r),
-        num(g),
-        num(b),
-        num(MARGIN),
-        num(top - HEADER_H + 4.0),
-        num(w - MARGIN),
-        num(top - HEADER_H + 4.0)
-    );
     for o in ops {
         match o {
             Op::Text {
@@ -823,17 +1491,6 @@ fn page_content(
                     num(*y2)
                 );
             }
-            Op::Fill { x, y, w, h, grey } => {
-                let _ = writeln!(
-                    c,
-                    "{} g {} {} {} {} re f 0 g",
-                    num(*grey),
-                    num(*x),
-                    num(*y),
-                    num(*w),
-                    num(*h)
-                );
-            }
             Op::FillRgb { x, y, w, h, rgb } => {
                 let _ = writeln!(
                     c,
@@ -859,25 +1516,27 @@ fn page_content(
             }
         }
     }
-    // Footer.
-    let fy = MARGIN - 4.0;
-    let _ = writeln!(
-        c,
-        "0.7 G 0.4 w {} {} m {} {} l S",
-        num(MARGIN),
-        num(fy + 12.0),
-        num(w - MARGIN),
-        num(fy + 12.0)
-    );
-    let left = if t.footer.is_empty() {
-        generated.to_string()
-    } else {
-        format!("{} · {}", t.footer, generated)
-    };
-    text(&mut c, MARGIN, fy, 7.5, false, GREY, &left);
-    let pn = format!("página {} de {}", page + 1, pages);
-    let pw = width(&pn, 7.5, false);
-    text(&mut c, w - MARGIN - pw, fy, 7.5, false, GREY, &pn);
+    if !plain {
+        // Footer.
+        let fy = MARGIN - 4.0;
+        let _ = writeln!(
+            c,
+            "0.7 G 0.4 w {} {} m {} {} l S",
+            num(MARGIN),
+            num(fy + 12.0),
+            num(w - MARGIN),
+            num(fy + 12.0)
+        );
+        let left = if t.footer.is_empty() {
+            generated.to_string()
+        } else {
+            format!("{} · {}", t.footer, generated)
+        };
+        text(&mut c, MARGIN, fy, 7.5, false, GREY, &left);
+        let pn = format!("página {} de {}", page + 1, pages);
+        let pw = width(&pn, 7.5, false);
+        text(&mut c, w - MARGIN - pw, fy, 7.5, false, GREY, &pn);
+    }
     c
 }
 
@@ -904,7 +1563,7 @@ pub fn render(doc: &Document, t: &Template, generated: &str) -> Vec<u8> {
         .into_bytes(),
     );
     for (i, ops) in l.pages.iter().enumerate() {
-        let content = page_content(ops, i, n, doc, t, l.w, l.h, generated);
+        let content = page_content(ops, i, n, doc, t, l.w, l.h, generated, l.plain[i]);
         objs.push(
             format!(
                 "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {} 0 R >>",
