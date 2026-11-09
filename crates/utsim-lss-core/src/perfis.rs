@@ -593,7 +593,7 @@ impl TrainingWriters {
         if kind == Kind::Person && entity == author && SELF_FIELDS.contains(&field) {
             return true;
         }
-        if kind != Kind::ExamAnswer || !self.students.contains(&author) {
+        if !matches!(kind, Kind::ExamAnswer | Kind::Reaction) || !self.students.contains(&author) {
             return false;
         }
         let me = Value::from(author.to_string());
