@@ -316,7 +316,7 @@ impl Model {
             };
             if let Some(team) = &d.repair_crew {
                 let operates = self.objects.iter().any(|o| {
-                    matches!(&o.kind, ObjectKind::Processor { operators: Some(op), .. } if op.team == *team)
+                    o.kind.operator_uses().any(|op| op.team == *team)
                         || o.transport.as_deref() == Some(team)
                 });
                 if operates {

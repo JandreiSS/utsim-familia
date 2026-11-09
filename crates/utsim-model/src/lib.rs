@@ -339,6 +339,20 @@ pub struct VisualDef {
     pub color: Option<String>,
 }
 
+impl ObjectKind {
+    /// Every team a processor asks for operators (`operators` and then `also`); empty for
+    /// the other kinds.
+    pub fn operator_uses(&self) -> impl Iterator<Item = &OperatorUse> {
+        let (first, rest): (Option<&OperatorUse>, &[OperatorUse]) = match self {
+            ObjectKind::Processor {
+                operators, also, ..
+            } => (operators.as_ref(), also.as_slice()),
+            _ => (None, &[]),
+        };
+        first.into_iter().chain(rest)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ObjectKind {
     Source {
@@ -406,6 +420,10 @@ pub enum ObjectKind {
         /// Operators needed during setup and/or processing.
         #[serde(default)]
         operators: Option<OperatorUse>,
+        /// Other teams needed at the same time as `operators` (a doctor and a nurse): the
+        /// stage starts when the operators of every team needing it have arrived.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        also: Vec<OperatorUse>,
     },
     /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
     Combiner {
@@ -845,6 +863,7 @@ impl Model {
                     setup,
                     process,
                     operators,
+                    also,
                 } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
@@ -853,7 +872,17 @@ impl Model {
                         dists.push(("setup".into(), s));
                     }
                     dists.push(("process".into(), process));
-                    if let Some(op) = operators {
+                    if also
+                        .iter()
+                        .any(|a| operators.as_ref().is_none_or(|o| o.team == a.team))
+                        && !also.is_empty()
+                    {
+                        errors.push(format!(
+                            "{}: also precisa de operators e de equipes diferentes da de operators",
+                            obj.name
+                        ));
+                    }
+                    for op in operators.iter().chain(also) {
                         if op.count == 0 {
                             errors.push(format!("{}: operators.count deve ser >= 1", obj.name));
                         }
@@ -1174,11 +1203,7 @@ impl Model {
                     errors.push(format!("{}: recursos móveis não usam transport", obj.name));
                 }
             }
-            if let ObjectKind::Processor {
-                operators: Some(op),
-                ..
-            } = &obj.kind
-            {
+            for op in obj.kind.operator_uses() {
                 if op
                     .priority_label
                     .as_deref()
@@ -1442,6 +1467,7 @@ impl Model {
                     setup,
                     process,
                     operators,
+                    also,
                 } => Box::new(
                     Processor::new(process.clone())
                         .capacity(*capacity)
@@ -1450,6 +1476,11 @@ impl Model {
                             operators
                                 .as_ref()
                                 .map(|op| (ids[op.team.as_str()], op.clone())),
+                        )
+                        .also(
+                            also.iter()
+                                .map(|op| (ids[op.team.as_str()], op.clone()))
+                                .collect(),
                         ),
                 ),
                 ObjectKind::Sink if !self.item_types.is_empty() => Box::new(TypedSink::new(

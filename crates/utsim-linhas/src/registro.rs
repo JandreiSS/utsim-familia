@@ -10,13 +10,15 @@ pub const LEAN_OFFICE: &str = "lean_office";
 pub const SERVICOS: &str = "servicos";
 /// Identifier of the line Logística e armazém.
 pub const LOGISTICA: &str = "logistica";
+/// Identifier of the line Saúde e hospital.
+pub const SAUDE: &str = "saude";
 /// Identifier of the cross-cutting Quality pack.
 pub const QUALIDADE: &str = "qualidade";
 /// Identifier of the cross-cutting Safety pack.
 pub const SEGURANCA: &str = "seguranca";
 
 /// `(library, vocabulary)` text of every built-in pack.
-const BUILTIN: [(&str, &str); 5] = [
+const BUILTIN: [(&str, &str); 6] = [
     (
         include_str!("../../../linhas/lean_office/biblioteca.ron"),
         include_str!("../../../linhas/lean_office/vocabulario.ron"),
@@ -28,6 +30,10 @@ const BUILTIN: [(&str, &str); 5] = [
     (
         include_str!("../../../linhas/logistica/biblioteca.ron"),
         include_str!("../../../linhas/logistica/vocabulario.ron"),
+    ),
+    (
+        include_str!("../../../linhas/saude/biblioteca.ron"),
+        include_str!("../../../linhas/saude/vocabulario.ron"),
     ),
     (
         include_str!("../../../linhas/qualidade/biblioteca.ron"),

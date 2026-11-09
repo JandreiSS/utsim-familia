@@ -850,11 +850,7 @@ fn add_resources(model: &Model, objs: &[&ObjectDef], nodes: &mut [Node]) -> Vec<
             by_transport.entry(t.as_str()).or_default().push(i);
             nodes[i].resources.push(format!("transporte: {t}"));
         }
-        if let ObjectKind::Processor {
-            operators: Some(op),
-            ..
-        } = &obj.kind
-        {
+        for op in obj.kind.operator_uses() {
             by_operators.entry(op.team.as_str()).or_default().push(i);
             let when = match (op.setup, op.process) {
                 (true, true) => "preparação e processo",
