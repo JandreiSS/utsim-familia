@@ -10,7 +10,7 @@ use egui::{Color32, RichText, Ui};
 use utsim_ensino_core::editor::{Calibragem, Edicao, PacoteProfessor, calibrar, slug};
 use utsim_ensino_core::missao::{Alavanca, Objetivo, Tolerancia};
 use utsim_ensino_core::nota::fmt_num;
-use utsim_ui_tema::arquivos::{Filtro, Tipo};
+use utsim_ui_tema::arquivos::Tipo;
 
 use crate::missao::Trabalho;
 use crate::{App, texto};
@@ -77,6 +77,9 @@ impl EstadoEditor {
                 }
                 Err(e) => self.erros.push(e),
             },
+            Ok(None) if std::fs::read_dir(&dir).is_ok_and(|mut r| r.next().is_some()) => {
+                self.erros.push(texto::ed_pasta_ocupada().into());
+            }
             Ok(None) => {
                 let nome = dir
                     .file_name()
@@ -91,11 +94,26 @@ impl EstadoEditor {
         }
     }
 
+    /// Forgets the calibration running or done (the mission changed): a late result of
+    /// another mission must not be applied to this one.
+    fn esquecer_calibragem(&mut self) {
+        if let Some(t) = self.trabalho.take() {
+            t.cancelar.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.calibragem = None;
+    }
+
+    /// Closes the mission being edited.
+    pub fn fechar(&mut self) {
+        self.esquecer_calibragem();
+        self.edicao = None;
+    }
+
     /// Starts the calibration of the mission in the background.
     pub fn calibrar(&mut self, executor: &dyn crate::Executor, ctx: Option<egui::Context>) {
         let Some(ed) = &self.edicao else { return };
         let copia = ed.clone();
-        self.calibragem = None;
+        self.esquecer_calibragem();
         self.trabalho = Some(Trabalho::iniciar(executor, ctx, move |_| calibrar(&copia)));
     }
 
@@ -109,7 +127,7 @@ impl EstadoEditor {
 
     /// Writes the mission to the package and the package to its folder.
     pub fn gravar_missao(&mut self) {
-        let (Some(ed), Some((dir, p, _))) = (&self.edicao, &mut self.pacote) else {
+        let (Some(ed), Some((dir, p, _))) = (&mut self.edicao, &mut self.pacote) else {
             return;
         };
         let dir = dir.clone();
@@ -160,12 +178,37 @@ impl EstadoEditor {
                     self.erros.push(texto::ed_sem_alavancas().into());
                 }
                 self.ato = 0;
-                self.calibragem = None;
+                self.esquecer_calibragem();
                 self.edicao = Some(ed);
             }
             Err(e) => self.erros.push(e),
         }
     }
+}
+
+/// A column header of the tables, as in the opening screen.
+fn cabecalho(ui: &mut Ui, t: &str) {
+    let cor = ui.visuals().weak_text_color();
+    ui.label(
+        RichText::new(t.to_uppercase())
+            .size(11.0)
+            .strong()
+            .color(cor),
+    );
+}
+
+/// A section of the screen in a frame.
+fn quadro(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
+    let v = ui.visuals().clone();
+    egui::Frame::new()
+        .fill(v.faint_bg_color)
+        .stroke(v.widgets.noninteractive.bg_stroke)
+        .corner_radius(8)
+        .inner_margin(14)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            f(ui)
+        });
 }
 
 /// The editor tab.
@@ -178,12 +221,12 @@ pub fn tela_editor(app: &mut App, ui: &mut Ui) {
     ui.label(RichText::new(texto::ed_texto()).weak());
     ui.add_space(6.0);
 
-    secao_pacote(s, ui);
-    ui.separator();
-    secao_nova(s, ui);
+    quadro(ui, |ui| secao_pacote(s, ui));
+    ui.add_space(8.0);
+    quadro(ui, |ui| secao_nova(s, ui));
     if s.edicao.is_some() {
-        ui.separator();
-        secao_missao(s, ui, executor.as_ref(), &ctx);
+        ui.add_space(8.0);
+        quadro(ui, |ui| secao_missao(s, ui, executor.as_ref(), &ctx));
     }
     for m in &s.mensagens {
         ui.label(m);
@@ -257,8 +300,8 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
         match p.abrir(&c) {
             Ok(ed) => {
                 s.ato = lista.iter().find(|x| x.caminho == c).map_or(0, |x| x.ato);
+                s.esquecer_calibragem();
                 s.edicao = Some(ed);
-                s.calibragem = None;
                 s.erros.clear();
             }
             Err(e) => s.erros = vec![e],
@@ -303,24 +346,24 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
 
 fn secao_nova(s: &mut EstadoEditor, ui: &mut Ui) {
     ui.label(RichText::new(texto::ed_nova()).strong());
-    egui::Grid::new("ed_nova").num_columns(2).show(ui, |ui| {
-        ui.label(texto::turma_modelo());
-        crate::abertura::campo(
-            ui,
-            &mut s.modelo,
-            Tipo::Abrir,
-            texto::turma_modelo(),
-            &[Filtro {
-                nome: texto::ed_filtro_modelo(),
-                extensoes: &["ron"],
-            }],
-            360.0,
-        );
-        ui.end_row();
-        ui.label(texto::turma_titulo_missao());
-        ui.text_edit_singleline(&mut s.titulo_novo);
-        ui.end_row();
-    });
+    egui::Grid::new("ed_nova")
+        .num_columns(2)
+        .spacing([12.0, 8.0])
+        .show(ui, |ui| {
+            ui.label(texto::turma_modelo());
+            crate::abertura::campo(
+                ui,
+                &mut s.modelo,
+                Tipo::Abrir,
+                texto::turma_modelo(),
+                &[utsim_ui_tema::arquivos::RON],
+                360.0,
+            );
+            ui.end_row();
+            ui.label(texto::turma_titulo_missao());
+            ui.add(egui::TextEdit::singleline(&mut s.titulo_novo).desired_width(300.0));
+            ui.end_row();
+        });
     if ui.button(texto::ed_criar_rascunho()).clicked() {
         s.nova_missao();
     }
@@ -333,42 +376,55 @@ fn secao_missao(
     ctx: &egui::Context,
 ) {
     let n_atos = s.pacote.as_ref().map_or(1, |p| p.1.pacote.atos.len());
+    s.ato = s.ato.min(n_atos);
     let ocupado = s.trabalho.is_some();
     let Some(ed) = &mut s.edicao else { return };
+    let gravada = ed.origem.is_some();
     ui.label(RichText::new(texto::ed_missao()).strong());
-    egui::Grid::new("ed_cab").num_columns(2).show(ui, |ui| {
-        ui.label(texto::turma_titulo_missao());
-        ui.text_edit_singleline(&mut ed.base.titulo);
-        ui.end_row();
-        ui.label(texto::ed_id());
-        ui.text_edit_singleline(&mut ed.base.id);
-        ui.end_row();
-        ui.label(texto::ed_ato());
-        egui::ComboBox::from_id_salt("ed_ato")
-            .selected_text(if s.ato >= n_atos {
-                texto::ed_ato_novo().to_string()
+    egui::Grid::new("ed_cab")
+        .num_columns(2)
+        .spacing([12.0, 8.0])
+        .show(ui, |ui| {
+            ui.label(texto::turma_titulo_missao());
+            ui.add(egui::TextEdit::singleline(&mut ed.base.titulo).desired_width(300.0));
+            ui.end_row();
+            ui.label(texto::ed_id());
+            ui.add(egui::TextEdit::singleline(&mut ed.base.id).desired_width(300.0));
+            ui.end_row();
+            ui.label(texto::ed_ato());
+            if gravada {
+                ui.label(RichText::new(texto::ed_ato_fixo()).weak());
             } else {
-                texto::f(texto::ed_ato_n(), &[&(s.ato + 1)])
-            })
-            .show_ui(ui, |ui| {
-                for i in 0..n_atos {
-                    ui.selectable_value(&mut s.ato, i, texto::f(texto::ed_ato_n(), &[&(i + 1)]));
+                egui::ComboBox::from_id_salt("ed_ato")
+                    .selected_text(if s.ato >= n_atos {
+                        texto::ed_ato_novo().to_string()
+                    } else {
+                        texto::f(texto::ed_ato_n(), &[&(s.ato + 1)])
+                    })
+                    .show_ui(ui, |ui| {
+                        for i in 0..n_atos {
+                            ui.selectable_value(
+                                &mut s.ato,
+                                i,
+                                texto::f(texto::ed_ato_n(), &[&(i + 1)]),
+                            );
+                        }
+                        ui.selectable_value(&mut s.ato, n_atos, texto::ed_ato_novo());
+                    });
+            }
+            ui.end_row();
+            ui.label(texto::ed_orcamento());
+            ui.horizontal(|ui| {
+                let mut tem = ed.base.orcamento.is_some();
+                if ui.checkbox(&mut tem, "").changed() {
+                    ed.base.orcamento = tem.then_some(ed.base.orcamento.unwrap_or(10000.0));
                 }
-                ui.selectable_value(&mut s.ato, n_atos, texto::ed_ato_novo());
+                if let Some(o) = &mut ed.base.orcamento {
+                    ui.add(egui::DragValue::new(o).speed(100.0).range(0.0..=f64::MAX));
+                }
             });
-        ui.end_row();
-        ui.label(texto::ed_orcamento());
-        ui.horizontal(|ui| {
-            let mut tem = ed.base.orcamento.is_some();
-            if ui.checkbox(&mut tem, "").changed() {
-                ed.base.orcamento = tem.then_some(ed.base.orcamento.unwrap_or(10000.0));
-            }
-            if let Some(o) = &mut ed.base.orcamento {
-                ui.add(egui::DragValue::new(o).speed(100.0).range(0.0..=f64::MAX));
-            }
+            ui.end_row();
         });
-        ui.end_row();
-    });
 
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_alavancas()).strong());
@@ -383,7 +439,7 @@ fn secao_missao(
                 texto::ed_passo(),
                 texto::ed_custo(),
             ] {
-                ui.label(RichText::new(h).weak());
+                cabecalho(ui, h);
             }
             ui.end_row();
             for it in &mut ed.alavancas {
@@ -452,7 +508,7 @@ fn secao_missao(
             texto::ed_tolerancia(),
             texto::ed_peso(),
         ] {
-            ui.label(RichText::new(h).weak());
+            cabecalho(ui, h);
         }
         ui.end_row();
         for it in &mut ed.metricas {
@@ -520,6 +576,7 @@ fn secao_missao(
     for e in &erros {
         ui.colored_label(AMARELO, e);
     }
+    let mut fechar = false;
     let mut calibrar_agora = false;
     let mut aplicar = false;
     let mut gravar = false;
@@ -539,18 +596,21 @@ fn secao_missao(
         gravar = ui
             .add_enabled(
                 erros.is_empty() && s.pacote.is_some(),
-                egui::Button::new(texto::ed_gravar_no_pacote()),
+                utsim_ui_tema::widgets::primary(texto::ed_gravar_no_pacote()),
             )
             .on_hover_text(texto::ed_gravar_dica())
             .clicked();
         if ui.button(texto::ed_fechar()).clicked() {
-            s.edicao = None;
-            s.calibragem = None;
+            fechar = true;
         }
     });
     if let Some(c) = &s.calibragem {
         mostrar_calibragem(ui, c, s.edicao.as_ref());
         aplicar = ui.button(texto::ed_aplicar()).clicked();
+    }
+    if fechar {
+        s.fechar();
+        return;
     }
     if calibrar_agora {
         s.calibrar(executor, Some(ctx.clone()));
@@ -585,7 +645,7 @@ fn mostrar_calibragem(ui: &mut Ui, c: &Calibragem, ed: Option<&Edicao>) {
             texto::ed_referencia(),
             texto::ed_meta_sugerida(),
         ] {
-            ui.label(RichText::new(h).weak());
+            cabecalho(ui, h);
         }
         ui.end_row();
         for (nome, b) in &c.base {

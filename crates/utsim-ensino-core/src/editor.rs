@@ -42,6 +42,9 @@ pub struct Edicao {
     pub texto: String,
     pub alavancas: Vec<ItemAlavanca>,
     pub metricas: Vec<ItemMetrica>,
+    /// Path of `missao.ron` in the teacher's package when the mission was opened from it
+    /// (or written to it): writing again replaces that mission, whatever its id now.
+    pub origem: Option<String>,
 }
 
 /// A mission id: words of letters, digits, `_` and `-`, separated by `/`.
@@ -111,6 +114,7 @@ impl Edicao {
                     metrica,
                 })
                 .collect(),
+            origem: None,
         })
     }
 
@@ -159,11 +163,12 @@ impl Edicao {
             texto: texto.to_string(),
             alavancas,
             metricas,
+            origem: None,
         })
     }
 
     /// The mission as it will be written: the base with the levers and measures in use.
-    /// A reference that names a lever no longer used is dropped (calibrate again).
+    /// A reference that names a lever no longer in use is dropped (calibrate again).
     pub fn missao(&self) -> Missao {
         let mut m = self.base.clone();
         m.alavancas = self
@@ -179,8 +184,7 @@ impl Edicao {
             .map(|x| x.metrica.clone())
             .collect();
         let ids: BTreeSet<&str> = m.alavancas.iter().map(|a| a.id()).collect();
-        let antigas: BTreeSet<&str> = m.referencia.keys().map(String::as_str).collect();
-        if antigas != ids {
+        if m.referencia.keys().any(|k| !ids.contains(k.as_str())) {
             m.referencia = Decisoes::new();
         }
         m
@@ -295,21 +299,6 @@ impl Edicao {
             .fold(1u64, |acc, n| acc.saturating_mul(n))
     }
 
-    /// The files of the mission under `dir` of a package.
-    pub fn arquivos(&self, dir: &str) -> Arquivos {
-        let mut m = self.missao();
-        m.modelo = "modelo.ron".into();
-        m.texto = "texto.md".into();
-        let mut a = Arquivos::new();
-        a.insert(format!("{dir}/missao.ron"), ron_missao(&m).into_bytes());
-        a.insert(
-            format!("{dir}/modelo.ron"),
-            self.modelo_ron.as_bytes().to_vec(),
-        );
-        a.insert(format!("{dir}/texto.md"), self.texto.as_bytes().to_vec());
-        a
-    }
-
     /// The mission alone in a package, loaded and checked like any package.
     pub fn carregar(&self) -> Result<PacoteCarregado, Vec<String>> {
         let erros = self.erros();
@@ -317,7 +306,11 @@ impl Edicao {
             return Err(erros);
         }
         let mut p = PacoteProfessor::novo("rascunho", "Rascunho", "");
-        p.gravar(self, 0)?;
+        let mut e = self.clone();
+        e.origem = None;
+        e.base.modelo = "modelo.ron".into();
+        e.base.texto = "texto.md".into();
+        p.gravar(&mut e, 0)?;
         p.conferir()
     }
 
@@ -377,6 +370,14 @@ pub fn calibrar(ed: &Edicao) -> Result<Calibragem, Vec<String>> {
     let p = ed.carregar()?;
     let m = &p.missoes[0];
     let c = conferir(m).map_err(|e| vec![e.to_string()])?;
+    if c.viaveis == 0 {
+        let mut e = vec![
+            "nenhuma combinação cabe no orçamento e nas restrições: aumente o orçamento ou mude as faixas"
+                .to_string(),
+        ];
+        e.extend(c.erros);
+        return Err(e);
+    }
     let inicial: Decisoes = m
         .missao
         .alavancas
@@ -406,12 +407,7 @@ pub fn calibrar(ed: &Edicao) -> Result<Calibragem, Vec<String>> {
         base.push((mt.nome.clone(), b));
         referencia.push((mt.nome.clone(), r));
         if mt.peso > 0.0 {
-            let meta = match mt.objetivo {
-                Objetivo::Menor => r * 1.05,
-                Objetivo::Maior => r * 0.95,
-            };
-            let f = 10f64.powi(mt.casas as i32);
-            metas.push((mt.nome.clone(), (meta * f).round() / f));
+            metas.push((mt.nome.clone(), meta_sugerida(r, mt.objetivo, mt.casas)));
         }
     }
     Ok(Calibragem {
@@ -420,6 +416,40 @@ pub fn calibrar(ed: &Edicao) -> Result<Calibragem, Vec<String>> {
         referencia,
         metas,
     })
+}
+
+/// The goal 5 % of slack around the reference value `r`, rounded to `casas` decimals
+/// toward the slack, so the reference always reaches it.
+pub fn meta_sugerida(r: f64, objetivo: Objetivo, casas: u32) -> f64 {
+    let f = 10f64.powi(casas as i32);
+    match objetivo {
+        Objetivo::Menor => ((r + 0.05 * r.abs()) * f).ceil() / f,
+        Objetivo::Maior => ((r - 0.05 * r.abs()) * f).floor() / f,
+    }
+}
+
+/// `p` relative to the folder `dir` of a package, with `..` resolved.
+fn junta(dir: &str, p: &str) -> String {
+    let todo = if dir.is_empty() || p.starts_with('/') {
+        p.trim_start_matches('/').to_string()
+    } else {
+        format!("{dir}/{p}")
+    };
+    let mut out: Vec<&str> = Vec::new();
+    for parte in todo.split('/') {
+        match parte {
+            "" | "." => {}
+            ".." => {
+                out.pop();
+            }
+            x => out.push(x),
+        }
+    }
+    out.join("/")
+}
+
+fn pasta(caminho: &str) -> &str {
+    caminho.rsplit_once('/').map_or("", |(d, _)| d)
 }
 
 /// A mission of the teacher's package, as listed.
@@ -509,14 +539,8 @@ impl PacoteProfessor {
     /// Opens the mission at `caminho` for editing.
     pub fn abrir(&self, caminho: &str) -> Result<Edicao, String> {
         let missao = Missao::parse(&self.texto(caminho)?)?;
-        let dir = caminho.rsplit_once('/').map_or("", |(d, _)| d);
-        let junta = |p: &str| {
-            if dir.is_empty() {
-                p.to_string()
-            } else {
-                format!("{dir}/{p}")
-            }
-        };
+        let dir = pasta(caminho);
+        let junta = |p: &str| junta(dir, p);
         if missao.modelagem.is_some() || missao.tem_pecas() || !missao.dados.is_empty() {
             return Err(
                 "o editor ainda não abre missões de modelagem, de peças ou de dados".into(),
@@ -524,57 +548,82 @@ impl PacoteProfessor {
         }
         let modelo = self.texto(&junta(&missao.modelo))?;
         let texto = self.texto(&junta(&missao.texto))?;
-        Edicao::abrir(missao, &modelo, &texto)
+        let mut ed = Edicao::abrir(missao, &modelo, &texto)?;
+        ed.origem = Some(caminho.to_string());
+        Ok(ed)
     }
 
-    /// The folder of a mission: where it already is (same id) or a new one from its id.
-    fn pasta_de(&self, id: &str) -> String {
-        if let Some(it) = self.missoes().into_iter().find(|it| it.id == id) {
-            return it
-                .caminho
-                .rsplit_once('/')
-                .map_or(String::new(), |(d, _)| d.to_string());
-        }
+    /// A new folder for a mission with id `id`, not used by any file of the package.
+    fn pasta_nova(&self, id: &str) -> String {
         let base = slug(&id.replace('/', "_"));
-        let usadas: BTreeSet<String> = self
+        let usadas: BTreeSet<&str> = self
             .arquivos
             .keys()
-            .filter_map(|k| k.split_once('/').map(|(d, _)| d.to_string()))
+            .filter_map(|k| k.split_once('/').map(|(d, _)| d))
             .collect();
         let mut d = base.clone();
         let mut n = 2;
-        while usadas.contains(&d) {
+        while usadas.contains(d.as_str()) {
             d = format!("{base}_{n}");
             n += 1;
         }
         d
     }
 
-    /// Writes the mission: in its place when the id is already in the package, or at the
-    /// end of the act `ato` (a new act when `ato` is past the last one). Checks the fields
-    /// first; the whole package is checked by [`Self::conferir`].
-    pub fn gravar(&mut self, ed: &Edicao, ato: usize) -> Result<String, Vec<String>> {
+    /// The files a mission refers to (its model, statement and reference model), resolved.
+    fn referencias(&self, caminho: &str) -> Vec<String> {
+        let Ok(m) = self.texto(caminho).and_then(|t| Missao::parse(&t)) else {
+            return Vec::new();
+        };
+        let dir = pasta(caminho);
+        let mut v = vec![junta(dir, &m.modelo), junta(dir, &m.texto)];
+        if let Some(md) = &m.modelagem {
+            v.push(junta(dir, &md.gabarito));
+        }
+        v
+    }
+
+    /// Writes the mission. A mission opened from this package (`ed.origem`) goes back to
+    /// its place, with its files where they were, even when its id changed. A new one goes
+    /// to a folder of its own at the end of the act `ato` (a new act when `ato` is past the
+    /// last one). An id already used by another mission is refused. Checks the fields
+    /// first; the whole package is checked by [`Self::conferir`]. Sets `ed.origem`.
+    pub fn gravar(&mut self, ed: &mut Edicao, ato: usize) -> Result<String, Vec<String>> {
         let erros = ed.erros();
         if !erros.is_empty() {
             return Err(erros);
         }
-        let dir = self.pasta_de(&ed.base.id);
-        let caminho = format!("{dir}/missao.ron");
-        // The old statement and model of the mission go: the folder is rewritten.
-        let ja = self.missoes().iter().any(|it| it.caminho == caminho);
-        if ja {
-            let antigos: Vec<String> = self
-                .arquivos
-                .keys()
-                .filter(|k| k.starts_with(&format!("{dir}/")))
-                .cloned()
-                .collect();
-            for k in antigos {
-                self.arquivos.remove(&k);
-            }
+        let lista = self.missoes();
+        let origem = ed
+            .origem
+            .clone()
+            .filter(|c| lista.iter().any(|it| &it.caminho == c));
+        if lista
+            .iter()
+            .any(|it| it.id == ed.base.id && Some(&it.caminho) != origem.as_ref())
+        {
+            return Err(vec![format!(
+                "já existe outra missão com o id '{}' no pacote: troque o id",
+                ed.base.id
+            )]);
         }
-        self.arquivos.extend(ed.arquivos(&dir));
-        if !ja {
+        let mut m = ed.missao();
+        let caminho = match &origem {
+            Some(c) => c.clone(),
+            None => {
+                m.modelo = "modelo.ron".into();
+                m.texto = "texto.md".into();
+                format!("{}/missao.ron", self.pasta_nova(&m.id))
+            }
+        };
+        let dir = pasta(&caminho).to_string();
+        self.arquivos
+            .insert(caminho.clone(), ron_missao(&m).into_bytes());
+        self.arquivos
+            .insert(junta(&dir, &m.modelo), ed.modelo_ron.as_bytes().to_vec());
+        self.arquivos
+            .insert(junta(&dir, &m.texto), ed.texto.as_bytes().to_vec());
+        if origem.is_none() {
             if ato >= self.pacote.atos.len() {
                 let n = self.pacote.atos.len() as u32 + 1;
                 self.pacote.atos.push(Ato {
@@ -585,19 +634,29 @@ impl PacoteProfessor {
             }
             let i = ato.min(self.pacote.atos.len() - 1);
             self.pacote.atos[i].missoes.push(caminho.clone());
+            ed.base.modelo = m.modelo;
+            ed.base.texto = m.texto;
         }
+        ed.origem = Some(caminho.clone());
         self.sincronizar();
         Ok(caminho)
     }
 
-    /// Removes the mission at `caminho` and its files.
+    /// Removes the mission at `caminho`: its file, and the files it refers to that no
+    /// other mission uses. Anything else of the package stays.
     pub fn remover(&mut self, caminho: &str) {
+        let seus = self.referencias(caminho);
         for a in &mut self.pacote.atos {
             a.missoes.retain(|c| c != caminho);
         }
-        if let Some((dir, _)) = caminho.rsplit_once('/') {
-            let pre = format!("{dir}/");
-            self.arquivos.retain(|k, _| !k.starts_with(&pre));
+        let outros: BTreeSet<String> = self
+            .missoes()
+            .iter()
+            .flat_map(|it| self.referencias(&it.caminho))
+            .collect();
+        self.arquivos.remove(caminho);
+        for f in seus.iter().filter(|f| !outros.contains(*f)) {
+            self.arquivos.remove(f);
         }
         self.sincronizar();
     }

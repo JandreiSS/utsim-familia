@@ -93,7 +93,7 @@ fn campos_conferidos_antes_de_gravar() {
     assert!(ed.erros().iter().any(|x| x.contains("combinações")));
     // A wrong mission is not written.
     let mut p = PacoteProfessor::novo("meu", "Meu pacote", "Prof");
-    assert!(p.gravar(&ed, 0).is_err());
+    assert!(p.gravar(&mut ed, 0).is_err());
     assert!(p.missoes().is_empty());
 }
 
@@ -126,8 +126,20 @@ fn calibragem_acha_a_referencia_e_sugere_metas() {
     let c2 = utsim_ensino_core::conferir::conferir(&p.missoes[0]).unwrap();
     assert!(c2.passou(), "{:?}", c2.erros);
     assert!(c2.referencia_confere);
-    // Dropping a lever drops the reference (it named the old levers).
-    ed.alavancas[0].usar = !ed.alavancas[0].usar;
+    // A lever more keeps the reference (the rest is completed with the initial values).
+    let corte = ed
+        .alavancas
+        .iter_mut()
+        .find(|a| a.alavanca.id() == "corte_capacidade")
+        .unwrap();
+    corte.usar = true;
+    assert_eq!(ed.missao().referencia, c.conferencia.melhor);
+    // Dropping a lever the reference names drops the reference.
+    for a in ed.alavancas.iter_mut() {
+        if a.alavanca.id() == "furacao_capacidade" {
+            a.usar = false;
+        }
+    }
     assert!(ed.missao().referencia.is_empty());
 }
 
@@ -139,13 +151,13 @@ fn pacote_do_professor_ida_e_volta() {
     ed.texto = "# A linha\n\nTexto meu.\n".into();
     // A field the editor does not show goes back as it was.
     ed.base.dicas = vec!["Olhe a fila antes da furação.".into()];
-    let c1 = p.gravar(&ed, 0).unwrap();
+    let c1 = p.gravar(&mut ed, 0).unwrap();
     let mut ed2 = Edicao::nova("prof/outra", "Outra linha", &modelo_tutorial()).unwrap();
     for a in ed2.alavancas.iter_mut() {
         a.usar = a.alavanca.id() == "furacao_capacidade";
     }
     // Act 2 (past the last one: a new act).
-    let c2 = p.gravar(&ed2, 5).unwrap();
+    let c2 = p.gravar(&mut ed2, 5).unwrap();
     assert_ne!(c1, c2);
     let lista = p.missoes();
     assert_eq!(
@@ -180,7 +192,7 @@ fn pacote_do_professor_ida_e_volta() {
     let mut ed3 = aberta.clone();
     ed3.base.titulo = "A linha, revista".into();
     let mut p3 = p2.clone();
-    assert_eq!(p3.gravar(&ed3, 1).unwrap(), c1);
+    assert_eq!(p3.gravar(&mut ed3, 1).unwrap(), c1);
     assert_eq!(p3.missoes()[0].titulo, "A linha, revista");
     assert_eq!(p3.missoes().len(), 2);
 
@@ -238,4 +250,78 @@ fn walk(d: &std::path::Path) -> Vec<PathBuf> {
         }
     }
     v
+}
+
+#[test]
+fn ids_repetidos_e_id_trocado_depois_de_abrir() {
+    let mut p = PacoteProfessor::novo("meu", "Meu", "Prof");
+    let mut a = edicao();
+    let ca = p.gravar(&mut a, 0).unwrap();
+    // A second new mission with the same id does not overwrite the first.
+    let mut b = edicao();
+    let e = p.gravar(&mut b, 0).unwrap_err();
+    assert!(e[0].contains("já existe"), "{e:?}");
+    assert_eq!(p.missoes().len(), 1);
+    // Opened and its id changed: it goes back to its place, no copy.
+    let mut aberta = p.abrir(&ca).unwrap();
+    assert_eq!(aberta.origem.as_deref(), Some(ca.as_str()));
+    aberta.base.id = "prof/linha_nova".into();
+    assert_eq!(p.gravar(&mut aberta, 0).unwrap(), ca);
+    let l = p.missoes();
+    assert_eq!(l.len(), 1);
+    assert_eq!(l[0].id, "prof/linha_nova");
+    // Written once more with no changes: the same files.
+    let antes = p.todos();
+    p.gravar(&mut aberta, 0).unwrap();
+    assert_eq!(p.todos(), antes);
+    // The first draft, written now under the old id, is a new mission.
+    b.base.id = "prof/linha".into();
+    let cb = p.gravar(&mut b, 0).unwrap();
+    assert_ne!(cb, ca);
+    assert!(carregar(&p.todos()).is_ok());
+}
+
+#[test]
+fn remover_numa_pasta_comum_leva_so_a_missao() {
+    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../ensino/pacotes/estatistica_qualidade");
+    let mut a = utsim_ensino_core::pacote::Arquivos::new();
+    for e in walk(&raiz) {
+        let k = e
+            .strip_prefix(&raiz)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        a.insert(k, std::fs::read(&e).unwrap());
+    }
+    let mut p = PacoteProfessor::de_arquivos(a).unwrap();
+    let n = p.missoes().len();
+    let alvo = p.missoes()[2].caminho.clone();
+    assert!(alvo.starts_with("eq/"));
+    p.remover(&alvo);
+    let todos = p.todos();
+    assert!(!todos.contains_key(&alvo));
+    // The other missions of eq/ and the shared models stay, and the package loads.
+    assert_eq!(p.missoes().len(), n - 1);
+    assert!(todos.contains_key("modelos/eixos.ron"));
+    let c = carregar(&todos).unwrap_or_else(|e| panic!("{}", e.join("\n")));
+    assert_eq!(c.missoes.len(), n - 1);
+}
+
+#[test]
+fn metas_sugeridas_a_referencia_sempre_bate() {
+    use utsim_ensino_core::editor::meta_sugerida;
+    assert_eq!(meta_sugerida(0.96, Objetivo::Maior, 0), 0.0);
+    assert_eq!(meta_sugerida(1.4, Objetivo::Menor, 0), 2.0);
+    assert_eq!(meta_sugerida(10.0, Objetivo::Menor, 1), 10.5);
+    assert_eq!(meta_sugerida(10.0, Objetivo::Maior, 1), 9.5);
+    // Negative values keep the slack on the right side.
+    assert!(meta_sugerida(-10.0, Objetivo::Menor, 1) >= -10.0);
+    assert!(meta_sugerida(-10.0, Objetivo::Maior, 1) <= -10.0);
+    for r in [0.37, 3.21, 127.4, 0.001] {
+        for c in 0..3 {
+            assert!(meta_sugerida(r, Objetivo::Menor, c) >= r);
+            assert!(meta_sugerida(r, Objetivo::Maior, c) <= r);
+        }
+    }
 }

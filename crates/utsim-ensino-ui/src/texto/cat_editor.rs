@@ -57,6 +57,14 @@ textos! {
         "Ato {}",
         "Act {}",
         "Acto {}";
+    ed_ato_fixo:
+        "o mesmo da missão gravada (use as setas da lista para mudar)",
+        "the same as the written mission (use the arrows of the list to change it)",
+        "el mismo de la misión grabada (use las flechas de la lista para cambiarlo)";
+    ed_pasta_ocupada:
+        "a pasta já tem arquivos e não tem pacote.ron: escolha uma pasta vazia para um pacote novo",
+        "the folder already has files and no pacote.ron: choose an empty folder for a new package",
+        "la carpeta ya tiene archivos y no tiene pacote.ron: elija una carpeta vacía para un paquete nuevo";
     ed_ato_novo:
         "Ato novo",
         "New act",
@@ -93,10 +101,6 @@ textos! {
         "Missão nova a partir de um modelo",
         "New mission from a model",
         "Misión nueva a partir de un modelo";
-    ed_filtro_modelo:
-        "Modelo do UTSim",
-        "UTSim model",
-        "Modelo de UTSim";
     ed_criar_rascunho:
         "Criar o rascunho",
         "Create the draft",
