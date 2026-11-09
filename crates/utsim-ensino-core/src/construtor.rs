@@ -172,6 +172,7 @@ pub fn rascunho(
         arranjo: None,
         modelagem: None,
         dados: Vec::new(),
+        analisar_em: Vec::new(),
     }
 }
 

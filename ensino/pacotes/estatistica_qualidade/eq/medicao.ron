@@ -1,0 +1,26 @@
+Missao(
+    id: "eq/medicao",
+    titulo: "O instrumento ou as pessoas?",
+    conceitos: ["msa"],
+    modelo: "../modelos/eixos.ron",
+    texto: "medicao.md",
+    dados: [
+        (id: "rr_paquimetro", nome: "Estudo de R&R do paquímetro da expedição",
+         gerador: Msa(pecas: 10, operadores: 3, repeticoes: 3, media: 25.0, sd_peca: 0.010, sd_operador: 0.004, sd_repetibilidade: 0.0025)),
+    ],
+    analisar_em: ["qualidade"],
+    previsao: [
+        Dados(id: "rr", pergunta: "Qual é o %R&R do paquímetro (porcentagem da variação do estudo, método ANOVA)?",
+              conjunto: "rr_paquimetro", questao: RrPercentual, unidade: "%", tolerancia: Absoluta(1.5)),
+        Dados(id: "fonte", pergunta: "Qual é a maior parte do erro de medição?",
+              conjunto: "rr_paquimetro", questao: FonteDominante, tolerancia: Absoluta(0.0)),
+        Dados(id: "veredito", pergunta: "O sistema de medição serve para separar eixos bons de ruins?",
+              conjunto: "rr_paquimetro", questao: RrVeredito, tolerancia: Absoluta(0.0)),
+    ],
+    justificativa: [
+        (pergunta: "Se a maior parte do erro vem dos operadores, qual ação vem primeiro?",
+         opcoes: ["Padronizar o método de medição e treinar os operadores", "Comprar um instrumento mais preciso", "Medir cada peça mais vezes"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

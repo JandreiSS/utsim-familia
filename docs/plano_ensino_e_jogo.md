@@ -485,6 +485,18 @@ Essa frente está em planejamento paralelo. Este plano só fixa o contrato. A fr
 
 "Levar para o UTSim" grava o `.ron` da tentativa e abre o editor. "Ver em 3D" abre o `Replay` no cliente Godot. Os dois só aparecem quando o produto está instalado pelo launcher, como no Seis Sigma.
 
+### 7.6 UTSim Estatística e UTSim Qualidade
+
+O pacote "Estatística e qualidade na fábrica" (`ensino/pacotes/estatistica_qualidade`, feito em 2026-11-09) liga o jogo aos dois apps. Ele traz seis missões de análise:
+- replicações e intervalo de confiança;
+- comparação pareada com números aleatórios comuns;
+- carta X̄-R com deriva plantada;
+- Cpk antes e depois;
+- R&R com a fonte dominante;
+- estratificação.
+
+Os geradores `Pareado` e `Subgrupos` e as questões `MeiaLargura`, `Replicacoes`, `DiferencaMedia`, `DiferencaSignificativa`, `PrimeiroSubgrupoFora`, `Cpk` e `FonteDominante` entram no núcleo. A missão diz em `analisar_em` para qual app os dados vão. O botão grava os `.csv` no perfil e abre o app com `--utsim-abrir=<arquivo.csv>`, um por conjunto, na convenção da família. A leitura do `.csv` como conjunto de dados fica com os dois apps. Até lá, o app só abre, e os arquivos ficam no perfil para a importação manual.
+
 ### 7.5 Placas com microcontrolador
 
 O protocolo próprio para placas (ESP32, Arduino) ainda será conversado com o dono (backlog). Quando existir, o app de ensino pode usá-lo de duas formas.

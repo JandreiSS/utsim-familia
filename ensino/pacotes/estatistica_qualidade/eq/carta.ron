@@ -1,0 +1,34 @@
+Missao(
+    id: "eq/carta",
+    titulo: "A deriva do torno",
+    conceitos: ["carta_de_controle"],
+    modelo: "../modelos/eixos.ron",
+    texto: "carta.md",
+    dados: [
+        (id: "diametros", nome: "Diâmetro de 5 eixos por hora no torno (mm)",
+         gerador: Subgrupos(k: 30, tamanho: 5, media: 25.0, sd: 0.004, padrao: Some(Deslocamento(inicio: 20, tamanho: 1.5)))),
+    ],
+    analisar_em: ["qualidade"],
+    previsao: [
+        Escolha(
+            id: "carta",
+            pergunta: "Qual carta usar para 5 eixos medidos a cada hora?",
+            opcoes: [(rotulo: "Carta de média e amplitude (X̄-R) com subgrupos de 5"), (rotulo: "Carta de valores individuais (I-AM)"), (rotulo: "Carta p")],
+            resposta: Fixa(0),
+        ),
+        Dados(id: "fora", pergunta: "Com os limites calculados pelos 15 primeiros subgrupos, qual é o primeiro subgrupo seguinte com um ponto fora dos limites (na média ou na amplitude)?",
+              conjunto: "diametros", questao: PrimeiroSubgrupoFora(base: 15), tolerancia: Absoluta(0.0)),
+        Escolha(
+            id: "limites",
+            pergunta: "Depois do sinal, o que fazer com os limites?",
+            opcoes: [(rotulo: "Manter os limites e procurar a causa no torno"), (rotulo: "Recalcular os limites com todos os pontos"), (rotulo: "Alargar os limites para o ponto caber")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que os limites vêm do começo da série e não da série toda?",
+         opcoes: ["Porque o começo estava estável, e os limites devem descrever o processo sem a causa especial", "Porque os primeiros pontos são mais precisos", "Porque a carta só aceita 15 subgrupos"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

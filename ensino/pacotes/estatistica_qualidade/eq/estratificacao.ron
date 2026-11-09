@@ -1,0 +1,31 @@
+Missao(
+    id: "eq/estratificacao",
+    titulo: "De onde vem o refugo?",
+    conceitos: ["estratificacao", "capacidade_do_processo"],
+    modelo: "../modelos/eixos.ron",
+    texto: "estratificacao.md",
+    dados: [
+        (id: "comprimentos", nome: "Comprimento dos eixos por torno (mm)",
+         gerador: MediaDeslocada(grupos: ["Torno 1", "Torno 2", "Torno 3", "Torno 4"], n_por_grupo: 30, media: 120.0, sd: 0.3, afetado: 0, deslocamento: 2.0),
+         sortear_afetado: true),
+    ],
+    analisar_em: ["estatistica", "qualidade"],
+    previsao: [
+        Dados(id: "ppk", pergunta: "Qual é o Ppk de todos os comprimentos juntos, com especificação de 119,0 a 121,0 mm?",
+              conjunto: "comprimentos", questao: Ppk(lie: Some(119.0), lse: Some(121.0)), tolerancia: Absoluta(0.05)),
+        Dados(id: "torno", pergunta: "Qual torno tem a média deslocada?",
+              conjunto: "comprimentos", questao: GrupoDeslocado, tolerancia: Absoluta(0.0)),
+        Escolha(
+            id: "acao",
+            pergunta: "Qual é o próximo passo?",
+            opcoes: [(rotulo: "Investigar o que esse torno tem de diferente: ajuste, ferramenta, fixação"), (rotulo: "Pedir ao cliente uma especificação mais larga"), (rotulo: "Inspecionar todas as peças dos quatro tornos")],
+            resposta: Fixa(0),
+        ),
+    ],
+    justificativa: [
+        (pergunta: "Por que separar os dados por torno antes de mexer no processo?",
+         opcoes: ["Porque o Ppk de todos juntos esconde que um torno só causa a maior parte do problema", "Porque cada torno tem uma especificação diferente", "Porque a estratificação aumenta o Ppk"],
+         certa: 0),
+    ],
+    animacao: (duracao: 480, unidade: "min"),
+)

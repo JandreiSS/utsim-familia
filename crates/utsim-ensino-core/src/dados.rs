@@ -61,6 +61,54 @@ pub enum Gerador {
         efeitos: Vec<f64>,
         interacao_ab: f64,
     },
+    /// Two alternatives run with common random numbers: each replication gives the result
+    /// of A and of B, which share most of the noise. B differs from A by `diferenca` on
+    /// average, with `sd_diferenca` of its own noise.
+    Pareado {
+        n: usize,
+        media: f64,
+        sd: f64,
+        diferenca: f64,
+        sd_diferenca: f64,
+    },
+    /// `k` subgroups of `tamanho` measurements in time order (X̄-R charts, capability with
+    /// subgroups), in control or with a pattern by subgroup.
+    Subgrupos {
+        k: usize,
+        tamanho: usize,
+        media: f64,
+        sd: f64,
+        #[serde(default)]
+        padrao: Option<Padrao>,
+    },
+}
+
+impl Padrao {
+    /// The shift of the mean at point `i` (0-based), in units of `sd`.
+    fn extra(&self, i: usize) -> f64 {
+        match self {
+            Padrao::Deslocamento { inicio, tamanho } if i >= *inicio => *tamanho,
+            Padrao::Tendencia { inicio, inclinacao } if i >= *inicio => {
+                (i - inicio + 1) as f64 * inclinacao
+            }
+            _ => 0.0,
+        }
+    }
+
+    fn descrever(&self, unidade: &str) -> String {
+        match self {
+            Padrao::Deslocamento { inicio, tamanho } => format!(
+                "deslocamento de {} desvios padrão a partir do {unidade} {}",
+                n4(*tamanho),
+                inicio + 1
+            ),
+            Padrao::Tendencia { inicio, inclinacao } => format!(
+                "tendência de {} desvio padrão por {unidade} a partir do {unidade} {}",
+                n4(*inclinacao),
+                inicio + 1
+            ),
+        }
+    }
 }
 
 /// A generator with its seed: the same recipe gives the same data on every machine.
@@ -216,33 +264,9 @@ impl Receita {
                 padrao,
             } => {
                 let xs: Vec<f64> = (0..*n)
-                    .map(|i| {
-                        let extra = match padrao {
-                            Padrao::Deslocamento { inicio, tamanho } if i >= *inicio => {
-                                tamanho * sd
-                            }
-                            Padrao::Tendencia { inicio, inclinacao } if i >= *inicio => {
-                                (i - inicio + 1) as f64 * inclinacao * sd
-                            }
-                            _ => 0.0,
-                        };
-                        r4(normal(&mut rng, media + extra, *sd))
-                    })
+                    .map(|i| r4(normal(&mut rng, media + padrao.extra(i) * sd, *sd)))
                     .collect();
-                let resposta = match padrao {
-                    Padrao::Deslocamento { inicio, tamanho } => {
-                        format!(
-                            "deslocamento de {} desvios padrão a partir do ponto {}",
-                            n4(*tamanho),
-                            inicio + 1
-                        )
-                    }
-                    Padrao::Tendencia { inicio, inclinacao } => format!(
-                        "tendência de {} desvio padrão por ponto a partir do ponto {}",
-                        n4(*inclinacao),
-                        inicio + 1
-                    ),
-                };
+                let resposta = padrao.descrever("ponto");
                 Conjunto {
                     cabecalho: vec!["ponto".into(), "medida".into()],
                     linhas: xs
@@ -303,6 +327,63 @@ impl Receita {
                         fatores.first().map_or("A", String::as_str),
                         fatores.get(1).map_or("B", String::as_str),
                         n4(*interacao_ab)
+                    ),
+                }
+            }
+            Gerador::Pareado {
+                n,
+                media,
+                sd,
+                diferenca,
+                sd_diferenca,
+            } => {
+                let mut linhas = Vec::new();
+                let mut valores = Vec::new();
+                for i in 0..*n {
+                    let a = r4(normal(&mut rng, *media, *sd));
+                    let b = r4(a + normal(&mut rng, *diferenca, *sd_diferenca));
+                    linhas.push(vec![(i + 1).to_string(), n4(a), n4(b)]);
+                    valores.push(vec![a, b]);
+                }
+                Conjunto {
+                    cabecalho: vec!["replicacao".into(), "a".into(), "b".into()],
+                    linhas,
+                    valores,
+                    resposta: format!(
+                        "B difere de A em {} em média (desvio da diferença {})",
+                        n4(*diferenca),
+                        n4(*sd_diferenca)
+                    ),
+                }
+            }
+            Gerador::Subgrupos {
+                k,
+                tamanho,
+                media,
+                sd,
+                padrao,
+            } => {
+                let mut linhas = Vec::new();
+                let mut valores = Vec::new();
+                for g in 0..*k {
+                    let m = media + padrao.as_ref().map_or(0.0, |p| p.extra(g)) * sd;
+                    let xs: Vec<f64> = (0..*tamanho)
+                        .map(|_| r4(normal(&mut rng, m, *sd)))
+                        .collect();
+                    let mut l = vec![(g + 1).to_string()];
+                    l.extend(xs.iter().map(|x| n4(*x)));
+                    linhas.push(l);
+                    valores.push(xs);
+                }
+                let mut cabecalho = vec!["subgrupo".to_string()];
+                cabecalho.extend((1..=*tamanho).map(|j| format!("x{j}")));
+                Conjunto {
+                    cabecalho,
+                    linhas,
+                    valores,
+                    resposta: padrao.as_ref().map_or_else(
+                        || "processo sob controle".to_string(),
+                        |p| p.descrever("subgrupo"),
                     ),
                 }
             }

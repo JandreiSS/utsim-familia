@@ -216,6 +216,14 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
             },
         }
     }
+    for a in &missao.analisar_em {
+        if !crate::missao::APPS_DE_ANALISE.contains(&a.as_str()) {
+            erros.push(format!("analisar_em: app '{a}' desconhecido"));
+        }
+        if missao.dados.is_empty() {
+            erros.push(format!("analisar_em: '{a}' sem conjunto de dados"));
+        }
+    }
     for r in &missao.restricoes {
         for t in &r.valor {
             if !termo_de_decisao(t) {
