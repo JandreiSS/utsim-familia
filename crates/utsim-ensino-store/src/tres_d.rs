@@ -2,6 +2,10 @@
 //! its replay are written to a folder and the UTSim client installed by the launcher opens
 //! them. The 3D client (`utsim-3d`, Godot) gets `--utsim-abrir=<replay.json>` after `--`;
 //! the older viewer (`utsim-view`) gets the model path.
+//!
+//! "Levar para o UTSim" (7.4) writes only the model, in a folder that stays
+//! (`modelos/` of the profile), and the client opens it to edit: the student goes on from
+//! the attempt in the full simulator.
 
 use std::path::{Path, PathBuf};
 
@@ -60,6 +64,52 @@ pub fn argumentos(exe: &Path, padrao: &[String], modelo: &Path, replay: &Path) -
     } else {
         vec![modelo.display().to_string()]
     }
+}
+
+/// The arguments to open a model (`.ron`) to edit: the 3D client gets
+/// `--utsim-abrir=<modelo.ron>`, the viewer the path.
+pub fn argumentos_modelo(exe: &Path, padrao: &[String], modelo: &Path) -> Vec<String> {
+    argumentos(exe, padrao, modelo, modelo)
+}
+
+/// Writes the model of the attempt (`<missao>.ron`, with the student's variant and
+/// decisions) in `dir`, without the replay.
+pub fn gravar_modelo(
+    dir: &Path,
+    m: &MissaoCarregada,
+    aluno: &str,
+    decisoes: &Decisoes,
+) -> Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let modelo =
+        modelo_da_tentativa(m, aluno, decisoes).map_err(|e| Erro::Invalido(e.to_string()))?;
+    let txt = ron::ser::to_string_pretty(
+        &modelo,
+        ron::ser::PrettyConfig::default().struct_names(true),
+    )
+    .map_err(|e| Erro::Invalido(e.to_string()))?;
+    let pm = dir.join(format!("{}.ron", slug(&m.missao.id)));
+    std::fs::write(&pm, txt)?;
+    Ok(pm)
+}
+
+/// "Levar para o UTSim": writes the model of the attempt in `dir` and opens it in the
+/// installed client. The path of the model.
+pub fn levar_para_utsim(
+    dir: &Path,
+    m: &MissaoCarregada,
+    aluno: &str,
+    decisoes: &Decisoes,
+) -> Result<PathBuf> {
+    let (exe, padrao, pasta) = cliente().ok_or_else(|| {
+        Erro::Invalido("o UTSim não está instalado pelo launcher neste computador".into())
+    })?;
+    let pm = gravar_modelo(dir, m, aluno, decisoes)?;
+    std::process::Command::new(&exe)
+        .args(argumentos_modelo(&exe, &padrao, &pm))
+        .current_dir(pasta)
+        .spawn()?;
+    Ok(pm)
 }
 
 /// The installed client (program, default arguments, folder), when the launcher has it.

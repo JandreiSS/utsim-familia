@@ -426,3 +426,26 @@ fn ver_em_3d_grava_modelo_e_replay() {
     let v = argumentos(std::path::Path::new("bin/utsim-view.exe"), &[], &pm, &pr);
     assert_eq!(v, [pm.display().to_string()]);
 }
+
+#[test]
+fn levar_para_o_utsim_grava_so_o_modelo() {
+    use utsim_ensino_store::tres_d::{argumentos_modelo, gravar_modelo};
+    let p = utsim_ensino_core::campanha::carregar_campanha().unwrap();
+    let m = p.missao("ato1/furadeira").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let d = m.missao.completar(&m.missao.referencia);
+    let pm = gravar_modelo(dir.path(), m, "ra042", &d).unwrap();
+    let modelo = utsim_model::Model::parse(&std::fs::read_to_string(&pm).unwrap()).unwrap();
+    assert_eq!(
+        modelo,
+        utsim_ensino_core::motor::modelo_da_tentativa(m, "ra042", &d).unwrap()
+    );
+    // Only the model: no replay beside it.
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    // The 3D client opens the model to edit; the viewer gets the path.
+    let a = argumentos_modelo(std::path::Path::new("3d/utsim-3d.exe"), &[], &pm);
+    assert_eq!(a[0], "--");
+    assert!(a[1].starts_with("--utsim-abrir=") && a[1].ends_with(".ron"));
+    let v = argumentos_modelo(std::path::Path::new("bin/utsim-view.exe"), &[], &pm);
+    assert_eq!(v, [pm.display().to_string()]);
+}
