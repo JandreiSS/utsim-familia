@@ -703,3 +703,68 @@ fn pacote_de_estatistica_e_qualidade_com_o_botao_de_analise() {
         frames(&mut app, &ctx, 2);
     }
 }
+
+#[test]
+fn editor_de_missoes_do_professor() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut prof = App::com(Perfil::em(&dir.path().join("prof")), Arc::new(NaHora), || 0);
+    prof.salvar_identidade("Professor", "prof", "");
+    prof.config.professor = true;
+    prof.tela = Tela::Editor;
+    frames(&mut prof, &ctx, 1);
+    let pasta = dir.path().join("Meu pacote");
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let e = &mut prof.editor;
+    e.pasta = pasta.display().to_string();
+    e.abrir_pasta();
+    assert!(e.erros.is_empty(), "{:?}", e.erros);
+    e.modelo = raiz
+        .join("examples/tutorial_02_linha.ron")
+        .display()
+        .to_string();
+    e.titulo_novo = "Linha do tutorial".into();
+    e.nova_missao();
+    let ed = e.edicao.as_mut().expect("rascunho");
+    assert_eq!(ed.base.id, "prof/linha_do_tutorial");
+    for a in ed.alavancas.iter_mut() {
+        a.usar = a.alavanca.id() != "corte_capacidade";
+        if let utsim_ensino_core::missao::Alavanca::Quantidade { ate, .. } = &mut a.alavanca {
+            *ate -= 1;
+        }
+    }
+    ed.base.orcamento = Some(10000.0);
+    frames(&mut prof, &ctx, 2);
+    prof.editor.calibrar(&NaHora, None);
+    frames(&mut prof, &ctx, 2);
+    let c = prof.editor.calibragem.clone().expect("calibragem");
+    assert_eq!(c.conferencia.melhor.get("furacao_capacidade"), Some(&2.0));
+    prof.editor.aplicar();
+    prof.editor.gravar_missao();
+    assert!(prof.editor.erros.is_empty(), "{:?}", prof.editor.erros);
+    frames(&mut prof, &ctx, 2);
+    // On disk, a package the student's app opens.
+    assert!(pasta.join("pacote.ron").is_file());
+    let a = utsim_ensino_store::arquivos::ler_pacote(&pasta).unwrap();
+    let p = utsim_ensino_core::pacote::carregar(&a).unwrap();
+    assert_eq!(p.missoes.len(), 1);
+    assert_eq!(
+        p.missoes[0].missao.referencia.get("furacao_capacidade"),
+        Some(&2.0)
+    );
+    // Opened again from the folder, the mission is listed and opens.
+    let mut outro = App::com(
+        Perfil::em(&dir.path().join("prof2")),
+        Arc::new(NaHora),
+        || 0,
+    );
+    outro.config.professor = true;
+    outro.tela = Tela::Editor;
+    outro.editor.pasta = pasta.display().to_string();
+    outro.editor.abrir_pasta();
+    let (_, pp, _) = outro.editor.pacote.as_ref().unwrap();
+    let lista = pp.missoes();
+    assert_eq!(lista.len(), 1);
+    assert!(pp.abrir(&lista[0].caminho).is_ok());
+    frames(&mut outro, &ctx, 2);
+}

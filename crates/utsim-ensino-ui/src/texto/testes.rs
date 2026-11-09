@@ -9,6 +9,7 @@ type Entrada = (&'static str, &'static str, &'static str, &'static str);
 fn catalogos() -> Vec<(&'static str, &'static [Entrada])> {
     vec![
         ("abertura", cat_abertura::TODOS),
+        ("editor", cat_editor::TODOS),
         ("geral", geral::TODOS),
         ("missao", cat_missao::TODOS),
         ("turma", cat_turma::TODOS),
