@@ -25,6 +25,11 @@ use utsim_ensino_core::progresso::Progresso;
 use utsim_ensino_core::turma::{Aluno, registro_valido};
 use utsim_ensino_store::perfil::{Config, Perfil};
 
+/// The color of UTSim Ensino in the family (`#8A5CE6`, the launcher icon).
+pub const ROXO: Color32 = Color32::from_rgb(0x8A, 0x5C, 0xE6);
+/// Warnings that do not stop anything (a need of the package this version does not meet).
+pub const AVISO: Color32 = Color32::from_rgb(240, 190, 80);
+
 /// Runs jobs away from the screen (a thread in the eframe app, inline in tests).
 pub trait Executor: Send + Sync {
     fn executar(&self, job: Box<dyn FnOnce() + Send>);
@@ -481,9 +486,12 @@ impl App {
         };
         ui.heading(&p.pacote.titulo);
         ui.label(&p.pacote.descricao);
+        if !p.faltando.is_empty() {
+            ui.colored_label(AVISO, texto::requisitos(&p.faltando));
+        }
         if let Some((pr, aberta)) = self.prova() {
             ui.colored_label(
-                Color32::from_rgb(242, 163, 58),
+                ROXO,
                 texto_prova(&pr, aberta, (self.relogio)()),
             );
         }
@@ -605,6 +613,10 @@ impl App {
                     .clicked()
                 {
                     abrir = Some(p.caminho.clone());
+                }
+                if !p.faltando.is_empty() {
+                    ui.colored_label(AVISO, "⚠")
+                        .on_hover_text(texto::requisitos(&p.faltando));
                 }
                 ui.add(egui::Label::new(RichText::new(&p.descricao).weak()).truncate());
             });

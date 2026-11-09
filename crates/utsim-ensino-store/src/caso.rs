@@ -81,6 +81,9 @@ pub fn conferir_pacote(path: &Path) -> Result<String> {
     let p = carregar(&arquivos)
         .map_err(|e| Erro::Invalido(format!("pacote inválido:\n{}", e.join("\n"))))?;
     let mut s = format!("{} ({} missões)\n", p.pacote.titulo, p.missoes.len());
+    for f in &p.faltando {
+        s.push_str(&format!("aviso: requisito não atendido: {f}\n"));
+    }
     for m in &p.missoes {
         let c = conferir(m).map_err(|e| Erro::Invalido(e.to_string()))?;
         s.push_str(&format!(
