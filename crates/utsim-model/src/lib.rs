@@ -63,7 +63,7 @@ pub use arrivals::{AreaDef, ItemTypeDef};
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
-    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
+    ArrivalPeriod, Changeover, ChangeoverTime, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
     TableRepeat,
 };
 
@@ -424,6 +424,10 @@ pub enum ObjectKind {
         /// stage starts when the operators of every team needing it have arrived.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         also: Vec<OperatorUse>,
+        /// Product changeover: `setup` only when the item's product label changes, with
+        /// the time of each change from the matrix (sequence-dependent setup).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        changeover: Option<Changeover>,
     },
     /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
     Combiner {
@@ -864,12 +868,42 @@ impl Model {
                     process,
                     operators,
                     also,
+                    changeover,
                 } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
                     }
                     if let Some(s) = setup {
                         dists.push(("setup".into(), s));
+                    }
+                    if let Some(c) = changeover {
+                        if setup.is_none() {
+                            errors.push(format!(
+                                "{}: changeover precisa de setup (o tempo de troca sem linha na matriz)",
+                                obj.name
+                            ));
+                        }
+                        if c.label.trim().is_empty() {
+                            errors.push(format!(
+                                "{}: changeover precisa do nome do rótulo do produto",
+                                obj.name
+                            ));
+                        }
+                        for (k, m) in c.matrix.iter().enumerate() {
+                            if !m.from.is_finite() || !m.to.is_finite() || m.from == m.to {
+                                errors.push(format!(
+                                    "{}: changeover.matrix[{k}] precisa de from e to diferentes",
+                                    obj.name
+                                ));
+                            }
+                            if c.matrix[..k].iter().any(|p| p.from == m.from && p.to == m.to) {
+                                errors.push(format!(
+                                    "{}: changeover.matrix tem a troca {} -> {} repetida",
+                                    obj.name, m.from, m.to
+                                ));
+                            }
+                            dists.push((format!("changeover.matrix[{k}].time"), &m.time));
+                        }
                     }
                     dists.push(("process".into(), process));
                     if also
@@ -1468,10 +1502,12 @@ impl Model {
                     process,
                     operators,
                     also,
+                    changeover,
                 } => Box::new(
                     Processor::new(process.clone())
                         .capacity(*capacity)
                         .setup(setup.clone())
+                        .changeover(changeover.clone())
                         .operators(
                             operators
                                 .as_ref()

@@ -87,6 +87,7 @@ fn processor(mean: f64) -> ObjectKind {
         process: Dist::Exp { mean },
         operators: None,
         also: Vec::new(),
+        changeover: None,
     }
 }
 
