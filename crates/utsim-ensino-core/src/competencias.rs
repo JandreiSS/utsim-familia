@@ -54,6 +54,33 @@ pub fn competencias(
     v.into_iter().collect()
 }
 
+/// The solved missions of each student of a graded class (record → mission ids), and the
+/// students left out because their delivery has a warning (broken chain, bad signature):
+/// only what the signed journal proves is recorded in the program.
+pub fn resolvidas_da_turma(
+    m: &crate::turma::Matriz,
+) -> (BTreeMap<String, BTreeSet<String>>, Vec<String>) {
+    let mut por = BTreeMap::new();
+    let mut com_avisos = Vec::new();
+    for l in &m.linhas {
+        if !l.avisos.is_empty() {
+            com_avisos.push(l.aluno.registro.clone());
+            continue;
+        }
+        let r: BTreeSet<String> = m
+            .missoes
+            .iter()
+            .zip(&l.celulas)
+            .filter(|(_, c)| c.as_ref().is_some_and(|c| c.resolvida))
+            .map(|(id, _)| id.clone())
+            .collect();
+        if !r.is_empty() {
+            por.insert(l.aluno.registro.clone(), r);
+        }
+    }
+    (por, com_avisos)
+}
+
 /// The tools the package ties to some concept, for the teacher to check against the
 /// curriculum of the program.
 pub fn ferramentas(p: &PacoteCarregado) -> BTreeSet<String> {

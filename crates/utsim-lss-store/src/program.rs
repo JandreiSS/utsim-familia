@@ -327,6 +327,8 @@ pub enum TeachingError {
     Level,
     #[error("ferramenta desconhecida no mapa de competências: {0}")]
     Tool(String),
+    #[error("a pessoa {0} não está no cadastro deste programa")]
+    NotAPerson(Id),
     #[error(transparent)]
     Store(#[from] crate::Error),
     #[error("{0}")]
@@ -402,4 +404,131 @@ pub fn record_teaching(
         .map_err(|d| TeachingError::Denied(d.to_string()))?;
     pf.commit(edits, clock)?;
     Ok(id)
+}
+
+/// One practice to record for a person of the program from a class of UTSim Ensino.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExerciseItem {
+    pub person: Id,
+    /// A key of [`utsim_lss_core::mentoria::all_tools`].
+    pub tool: String,
+    pub evidence: String,
+}
+
+/// Records in the program at `program_root`, as `me` (an instructor or the MBB), the
+/// practice of a class of UTSim Ensino: `praticou`, origin `exercicio`, `by` = `me`, all
+/// in one commit. Every person must be in the program's people list and every tool a key
+/// of the map; the batch is checked as a whole by the profiles (`RecordLearning`) before
+/// anything is written. An item equal to an entry already there (same person, tool,
+/// level, origin and evidence) or to an earlier item of the batch is not written again.
+/// Returns the id of each item, new or already there, in the order of `items`.
+pub fn record_exercises(
+    program_root: &Path,
+    me: &Identity,
+    clock: &dyn crate::Clock,
+    items: &[ExerciseItem],
+) -> std::result::Result<Vec<Id>, TeachingError> {
+    use utsim_lss_core::mentoria::{self, Level, Source};
+    let tools = mentoria::all_tools();
+    if let Some(it) = items.iter().find(|it| !tools.iter().any(|t| *t == it.tool)) {
+        return Err(TeachingError::Tool(it.tool.clone()));
+    }
+    let mut pf = ProjectFolder::open(program_root, me, None)?;
+    if !pf.is_program() {
+        return Err(TeachingError::NotAProgram);
+    }
+    let people = programa::members(pf.state());
+    if !people.iter().any(|m| m.id == me.person) {
+        return Err(TeachingError::NotAMember(me.name.clone()));
+    }
+    if let Some(it) = items
+        .iter()
+        .find(|it| !people.iter().any(|m| m.id == it.person))
+    {
+        return Err(TeachingError::NotAPerson(it.person));
+    }
+    if items.is_empty() {
+        return Ok(Vec::new());
+    }
+    let existing = mentoria::entries(pf.state());
+    let same = |person: Id, tool: &str, evidence: &str| {
+        existing
+            .iter()
+            .find(|e| {
+                e.person == Some(person)
+                    && e.tool == tool
+                    && e.level == Level::Practiced
+                    && e.source == Source::Exercise
+                    && e.evidence.trim() == evidence
+            })
+            .map(|e| e.id)
+    };
+    let today = Date::from_unix_ms(clock.now_ms(), clock.utc_offset_minutes());
+    let mut ids = Vec::with_capacity(items.len());
+    let mut new: Vec<(Id, Id, &str, &str)> = Vec::new();
+    let mut edits = Vec::new();
+    for it in items {
+        let evidence = it.evidence.trim();
+        let id = if let Some(id) = same(it.person, &it.tool, evidence) {
+            id
+        } else if let Some((id, ..)) = new
+            .iter()
+            .find(|(_, p, t, e)| *p == it.person && *t == it.tool && *e == evidence)
+        {
+            *id
+        } else {
+            let id = clock.new_id();
+            edits.extend(mentoria::record_level(
+                pf.project_id(),
+                id,
+                it.person,
+                &it.tool,
+                Level::Practiced,
+                Source::Exercise,
+                evidence,
+                me.person,
+                today,
+            ));
+            new.push((id, it.person, &it.tool, evidence));
+            id
+        };
+        ids.push(id);
+    }
+    if !edits.is_empty() {
+        let founder = pf.manifest().created_by;
+        utsim_lss_core::perfis::check_edits(pf.state(), founder, me.person, &edits)
+            .map_err(|d| TeachingError::Denied(d.to_string()))?;
+        pf.commit(edits, clock)?;
+    }
+    Ok(ids)
+}
+
+/// The people of the program at `program_root` with their e-mail trimmed and in lower
+/// case, for UTSim Ensino to tie the students of a class to them. The e-mail is personal
+/// data: only someone who may record learning (an instructor or the MBB) gets the list.
+/// People without an e-mail or anonymised are left out.
+pub fn members(
+    program_root: &Path,
+    me: &Identity,
+) -> std::result::Result<Vec<(Id, String)>, TeachingError> {
+    let pf = ProjectFolder::open(program_root, me, None)?;
+    if !pf.is_program() {
+        return Err(TeachingError::NotAProgram);
+    }
+    let founder = pf.manifest().created_by;
+    utsim_lss_core::perfis::check(
+        pf.state(),
+        founder,
+        me.person,
+        utsim_lss_core::perfis::Action::RecordLearning,
+        None,
+    )
+    .map_err(|d| TeachingError::Denied(d.to_string()))?;
+    let redacted = privacidade::redacted_value(programa::fields::EMAIL, Id::NIL);
+    Ok(programa::members(pf.state())
+        .into_iter()
+        .filter(|m| !m.anonymised)
+        .map(|m| (m.id, m.email.trim().to_lowercase()))
+        .filter(|(_, e)| !e.is_empty() && Value::from(e.as_str()) != redacted)
+        .collect())
 }

@@ -262,3 +262,126 @@ fn missoes_resolvidas_viram_pratica_no_programa() {
     let err = registrar_competencias(&raiz, &beto, &c2, &p, &progresso, None).unwrap_err();
     assert!(err.contains("Beto"), "{err}");
 }
+
+/// Every tool of the `competencias` tables (campaign and the packages of `ensino/pacotes`)
+/// is a key of the competence map of UTSim Seis Sigma, so no entry is refused for an
+/// unknown tool.
+#[test]
+fn ferramentas_das_tabelas_existem_no_mapa_do_seis_sigma() {
+    let todas = utsim_lss_core::mentoria::all_tools();
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ensino/pacotes");
+    let mut pacotes = vec![carregar_campanha().unwrap()];
+    for d in std::fs::read_dir(&raiz).unwrap() {
+        let d = d.unwrap().path();
+        let arq = utsim_ensino_store::arquivos::ler_pacote(&d).unwrap();
+        pacotes.push(utsim_ensino_core::pacote::carregar(&arq).unwrap());
+    }
+    assert!(pacotes.len() >= 3);
+    for p in &pacotes {
+        for (conceito, fs) in &p.pacote.competencias {
+            for f in fs {
+                assert!(
+                    todas.contains(f),
+                    "{}: '{conceito}' liga a ferramenta '{f}', que não está no mapa",
+                    p.pacote.id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn o_professor_registra_a_turma_no_programa() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use utsim_ensino_core::turma::{Aluno, Celula, LinhaMatriz, Matriz};
+    use utsim_ensino_store::seis_sigma::registrar_turma;
+    use utsim_lss_core::mentoria;
+    use utsim_lss_store::Clock;
+
+    struct Relogio(AtomicU64, u8);
+    impl Clock for Relogio {
+        fn now_ms(&self) -> i64 {
+            self.0.fetch_add(1, Ordering::Relaxed) as i64
+        }
+        fn random(&self) -> [u8; 10] {
+            let n = self.0.load(Ordering::Relaxed);
+            let mut r = [self.1; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            r
+        }
+    }
+    let pessoa = |n: u8, nome: &str| Identity {
+        person: utsim_lss_core::Id::v7(1_700_000_000_000, [n; 10]),
+        name: nome.into(),
+        email: format!("p{n}@empresa.com"),
+    };
+    let (mbb, ana) = (pessoa(1, "MBB"), pessoa(2, "Ana"));
+    let (c1, c2) = (
+        Relogio(AtomicU64::new(1_793_000_000_000), 1),
+        Relogio(AtomicU64::new(1_793_000_000_000), 2),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let raiz = ProjectFolder::create_program(&dir.path().join("Programa"), "Programa", &mbb, &c1)
+        .unwrap()
+        .root()
+        .to_path_buf();
+    ProjectFolder::open(&raiz, &ana, None)
+        .unwrap()
+        .register_me(&c2)
+        .unwrap();
+
+    let p = carregar_campanha().unwrap();
+    let aluno = |nome: &str, registro: &str, email: &str| Aluno {
+        nome: nome.into(),
+        registro: registro.into(),
+        apelido: String::new(),
+        email: email.into(),
+    };
+    let resolvida = |nota| {
+        Some(Celula {
+            nota,
+            estrelas: 2,
+            tentativas: 1,
+            dicas: 0,
+            resolvida: true,
+        })
+    };
+    let linha = |a: Aluno, avisos: Vec<String>| LinhaMatriz {
+        aluno: a,
+        celulas: vec![resolvida(92.0), None],
+        avisos,
+    };
+    let matriz = Matriz {
+        missoes: vec!["ato8/medir".into(), "ato1/furadeira".into()],
+        titulos: vec!["Medir".into(), "Furadeira".into()],
+        linhas: vec![
+            linha(aluno("Ana Lima", "ra1", " P2@Empresa.com"), vec![]),
+            linha(aluno("Beto Reis", "ra2", "beto@fora.com"), vec![]),
+            linha(aluno("Caio Melo", "ra3", ""), vec![]),
+            linha(
+                aluno("Dora Luz", "ra4", "p2@empresa.com"),
+                vec!["cadeia quebrada".into()],
+            ),
+        ],
+    };
+    let r = registrar_turma(&raiz, &mbb, &c1, &p, &matriz).unwrap();
+    assert_eq!((r.enviadas, r.alunos), (2, 1), "{r:?}");
+    assert_eq!(r.sem_pessoa, ["Beto Reis (ra2)", "Caio Melo (ra3)"]);
+    assert_eq!(r.com_avisos, ["ra4"]);
+    // Again: nothing repeats.
+    registrar_turma(&raiz, &mbb, &c1, &p, &matriz).unwrap();
+    let pf = ProjectFolder::open(&raiz, &mbb, None).unwrap();
+    let e = mentoria::entries(pf.state());
+    assert_eq!(e.len(), 2, "{e:#?}");
+    assert!(e.iter().all(|x| x.person == Some(ana.person)
+        && x.source == mentoria::Source::Exercise
+        && x.level == mentoria::Level::Practiced
+        && x.by == Some(mbb.person)
+        && x.evidence.contains("UTSim Ensino")
+        && x.evidence.contains("nota 92")
+        && !x.evidence.contains("Ana")
+        && !x.evidence.contains("ra1")));
+    // A common belt cannot read the e-mails nor record the class.
+    let err = registrar_turma(&raiz, &ana, &c2, &p, &matriz).unwrap_err();
+    assert!(!err.is_empty());
+}
