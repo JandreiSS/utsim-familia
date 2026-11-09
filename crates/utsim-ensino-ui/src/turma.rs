@@ -81,7 +81,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
             ui.label(texto::turma_como_entrar());
             egui::Grid::new("entrar").num_columns(2).show(ui, |ui| {
                 ui.label(texto::turma_convite());
-                seletor::campo(
+                crate::abertura::campo(
                     ui,
                     &mut app.turma.convite,
                     seletor::Tipo::Abrir,
@@ -91,7 +91,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                 );
                 ui.end_row();
                 ui.label(texto::turma_pasta_opcional());
-                seletor::campo(
+                crate::abertura::campo(
                     ui,
                     &mut app.turma.pasta,
                     seletor::Tipo::Pasta,
@@ -124,7 +124,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
     ui.label(texto::turma_entrega_texto());
     ui.horizontal(|ui| {
         ui.label(texto::turma_arquivo());
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut app.turma.destino_entrega,
             seletor::Tipo::Salvar,
@@ -475,7 +475,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
         ui.label(texto::turma_construtor_texto());
         egui::Grid::new("caso").num_columns(2).show(ui, |ui| {
             ui.label(texto::turma_modelo());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut s.caso_modelo,
                 seletor::Tipo::Abrir,
@@ -488,7 +488,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             ui.text_edit_singleline(&mut s.caso_titulo);
             ui.end_row();
             ui.label(texto::turma_pasta_pacote());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut s.caso_pasta,
                 seletor::Tipo::Pasta,
@@ -538,7 +538,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     ui.collapsing(texto::turma_nova(), |ui| {
         egui::Grid::new("nova_turma").num_columns(2).show(ui, |ui| {
             ui.label(texto::turma_pasta_local_drive());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut s.pasta,
                 seletor::Tipo::Pasta,
@@ -557,7 +557,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             ui.text_edit_singleline(&mut s.finalidade);
             ui.end_row();
             ui.label(texto::turma_lista_csv());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut s.csv,
                 seletor::Tipo::Abrir,
@@ -610,7 +610,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
 
     ui.horizontal(|ui| {
         ui.label(texto::turma_abrir_turma());
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut s.pasta,
             seletor::Tipo::Pasta,
@@ -657,7 +657,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     ));
     ui.horizontal(|ui| {
         ui.label(texto::turma_importar_lista());
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut s.csv,
             seletor::Tipo::Abrir,
@@ -701,7 +701,7 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     }
     ui.horizontal(|ui| {
         ui.label(texto::turma_entregas_utsr());
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut s.pasta_utsr,
             seletor::Tipo::Pasta,
@@ -1203,7 +1203,7 @@ fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
     ui.label(texto::programa_texto());
     ui.horizontal(|ui| {
         ui.label(texto::turma_pasta_programa());
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut app.turma.programa,
             seletor::Tipo::Pasta,

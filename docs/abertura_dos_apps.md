@@ -29,7 +29,8 @@ Toda abertura tem, de cima para baixo:
    fica apagada e diz por quê ao passar o mouse.
 4. **Recentes:** à direita, um clique para voltar. Um item que sumiu aparece apagado, com
    um botão para tirá-lo da lista.
-5. **Onde fica salvo:** sempre visível. Mostra a pasta aberta e o botão "Mostrar no
+5. **Onde fica salvo:** à direita, embaixo dos recentes, sempre à vista (também em
+   1280x720). Mostra a pasta aberta e o botão "Mostrar no
    explorador", e explica a pasta em linguagem simples (inclusive o Google Drive para
    trabalhar em equipe).
 
@@ -61,7 +62,9 @@ Feitas sem janela pelos testes `tests/abertura.rs` de cada app
 ![Qualidade, primeira vez](imagens/abertura/qualidade_abertura_primeira_vez.png)
 ![Segurança com unidade aberta](imagens/abertura/seguranca_abertura.png)
 ![Estatística com unidade aberta](imagens/abertura/estatistica_abertura.png)
+![Estatística em 1280x720](imagens/abertura/estatistica_abertura_1280x720.png)
 ![Seis Sigma, identidade](imagens/abertura/seis_sigma_identidade.png)
 ![Seis Sigma](imagens/abertura/seis_sigma_abertura.png)
 ![Ensino, primeira vez](imagens/abertura/ensino_abertura_primeira_vez.png)
 ![Ensino](imagens/abertura/ensino_abertura.png)
+![Ensino em inglês](imagens/abertura/ensino_abertura_en.png)

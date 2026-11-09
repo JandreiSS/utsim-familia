@@ -112,6 +112,9 @@ impl Sessao {
 
     /// Guarda o nome do autor para a próxima vez.
     pub fn lembrar_autor(&mut self, autor: &str) {
+        if self.erro {
+            self.avisar("");
+        }
         if self.config.autor != autor {
             self.config.autor = autor.to_string();
             self.gravar_config();
@@ -141,10 +144,9 @@ impl Sessao {
                 let msg = format!("Unidade '{}' aberta.", u.manifesto.nome);
                 self.unidade = Some(u);
                 self.versao += 1;
+                // Um erro antigo (outra pasta, nome faltando) não vale mais.
+                self.avisar(msg);
                 self.lembrar(autor.trim(), caminho);
-                if !self.erro {
-                    self.avisar(msg);
-                }
                 true
             }
             Err(e) => {
@@ -160,10 +162,9 @@ impl Sessao {
                 let msg = format!("Unidade '{}' criada.", u.manifesto.nome);
                 self.unidade = Some(u);
                 self.versao += 1;
+                // Um erro antigo (outra pasta, nome faltando) não vale mais.
+                self.avisar(msg);
                 self.lembrar(autor.trim(), caminho);
-                if !self.erro {
-                    self.avisar(msg);
-                }
                 true
             }
             Err(e) => {

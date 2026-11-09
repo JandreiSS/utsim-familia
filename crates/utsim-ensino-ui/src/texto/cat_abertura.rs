@@ -51,13 +51,13 @@ textos! {
         "Your stars, grades and submissions are kept in a folder of yours on this computer. Nothing is sent over the internet: to hand in, use the Class tab.",
         "Las estrellas, las notas y las entregas quedan en una carpeta suya en este equipo. Nada se envía por internet: para entregar, use la pestaña Turma.";
     ab_continuar:
-        "Continuar: {}",
-        "Continue: {}",
-        "Continuar: {}";
+        "Continuar a campanha",
+        "Continue the campaign",
+        "Continuar la campaña";
     ab_continuar_texto:
-        "Volte ao mapa das missões, de onde parou.",
-        "Back to the mission map, where you left off.",
-        "Vuelva al mapa de misiones, donde lo dejó.";
+        "{}: volte ao mapa das missões, de onde parou.",
+        "{}: back to the mission map, where you left off.",
+        "{}: vuelva al mapa de misiones, donde lo dejó.";
     ab_turma_texto:
         "Entre na turma do professor e entregue as suas missões.",
         "Join your teacher's class and hand in your missions.",
@@ -146,4 +146,24 @@ textos! {
         "Escolher a pasta do programa",
         "Choose the program folder",
         "Elegir la carpeta del programa";
+    sel_procurar:
+        "Procurar…",
+        "Browse…",
+        "Buscar…";
+    sel_ajuda:
+        "Abre o explorador de arquivos para escolher.",
+        "Opens the file explorer to choose.",
+        "Abre el explorador de archivos para elegir.";
+    sel_dica_pasta:
+        "pasta: escreva ou clique em Procurar…",
+        "folder: type it or click Browse…",
+        "carpeta: escríbala o haga clic en Buscar…";
+    sel_dica_arquivo:
+        "arquivo: escreva ou clique em Procurar…",
+        "file: type it or click Browse…",
+        "archivo: escríbalo o haga clic en Buscar…";
+    sel_todos:
+        "Todos os arquivos",
+        "All files",
+        "Todos los archivos";
 }

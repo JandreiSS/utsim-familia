@@ -83,6 +83,18 @@ fn nome_inicial(atual: &str) -> Option<String> {
 /// `atual` é o caminho já escrito, de onde o seletor parte.
 #[cfg(feature = "arquivos")]
 pub fn procurar(tipo: Tipo, titulo: &str, filtros: &[Filtro], atual: &str) -> Option<PathBuf> {
+    procurar_com(tipo, titulo, filtros, atual, &Textos::PT)
+}
+
+/// [`procurar`] com os textos dados.
+#[cfg(feature = "arquivos")]
+pub fn procurar_com(
+    tipo: Tipo,
+    titulo: &str,
+    filtros: &[Filtro],
+    atual: &str,
+    textos: &Textos<'_>,
+) -> Option<PathBuf> {
     let mut d = rfd::FileDialog::new().set_title(titulo);
     if let Some(p) = pasta_inicial(atual) {
         d = d.set_directory(p);
@@ -92,7 +104,7 @@ pub fn procurar(tipo: Tipo, titulo: &str, filtros: &[Filtro], atual: &str) -> Op
             d = d.add_filter(f.nome, f.extensoes);
         }
         if !filtros.is_empty() {
-            d = d.add_filter("Todos os arquivos", &["*"]);
+            d = d.add_filter(textos.todos_os_arquivos, &["*"]);
         }
     }
     match tipo {
@@ -117,6 +129,27 @@ pub fn procurar(tipo: Tipo, titulo: &str, filtros: &[Filtro], atual: &str) -> Op
 /// O rótulo do botão (com reticências: abre uma janela).
 pub const PROCURAR: &str = "Procurar…";
 
+/// Os textos do campo e do seletor (para os apps com mais de uma língua).
+#[derive(Debug, Clone, Copy)]
+pub struct Textos<'a> {
+    pub procurar: &'a str,
+    pub ajuda: &'a str,
+    pub dica_pasta: &'a str,
+    pub dica_arquivo: &'a str,
+    pub todos_os_arquivos: &'a str,
+}
+
+impl Textos<'static> {
+    /// Em português.
+    pub const PT: Textos<'static> = Textos {
+        procurar: PROCURAR,
+        ajuda: "Abre o explorador de arquivos para escolher.",
+        dica_pasta: "pasta: escreva ou clique em Procurar…",
+        dica_arquivo: "arquivo: escreva ou clique em Procurar…",
+        todos_os_arquivos: "Todos os arquivos",
+    };
+}
+
 /// O campo de caminho: a caixa de texto e, ao lado, o botão "Procurar…" que abre o seletor
 /// nativo. Devolve a resposta da caixa; `changed()` também vale quando o seletor escolheu.
 #[cfg(feature = "arquivos")]
@@ -128,10 +161,24 @@ pub fn campo(
     filtros: &[Filtro],
     largura: f32,
 ) -> Response {
+    campo_com(ui, texto, tipo, titulo, filtros, largura, &Textos::PT)
+}
+
+/// [`campo`] com os textos dados.
+#[cfg(feature = "arquivos")]
+pub fn campo_com(
+    ui: &mut Ui,
+    texto: &mut String,
+    tipo: Tipo,
+    titulo: &str,
+    filtros: &[Filtro],
+    largura: f32,
+    textos: &Textos<'_>,
+) -> Response {
     ui.horizontal(|ui| {
         let dica = match tipo {
-            Tipo::Pasta => "pasta: escreva ou clique em Procurar…",
-            Tipo::Abrir | Tipo::Salvar => "arquivo: escreva ou clique em Procurar…",
+            Tipo::Pasta => textos.dica_pasta,
+            Tipo::Abrir | Tipo::Salvar => textos.dica_arquivo,
         };
         let mut r = ui.add(
             egui::TextEdit::singleline(texto)
@@ -139,10 +186,10 @@ pub fn campo(
                 .desired_width(largura),
         );
         if ui
-            .button(PROCURAR)
-            .on_hover_text("Abre o explorador de arquivos para escolher.")
+            .button(textos.procurar)
+            .on_hover_text(textos.ajuda)
             .clicked()
-            && let Some(p) = procurar(tipo, titulo, filtros, texto)
+            && let Some(p) = procurar_com(tipo, titulo, filtros, texto, textos)
         {
             *texto = p.display().to_string();
             r.mark_changed();

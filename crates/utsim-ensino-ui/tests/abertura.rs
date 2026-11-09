@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use egui::{Context, vec2};
 use utsim_ensino_store::perfil::Perfil;
-use utsim_ensino_ui::{App, NaHora, Tela};
+use utsim_ensino_ui::{App, NaHora, Tela, texto};
 use utsim_ui_tema::captura::{Captura, Imagem};
 
 fn conferir(img: &Imagem, nome: &str) {
@@ -39,4 +39,14 @@ fn abertura_picture() {
     app.tela = Tela::Identidade;
     let img = cap.imagem(3, |ui| app.draw(ui));
     conferir(&img, "ensino_abertura");
+    // The longest texts of each card, in the other two languages.
+    for (i, nome) in [
+        (texto::Idioma::En, "ensino_abertura_en"),
+        (texto::Idioma::Es, "ensino_abertura_es"),
+    ] {
+        texto::definir(i);
+        let img = cap.imagem(3, |ui| app.draw(ui));
+        conferir(&img, nome);
+    }
+    texto::definir(texto::Idioma::Pt);
 }

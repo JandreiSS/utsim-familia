@@ -499,7 +499,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         }
         ui.horizontal(|ui| {
             ui.label(texto::missao_pasta());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut m.pasta_dados,
                 seletor::Tipo::Pasta,
@@ -708,7 +708,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(texto::missao_modelo_texto()).weak());
         ui.horizontal(|ui| {
             ui.label(texto::missao_arquivo_ron());
-            seletor::campo(
+            crate::abertura::campo(
                 ui,
                 &mut m.caminho_modelo,
                 seletor::Tipo::Salvar,
@@ -1221,7 +1221,7 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
     ui.separator();
     ui.label(texto::missao_levar_cenario());
     ui.horizontal(|ui| {
-        seletor::campo(
+        crate::abertura::campo(
             ui,
             &mut s.caminho_ron,
             seletor::Tipo::Salvar,

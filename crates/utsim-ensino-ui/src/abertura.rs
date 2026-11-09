@@ -28,6 +28,37 @@ fn rotulos() -> Rotulos<'static> {
     }
 }
 
+/// The texts of the "Browse…" button and of the system picker, from the catalogue.
+pub(crate) fn textos_seletor() -> arquivos::Textos<'static> {
+    arquivos::Textos {
+        procurar: texto::sel_procurar(),
+        ajuda: texto::sel_ajuda(),
+        dica_pasta: texto::sel_dica_pasta(),
+        dica_arquivo: texto::sel_dica_arquivo(),
+        todos_os_arquivos: texto::sel_todos(),
+    }
+}
+
+/// A path field with the "Browse…" button, in the language of the app.
+pub(crate) fn campo(
+    ui: &mut Ui,
+    valor: &mut String,
+    tipo: Tipo,
+    titulo: &str,
+    filtros: &[Filtro],
+    largura: f32,
+) -> egui::Response {
+    arquivos::campo_com(ui, valor, tipo, titulo, filtros, largura, &textos_seletor())
+}
+
+/// The filter of mission packages.
+pub(crate) fn filtro_pacote() -> Filtro {
+    Filtro {
+        nome: texto::ab_pacote_filtro(),
+        extensoes: &["utse"],
+    }
+}
+
 fn editando_id() -> egui::Id {
     egui::Id::new("ensino-abertura-editando-identidade")
 }
@@ -46,14 +77,14 @@ impl App {
             .as_ref()
             .map(|p| p.pacote.titulo.clone())
             .unwrap_or_else(|| texto::aba_campanha().to_string());
-        let continuar = texto::f(texto::ab_continuar(), &[&titulo_pacote]);
+        let continuar = texto::f(texto::ab_continuar_texto(), &[&titulo_pacote]);
         let bloqueio = texto::ab_identidade_bloqueio();
         let mut acoes = vec![
             Acao::nova(
                 "continuar",
                 Simbolo::Continuar,
+                texto::ab_continuar(),
                 &continuar,
-                texto::ab_continuar_texto(),
             )
             .principal()
             .bloqueada_se(sem_identidade, bloqueio),
@@ -126,14 +157,14 @@ impl App {
             Some(Escolha::Acao("glossario")) => self.tela = Tela::Glossario,
             Some(Escolha::Acao("professor")) => self.tela = Tela::Professor,
             Some(Escolha::Acao("pacote")) => {
-                let filtro = Filtro {
-                    nome: texto::ab_pacote_filtro(),
-                    extensoes: &["utse"],
-                };
                 let atual = self.caminho_pacote.clone();
-                if let Some(p) =
-                    arquivos::procurar(Tipo::Abrir, texto::ab_pacote(), &[filtro], &atual)
-                {
+                if let Some(p) = arquivos::procurar_com(
+                    Tipo::Abrir,
+                    texto::ab_pacote(),
+                    &[filtro_pacote()],
+                    &atual,
+                    &textos_seletor(),
+                ) {
                     self.abrir_e_ir(&p);
                 }
             }

@@ -204,6 +204,11 @@ impl Abertura<'_> {
                                     if let Some(e) = self.recentes(ui) {
                                         escolha = Some(e);
                                     }
+                                    // "Onde fica salvo" fica à vista, mesmo em telas baixas.
+                                    ui.add_space(20.0);
+                                    if let Some(e) = self.onde(ui) {
+                                        escolha = Some(e);
+                                    }
                                 });
                             });
                         } else {
@@ -214,10 +219,10 @@ impl Abertura<'_> {
                             if let Some(e) = self.recentes(ui) {
                                 escolha = Some(e);
                             }
-                        }
-                        ui.add_space(24.0);
-                        if let Some(e) = self.onde(ui) {
-                            escolha = Some(e);
+                            ui.add_space(20.0);
+                            if let Some(e) = self.onde(ui) {
+                                escolha = Some(e);
+                            }
                         }
                         rodape(ui);
                         ui.add_space(24.0);
@@ -325,40 +330,40 @@ impl Abertura<'_> {
         quadro(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(32.0), Sense::hover());
                 ui.painter().rect_filled(
                     r,
                     CornerRadius::same(RAIO),
                     self.cor.gamma_multiply(0.22),
                 );
-                pintar_simbolo(ui.painter(), r.shrink(10.0), Simbolo::Abrir, self.cor);
-                ui.add_space(6.0);
-                ui.vertical(|ui| {
-                    match self.onde.caminho {
-                        Some(c) => {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new(self.rotulos.aberto_agora).color(fraco(ui)));
-                                ui.label(
-                                    RichText::new(c.display().to_string())
-                                        .monospace()
-                                        .color(forte(ui)),
-                                );
-                                if ui.button(self.rotulos.mostrar_no_explorador).clicked() {
-                                    escolha = Some(Escolha::MostrarPasta(c.to_path_buf()));
-                                }
-                            });
-                        }
-                        None => {
-                            ui.label(
-                                RichText::new(self.rotulos.nada_aberto)
-                                    .strong()
-                                    .color(forte(ui)),
-                            );
-                        }
-                    }
-                    ui.label(RichText::new(self.onde.explicacao).color(fraco(ui)));
-                });
+                pintar_simbolo(ui.painter(), r.shrink(8.0), Simbolo::Abrir, self.cor);
+                let titulo = match self.onde.caminho {
+                    Some(_) => self.rotulos.aberto_agora,
+                    None => self.rotulos.nada_aberto,
+                };
+                ui.label(RichText::new(titulo).strong().color(forte(ui)));
             });
+            if let Some(c) = self.onde.caminho {
+                ui.add_space(4.0);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(c.display().to_string())
+                            .monospace()
+                            .size(13.0)
+                            .color(forte(ui)),
+                    )
+                    .wrap(),
+                );
+                if ui.button(self.rotulos.mostrar_no_explorador).clicked() {
+                    escolha = Some(Escolha::MostrarPasta(c.to_path_buf()));
+                }
+            }
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(self.onde.explicacao)
+                    .size(13.0)
+                    .color(fraco(ui)),
+            );
         });
         escolha
     }
@@ -476,7 +481,9 @@ fn cartao(ui: &mut Ui, a: &Acao<'_>, cor: Color32, largura: f32) -> bool {
     let (r, resp) = ui.allocate_exact_size(vec2(largura, altura), sense);
     let resp = match a.bloqueio {
         Some(m) => resp.on_hover_text(m),
-        None => resp.on_hover_cursor(egui::CursorIcon::PointingHand),
+        None => resp
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(a.titulo),
     };
     if ui.is_rect_visible(r) {
         let v = ui.visuals();
