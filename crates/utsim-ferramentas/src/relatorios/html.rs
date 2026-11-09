@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 
-use super::pdf::{PALETTE, REFERENCE, SIGNAL, axis, dark, light, range, tone_colours};
+use super::pdf::{LINE_W, PALETTE, REFERENCE, SIGNAL, axis, dark, light, range, tone_colours};
 use super::{Block, Chart, ChartKind, Cover, Document, Kpi, Template, Tone};
 
 type Rgb = (f64, f64, f64);
@@ -190,15 +190,20 @@ impl Area {
     }
 }
 
-fn legend(entries: &[(String, Rgb)]) -> String {
+/// One entry per series: name, colour and whether it is drawn as a line (a dash in the
+/// legend, like the PDF) or as marks (a square).
+fn legend(entries: &[(String, Rgb, bool)]) -> String {
     let mut o = String::from("<div class=\"legend\">");
-    for (s, c) in entries {
-        let _ = write!(
-            o,
-            "<span><i style=\"background:{}\"></i>{}</span>",
-            hex(*c),
-            esc(s)
-        );
+    for (s, c, line) in entries {
+        let mark = if *line {
+            format!(
+                "<i class=\"ln\" style=\"border-top-color:{}\"></i>",
+                hex(*c)
+            )
+        } else {
+            format!("<i style=\"background:{}\"></i>", hex(*c))
+        };
+        let _ = write!(o, "<span>{mark}{}</span>", esc(s));
     }
     o.push_str("</div>");
     o
@@ -319,27 +324,31 @@ fn chart(c: &Chart, accent: Rgb) -> String {
     }
     for (_, v) in &c.hlines {
         if v.is_finite() {
-            s.line((a.left, a.y(*v)), (a.right, a.y(*v)), 0.7, REFERENCE);
+            s.line((a.left, a.y(*v)), (a.right, a.y(*v)), LINE_W, REFERENCE);
         }
     }
     let named = c.series.iter().filter(|(s, _)| !s.is_empty()).count();
     let total = named + c.hlines.len() + c.bands.len();
     let leg = if total > 1 || !c.hlines.is_empty() || !c.bands.is_empty() {
-        let entries: Vec<(String, Rgb)> =
-            c.series
-                .iter()
-                .enumerate()
-                .filter(|(_, (s, _))| !s.is_empty())
-                .map(|(i, (s, _))| (s.clone(), PALETTE[i % PALETTE.len()]))
-                .chain(
-                    c.hlines
-                        .iter()
-                        .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE)),
+        let entries: Vec<(String, Rgb, bool)> = c
+            .series
+            .iter()
+            .enumerate()
+            .filter(|(_, (s, _))| !s.is_empty())
+            .map(|(i, (s, _))| (s.clone(), PALETTE[i % PALETTE.len()], !bars))
+            .chain(
+                c.hlines
+                    .iter()
+                    .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE, true)),
+            )
+            .chain(c.bands.iter().enumerate().map(|(bi, (s, _, _))| {
+                (
+                    s.clone(),
+                    light(PALETTE[(bi + 2) % PALETTE.len()], 0.35),
+                    false,
                 )
-                .chain(c.bands.iter().enumerate().map(|(bi, (s, _, _))| {
-                    (s.clone(), light(PALETTE[(bi + 2) % PALETTE.len()], 0.35))
-                }))
-                .collect();
+            }))
+            .collect();
         legend(&entries)
     } else {
         String::new()
@@ -389,7 +398,7 @@ fn pareto(c: &Chart, accent: Rgb) -> String {
         );
     }
     let y80 = a.y(0.8 * total);
-    s.line((a.left, y80), (a.right, y80), 0.7, REFERENCE);
+    s.line((a.left, y80), (a.right, y80), LINE_W, REFERENCE);
     for pct in [0, 50, 80, 100] {
         let y = a.y(total * f64::from(pct) / 100.0);
         s.text(
@@ -411,9 +420,10 @@ fn pareto(c: &Chart, accent: Rgb) -> String {
                 name
             },
             accent,
+            false,
         ),
-        ("acumulado (%)".into(), PALETTE[1]),
-        ("80 %".into(), REFERENCE),
+        ("acumulado (%)".into(), PALETTE[1], true),
+        ("80 %".into(), REFERENCE, true),
     ]);
     figure(&c.title, s.finish(), leg)
 }
@@ -458,13 +468,14 @@ fn histogram(c: &Chart, accent: Rgb) -> String {
             .first()
             .map_or(String::new(), |s| format!("{} (n = {})", s.0, data.len())),
         accent,
+        false,
     )];
     for (name, v) in &c.hlines {
         if v.is_finite() {
             let x = a.x(*v, x0, x1);
-            s.line((x, a.bottom), (x, a.top), 1.0, REFERENCE);
+            s.line((x, a.bottom), (x, a.top), LINE_W, REFERENCE);
             s.text(x + 2.0, a.top + 9.0, 7.0, true, REFERENCE, "start", name);
-            entries.push((format!("{name} = {}", axis(*v)), REFERENCE));
+            entries.push((format!("{name} = {}", axis(*v)), REFERENCE, true));
         }
     }
     figure(&c.title, s.finish(), legend(&entries))
@@ -490,7 +501,7 @@ fn scatter(c: &Chart, accent: Rgb) -> String {
     }
     a.x_ticks(&mut s, x0, x1);
     let cnt = pts.len() as f64;
-    let mut entries = vec![(format!("{} × {}", ys.0, xs.0), accent)];
+    let mut entries = vec![(format!("{} × {}", ys.0, xs.0), accent, false)];
     if pts.len() >= 2 {
         let mx = pts.iter().map(|p| p.0).sum::<f64>() / cnt;
         let my = pts.iter().map(|p| p.1).sum::<f64>() / cnt;
@@ -505,7 +516,11 @@ fn scatter(c: &Chart, accent: Rgb) -> String {
                 1.0,
                 PALETTE[1],
             );
-            entries.push((format!("y = {} + {}·x", axis(b0), axis(b)), PALETTE[1]));
+            entries.push((
+                format!("y = {} + {}·x", axis(b0), axis(b)),
+                PALETTE[1],
+                true,
+            ));
         }
     }
     figure(&c.title, s.finish(), legend(&entries))
@@ -801,7 +816,7 @@ table.data th,table.data td{border:.4pt solid #999;padding:2.5pt;text-align:left
 table.data thead{display:table-header-group}table.data tr{break-inside:avoid}table.data tr.z td{background:#f4f5f7}\
 ul{margin:0 0 6pt;padding-left:14pt}.sig{margin-top:30pt;width:220pt;border-top:.5pt solid #000;padding-top:3pt;font-size:9pt;break-inside:avoid}\
 figure.chart,div.chart{margin:0 0 8pt;break-inside:avoid}.fig{width:100%;height:auto;display:block;font-family:Helvetica,Arial,sans-serif}\
-.legend{display:flex;flex-wrap:wrap;gap:2pt 14pt;font-size:7.5pt;margin-top:2pt}.legend i{display:inline-block;width:7pt;height:7pt;margin-right:3pt}\
+.legend{display:flex;flex-wrap:wrap;gap:2pt 14pt;font-size:7.5pt;margin-top:2pt}.legend i{display:inline-block;width:7pt;height:7pt;margin-right:3pt}.legend i.ln{width:10pt;height:0;border-top:1.2pt solid;vertical-align:middle;margin-left:-1pt}\
 .callout{padding:6pt 10pt;margin:0 0 8pt;font-size:9.5pt;break-inside:avoid}.ct{font-weight:bold;font-size:10pt;margin-bottom:2pt}\
 .kpis{display:flex;gap:8pt;margin:0 0 8pt;flex-wrap:wrap}.kpi{flex:1 1 0;min-width:90pt;padding:6pt 8pt;break-inside:avoid}\
 .kl{font-size:8pt;color:#595959}.kv{font-size:18pt;font-weight:bold}.kn{font-size:7.5pt;color:#595959}\
