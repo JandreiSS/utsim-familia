@@ -169,6 +169,7 @@ impl App {
             nome: String::new(),
             registro: String::new(),
             apelido: String::new(),
+            email: String::new(),
         });
         let caminho_pacote = config
             .pacote_aberto
@@ -279,6 +280,7 @@ impl App {
             } else {
                 apelido.trim().into()
             },
+            email: String::new(),
         });
         self.salvar_config();
         self.mensagem = None;
