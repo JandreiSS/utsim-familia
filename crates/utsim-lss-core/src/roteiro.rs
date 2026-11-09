@@ -241,7 +241,12 @@ pub const PHASES: [Phase; 5] = [
             Step {
                 name: "Gerar e escolher soluções",
                 purpose: "Propor soluções para cada causa comprovada e escolher com critérios.",
-                tools: &[t("Ações", Screen("acoes")), t("Matriz de seleção", Soon)],
+                tools: &[
+                    t("Ações", Screen("acoes")),
+                    t("Matriz de seleção", Deliverable(Tool::Selection)),
+                    t("SMED", Deliverable(Tool::Smed)),
+                    t("5S", Deliverable(Tool::FiveS)),
+                ],
                 check: None,
             },
             Step {
@@ -291,7 +296,10 @@ pub const PHASES: [Phase; 5] = [
                 purpose: "Acompanhar o processo com cartas de controle.",
                 tools: &[
                     t("Carta de controle", Analysis("carta")),
-                    t("Painel do gêmeo", Soon),
+                    t(
+                        "Leitura do gêmeo no plano de controle",
+                        Deliverable(Tool::ControlPlan),
+                    ),
                 ],
                 check: None,
             },
@@ -305,7 +313,8 @@ pub const PHASES: [Phase; 5] = [
                 name: "Padronização",
                 purpose: "Atualizar procedimentos e treinar quem opera.",
                 tools: &[
-                    t("Trabalho padronizado", Soon),
+                    t("Trabalho padronizado", Deliverable(Tool::StandardWork)),
+                    t("5S", Deliverable(Tool::FiveS)),
                     t("A3", Deliverable(Tool::A3)),
                 ],
                 check: None,

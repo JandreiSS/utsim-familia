@@ -1,6 +1,6 @@
 [package]
 name = "utsim-ferramentas"
-description = "Ferramentas de solução de problemas comuns aos apps da família (FMEA com a tabela de AP, Ishikawa, 5 porquês, planos de controle e de reação, A3, Pareto, gerador de relatórios em PDF e CSV), sem estado de projeto e sem interface"
+description = "Ferramentas de solução de problemas comuns aos apps da família (FMEA com a tabela de AP, Ishikawa, 5 porquês, planos de controle e de reação, A3, Pareto, QFD, poka-yoke, seleção de soluções, 5S, SMED, trabalho padronizado, gerador de relatórios em PDF e CSV), sem estado de projeto e sem interface"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
