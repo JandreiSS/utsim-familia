@@ -8329,6 +8329,7 @@ dependencies = [
  "utsim-fluid",
  "utsim-look",
  "utsim-model",
+ "utsim-objects",
  "utsim-opt",
  "utsim-scene",
  "utsim-script",

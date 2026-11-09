@@ -263,7 +263,7 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
                     .perfil
                     .salvar_progresso(&pacote.pacote.id, &app.progresso)
                 {
-                    app.mensagem = Some(format!("não foi possível salvar o progresso: {e}"));
+                    app.mensagem = Some(texto::f(texto::missao_erro_salvar_progresso(), &[&e]));
                 }
                 // A solved mission records the practice in the company program.
                 if res.resolvida
@@ -282,12 +282,17 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
                     });
                     match r {
                         Ok(x) if !x.erros.is_empty() => {
-                            app.mensagem = Some(format!("competências: {}", x.erros.join("; ")))
+                            app.mensagem = Some(texto::f(
+                                texto::missao_competencias_erros(),
+                                &[&x.erros.join("; ")],
+                            ))
                         }
                         Ok(_) => {}
                         Err(e) => {
-                            app.mensagem =
-                                Some(format!("competências não registradas no programa: {e}"))
+                            app.mensagem = Some(texto::f(
+                                texto::missao_competencias_nao_registradas(),
+                                &[&e],
+                            ))
                         }
                     }
                 }
@@ -298,7 +303,8 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
                     Ok((_, Some(aviso))) => app.mensagem = Some(aviso),
                     Ok(_) => {}
                     Err(e) => {
-                        app.mensagem = Some(format!("tentativa não registrada no diário: {e}"))
+                        app.mensagem =
+                            Some(texto::f(texto::missao_tentativa_nao_registrada(), &[&e]))
                     }
                 }
             }
@@ -308,10 +314,10 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
 
 fn situacao_texto(s: Situacao) -> (&'static str, Color32) {
     match s {
-        Situacao::Atingida => ("meta atingida", VERDE),
-        Situacao::DentroDaTolerancia => ("dentro da tolerância", AMARELO),
-        Situacao::NaoAtingida => ("meta não atingida", VERMELHO),
-        Situacao::SemMeta => ("sem meta", Color32::GRAY),
+        Situacao::Atingida => (texto::missao_meta_atingida(), VERDE),
+        Situacao::DentroDaTolerancia => (texto::missao_dentro_tolerancia(), AMARELO),
+        Situacao::NaoAtingida => (texto::missao_meta_nao_atingida(), VERMELHO),
+        Situacao::SemMeta => (texto::missao_sem_meta(), Color32::GRAY),
     }
 }
 
@@ -337,8 +343,11 @@ fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
                     && *custo_unitario > 0.0
                 {
                     ui.label(
-                        RichText::new(format!("{} cada unidade a mais", dinheiro(*custo_unitario)))
-                            .weak(),
+                        RichText::new(texto::f(
+                            texto::missao_cada_unidade(),
+                            &[&dinheiro(*custo_unitario)],
+                        ))
+                        .weak(),
                     );
                 }
             });
@@ -399,10 +408,16 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     let mc = m.missao().clone();
     let missao = &mc.missao;
     ui.horizontal(|ui| {
-        if ui.button("← Campanha").clicked() {
+        if ui.button(texto::missao_campanha()).clicked() {
             app.tela = Tela::Mapa;
         }
-        ui.label(RichText::new(format!("Missão {}", numero_missao(&m.pacote, m.indice))).weak());
+        ui.label(
+            RichText::new(texto::f(
+                texto::missao_numero(),
+                &[&numero_missao(&m.pacote, m.indice)],
+            ))
+            .weak(),
+        );
     });
     let Some(m) = app.missao.as_mut() else { return };
     texto::markdown(ui, &mc.texto);
@@ -419,12 +434,12 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                     .map(|t| t.nome.clone())
             })
             .collect();
-        ui.label(RichText::new(format!("Conceitos: {}", nomes.join(", "))).weak());
+        ui.label(RichText::new(texto::f(texto::missao_conceitos(), &[&nomes.join(", ")])).weak());
     }
     ui.separator();
 
     if !missao.medicoes.is_empty() {
-        ui.label(RichText::new("Medições do estado atual").strong());
+        ui.label(RichText::new(texto::missao_medicoes()).strong());
         match &m.medicoes {
             Some(v) => {
                 for l in v {
@@ -433,7 +448,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
             }
             None => {
                 if ui
-                    .add_enabled(m.trabalho.is_none(), egui::Button::new(texto::MEDIR))
+                    .add_enabled(m.trabalho.is_none(), egui::Button::new(texto::medir()))
                     .clicked()
                 {
                     m.medir(aluno.clone(), executor.as_ref(), Some(ctx.clone()));
@@ -444,71 +459,70 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.dados.is_empty() {
-        ui.label(RichText::new("Dados da sua fábrica").strong());
-        ui.label(
-            RichText::new(
-                "Os dados foram gerados para você: outro aluno recebe outros números. Analise com as ferramentas do jogo ou leve para o UTSim Seis Sigma, e responda abaixo.",
-            )
-            .weak(),
-        );
+        ui.label(RichText::new(texto::missao_dados_titulo()).strong());
+        ui.label(RichText::new(texto::missao_dados_texto()).weak());
         for cj in &missao.dados {
             let c = cj.gerar(&missao.id, &aluno);
-            ui.collapsing(format!("{} ({} linhas)", cj.nome, c.linhas.len()), |ui| {
-                egui::Grid::new(("dados", &cj.id))
-                    .striped(true)
-                    .show(ui, |ui| {
-                        for h in &c.cabecalho {
-                            ui.label(RichText::new(h).strong());
-                        }
-                        ui.end_row();
-                        for l in c.linhas.iter().take(12) {
-                            for v in l {
-                                ui.label(v);
+            ui.collapsing(
+                texto::f(texto::missao_dados_linhas(), &[&cj.nome, &c.linhas.len()]),
+                |ui| {
+                    egui::Grid::new(("dados", &cj.id))
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for h in &c.cabecalho {
+                                ui.label(RichText::new(h).strong());
                             }
                             ui.end_row();
-                        }
-                    });
-                if c.linhas.len() > 12 {
-                    ui.label(
-                        RichText::new(format!(
-                            "... e mais {} linhas no arquivo",
-                            c.linhas.len() - 12
-                        ))
-                        .weak(),
-                    );
-                }
-                ui.label(RichText::new("Ferramentas do jogo").strong());
-                for l in utsim_ensino_core::questoes::ferramenta(cj, &c) {
-                    ui.label(l);
-                }
-            });
+                            for l in c.linhas.iter().take(12) {
+                                for v in l {
+                                    ui.label(v);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    if c.linhas.len() > 12 {
+                        ui.label(
+                            RichText::new(texto::f(
+                                texto::missao_mais_linhas(),
+                                &[&(c.linhas.len() - 12)],
+                            ))
+                            .weak(),
+                        );
+                    }
+                    ui.label(RichText::new(texto::missao_ferramentas()).strong());
+                    for l in utsim_ensino_core::questoes::ferramenta(cj, &c) {
+                        ui.label(l);
+                    }
+                },
+            );
         }
         ui.horizontal(|ui| {
-            ui.label("Pasta");
+            ui.label(texto::missao_pasta());
             ui.text_edit_singleline(&mut m.pasta_dados);
-            if ui.button("Gravar os dados (.csv)").clicked() {
+            if ui.button(texto::missao_gravar_csv()).clicked() {
                 let pasta = std::path::PathBuf::from(m.pasta_dados.trim());
-                let r = std::fs::create_dir_all(&pasta).map_err(|e| e.to_string()).and_then(|_| {
-                    for cj in &missao.dados {
-                        let c = cj.gerar(&missao.id, &aluno);
-                        std::fs::write(pasta.join(format!("{}.csv", cj.id)), c.csv()).map_err(|e| e.to_string())?;
-                    }
-                    Ok(missao.dados.len())
-                });
+                let r = std::fs::create_dir_all(&pasta)
+                    .map_err(|e| e.to_string())
+                    .and_then(|_| {
+                        for cj in &missao.dados {
+                            let c = cj.gerar(&missao.id, &aluno);
+                            std::fs::write(pasta.join(format!("{}.csv", cj.id)), c.csv())
+                                .map_err(|e| e.to_string())?;
+                        }
+                        Ok(missao.dados.len())
+                    });
                 m.aviso_dados = Some(match r {
-                    Ok(n) => format!("{n} arquivo(s) gravado(s) em {}", pasta.display()),
-                    Err(e) => format!("não foi possível gravar: {e}"),
+                    Ok(n) => texto::f(texto::missao_arquivos_gravados(), &[&n, &pasta.display()]),
+                    Err(e) => texto::f(texto::missao_erro_gravar(), &[&e]),
                 });
             }
-            if ui.button("Levar para o UTSim Seis Sigma").clicked() {
+            if ui.button(texto::missao_levar_seis_sigma()).clicked() {
                 let pasta = std::path::PathBuf::from(m.pasta_dados.trim());
                 m.aviso_dados = Some(
-                    match utsim_ensino_store::seis_sigma::exportar(&pasta, &mc, &aluno, &nome_aluno) {
-                        Ok(p) => format!(
-                            "projeto de treino criado em {}: abra no UTSim Seis Sigma, analise e responda aqui",
-                            p.display()
-                        ),
-                        Err(e) => format!("não foi possível criar o projeto: {e}"),
+                    match utsim_ensino_store::seis_sigma::exportar(&pasta, &mc, &aluno, &nome_aluno)
+                    {
+                        Ok(p) => texto::f(texto::missao_projeto_criado(), &[&p.display()]),
+                        Err(e) => texto::f(texto::missao_erro_projeto(), &[&e]),
                     },
                 );
             }
@@ -520,8 +534,8 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.previsao.is_empty() {
-        ui.label(RichText::new("Previsão").strong());
-        ui.label(RichText::new(texto::PREVER_ANTES).weak());
+        ui.label(RichText::new(texto::missao_previsao()).strong());
+        ui.label(RichText::new(texto::prever_antes()).weak());
         let travada = m.previsao_travada;
         for p in &missao.previsao {
             ui.label(p.pergunta());
@@ -593,7 +607,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.alavancas.is_empty() {
-        ui.label(RichText::new("Decisões").strong());
+        ui.label(RichText::new(texto::missao_decisoes()).strong());
         for a in &missao.alavancas {
             let v = m
                 .tentativa
@@ -608,52 +622,46 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                 let cor = if custo > o + 1e-9 { VERMELHO } else { VERDE };
                 ui.colored_label(
                     cor,
-                    format!(
-                        "Custo das decisões: {} de {} do orçamento",
-                        dinheiro(custo),
-                        dinheiro(o)
+                    texto::f(
+                        texto::missao_custo_orcamento(),
+                        &[&dinheiro(custo), &dinheiro(o)],
                     ),
                 );
             }
             None => {
-                ui.label(format!("Custo das decisões: {}", dinheiro(custo)));
+                ui.label(texto::f(texto::missao_custo(), &[&dinheiro(custo)]));
             }
         }
         if let Some(motivo) = utsim_ensino_core::nota::portao(missao, &m.tentativa.decisoes) {
-            ui.colored_label(VERMELHO, format!("Restrição: {motivo}"));
+            ui.colored_label(VERMELHO, texto::f(texto::missao_restricao(), &[&motivo]));
         }
         ui.add_space(6.0);
     }
 
     if let Some(b) = missao.balanceamento.as_ref().filter(|b| b.editavel) {
-        ui.label(RichText::new("Balanceamento da linha").strong());
+        ui.label(RichText::new(texto::missao_balanceamento()).strong());
         crate::pecas::quadro_balanceamento(ui, b, &mut m.tentativa.decisoes, &mut m.selecionada);
     }
     if let Some(a) = &missao.arranjo {
-        ui.label(RichText::new("Arranjo físico").strong());
+        ui.label(RichText::new(texto::missao_arranjo()).strong());
         crate::pecas::grade_arranjo(ui, a, &mut m.tentativa.decisoes, &mut m.selecionada);
     }
     if missao.tem_pecas()
         && let Some(motivo) = utsim_ensino_core::nota::portao(missao, &m.tentativa.decisoes)
     {
-        ui.colored_label(VERMELHO, format!("Restrição: {motivo}"));
+        ui.colored_label(VERMELHO, texto::f(texto::missao_restricao(), &[&motivo]));
     }
     if missao.tem_pecas() {
         ui.add_space(6.0);
     }
 
     if missao.modelagem.is_some() {
-        ui.label(RichText::new("Seu modelo").strong());
-        ui.label(
-            RichText::new(
-                "Monte o modelo no UTSim com os nomes de objeto pedidos no enunciado, grave o arquivo .ron e indique-o aqui. O botão \"Gravar modelo inicial\" grava um ponto de partida.",
-            )
-            .weak(),
-        );
+        ui.label(RichText::new(texto::missao_seu_modelo()).strong());
+        ui.label(RichText::new(texto::missao_modelo_texto()).weak());
         ui.horizontal(|ui| {
-            ui.label("Arquivo .ron");
+            ui.label(texto::missao_arquivo_ron());
             ui.text_edit_singleline(&mut m.caminho_modelo);
-            if ui.button("Gravar modelo inicial").clicked() {
+            if ui.button(texto::missao_gravar_modelo_inicial()).clicked() {
                 let r = ron::ser::to_string_pretty(
                     &mc.modelo,
                     ron::ser::PrettyConfig::default().struct_names(true),
@@ -663,31 +671,34 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                     std::fs::write(m.caminho_modelo.trim(), t).map_err(|e| e.to_string())
                 });
                 m.aviso_modelo = Some(match r {
-                    Ok(()) => format!("modelo inicial gravado em {}", m.caminho_modelo.trim()),
-                    Err(e) => format!("não foi possível gravar: {e}"),
+                    Ok(()) => texto::f(
+                        texto::missao_modelo_inicial_gravado(),
+                        &[&m.caminho_modelo.trim()],
+                    ),
+                    Err(e) => texto::f(texto::missao_erro_gravar(), &[&e]),
                 });
             }
-            if ui.button("Ler o modelo").clicked() {
+            if ui.button(texto::missao_ler_modelo()).clicked() {
                 match std::fs::read_to_string(m.caminho_modelo.trim()) {
                     Ok(t) => {
                         m.aviso_modelo =
-                            Some(format!("modelo lido ({} linhas)", t.lines().count()));
+                            Some(texto::f(texto::missao_modelo_lido(), &[&t.lines().count()]));
                         m.tentativa.modelo = Some(t);
                     }
-                    Err(e) => m.aviso_modelo = Some(format!("não foi possível ler: {e}")),
+                    Err(e) => m.aviso_modelo = Some(texto::f(texto::missao_erro_ler(), &[&e])),
                 }
             }
         });
         if let Some(a) = &m.aviso_modelo {
             ui.label(a);
         } else if m.tentativa.modelo.is_none() {
-            ui.label(RichText::new("Nenhum modelo lido ainda.").weak());
+            ui.label(RichText::new(texto::missao_nenhum_modelo()).weak());
         }
         ui.add_space(6.0);
     }
 
     if !missao.justificativa.is_empty() {
-        ui.label(RichText::new("Justificativa").strong());
+        ui.label(RichText::new(texto::missao_justificativa()).strong());
         for (qi, q) in missao.justificativa.iter().enumerate() {
             ui.label(&q.pergunta);
             ui.horizontal_wrapped(|ui| {
@@ -706,7 +717,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.dicas.is_empty() && prova.is_none() {
-        ui.collapsing("Dicas", |ui| {
+        ui.collapsing(texto::missao_dicas(), |ui| {
             let pesos = &m.pacote.pacote.pesos;
             for (i, d) in missao.dicas.iter().enumerate() {
                 let nivel = i as u8 + 1;
@@ -715,9 +726,9 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                 } else {
                     let desc = pesos.dicas[i];
                     let rot = if desc > 0.0 {
-                        format!("Ver dica {nivel} (desconta {desc} pontos)")
+                        texto::f(texto::missao_ver_dica_desconto(), &[&nivel, &desc])
                     } else {
-                        format!("Ver dica {nivel} (sem desconto)")
+                        texto::f(texto::missao_ver_dica(), &[&nivel])
                     };
                     if ui.button(rot).clicked() {
                         m.tentativa.dicas = nivel;
@@ -732,12 +743,8 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     // An exam: inside the window and the time, and up to the runs allowed.
     let bloqueio = prova.as_ref().and_then(|(pr, aberta)| {
         pr.pode_rodar(agora, *aberta).err().or_else(|| {
-            (m.rodadas >= pr.tentativas).then(|| {
-                format!(
-                    "as {} rodada(s) desta missão já foram usadas",
-                    pr.tentativas
-                )
-            })
+            (m.rodadas >= pr.tentativas)
+                .then(|| texto::f(texto::missao_rodadas_usadas(), &[&pr.tentativas]))
         })
     });
     if let Some((pr, aberta)) = &prova {
@@ -746,28 +753,34 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
             .request_repaint_after(std::time::Duration::from_secs(20));
     }
     if let Some(b) = &bloqueio {
-        ui.colored_label(VERMELHO, format!("Simular está bloqueado: {b}."));
+        ui.colored_label(VERMELHO, texto::f(texto::missao_simular_bloqueado(), &[b]));
     }
     ui.horizontal(|ui| {
         let pode = m.trabalho.is_none() && m.previsoes_completas() && bloqueio.is_none();
         if ui
             .add_enabled(
                 pode,
-                egui::Button::new(RichText::new(texto::SIMULAR).strong()),
+                egui::Button::new(RichText::new(texto::simular()).strong()),
             )
             .clicked()
         {
             m.simular(aluno.clone(), executor.as_ref(), Some(ctx.clone()));
         }
         if !m.previsoes_completas() {
-            ui.label(RichText::new("Responda às previsões para simular.").weak());
+            ui.label(RichText::new(texto::missao_responda_previsoes()).weak());
         }
         if let Some((pr, _)) = &prova {
-            ui.label(format!("Rodadas: {} de {}", m.rodadas, pr.tentativas));
+            ui.label(texto::f(
+                texto::missao_rodadas_de(),
+                &[&m.rodadas, &pr.tentativas],
+            ));
         } else if let Some(o) = missao.rodadas.orcamento {
-            ui.label(format!("Rodadas: {} de {o} sem desconto", m.rodadas));
+            ui.label(texto::f(
+                texto::missao_rodadas_sem_desconto(),
+                &[&m.rodadas, &o],
+            ));
         } else {
-            ui.label(format!("Rodadas feitas: {}", m.rodadas));
+            ui.label(texto::f(texto::missao_rodadas_feitas(), &[&m.rodadas]));
         }
         if let Some(t) = &m.trabalho {
             ui.add(
@@ -775,7 +788,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                     .desired_width(160.0)
                     .show_percentage(),
             );
-            if ui.button(texto::CANCELAR).clicked() {
+            if ui.button(texto::cancelar()).clicked() {
                 t.cancelar.store(true, Ordering::Relaxed);
             }
             ui.ctx()
@@ -791,17 +804,22 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
     if let Some(a) = m.animacao.as_mut() {
         ui.separator();
-        ui.label(RichText::new("A sua fábrica (uma replicação)").strong());
+        ui.label(RichText::new(texto::missao_sua_fabrica()).strong());
         a.mostrar(ui);
     }
-    if app.cliente_3d && m.animacao.is_some() && ui.button("Ver em 3D").clicked() {
+    if app.cliente_3d && m.animacao.is_some() && ui.button(texto::missao_ver_3d()).clicked() {
         let dir = app.perfil.dir.join("3d");
         // The client opens in its own window; only a failure is said here.
         m.erro = utsim_ensino_store::tres_d::abrir_em_3d(&dir, &mc, &aluno, &m.tentativa.decisoes)
             .err()
-            .map(|e| format!("não foi possível abrir em 3D: {e}"));
+            .map(|e| texto::f(texto::missao_erro_3d(), &[&e]));
     }
-    if let Some(e) = m.erro.as_ref().filter(|e| e.contains("em 3D")) {
+    // The 3D error is told by the start of its text, in the language now.
+    let prefixo_3d = texto::missao_erro_3d()
+        .split('{')
+        .next()
+        .unwrap_or_default();
+    if let Some(e) = m.erro.as_ref().filter(|e| e.starts_with(prefixo_3d)) {
         ui.colored_label(VERMELHO, e);
     }
     let Some(m) = app.missao.as_mut() else { return };
@@ -809,9 +827,9 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         let i = m.indice;
         let proxima = i + 1 < m.pacote.missoes.len() && app.progresso.liberada(&m.pacote, i + 1);
         ui.horizontal(|ui| {
-            if proxima && ui.button("Próxima missão →").clicked() {
+            if proxima && ui.button(texto::missao_proxima()).clicked() {
                 app.abrir_missao(i + 1);
-            } else if ui.button("Caixa de areia").clicked() {
+            } else if ui.button(texto::missao_caixa_areia()).clicked() {
                 app.abrir_areia(i);
             }
         });
@@ -821,13 +839,8 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
 fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Missao, prova: bool) {
     if prova {
         // No grade in an exam: the indicators only (the goals are in the statement).
-        ui.label(RichText::new("Resultado da rodada").strong());
-        ui.label(
-            RichText::new(
-                "A nota sai da correção do professor, que simula de novo as suas decisões.",
-            )
-            .weak(),
-        );
+        ui.label(RichText::new(texto::missao_resultado_rodada()).strong());
+        ui.label(RichText::new(texto::missao_nota_professor()).weak());
         tabela_metricas(ui, r, false);
         return;
     }
@@ -838,32 +851,34 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
     );
     ui.horizontal(|ui| {
         ui.label(
-            RichText::new(format!("Nota {}", fmt_num(r.nota, 1)))
+            RichText::new(texto::f(texto::missao_nota(), &[&fmt_num(r.nota, 1)]))
                 .size(22.0)
                 .strong(),
         );
         ui.label(RichText::new(estrelas).size(22.0));
         if r.resolvida {
-            ui.colored_label(VERDE, "resolvida");
+            ui.colored_label(VERDE, texto::missao_resolvida());
         } else {
-            ui.colored_label(VERMELHO, "não resolvida");
+            ui.colored_label(VERMELHO, texto::missao_nao_resolvida());
         }
         if r.selo {
-            ui.colored_label(AMARELO, "selo: melhor que a referência");
+            ui.colored_label(AMARELO, texto::missao_selo());
         }
     });
     if let Some(p) = &r.portao {
-        ui.colored_label(VERMELHO, format!("Restrição violada: {p}"));
+        ui.colored_label(VERMELHO, texto::f(texto::missao_restricao_violada(), &[p]));
     }
     tabela_metricas(ui, r, true);
-    ui.label(format!(
-        "Pontos: desempenho {}, previsão {}, justificativa {} (de {} possíveis) · descontos {} (dicas) e {} (rodadas)",
-        fmt_num(r.pontos_desempenho, 1),
-        fmt_num(r.pontos_previsao, 1),
-        fmt_num(r.pontos_justificativa, 1),
-        fmt_num(r.pontos_possiveis, 0),
-        fmt_num(r.desconto_dicas, 0),
-        fmt_num(r.desconto_rodadas, 0),
+    ui.label(texto::f(
+        texto::missao_pontos(),
+        &[
+            &fmt_num(r.pontos_desempenho, 1),
+            &fmt_num(r.pontos_previsao, 1),
+            &fmt_num(r.pontos_justificativa, 1),
+            &fmt_num(r.pontos_possiveis, 0),
+            &fmt_num(r.desconto_dicas, 0),
+            &fmt_num(r.desconto_rodadas, 0),
+        ],
     ));
     resto_do_resultado(ui, r, missao);
 }
@@ -872,12 +887,12 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
 fn tabela_metricas(ui: &mut Ui, r: &Resultado, situacao: bool) {
     if !r.metricas.is_empty() {
         egui::Grid::new("metricas").striped(true).show(ui, |ui| {
-            ui.label(RichText::new("Indicador").strong());
-            ui.label(RichText::new("Estado inicial").strong());
-            ui.label(RichText::new("Sua tentativa").strong());
-            ui.label(RichText::new("Meta").strong());
+            ui.label(RichText::new(texto::missao_indicador()).strong());
+            ui.label(RichText::new(texto::missao_estado_inicial()).strong());
+            ui.label(RichText::new(texto::missao_sua_tentativa()).strong());
+            ui.label(RichText::new(texto::missao_meta()).strong());
             if situacao {
-                ui.label(RichText::new("Situação").strong());
+                ui.label(RichText::new(texto::missao_situacao()).strong());
             }
             ui.end_row();
             for m in &r.metricas {
@@ -915,33 +930,34 @@ fn resto_do_resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::mi
         if p.certa {
             ui.colored_label(
                 VERDE,
-                format!("Previsão certa: {} {}", q.pergunta(), p.esperado),
+                texto::f(
+                    texto::missao_previsao_certa(),
+                    &[&q.pergunta(), &p.esperado],
+                ),
             );
         } else {
             ui.colored_label(
                 VERMELHO,
-                format!(
-                    "Previsão errada: {} A resposta da simulação é {}.",
-                    q.pergunta(),
-                    p.esperado
+                texto::f(
+                    texto::missao_previsao_errada(),
+                    &[&q.pergunta(), &p.esperado],
                 ),
             );
         }
     }
     if !missao.justificativa.is_empty() {
-        ui.label(format!(
-            "Justificativa: {} de {} certas",
-            r.justificativas_certas,
-            missao.justificativa.len()
+        ui.label(texto::f(
+            texto::missao_justificativa_certas(),
+            &[&r.justificativas_certas, &missao.justificativa.len()],
         ));
     }
     if !r.criterios.is_empty() {
-        ui.label(RichText::new("Critérios do modelo").strong());
+        ui.label(RichText::new(texto::missao_criterios()).strong());
         for k in &r.criterios {
             let (marca, cor) = if k.ok {
-                ("OK", VERDE)
+                (texto::missao_criterio_ok(), VERDE)
             } else {
-                ("Falta", VERMELHO)
+                (texto::missao_criterio_falta(), VERMELHO)
             };
             ui.horizontal_wrapped(|ui| {
                 ui.colored_label(cor, format!("{marca}: {}", k.rotulo));
@@ -950,7 +966,7 @@ fn resto_do_resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::mi
         }
     }
     if !r.dicas_automaticas.is_empty() {
-        ui.label(RichText::new("O que aconteceu").strong());
+        ui.label(RichText::new(texto::missao_o_que_aconteceu()).strong());
         for d in &r.dicas_automaticas {
             ui.label(format!("• {d}"));
         }
@@ -1021,16 +1037,19 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
     };
     let mc = s.pacote.missoes[s.indice].clone();
     let missao = &mc.missao;
-    if ui.button("← Campanha").clicked() {
+    if ui.button(texto::missao_campanha()).clicked() {
         app.tela = Tela::Mapa;
         return;
     }
-    ui.heading(format!("Caixa de areia: {}", missao.titulo));
-    ui.label(texto::AREIA_TEXTO);
+    ui.heading(texto::f(texto::missao_areia_titulo(), &[&missao.titulo]));
+    ui.label(texto::areia_texto());
     ui.columns(2, |cols| {
-        for (k, (nome, d)) in [("Cenário A", &mut s.a), ("Cenário B", &mut s.b)]
-            .into_iter()
-            .enumerate()
+        for (k, (nome, d)) in [
+            (texto::missao_cenario_a(), &mut s.a),
+            (texto::missao_cenario_b(), &mut s.b),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let ui = &mut cols[k];
             ui.label(RichText::new(nome).strong());
@@ -1038,12 +1057,18 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
                 let v = d.entry(a.id().to_string()).or_insert(a.inicial());
                 alavanca(ui, a, v, &format!("{nome}{}", a.id()));
             }
-            ui.label(format!("Custo: {}", dinheiro(missao.custo(d))));
+            ui.label(texto::f(
+                texto::missao_custo_curto(),
+                &[&dinheiro(missao.custo(d))],
+            ));
         }
     });
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(s.trabalho.is_none(), egui::Button::new("Comparar A e B"))
+            .add_enabled(
+                s.trabalho.is_none(),
+                egui::Button::new(texto::missao_comparar()),
+            )
             .clicked()
         {
             s.comparar(aluno.clone(), executor.as_ref(), Some(ctx.clone()));
@@ -1059,7 +1084,13 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
     }
     if let Some(v) = &s.resultado {
         egui::Grid::new("areia").striped(true).show(ui, |ui| {
-            for h in ["Indicador", "A", "B", "B menos A (pareada)", ""] {
+            for h in [
+                texto::missao_indicador(),
+                texto::missao_coluna_a(),
+                texto::missao_coluna_b(),
+                texto::missao_diferenca_pareada(),
+                "",
+            ] {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();
@@ -1094,19 +1125,19 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
                     fmt_num(hw, m.casas)
                 ));
                 ui.label(if is_significant(&d) {
-                    "diferença significativa"
+                    texto::missao_diferenca_significativa()
                 } else {
-                    "empate estatístico"
+                    texto::missao_empate()
                 });
                 ui.end_row();
             }
         });
     }
     ui.separator();
-    ui.label("Levar o cenário A para o UTSim (grava o modelo .ron com as decisões aplicadas):");
+    ui.label(texto::missao_levar_cenario());
     ui.horizontal(|ui| {
         ui.text_edit_singleline(&mut s.caminho_ron);
-        if ui.button("Gravar .ron").clicked() {
+        if ui.button(texto::missao_gravar_ron()).clicked() {
             let r = modelo_da_tentativa(&mc, &aluno, &s.a)
                 .map_err(|e| e.to_string())
                 .and_then(|m| {
@@ -1118,8 +1149,8 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
                 })
                 .and_then(|t| std::fs::write(s.caminho_ron.trim(), t).map_err(|e| e.to_string()));
             app.mensagem = Some(match r {
-                Ok(()) => format!("modelo gravado em {}", s.caminho_ron.trim()),
-                Err(e) => format!("não foi possível gravar: {e}"),
+                Ok(()) => texto::f(texto::missao_modelo_gravado(), &[&s.caminho_ron.trim()]),
+                Err(e) => texto::f(texto::missao_erro_gravar(), &[&e]),
             });
         }
     });
