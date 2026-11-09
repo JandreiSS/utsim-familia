@@ -165,9 +165,9 @@ textos! {
         "Purpose of the data (LGPD)",
         "Finalidad de los datos (LGPD)";
     turma_lista_csv:
-        "Lista de alunos (.csv: nome;registro;apelido)",
-        "Student list (.csv with columns nome, registro, apelido)",
-        "Lista de estudiantes (.csv con columnas nome, registro, apelido)";
+        "Lista de alunos (.csv: nome;registro;apelido;email)",
+        "Student list (.csv with columns nome, registro, apelido, email)",
+        "Lista de estudiantes (.csv con columnas nome, registro, apelido, email)";
     turma_criar:
         "Criar turma",
         "Create class",
@@ -490,6 +490,26 @@ textos! {
         "Ligado a {}",
         "Connected to {}",
         "Conectado a {}";
+    turma_programa_turma_texto:
+        "As missões resolvidas pela turma viram \"praticou\" no mapa de competências do programa, em nome de cada pessoa com o mesmo e-mail da lista de alunos. Quem registra é você, como instrutor ou master black belt do programa, com a identidade do UTSim Seis Sigma deste computador. Nomes e registros da turma não vão para o programa.",
+        "The missions the class solved become \"practised\" in the program's competence map, for each person with the same e-mail as in the student list. You record them, as an instructor or master black belt of the program, with the UTSim Seis Sigma identity of this computer. Names and records of the class do not go to the program.",
+        "Las misiones resueltas por el grupo se vuelven \"practicó\" en el mapa de competencias del programa, para cada persona con el mismo correo de la lista de alumnos. Quien registra es usted, como instructor o master black belt del programa, con la identidad de UTSim Seis Sigma de esta computadora. Nombres y registros del grupo no van al programa.";
+    turma_registrar_turma:
+        "Registrar a turma no programa",
+        "Record the class in the program",
+        "Registrar el grupo en el programa";
+    turma_turma_registrada:
+        "{} competência(s) de {} aluno(s) enviadas ao programa (as que já estavam lá não se repetem).",
+        "{} competence(s) of {} student(s) sent to the program (the ones already there are not repeated).",
+        "{} competencia(s) de {} alumno(s) enviadas al programa (las que ya estaban no se repiten).";
+    turma_sem_pessoa:
+        "Sem pessoa no programa com o e-mail da lista: {}.",
+        "No person in the program with the e-mail of the list: {}.",
+        "Sin persona en el programa con el correo de la lista: {}.";
+    turma_fora_por_aviso:
+        "Fora por aviso na entrega: {}.",
+        "Left out for a warning in the delivery: {}.",
+        "Fuera por aviso en la entrega: {}.";
     turma_registrar_missoes:
         "Registrar as missões já resolvidas",
         "Record the missions already solved",

@@ -486,7 +486,7 @@ impl TelaModelo {
         ui.heading("Modelo (mão dupla com o UTSim)");
         ui.horizontal(|ui| {
             ui.label("Modelo (.ron):");
-            ui.add(egui::TextEdit::singleline(&mut self.caminho).desired_width(420.0));
+            crate::util::campo_modelo(ui, &mut self.caminho, s.unidade.as_ref(), 420.0);
             if !modelos.is_empty() {
                 egui::ComboBox::from_id_salt("modelos_da_aba_modelo")
                     .selected_text("modelos dos postos")
