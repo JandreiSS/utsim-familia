@@ -7,6 +7,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim 3D relê o modelo quando o UTSim Qualidade ou o Segurança o grava (conferido a cada minuto e quando a janela volta a ficar ativa), mantendo modo, câmera e seleção. Com mudanças locais não salvas, avisa e "Salvar" recusa gravar por cima do trabalho do outro app ("Salvar como" continua). Antes, o 3D podia apagar as edições do outro app no próximo "Salvar". Roteiro `g4_disco.json`.
+- UTSim 3D: o despacho das ações da interface e as decisões da câmera do Simular passaram para a ponte em Rust (`acoes.rs`, `camera_follow.rs`). Sem mudança para quem usa.
 - UTSim 3D: o relógio da reprodução e o acompanhamento dos trabalhos em segundo plano passaram para a ponte em Rust (`relogio.rs`, `andamento.rs`, com testes); a barra de reprodução muda o relógio sem passar pelo script da cena. Sem mudança para quem usa.
 - `utsim-viewer`: o painel de propriedades escreve `SplitBy`, `Abc` e a prioridade dos operadores em RON válido (ler e regravar um campo não muda mais o modelo).
 - Ícones da família no mesmo estilo plano do UTSim Qualidade e do UTSim Segurança: quadrado arredondado com degradê na cor do app e um símbolo branco. São eles: UTSim (rede de nós), UTSim Seis Sigma (σ), UTSim Ensino (capelo, agora em roxo), launcher (três engrenagens) e o novo UTSim Estatística (curva normal). A logo oficial (`assets/icone/utsim.svg`) passa a ser as três engrenagens metálicas da abertura do launcher. Os SVG saem de `tools/icone/gerar_svgs.py`, e `tools/icone` gera os PNG e os `.ico`. Cada executável usa o `.ico` do próprio app.
