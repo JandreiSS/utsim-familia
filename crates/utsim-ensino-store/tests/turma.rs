@@ -475,4 +475,14 @@ fn dados_da_missao_para_o_app_de_analise() {
     assert_eq!(args.len(), 3);
     assert!(args[1].starts_with("--utsim-abrir=") && args[1].ends_with("antes.csv"));
     assert!(args[2].ends_with("depois.csv"));
+    // UTSim Qualidade gets the tool and the limits, each as its own item.
+    assert_eq!(
+        utsim_ensino_store::analise::opcoes("qualidade", m),
+        [
+            "--utsim-ferramenta=capacidade",
+            "--utsim-lie=24.985",
+            "--utsim-lse=25.015"
+        ]
+    );
+    assert!(utsim_ensino_store::analise::opcoes("estatistica", m).is_empty());
 }

@@ -19,6 +19,15 @@ pub struct ConjuntoMissao {
     /// Draw the affected group from the student's seed (shifted means).
     #[serde(default)]
     pub sortear_afetado: bool,
+    /// The tool of UTSim Qualidade that opens this set (`carta`, `capacidade`, `msa`,
+    /// `estratificacao`, ...), sent as `--utsim-ferramenta`.
+    #[serde(default)]
+    pub ferramenta: Option<String>,
+    /// Specification limits sent with the set (`--utsim-lie`, `--utsim-lse`).
+    #[serde(default)]
+    pub lie: Option<f64>,
+    #[serde(default)]
+    pub lse: Option<f64>,
 }
 
 impl ConjuntoMissao {

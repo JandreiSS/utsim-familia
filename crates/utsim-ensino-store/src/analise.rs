@@ -4,6 +4,11 @@
 //! analyses there and types the answers back in the game, which grades them from the same
 //! data. An app that does not read the files yet just opens, and the files stay in the
 //! profile for its import screen.
+//!
+//! UTSim Qualidade also gets the tool and the specification limits of the mission
+//! (`--utsim-ferramenta`, `--utsim-lie`, `--utsim-lse`, from the first data set that names
+//! them), one study with one tool per file (contract of section 2.2 of
+//! `docs/plano_integracao_familia.md`).
 
 use std::path::{Path, PathBuf};
 
@@ -54,6 +59,25 @@ pub fn argumentos(padrao: &[String], arquivos: &[PathBuf]) -> Vec<String> {
     a
 }
 
+/// The options of the mission for the app `produto`: for `qualidade`, the tool and the
+/// limits of the first data set that names them (they apply to every file).
+pub fn opcoes(produto: &str, m: &MissaoCarregada) -> Vec<String> {
+    if produto != "qualidade" {
+        return Vec::new();
+    }
+    let mut a = Vec::new();
+    if let Some(f) = m.missao.dados.iter().find_map(|c| c.ferramenta.as_ref()) {
+        a.push(format!("--utsim-ferramenta={f}"));
+    }
+    if let Some(v) = m.missao.dados.iter().find_map(|c| c.lie) {
+        a.push(format!("--utsim-lie={v}"));
+    }
+    if let Some(v) = m.missao.dados.iter().find_map(|c| c.lse) {
+        a.push(format!("--utsim-lse={v}"));
+    }
+    a
+}
+
 /// Writes the data of `m` in `dir` and opens them in the installed app `produto`. The paths
 /// of the files.
 pub fn analisar(
@@ -70,6 +94,7 @@ pub fn analisar(
     let arquivos = gravar_dados(dir, m, aluno)?;
     std::process::Command::new(&exe)
         .args(argumentos(&padrao, &arquivos))
+        .args(opcoes(produto_id, m))
         .current_dir(pasta)
         .spawn()?;
     Ok(arquivos)

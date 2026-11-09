@@ -495,7 +495,7 @@ O pacote "Estatística e qualidade na fábrica" (`ensino/pacotes/estatistica_qua
 - R&R com a fonte dominante;
 - estratificação.
 
-Os geradores `Pareado` e `Subgrupos` e as questões `MeiaLargura`, `Replicacoes`, `DiferencaMedia`, `DiferencaSignificativa`, `PrimeiroSubgrupoFora`, `Cpk` e `FonteDominante` entram no núcleo. A missão diz em `analisar_em` para qual app os dados vão. O botão grava os `.csv` no perfil e abre o app com `--utsim-abrir=<arquivo.csv>`, um por conjunto, na convenção da família. A leitura do `.csv` como conjunto de dados fica com os dois apps. Até lá, o app só abre, e os arquivos ficam no perfil para a importação manual.
+Os geradores `Pareado` e `Subgrupos` e as questões `MeiaLargura`, `Replicacoes`, `DiferencaMedia`, `DiferencaSignificativa`, `PrimeiroSubgrupoFora`, `Cpk` e `FonteDominante` entram no núcleo. A missão diz em `analisar_em` para qual app os dados vão. O botão grava os `.csv` no perfil e abre o app com `--utsim-abrir=<arquivo.csv>`, um por conjunto, na convenção da família. Para o UTSim Qualidade, o conjunto diz também a ferramenta e os limites (`ferramenta`, `lie`, `lse`), que vão como `--utsim-ferramenta`, `--utsim-lie` e `--utsim-lse`. O contrato foi combinado com a sessão Qualidade e Segurança e registrado por ela na seção 2.2 de `docs/plano_integracao_familia.md`: vários arquivos num só estudo, subgrupos em formato largo, colunas do R&R achadas pelo cabeçalho e, na capacidade, a última coluna numérica. A leitura do `.csv` como conjunto de dados fica com os dois apps. Até lá, o app só abre, e os arquivos ficam no perfil para a importação manual.
 
 ### 7.5 Placas com microcontrolador
 

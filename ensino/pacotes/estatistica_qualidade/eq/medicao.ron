@@ -6,7 +6,8 @@ Missao(
     texto: "medicao.md",
     dados: [
         (id: "rr_paquimetro", nome: "Estudo de R&R do paquímetro da expedição",
-         gerador: Msa(pecas: 10, operadores: 3, repeticoes: 3, media: 25.0, sd_peca: 0.010, sd_operador: 0.004, sd_repetibilidade: 0.0025)),
+         gerador: Msa(pecas: 10, operadores: 3, repeticoes: 3, media: 25.0, sd_peca: 0.010, sd_operador: 0.004, sd_repetibilidade: 0.0025),
+         ferramenta: Some("msa")),
     ],
     analisar_em: ["qualidade"],
     previsao: [

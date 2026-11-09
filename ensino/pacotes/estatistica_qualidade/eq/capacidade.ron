@@ -6,9 +6,11 @@ Missao(
     texto: "capacidade.md",
     dados: [
         (id: "antes", nome: "Diâmetros antes do ajuste da retífica (mm)",
-         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.006, sd: 0.005)),
+         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.006, sd: 0.005),
+         ferramenta: Some("capacidade"), lie: Some(24.985), lse: Some(25.015)),
         (id: "depois", nome: "Diâmetros depois do ajuste da retífica (mm)",
-         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.001, sd: 0.003)),
+         gerador: Subgrupos(k: 25, tamanho: 5, media: 25.001, sd: 0.003),
+         ferramenta: Some("capacidade"), lie: Some(24.985), lse: Some(25.015)),
     ],
     analisar_em: ["qualidade"],
     previsao: [

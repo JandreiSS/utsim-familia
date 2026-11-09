@@ -6,7 +6,8 @@ Missao(
     texto: "carta.md",
     dados: [
         (id: "diametros", nome: "Diâmetro de 5 eixos por hora no torno (mm)",
-         gerador: Subgrupos(k: 30, tamanho: 5, media: 25.0, sd: 0.004, padrao: Some(Deslocamento(inicio: 20, tamanho: 1.5)))),
+         gerador: Subgrupos(k: 30, tamanho: 5, media: 25.0, sd: 0.004, padrao: Some(Deslocamento(inicio: 20, tamanho: 1.5))),
+         ferramenta: Some("carta")),
     ],
     analisar_em: ["qualidade"],
     previsao: [

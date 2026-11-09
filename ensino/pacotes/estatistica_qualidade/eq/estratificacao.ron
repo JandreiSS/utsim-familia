@@ -7,7 +7,7 @@ Missao(
     dados: [
         (id: "comprimentos", nome: "Comprimento dos eixos por torno (mm)",
          gerador: MediaDeslocada(grupos: ["Torno 1", "Torno 2", "Torno 3", "Torno 4"], n_por_grupo: 30, media: 120.0, sd: 0.3, afetado: 0, deslocamento: 2.0),
-         sortear_afetado: true),
+         sortear_afetado: true, ferramenta: Some("estratificacao"), lie: Some(119.0), lse: Some(121.0)),
     ],
     analisar_em: ["estatistica", "qualidade"],
     previsao: [
