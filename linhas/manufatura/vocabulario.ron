@@ -1,0 +1,37 @@
+// Vocabulário da linha Manufatura discreta: termo do núcleo -> termo da fábrica, aplicado na
+// interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam de nome.
+Vocabulary(
+    line: "manufatura",
+    terms: {
+        // Coisas e objetos.
+        "item": "ordem",
+        "itens": "ordens",
+        "Source": "liberação",
+        "Queue": "buffer",
+        "Processor": "máquina",
+        "Combiner": "montagem",
+        "Separator": "desmontagem",
+        "Sink": "expedição",
+        "Transporter": "operador",
+        "Dispatcher": "equipe",
+        "operador": "operador",
+        "operadores": "operadores",
+        // Medidas.
+        "time_in_system": "tempo de atravessamento",
+        "process_time": "tempo de ciclo",
+        "content": "material em processo",
+        "throughput": "ordens por dia",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "sem peça",
+        "processing": "produzindo",
+        "setup": "em troca",
+        "blocked": "bloqueada",
+        "down": "quebrada",
+        "waiting_operator": "esperando o operador",
+        "off_shift": "fora do turno",
+        "utilize": "operando",
+        "travel_empty": "indo à máquina",
+        "empty": "vazio",
+    },
+)

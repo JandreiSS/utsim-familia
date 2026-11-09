@@ -1,0 +1,233 @@
+// Biblioteca da linha Manufatura discreta (docs/plano_linhas_especializadas.md, seção 10): as
+// predefinições sobre os objetos comuns do UTSim. Ordens de produção, regras de despacho,
+// máquinas com troca de produto, montagem, supermercado e laço de cartões (kanban e CONWIP).
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "manufatura/<id>".
+//
+// Quebra das máquinas, EPI, inspeção e refugo ficam nos campos do próprio nó (downtime, ppe,
+// quality, inspection, sink_role), os mesmos que as abas do painel de propriedades e os apps
+// da família editam (docs/plano_integracao_familia.md, seção 3): a linha não guarda dados
+// paralelos. Inspeção, retrabalho e refugo vêm do pacote Qualidade (packs: ["qualidade"]).
+//
+// Unidade de tempo: minuto. Rótulos das ordens lidos pela linha:
+// - produto: o produto da ordem (1, 2, 3...); a máquina com troca prepara só quando ele muda;
+// - prazo: minutos que a ordem tem, desde a liberação, para sair pela expedição;
+// - vence: instante da data de entrega, gravado pela fila de ordens na primeira passagem
+//   (vence = now + prazo), para a regra Asc("vence");
+// - cartao: 1 nos cartões do laço de cartões; os indicadores não contam cartões como ordens.
+Library(
+    line: "manufatura",
+    name: "Manufatura discreta",
+    description: "Ordens de produção, regras de despacho, máquinas com troca de produto que depende da sequência, quebras, montagem e laço de cartões (kanban e CONWIP): OEE por máquina, atravessamento, material em processo e ordens no prazo.",
+    models: [
+        (
+            file: "examples/usinagem_troca.ron",
+            name: "Usinagem com troca de produto",
+            description: "Três produtos, matriz de troca, fila que junta produtos iguais, quebras e OEE das máquinas.",
+        ),
+        (
+            file: "examples/linha_conwip.ron",
+            name: "Linha com CONWIP",
+            description: "Cartões que limitam o material em processo de uma linha com gargalo: vazão, atravessamento e prazo.",
+        ),
+        (
+            file: "examples/oficina_ordens.ron",
+            name: "Oficina por ordens",
+            description: "Roteiro por produto, operadores com habilidades, inspeção com retrabalho e refugo.",
+        ),
+    ],
+    presets: [
+        (
+            id: "liberacao",
+            name: "Liberação de ordens",
+            icon: "lista",
+            role: Entry,
+            description: "Ordens de produção que entram na fábrica: intervalo, mistura dos produtos e prazo de cada ordem.",
+            name_base: "liberacao",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre ordens (min)", default: "Exp(mean: 10.0)"),
+                (key: "produtos", label: "Mistura dos produtos", default: "Discrete([(1.0, 0.5), (2.0, 0.3), (3.0, 0.2)])",
+                 help: "produto 1, 2, 3... com a fração de cada"),
+                (key: "prazo", label: "Prazo da ordem (min)", default: "Const(480.0)",
+                 help: "minutos desde a liberação até a data de entrega"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: {"produto": ${produtos}, "prazo": ${prazo}}),
+                    symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "fila_ordens",
+            name: "Fila de ordens",
+            icon: "fila",
+            role: Inbox,
+            description: "As ordens esperam a máquina pela regra de despacho: chegada (None), data de entrega (Some(Asc(\"vence\"))) ou juntar produtos iguais (Some(Asc(\"produto\"))). Na primeira passagem grava a data de entrega (vence).",
+            name_base: "fila",
+            fields: [
+                (key: "regra", label: "Regra de despacho", default: "None",
+                 help: "None: ordem de chegada; Some(Asc(\"vence\")): data de entrega; Some(Asc(\"produto\")): junta produtos para trocar menos; Some(Desc(\"prioridade\")): prioridade"),
+                (key: "capacidade", label: "Capacidade", default: "None",
+                 help: "Some(5) para um buffer limitado (bloqueia a máquina anterior)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${capacidade}, order: ${regra}), symbol: "espera",
+                    on_entry: Some("if label(item, \"vence\", -1.0) < 0.0 { item.vence = now + label(item, \"prazo\", 1.0e9); }"),
+                    visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "maquina",
+            name: "Máquina",
+            icon: "engrenagem",
+            role: Work,
+            description: "Uma máquina: tempo de ciclo, preparação em toda peça (se houver), quantas peças ao mesmo tempo, quebra (no downtime do nó, aba Manutenção) e EPI.",
+            name_base: "maquina",
+            fields: [
+                (key: "ciclo", label: "Tempo de ciclo (min)", default: "Triangular(min: 4.0, mode: 5.0, max: 7.0)"),
+                (key: "preparacao", label: "Preparação em toda peça", default: "None"),
+                (key: "capacidade", label: "Peças ao mesmo tempo", default: "1"),
+                (key: "quebra", label: "Quebra", default: "None",
+                 help: "Some((mtbf: Exp(mean: 960.0), mttr: Exp(mean: 45.0))): fica no nó da máquina"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${capacidade}, setup: ${preparacao}, process: ${ciclo}),
+                    downtime: ${quebra}, ppe: ["oculos", "protetor_auricular"], symbol: "operacao",
+                    visual: Some((asset: Some("maquina"))))"#,
+            ],
+        ),
+        (
+            id: "maquina_troca",
+            name: "Máquina com troca de produto",
+            icon: "chave",
+            role: Work,
+            description: "Prepara só quando o produto muda (changeover); a matriz dá o tempo de cada troca (de, para) e, sem linha na matriz, vale a troca padrão. A primeira peça não troca.",
+            name_base: "maquina",
+            fields: [
+                (key: "ciclo", label: "Tempo de ciclo (min)", default: "Triangular(min: 4.0, mode: 5.0, max: 7.0)"),
+                (key: "troca", label: "Troca padrão (min)", default: "Const(30.0)"),
+                (key: "matriz", label: "Matriz de troca", default: "[]",
+                 help: "[(from: 1.0, to: 2.0, time: Const(15.0)), (from: 2.0, to: 1.0, time: Const(45.0))]"),
+                (key: "quebra", label: "Quebra", default: "None",
+                 help: "Some((mtbf: Exp(mean: 960.0), mttr: Exp(mean: 45.0))): fica no nó da máquina"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(setup: Some(${troca}), process: ${ciclo},
+                    changeover: Some((label: "produto", matrix: ${matriz}))),
+                    downtime: ${quebra}, ppe: ["oculos", "protetor_auricular"], symbol: "operacao",
+                    visual: Some((asset: Some("maquina"))))"#,
+            ],
+        ),
+        (
+            id: "montagem",
+            name: "Montagem",
+            icon: "solda",
+            role: Work,
+            description: "Junta a peça principal (primeira entrada) com os componentes (entradas seguintes); os componentes somem dentro do produto.",
+            name_base: "montagem",
+            fields: [
+                (key: "tempo", label: "Tempo de montagem (min)", default: "Triangular(min: 3.0, mode: 4.0, max: 6.0)"),
+                (key: "componentes", label: "Componentes por entrada", default: "[2]",
+                 help: "[2, 1]: duas peças da segunda entrada e uma da terceira"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Combiner(components: ${componentes}, mode: Join, process: ${tempo}),
+                    ppe: ["luvas"], symbol: "operacao", visual: Some((asset: Some("bancada"))))"#,
+            ],
+        ),
+        (
+            id: "supermercado",
+            name: "Supermercado",
+            icon: "estante",
+            role: Inbox,
+            description: "Estoque limitado entre duas etapas: quando enche, a etapa anterior para (produção puxada).",
+            name_base: "supermercado",
+            fields: [
+                (key: "capacidade", label: "Capacidade", default: "Some(10)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${capacidade}), symbol: "estoque",
+                    visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "cartoes",
+            name: "Laço de cartões (CONWIP ou kanban)",
+            icon: "bandeja_pilha",
+            role: Batch,
+            description: "Limita as ordens em processo ao número de cartões. Ligue a liberação a esta fila; ligue a saída _liberar à primeira etapa e a última etapa a _devolver; ligue _devolver à expedição (o cartão volta sozinho ao quadro). A ordem leva o cartão dentro dela.",
+            name_base: "conwip",
+            fields: [
+                (key: "cartoes", label: "Cartões", default: "8"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(), symbol: "espera",
+                    on_entry: Some("if label(item, \"vence\", -1.0) < 0.0 { item.vence = now + label(item, \"prazo\", 1.0e9); }"),
+                    visual: Some((asset: Some("area"))))"#,
+                r#"(name: "${name}_liberar", kind: Combiner(components: [1], mode: Pack, process: Const(0.0)), position: (2.0, 0.0, 0.0),
+                    symbol: "operacao")"#,
+                r#"(name: "${name}_cartoes", kind: Source(interarrival: Const(0.01), first_at_zero: true, max_arrivals: Some(${cartoes}),
+                    labels: {"cartao": Const(1.0)}), position: (0.0, -3.0, 0.0), symbol: "inicio")"#,
+                r#"(name: "${name}_quadro", kind: Queue(), position: (2.0, -3.0, 0.0), symbol: "estoque",
+                    visual: Some((asset: Some("bandeja"))))"#,
+                r#"(name: "${name}_devolver", kind: Separator(mode: Unpack, process: Const(0.0)), position: (8.0, -3.0, 0.0),
+                    output: Script("if label(item, \"cartao\", 0.0) == 1.0 { 1 } else { 2 }"), symbol: "operacao")"#,
+            ],
+            connections: [
+                ("${name}", "${name}_liberar"),
+                ("${name}_cartoes", "${name}_quadro"),
+                ("${name}_quadro", "${name}_liberar"),
+                ("${name}_devolver", "${name}_quadro"),
+            ],
+        ),
+        (
+            id: "expedicao",
+            name: "Expedição",
+            icon: "caminhao",
+            role: Done,
+            description: "Onde as ordens prontas saem da fábrica. Para o refugo, use o Refugo do pacote Qualidade.",
+            name_base: "expedicao",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+        (
+            id: "operadores",
+            name: "Equipe de operadores",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Operadores do turno (começa com dois), com as habilidades e o EPI de cada um.",
+            name_base: "operadores",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"usinagem\"]"),
+                (key: "turno", label: "Turno", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: FirstAvailable))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 60.0), position: (0.0, 1.5, 0.0), shifts: ${turno},
+                    ppe: ["oculos", "protetor_auricular", "botina"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "manufatura/operador")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 60.0), position: (0.0, -1.5, 0.0), shifts: ${turno},
+                    ppe: ["oculos", "protetor_auricular", "botina"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "manufatura/operador")"#,
+            ],
+        ),
+        (
+            id: "operador",
+            name: "Operador",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Um operador: habilidades, turno e EPI.",
+            name_base: "operador",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"usinagem\"]"),
+                (key: "turno", label: "Turno", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 60.0), shifts: ${turno}, ppe: ["oculos", "protetor_auricular", "botina"],
+                    visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})))"#,
+            ],
+        ),
+    ],
+)
