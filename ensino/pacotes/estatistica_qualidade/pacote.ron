@@ -1,0 +1,28 @@
+// Pacote "Estatística e qualidade na fábrica" do UTSim Ensino: a ponte entre os atos 1 a 7
+// e o caso Lean Seis Sigma do ato 8. Cada aluno recebe os seus dados, e o gabarito é
+// recalculado pelas mesmas análises do UTSim Estatística e do UTSim Qualidade.
+Pacote(
+    id: "estatistica_qualidade",
+    formato: 1,
+    titulo: "Estatística e qualidade na fábrica",
+    versao: "0.1.0",
+    autor: "UTSim",
+    descricao: "Seis análises sobre dados da fábrica simulada: quantas replicações bastam, se uma troca vale a pena, a carta de controle, a capacidade, o sistema de medição e a estratificação.",
+    requer: ["nucleo >= 0.1"],
+    glossario: "glossario.ron",
+    competencias: {
+        "msa": ["msa"],
+        "capacidade_do_processo": ["capacidade"],
+        "carta_de_controle": ["cep"],
+    },
+    atos: [
+        (numero: 1, titulo: "Estatística e qualidade na fábrica", missoes: [
+            "eq/replicacoes.ron",
+            "eq/alternativas.ron",
+            "eq/carta.ron",
+            "eq/capacidade.ron",
+            "eq/medicao.ron",
+            "eq/estratificacao.ron",
+        ]),
+    ],
+)

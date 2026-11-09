@@ -90,6 +90,22 @@ textos! {
         "Gravar os dados (.csv)",
         "Save the data (.csv)",
         "Guardar los datos (.csv)";
+    missao_analisar_estatistica:
+        "Analisar no UTSim Estatística",
+        "Analyse in UTSim Estatística",
+        "Analizar en UTSim Estatística";
+    missao_analisar_qualidade:
+        "Analisar no UTSim Qualidade",
+        "Analyse in UTSim Qualidade",
+        "Analizar en UTSim Qualidade";
+    missao_analisar_dica:
+        "Grava os seus dados desta missão (.csv) e abre no app. Analise lá e digite as respostas aqui: o jogo corrige pelos mesmos dados.",
+        "Saves your data of this mission (.csv) and opens them in the app. Analyse there and type the answers here: the game grades them from the same data.",
+        "Guarda sus datos de esta misión (.csv) y los abre en la aplicación. Analice allí y escriba las respuestas aquí: el juego las corrige con los mismos datos.";
+    missao_dados_abertos:
+        "{} arquivo(s) gravado(s) em {} e aberto(s) no app",
+        "{} file(s) saved to {} and opened in the app",
+        "{} archivo(s) guardado(s) en {} y abierto(s) en la aplicación";
     missao_levar_seis_sigma:
         "Levar para o UTSim Seis Sigma",
         "Take to UTSim Seis Sigma",

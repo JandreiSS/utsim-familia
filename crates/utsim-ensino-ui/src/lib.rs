@@ -88,6 +88,9 @@ pub struct App {
     pub pasta_instalada: Option<PathBuf>,
     /// The UTSim client is installed by the launcher ("Ver em 3D").
     pub cliente_3d: bool,
+    /// Apps of the family installed for the analysis of mission data (`estatistica`,
+    /// `qualidade`).
+    pub apps_analise: Vec<String>,
     nome: String,
     registro: String,
     apelido: String,
@@ -107,6 +110,7 @@ impl App {
             texto::definir(texto::Idioma::de_codigo(i));
         }
         app.cliente_3d = utsim_ensino_store::tres_d::cliente().is_some();
+        app.apps_analise = utsim_ensino_store::analise::instalados();
         match pasta_de_pacotes() {
             Some(dir) => app.procurar_pacotes(&dir),
             None => app.atualizar_pacotes(),
@@ -188,6 +192,7 @@ impl App {
             pacotes_instalados: Vec::new(),
             pasta_instalada: None,
             cliente_3d: false,
+            apps_analise: Vec::new(),
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,
