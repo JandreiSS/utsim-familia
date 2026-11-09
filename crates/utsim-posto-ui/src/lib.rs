@@ -10,6 +10,7 @@
 //! - [`trabalho`]: uma tarefa pesada num fio de trabalho, sem travar a tela;
 //! - [`util`]: data de hoje, cores e leitura de modelos.
 
+pub mod abrir;
 pub mod ferramentas;
 pub mod inicial;
 pub mod modelo;
@@ -18,6 +19,7 @@ pub mod sessao;
 pub mod trabalho;
 pub mod util;
 
+pub use abrir::{Abrir, Destino};
 pub use ferramentas::{FnLeituras, FnLimites, FnPuxar, FnSimular, TelaFerramentas};
 pub use inicial::TelaInicial;
 pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};

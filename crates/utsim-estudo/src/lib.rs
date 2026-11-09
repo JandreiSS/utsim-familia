@@ -16,6 +16,7 @@
 
 pub mod calculo;
 pub mod exemplo;
+pub mod importar;
 pub mod relatorio;
 pub mod tabela;
 

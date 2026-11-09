@@ -42,6 +42,20 @@ utsim-qualidade --utsim-pedido <caminho do pedido>
 
 Argumentos diretos continuam valendo para os casos simples: `utsim <modelo.ron>`, `utsim --utsim-no <nome>` para abrir o editor já no nó.
 
+Argumentos diretos combinados (cada argumento é um item do argv, sem o `--` do Godot, e cada opção aceita `--opcao=valor` ou `--opcao valor`):
+
+| Chamada | Quem usa | O que faz |
+|---|---|---|
+| `utsim-qualidade` ou `utsim-seguranca` `--utsim-abrir=<modelo.ron absoluto> --utsim-no=<name do objeto>` | 3D ("Abrir no UTSim Qualidade" e "Abrir no UTSim Segurança" nas abas do nó) | Abre na tela Modelo com o nó escolhido, mesmo sem unidade aberta. Toma a trava como num abrir normal. Antes, o 3D grava o que estiver pendente e solta a trava dele. Com a trava de outro, abre só para leitura e avisa. Se o nó não existe, abre e avisa. |
+| `utsim-qualidade --utsim-abrir=<dados.csv ou .xlsx> [--utsim-abrir=<outro>] --utsim-ferramenta=<chave> [--utsim-aba=<aba>] [--utsim-lie=<n>] [--utsim-lse=<n>] [--utsim-subgrupo=<n>]` | Ensino ("Analisar no UTSim Qualidade") | Cria o estudo "Análise de <arquivos>" com uma ferramenta por arquivo, de origem Importado (arquivo, aba e hash). As opções valem para todos os arquivos. O estudo fica na última unidade aberta. Sem unidade, fica na unidade "Análises avulsas", ao lado da configuração do app. Sem `--utsim-ferramenta`, a tela Ferramentas pede a escolha. Não há resposta. |
+
+Chaves de `--utsim-ferramenta`: `folha`, `estratificacao`, `pareto`, `histograma`, `dispersao`, `carta`, `capacidade`, `msa` e `fmea` (as ferramentas com tabela). Os números aceitam vírgula ou ponto. Ajustes da tabela por ferramenta (`utsim_estudo::importar`):
+
+- carta e capacidade: o formato largo `subgrupo;x1;...;xn` vira uma linha por valor, e n é o tamanho do subgrupo. Uma carta com uma coluna só ganha a coluna do subgrupo;
+- capacidade e histograma: a última coluna numérica;
+- msa: as colunas são achadas pelo cabeçalho, com ou sem acento (peca ou peça, operador, medida, medicao ou medição). As outras, como a repeticao, são ignoradas;
+- estratificacao: o grupo (grupo, estrato, turno) e a última coluna numérica.
+
 ### 2.3 Resposta
 
 Quem atende grava a **resposta** (`.utsim-resposta.json`) no caminho pedido, de uma vez (gravação atômica de `utsim-pasta`), ao clicar em "Concluir e voltar":

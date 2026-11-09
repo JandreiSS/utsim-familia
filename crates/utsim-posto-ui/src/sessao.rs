@@ -72,6 +72,11 @@ impl Sessao {
         }
     }
 
+    /// O arquivo de configuração (a unidade de análises avulsas fica ao lado).
+    pub fn arquivo_config(&self) -> Option<&Path> {
+        self.arquivo.as_deref()
+    }
+
     pub fn avisar(&mut self, texto: impl Into<String>) {
         self.mensagem = texto.into();
         self.erro = false;

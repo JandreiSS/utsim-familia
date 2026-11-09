@@ -208,6 +208,31 @@ impl TelaModelo {
         Ok(())
     }
 
+    /// Abre o modelo já com o nó escolhido (o pedido do 3D pela linha de comando). Nó que
+    /// não está no modelo: abre assim mesmo e avisa.
+    pub fn abrir_em_no(
+        &mut self,
+        caminho: &Path,
+        no: Option<&str>,
+        pessoa: &str,
+    ) -> Result<(), String> {
+        self.abrir(caminho, pessoa)?;
+        let Some(no) = no.map(str::trim).filter(|n| !n.is_empty()) else {
+            return Ok(());
+        };
+        let existe = self
+            .doc
+            .as_ref()
+            .is_some_and(|d| d.model().objects.iter().any(|o| o.name == no));
+        if existe {
+            self.selecionar(no);
+        } else {
+            let antes = std::mem::take(&mut self.mensagem);
+            self.falhar(format!("{antes} O nó {no} não está no modelo."));
+        }
+        Ok(())
+    }
+
     /// Fecha o modelo e solta a trava.
     pub fn fechar(&mut self) {
         self.soltar_trava();
@@ -465,13 +490,24 @@ impl TelaModelo {
     // ---- tela ------------------------------------------------------------------
 
     pub fn ui(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
-        let Some(u) = s.unidade.as_ref() else {
+        // Sem unidade, só o modelo aberto pela linha de comando (o pedido do 3D).
+        if s.unidade.is_none() && !self.aberto() {
             ui.label("Abra uma unidade na tela inicial.");
             return;
+        }
+        let pessoa = match s.unidade.as_ref() {
+            Some(u) => u.autor().to_string(),
+            None => self.pessoa.clone(),
         };
-        let pessoa = u.autor().to_string();
         let modelos: Vec<String> = {
-            let mut v: Vec<String> = u.postos().into_iter().filter_map(|p| p.modelo).collect();
+            let mut v: Vec<String> = s
+                .unidade
+                .as_ref()
+                .map(|u| u.postos())
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|p| p.modelo)
+                .collect();
             v.sort();
             v.dedup();
             v
@@ -509,10 +545,10 @@ impl TelaModelo {
                 .add_enabled(!self.caminho.trim().is_empty(), egui::Button::new("Abrir"))
                 .clicked()
             {
-                let c = s
-                    .unidade
-                    .as_ref()
-                    .map(|u| u.caminho_modelo(self.caminho.trim()));
+                let c = match s.unidade.as_ref() {
+                    Some(u) => Some(u.caminho_modelo(self.caminho.trim())),
+                    None => Some(PathBuf::from(self.caminho.trim())),
+                };
                 if let Some(c) = c
                     && let Err(e) = self.abrir(&c, &pessoa)
                 {

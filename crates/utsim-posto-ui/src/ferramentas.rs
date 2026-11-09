@@ -19,7 +19,8 @@ use egui_plot::{
 use utsim_estudo::calculo::{self, Resultado};
 use utsim_estudo::relatorio::{self, Contexto, Identidade};
 use utsim_estudo::{
-    Aplicacao, App, Assunto, Cadeia, Categoria, ESTUDOS, Estudo, Ferramenta, Origem, Tabela,
+    Aplicacao, App, Assunto, Cadeia, Categoria, ESTUDOS, Estudo, Ferramenta, Origem, Parametros,
+    Tabela,
 };
 use utsim_ferramentas::relatorios::{Chart, ChartKind, Tone};
 use utsim_model::Model;
@@ -151,6 +152,9 @@ pub struct TelaFerramentas {
     desmarcadas: Vec<String>,
     /// Remoção à espera de confirmação (`estudo` ou o id da aplicação).
     confirmar: Option<String>,
+    /// Arquivos abertos pela linha de comando sem ferramenta: (nome, tabela, origem) e os
+    /// parâmetros pedidos. A pessoa escolhe a ferramenta.
+    pub dados_pendentes: Option<(Vec<crate::abrir::Arquivo>, Parametros)>,
 }
 
 impl TelaFerramentas {
@@ -181,6 +185,82 @@ impl TelaFerramentas {
             relatorio_estudo: false,
             desmarcadas: Vec::new(),
             confirmar: None,
+            dados_pendentes: None,
+        }
+    }
+
+    /// Cria um estudo com uma ferramenta `f` por arquivo, com os dados de origem
+    /// Importado e os parâmetros pedidos (LIE, LSE, subgrupo). Devolve o id.
+    pub fn importar_estudo(
+        &mut self,
+        s: &mut Sessao,
+        arquivos: Vec<crate::abrir::Arquivo>,
+        f: Ferramenta,
+        parametros: &Parametros,
+    ) -> Option<String> {
+        if arquivos.is_empty() {
+            return None;
+        }
+        let nomes: Vec<&str> = arquivos.iter().map(|(n, _, _)| n.as_str()).collect();
+        let n = NovoEstudo {
+            titulo: format!("Análise de {}", nomes.join(", ")),
+            ..NovoEstudo::default()
+        };
+        let id = self.criar(s, &n)?;
+        let e = self.estudo.as_mut()?;
+        for (nome, t, o) in arquivos {
+            let mut a = Aplicacao::nova(&e.novo_id_aplicacao(), f);
+            a.titulo = std::path::Path::new(&nome)
+                .file_stem()
+                .map_or(nome.clone(), |x| x.to_string_lossy().into_owned());
+            a.parametros = parametros.clone();
+            utsim_estudo::importar::aplicar(&mut a, t, o);
+            e.aplicacoes.push(a);
+        }
+        self.aplicacao = e
+            .aplicacoes
+            .first()
+            .map(|a| a.id.clone())
+            .unwrap_or_default();
+        self.trocou_aplicacao();
+        self.sujo = true;
+        self.gravar_pendente(s);
+        Some(id)
+    }
+
+    /// A faixa "escolha a ferramenta" dos arquivos abertos sem ferramenta.
+    fn faixa_pendentes(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
+        let Some((arquivos, _)) = self.dados_pendentes.as_ref() else {
+            return;
+        };
+        let nomes: Vec<String> = arquivos.iter().map(|(n, _, _)| n.clone()).collect();
+        let mut escolhida = None;
+        let mut descartar = false;
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.label(
+                RichText::new(format!(
+                    "Dados de {}: escolha a ferramenta.",
+                    nomes.join(", ")
+                ))
+                .strong(),
+            );
+            ui.horizontal_wrapped(|ui| {
+                for f in Ferramenta::do_app(self.app).iter().copied() {
+                    if f.usa_tabela() && ui.button(f.nome()).on_hover_text(f.ajuda()).clicked() {
+                        escolhida = Some(f);
+                    }
+                }
+                if ui.button("Descartar").clicked() {
+                    descartar = true;
+                }
+            });
+        });
+        if let Some(f) = escolhida
+            && let Some((arquivos, p)) = self.dados_pendentes.take()
+        {
+            self.importar_estudo(s, arquivos, f, &p);
+        } else if descartar {
+            self.dados_pendentes = None;
         }
     }
 
@@ -481,6 +561,7 @@ impl TelaFerramentas {
         let agora = ui.ctx().input(|i| i.time);
         self.resolver_pedido(s);
         self.sondar_puxar(ui.ctx(), s, agora);
+        self.faixa_pendentes(ui, s);
         let h = ui.available_height();
         ui.horizontal_top(|ui| {
             ui.allocate_ui_with_layout(
