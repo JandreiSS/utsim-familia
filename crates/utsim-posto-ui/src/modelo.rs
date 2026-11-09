@@ -82,6 +82,12 @@ pub struct TelaModelo {
     pub trabalho: Trabalho<Resumo>,
     pub mensagem: String,
     pub erro: bool,
+    /// Pedido de abrir o nó na tela Ferramentas: (modelo, objeto). O app o atende.
+    pub pedido_ferramentas: Option<(String, String)>,
+    /// Estudos do nó escolhido: (versão da sessão, nó, quantos).
+    estudos_no: Option<(u64, String, usize)>,
+    /// O caminho do modelo aberto como os estudos o guardam (relativo à unidade).
+    modelo_rel: String,
 }
 
 impl TelaModelo {
@@ -112,6 +118,9 @@ impl TelaModelo {
             trabalho: Trabalho::default(),
             mensagem: String::new(),
             erro: false,
+            pedido_ferramentas: None,
+            estudos_no: None,
+            modelo_rel: String::new(),
         }
     }
 
@@ -525,12 +534,50 @@ impl TelaModelo {
         if !self.aberto() {
             return;
         }
+        self.contar_estudos(s);
         self.barra_estado(ui);
         ui.separator();
         ui.columns(2, |cols| {
             self.lista(&mut cols[0]);
             self.painel_campos(&mut cols[1]);
         });
+    }
+
+    /// O caminho do modelo como os estudos o guardam: relativo à pasta da unidade quando
+    /// o modelo está dentro dela, senão absoluto.
+    pub fn modelo_para_estudo(&self, s: &Sessao) -> String {
+        let Some(a) = &self.arquivo else {
+            return String::new();
+        };
+        if let Some(u) = s.unidade.as_ref()
+            && let Ok(r) = a.strip_prefix(u.raiz())
+        {
+            return r.to_string_lossy().replace('\\', "/");
+        }
+        a.display().to_string()
+    }
+
+    fn contar_estudos(&mut self, s: &Sessao) {
+        self.modelo_rel = self.modelo_para_estudo(s);
+        if self.selecionado.is_empty() {
+            return;
+        }
+        let atual = self
+            .estudos_no
+            .as_ref()
+            .is_some_and(|(v, o, _)| *v == s.versao && *o == self.selecionado);
+        if !atual {
+            let n = crate::ferramentas::estudos_do_no(s, &self.modelo_rel, &self.selecionado).len();
+            self.estudos_no = Some((s.versao, self.selecionado.clone(), n));
+        }
+    }
+
+    /// Quantos estudos o nó escolhido tem (contados no último quadro).
+    pub fn estudos_do_selecionado(&self) -> usize {
+        self.estudos_no
+            .as_ref()
+            .filter(|(_, o, _)| *o == self.selecionado)
+            .map_or(0, |(_, _, n)| *n)
     }
 
     fn atalhos(&mut self, ctx: &egui::Context) {
@@ -716,6 +763,17 @@ impl TelaModelo {
             return;
         }
         ui.strong(format!("Nó: {}", self.selecionado));
+        ui.horizontal(|ui| {
+            let n = self.estudos_do_selecionado();
+            ui.label(match n {
+                0 => "Estudos deste nó: nenhum".to_string(),
+                1 => "Estudos deste nó: 1".to_string(),
+                n => format!("Estudos deste nó: {n}"),
+            });
+            if ui.button("Abrir em Ferramentas").clicked() {
+                self.pedido_ferramentas = Some((self.modelo_rel.clone(), self.selecionado.clone()));
+            }
+        });
         let abas = [self.principal, Aba::Manutencao];
         ui.horizontal(|ui| {
             for a in abas {

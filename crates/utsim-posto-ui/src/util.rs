@@ -60,6 +60,29 @@ pub fn carregar_arquivo(c: &Path) -> Result<Model, String> {
     Model::load(c).map_err(|e| format!("{}: {e}", c.display()))
 }
 
+/// Abre um arquivo com o programa do sistema (o HTML de um relatório).
+pub fn abrir_com_sistema(caminho: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    let mut c = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]).arg(caminho);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut c = {
+        let mut c = std::process::Command::new("open");
+        c.arg(caminho);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut c = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(caminho);
+        c
+    };
+    c.spawn().map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
