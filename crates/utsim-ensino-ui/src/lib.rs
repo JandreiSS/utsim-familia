@@ -10,6 +10,7 @@
 //! - [`texto`]: the text catalogue.
 
 mod abertura;
+mod mapa;
 pub mod missao;
 pub mod pecas;
 pub mod texto;
@@ -478,63 +479,13 @@ impl App {
         }
         self.atalhos_de_pacotes(ui);
         ui.add_space(8.0);
-        let mut abrir = None;
-        let mut areia = None;
-        for ato in &p.pacote.atos {
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(texto::f(texto::ato_titulo(), &[&ato.numero, &ato.titulo]))
-                    .size(17.0)
-                    .strong(),
-            );
-            for (i, m) in p
-                .missoes
-                .iter()
-                .enumerate()
-                .filter(|(_, m)| m.ato == ato.numero)
-            {
-                // In an exam every mission is open from the start.
-                let liberada = p.pacote.prova.is_some() || self.progresso.liberada(&p, i);
-                let reg = self.progresso.registro(&m.missao.id);
-                ui.horizontal(|ui| {
-                    let estrelas = reg.map_or(0, |r| r.estrelas);
-                    let marca = format!(
-                        "{}{}",
-                        "★".repeat(estrelas as usize),
-                        "☆".repeat(3 - estrelas.min(3) as usize)
-                    );
-                    // An exam shows no grade before the teacher's correction.
-                    if p.pacote.prova.is_none() {
-                        ui.label(RichText::new(marca).monospace());
-                    }
-                    let titulo = format!("{} {}", numero_missao(&p, i), m.missao.titulo);
-                    if ui
-                        .add_enabled(liberada, egui::Button::new(titulo))
-                        .clicked()
-                    {
-                        abrir = Some(i);
-                    }
-                    if !liberada {
-                        let primeira_do_ato = i == 0 || p.missoes[i - 1].ato != m.ato;
-                        let txt = if primeira_do_ato {
-                            texto::bloqueada_ato()
-                        } else {
-                            texto::bloqueada_anterior()
-                        };
-                        ui.label(RichText::new(txt).weak());
-                    }
-                    if let Some(r) = reg.filter(|_| p.pacote.prova.is_none()) {
-                        ui.label(texto::f(
-                            texto::melhor_nota(),
-                            &[&format!("{:.1}", r.melhor_nota), &r.tentativas],
-                        ));
-                        if r.resolvida && ui.button(texto::caixa_de_areia()).clicked() {
-                            areia = Some(i);
-                        }
-                    }
-                });
-            }
+        let (mut abrir, mut areia) = (None, None);
+        match mapa::atos(self, ui) {
+            Some(mapa::Clique::Missao(i)) => abrir = Some(i),
+            Some(mapa::Clique::Areia(i)) => areia = Some(i),
+            None => {}
         }
+        ui.add_space(8.0);
         self.outros_pacotes(ui);
         if let Some(i) = abrir {
             self.abrir_missao(i);

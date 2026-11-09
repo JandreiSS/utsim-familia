@@ -265,6 +265,9 @@ pub mod captura;
 #[cfg(feature = "abertura")]
 pub mod abertura;
 
+#[cfg(feature = "abertura")]
+pub mod navegacao;
+
 pub mod arquivos;
 
 /// Widgets with the UTSim look that egui does not have.

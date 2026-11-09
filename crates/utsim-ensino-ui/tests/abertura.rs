@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use egui::{Context, vec2};
+use utsim_ensino_core::progresso::RegistroMissao;
 use utsim_ensino_store::perfil::Perfil;
 use utsim_ensino_ui::{App, NaHora, Tela, texto};
 use utsim_ui_tema::captura::{Captura, Imagem};
@@ -49,4 +50,28 @@ fn abertura_picture() {
         conferir(&img, nome);
     }
     texto::definir(texto::Idioma::Pt);
+
+    // The campaign map with two missions solved and one tried: stars, grades, sandbox,
+    // the next mission highlighted and the locks.
+    let p = app.pacote.clone().unwrap();
+    for (k, (nota, estrelas, resolvida)) in [
+        (0, (9.2, 3, true)),
+        (1, (7.1, 2, true)),
+        (2, (4.0, 0, false)),
+    ] {
+        app.progresso.missoes.insert(
+            p.missoes[k].missao.id.clone(),
+            RegistroMissao {
+                tentativas: 2,
+                melhor_nota: nota,
+                ultima_nota: nota,
+                estrelas,
+                resolvida,
+                dicas: 0,
+            },
+        );
+    }
+    app.tela = Tela::Mapa;
+    let img = cap.imagem(3, |ui| app.draw(ui));
+    conferir(&img, "ensino_mapa");
 }
