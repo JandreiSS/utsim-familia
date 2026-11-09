@@ -7756,6 +7756,7 @@ dependencies = [
  "utsim-core",
  "utsim-diagram",
  "utsim-fit",
+ "utsim-linhas",
  "utsim-model",
  "utsim-quality",
  "utsim-stats",

@@ -203,7 +203,7 @@ impl Animacao {
             }
             let f = ((self.t - t0) / dur).clamp(0.0, 1.0) as f32;
             let p = pos[*a] + (pos[*b] - pos[*a]) * f;
-            painter.circle_filled(p, 4.0, Color32::from_rgb(242, 163, 58));
+            painter.circle_filled(p, 4.0, crate::ROXO);
         }
         // One box per machine: the content added up, the busiest state.
         let prioridade = |st: State| match st {
@@ -269,7 +269,7 @@ impl Animacao {
                     painter.rect_filled(
                         Rect::from_min_size(p, vec2(7.0, 7.0)),
                         CornerRadius::same(1),
-                        Color32::from_rgb(242, 163, 58),
+                        crate::ROXO,
                     );
                 }
                 painter.text(

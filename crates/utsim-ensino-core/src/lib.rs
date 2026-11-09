@@ -35,6 +35,7 @@ pub mod pecas;
 pub mod progresso;
 pub mod prova;
 pub mod questoes;
+pub mod requisitos;
 pub mod turma;
 pub mod validar;
 pub mod variante;
