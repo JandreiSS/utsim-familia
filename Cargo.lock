@@ -7705,6 +7705,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-diario"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "getrandom 0.2.17",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "utsim-edit"
 version = "0.1.0"
 dependencies = [
@@ -7756,6 +7769,7 @@ dependencies = [
  "utsim-core",
  "utsim-diagram",
  "utsim-fit",
+ "utsim-linhas",
  "utsim-model",
  "utsim-quality",
  "utsim-stats",
@@ -7765,16 +7779,14 @@ dependencies = [
 name = "utsim-ensino-store"
 version = "0.1.0"
 dependencies = [
- "ed25519-dalek",
- "getrandom 0.2.17",
  "rayon",
  "ron 0.8.1",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror 2.0.21",
+ "utsim-diario",
  "utsim-ensino-core",
  "utsim-launcher-core",
  "utsim-lss-core",
@@ -7809,6 +7821,30 @@ dependencies = [
  "thiserror 2.0.21",
  "utsim-core",
  "utsim-model",
+]
+
+[[package]]
+name = "utsim-estatistica-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_plot",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "utsim-ferramentas",
+ "utsim-launcher-core",
+ "utsim-lss-core",
+ "utsim-pasta",
+ "utsim-posto",
+ "utsim-posto-ui",
+ "utsim-quality",
+ "utsim-stats",
+ "utsim-ui-tema",
+ "winresource",
+ "zip 2.6.1",
 ]
 
 [[package]]
@@ -7873,6 +7909,7 @@ dependencies = [
  "ron 0.8.1",
  "serde",
  "serde_json",
+ "tempfile",
  "utsim-assets",
  "utsim-core",
  "utsim-edit",
@@ -7886,6 +7923,7 @@ dependencies = [
  "utsim-model",
  "utsim-objects",
  "utsim-opt",
+ "utsim-pasta",
  "utsim-pert",
  "utsim-scene",
  "utsim-stats",
@@ -8166,6 +8204,7 @@ dependencies = [
  "rand_distr 0.5.1",
  "rand_pcg",
  "serde",
+ "serde_json",
  "utsim-stats",
 ]
 
@@ -8281,6 +8320,7 @@ dependencies = [
  "utsim-fluid",
  "utsim-look",
  "utsim-model",
+ "utsim-objects",
  "utsim-opt",
  "utsim-scene",
  "utsim-script",

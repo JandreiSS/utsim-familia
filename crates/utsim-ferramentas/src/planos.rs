@@ -41,6 +41,29 @@ pub mod fields {
     /// The FMEA row this line controls.
     pub const FMEA_ROW: &str = "linha_fmea";
     pub const CRITICAL: &str = "critica";
+    /// Where the characteristic is read in operation: `kpi:<id>` (a KPI of the twin
+    /// panel, per window) or `tag:<tag>` (an observation of the twin).
+    pub const SOURCE: &str = "fonte";
+    /// Frozen phase II limits: centre, lower and upper.
+    pub const CENTER: &str = "lc";
+    pub const LCL: &str = "lic";
+    pub const UCL: &str = "lsc";
+    /// Where the limits came from: `dados`, `modelo` or `manual`.
+    pub const LIMITS_FROM: &str = "origem_limites";
+    /// The response plan signal fired when the chart signals.
+    pub const RESPONSE: &str = "sinal_resposta";
+    /// The saving whose realised value the characteristic measures.
+    pub const SAVING: &str = "ganho";
+    /// Value of the characteristic before the project.
+    pub const BASELINE: &str = "linha_base";
+    /// Money per month for each unit of improvement over the baseline.
+    pub const PER_UNIT: &str = "valor_por_unidade";
+    /// `maior` (higher is better) or `menor`.
+    pub const BETTER: &str = "melhor";
+    /// Twin time of the last point already checked (signals before it opened their cards).
+    pub const CHECKED: &str = "conferido_ate";
+    /// Control plan (deliverable): address of the twin panel or folder of recordings.
+    pub const TWIN: &str = "endereco_gemeo";
 
     // Response plan.
     pub const SIGNAL: &str = "sinal";

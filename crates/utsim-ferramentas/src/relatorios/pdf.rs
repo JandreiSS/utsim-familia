@@ -1444,7 +1444,7 @@ fn page_content(
         // Header: the company and the document's title, with the accent rule.
         let top = h - MARGIN;
         let company = if t.company.is_empty() {
-            "UTSim Seis Sigma"
+            doc.app_name()
         } else {
             t.company.as_str()
         };
@@ -1574,8 +1574,9 @@ pub fn render(doc: &Document, t: &Template, generated: &str) -> Vec<u8> {
     }
     objs.push(
         format!(
-            "<< /Title ({}) /Producer (UTSim Seis Sigma) >>",
-            esc(&encode(&doc.title))
+            "<< /Title ({}) /Producer ({}) >>",
+            esc(&encode(&doc.title)),
+            esc(&encode(doc.app_name()))
         )
         .into_bytes(),
     );

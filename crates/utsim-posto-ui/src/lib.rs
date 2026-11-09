@@ -1,5 +1,5 @@
 //! Telas egui comuns aos apps UTSim Qualidade e UTSim Segurança do Trabalho (etapas QS8 e
-//! QS9 de `docs/plano_qualidade_e_seguranca.md`). Os dois apps abrem a MESMA pasta de
+//! QS9 de `docs/plano_qualidade_e_seguranca.md`). Os apps abrem a MESMA pasta de
 //! unidade ([`utsim_posto::Unidade`]).
 //!
 //! - [`sessao`]: a unidade aberta, o autor lembrado em arquivo e a atualização periódica;

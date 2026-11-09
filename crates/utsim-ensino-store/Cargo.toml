@@ -18,10 +18,8 @@ utsim-launcher-core = { path = "../utsim-launcher-core" }
 ron.workspace = true
 thiserror.workspace = true
 rayon.workspace = true
-# Crypto versions pinned like the launcher's: any upgrade is a reviewed change.
-ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "zeroize"] }
-sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
-getrandom = { version = "=0.2.17", features = ["std"] }
+# Keys, signatures and the hash chain, shared with UTSim Seis Sigma (decision E12).
+utsim-diario.workspace = true
 zip = { version = "=2.6.1", default-features = false, features = ["deflate"] }
 # The class grades as a spreadsheet (the same writer as the Seis Sigma reports).
 rust_xlsxwriter = { version = "=0.102.0", default-features = false }

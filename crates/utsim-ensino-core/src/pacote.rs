@@ -16,6 +16,10 @@ pub const FORMATO_PACOTE: u32 = 1;
 /// The files of a package: path with `/` to bytes.
 pub type Arquivos = BTreeMap<String, Vec<u8>>;
 
+fn pt_br() -> String {
+    "pt-BR".into()
+}
+
 fn um() -> u32 {
     1
 }
@@ -33,7 +37,11 @@ pub struct Pacote {
     pub autor: String,
     #[serde(default)]
     pub descricao: String,
-    /// What the package needs (`linha:lean_office`); unknown needs are reported.
+    /// Language of the texts of the package (`pt-BR`, `en`, `es`); the interface says so
+    /// when it differs from the chosen one.
+    #[serde(default = "pt_br")]
+    pub idioma: String,
+    /// What the package needs (`nucleo >= 0.1`, `linha:lean_office`), see [`crate::requisitos`].
     #[serde(default)]
     pub requer: Vec<String>,
     pub atos: Vec<Ato>,
@@ -128,12 +136,9 @@ pub struct PacoteCarregado {
     pub glossario: Glossario,
     /// SHA-256 of the files, in hex: goes in every delivery.
     pub hash: String,
-    /// Needs this version does not provide (a warning, not an error).
-    pub faltando: Vec<String>,
+    /// Needs this version does not meet (a warning, not an error).
+    pub faltando: Vec<crate::requisitos::Falta>,
 }
-
-/// What this version provides to `requer`.
-pub const OFERECE: &[&str] = &["nucleo"];
 
 impl PacoteCarregado {
     pub fn missao(&self, id: &str) -> Option<&MissaoCarregada> {
@@ -242,15 +247,7 @@ pub fn carregar(arquivos: &Arquivos) -> Result<PacoteCarregado, Vec<String>> {
     if !erros.is_empty() {
         return Err(erros);
     }
-    let faltando = pacote
-        .requer
-        .iter()
-        .filter(|r| {
-            let nome = r.split_whitespace().next().unwrap_or("");
-            !OFERECE.contains(&nome)
-        })
-        .cloned()
-        .collect();
+    let faltando = crate::requisitos::faltando(&pacote.requer);
     Ok(PacoteCarregado {
         hash: hash_arquivos(arquivos),
         pacote,

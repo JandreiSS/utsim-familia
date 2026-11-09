@@ -107,6 +107,12 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | Segurança | Ensino | casos de segurança | resultado do aluno |
 | Qualidade | Ensino | casos de qualidade (já existe: pacote de missões) | resultado do aluno |
 | Ensino | Qualidade | missão que pede uma ferramenta (Pareto dos defeitos, carta) | a ferramenta feita pelo aluno, para conferir |
+| UTSim | Estatística | saídas por replicação e por cenário de experimento, medições simuladas do nó, campos do nó (`docs/plano_estatistica.md`, 3.1) | `Dist` ajustada gravada no campo do nó (`SetFieldSource`, com a trava), ótimo do DOE gravado nos parâmetros (`Set*`), replicações sugeridas |
+| Estatística | UTSim | pedido `abrir_modelo` no nó analisado | nada (o modelo muda só pelos comandos acima) |
+| Estatística | Qualidade | pedido `abrir_ferramenta` (`carta`, `capacidade`, `msa`, `pareto`) com a coluna escolhida | a ferramenta pronta, citada no histórico de análises |
+| Qualidade | Estatística | pedido `analisar` (teste, ANOVA, regressão) ou `ajustar_distribuicao` sobre uma característica | receita, resultado e relatório com hash; a `Dist` quando pedida |
+| Seis Sigma | Estatística | pedido `analisar` com o conjunto de dados do projeto, ou `planejar_experimento` (decisão 4 do plano do Estatística: migração gradual) | resultado e relatório gravados como entregável do projeto `.lss` |
+| Ensino | Estatística | missão que pede uma análise (teste, regressão) | a análise feita pelo aluno, para conferir |
 | launcher | todos | onde cada app está instalado, versão ativa | nada |
 
 ## 5. Papel dos apps e ordem

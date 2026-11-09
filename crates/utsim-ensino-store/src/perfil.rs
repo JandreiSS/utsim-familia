@@ -13,7 +13,7 @@ use utsim_ensino_core::turma::Aluno;
 
 use crate::arquivos::{Convite, Entrega, FORMATO_ENTREGA};
 use crate::chave::Chave;
-use crate::diario::{RegistroTentativa, TentativaAssinada, assinar};
+use crate::diario::{LerRegistro, RegistroTentativa, TentativaAssinada, assinar};
 use crate::pasta::{PastaTurma, slug};
 use crate::{Erro, Result};
 
@@ -55,6 +55,9 @@ pub struct Config {
     /// in its competence map.
     #[serde(default)]
     pub programa_seis_sigma: Option<PathBuf>,
+    /// Language of the interface (`pt-BR`, `en`, `es`); Portuguese when absent.
+    #[serde(default)]
+    pub idioma: Option<String>,
 }
 
 pub struct Perfil {
@@ -120,12 +123,17 @@ impl Perfil {
 
     /// The student's key, created on first use.
     pub fn chave(&self) -> Result<Chave> {
-        Chave::carregar_ou_criar(&self.dir.join("chave_aluno.txt"))
+        Chave::carregar_ou_criar(&self.dir.join("chave_aluno.txt"), crate::chave::CABECALHO)
+            .map_err(Into::into)
     }
 
     /// The teacher's key, created when teacher mode is turned on.
     pub fn chave_professor(&self) -> Result<Chave> {
-        Chave::carregar_ou_criar(&self.dir.join("professor").join("chave.txt"))
+        Chave::carregar_ou_criar(
+            &self.dir.join("professor").join("chave.txt"),
+            crate::chave::CABECALHO,
+        )
+        .map_err(Into::into)
     }
 
     pub fn progresso(&self, pacote: &str) -> Progresso {
