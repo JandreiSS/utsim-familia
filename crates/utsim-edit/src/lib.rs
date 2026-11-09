@@ -1003,6 +1003,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             batch: None,
             order: None,
             patience: None,
+            gather: None,
+            waves: None,
         },
         "Processor" => ObjectKind::Processor {
             capacity: 1,
@@ -1049,6 +1051,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             levels: 3,
             dwell: None,
             placement: Default::default(),
+            access: None,
             bay_width: 1.0,
             level_height: 1.0,
         },

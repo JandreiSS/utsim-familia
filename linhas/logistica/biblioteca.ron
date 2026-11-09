@@ -1,0 +1,272 @@
+// Biblioteca da linha Logística e armazém (docs/plano_linhas_especializadas.md, seção 8): as
+// predefinições sobre os objetos comuns do UTSim. Recebimento por caminhões com agenda,
+// docas, armazenagem com curva ABC, pedidos com várias linhas, ondas de separação,
+// consolidação e expedição.
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "logistica/<id>".
+//
+// Manutenção, EPI e qualidade ficam nos campos do próprio nó (downtime, ppe, quality), os
+// mesmos que as abas do painel de propriedades e os apps da família editam
+// (docs/plano_integracao_familia.md, seção 3): a linha não guarda dados paralelos.
+//
+// Unidade de tempo: minuto. Rótulos lidos pelos indicadores da linha:
+// - paletes: quantos paletes o caminhão traz (a doca o desmonta em paletes);
+// - caminhao: número do caminhão em cada palete (gravado pela doca);
+// - classe: curva ABC do palete (1 = A, 2 = B, 3 = C), para o endereçamento;
+// - linhas: quantas linhas o pedido tem (a divisão em linhas usa este rótulo);
+// - pedido e linha: número do pedido e índice da linha (gravados pela divisão);
+// - sla: prazo do pedido em minutos a partir da entrada.
+Library(
+    line: "logistica",
+    name: "Logística e armazém",
+    description: "Caminhões com agenda, pátio e docas, armazenagem com curva ABC, pedidos com várias linhas, ondas de separação, consolidação e expedição: linhas por hora, tempo de doca e pedidos no prazo.",
+    models: [
+        (
+            file: "examples/cd_recebimento_expedicao.ron",
+            name: "CD com recebimento e expedição",
+            description: "Agenda de caminhões, docas, armazenagem ABC com empilhadeiras, separação e expedição.",
+        ),
+        (
+            file: "examples/separacao_em_ondas.ron",
+            name: "Separação em ondas",
+            description: "Pedidos de e-commerce com várias linhas, ondas por horário, consolidação e corte da transportadora.",
+        ),
+        (
+            file: "examples/cross_docking.ron",
+            name: "Cross-docking",
+            description: "Paletes da doca de entrada direto à doca de saída, sem armazenar.",
+        ),
+    ],
+    presets: [
+        (
+            id: "caminhoes",
+            name: "Chegada de caminhões",
+            icon: "caminhao",
+            role: Entry,
+            description: "Caminhões que trazem paletes: intervalo ou agenda (tabela de horários) e quantos paletes cada um traz.",
+            name_base: "caminhoes",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre caminhões (min)", default: "Exp(mean: 60.0)"),
+                (key: "paletes", label: "Paletes por caminhão", default: "Discrete([(10.0, 0.5), (20.0, 0.5)])"),
+                (key: "agenda", label: "Agenda de chegadas", default: "None",
+                 help: "Some((repeat: Cycle(1440.0), rows: [(at: 480.0), (at: 600.0)])) para caminhões em horários marcados"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: {"paletes": ${paletes}}, table: ${agenda}),
+                    symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "patio",
+            name: "Pátio",
+            icon: "fila",
+            role: Inbox,
+            description: "Os caminhões esperam uma doca livre.",
+            name_base: "patio",
+            objects: [
+                r#"(name: "${name}", kind: Queue(), symbol: "espera", visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "doca",
+            name: "Doca",
+            icon: "doca",
+            role: Work,
+            description: "Uma doca: o caminhão encosta (manobra), é desmontado em paletes e fica na doca até as empilhadeiras tirarem o último palete. Para mais docas, coloque mais desta predefinição ligadas ao mesmo pátio.",
+            name_base: "doca",
+            fields: [
+                (key: "manobra", label: "Tempo de encostar e abrir (min)", default: "Const(10.0)"),
+                (key: "empilhadeiras", label: "Quem tira os paletes", default: "\"empilhadeiras\""),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Separator(mode: SplitBy(count: "paletes", group: "caminhao"), process: ${manobra}),
+                    transport: ${empilhadeiras}, symbol: "transporte", visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "porta_paletes",
+            name: "Porta-paletes",
+            icon: "estante",
+            role: Inbox,
+            description: "Armazenagem endereçada: colunas, níveis, permanência e endereçamento pela curva ABC, com o tempo de acesso por coluna e por nível.",
+            name_base: "porta_paletes",
+            fields: [
+                (key: "colunas", label: "Colunas", default: "10"),
+                (key: "niveis", label: "Níveis", default: "4"),
+                (key: "permanencia", label: "Permanência (min)", default: "Some(Exp(mean: 480.0))"),
+                (key: "enderecamento", label: "Endereçamento", default: "Abc(a: 0.2, b: 0.3)",
+                 help: "Abc(a, b): frações das posições de acesso mais rápido para as classes A e B; FirstFree ou Random"),
+                (key: "acesso", label: "Tempo de acesso (min por coluna e por nível)", default: "Some((per_bay: 0.2, per_level: 0.5))"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Rack(bays: ${colunas}, levels: ${niveis}, dwell: ${permanencia},
+                    placement: ${enderecamento}, access: ${acesso}), symbol: "armazenagem")"#,
+            ],
+        ),
+        (
+            id: "pedidos",
+            name: "Entrada de pedidos",
+            icon: "bandeja_entrada",
+            role: Entry,
+            description: "Os pedidos dos clientes: intervalo, linhas por pedido e prazo.",
+            name_base: "pedidos",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre pedidos (min)", default: "Exp(mean: 5.0)"),
+                (key: "linhas", label: "Linhas por pedido", default: "Discrete([(1.0, 0.4), (2.0, 0.3), (3.0, 0.2), (5.0, 0.1)])"),
+                (key: "sla", label: "Prazo do pedido (min)", default: "Const(1440.0)"),
+                (key: "expediente", label: "Horário dos pedidos", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: {"linhas": ${linhas}, "sla": ${sla}}),
+                    shifts: ${expediente}, symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "onda",
+            name: "Onda de separação",
+            icon: "pilha_amarrada",
+            role: Batch,
+            description: "Os pedidos esperam e vão para a separação juntos nos horários das ondas.",
+            name_base: "onda",
+            fields: [
+                (key: "horarios", label: "Horários das ondas (min do dia)", default: "[480.0, 600.0, 780.0, 900.0]",
+                 help: "minutos desde a meia-noite: 480.0 é 8h"),
+                (key: "ciclo", label: "Ciclo (min)", default: "1440.0"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(waves: Some((cycle: ${ciclo}, times: ${horarios}))), symbol: "espera",
+                    visual: Some((asset: Some("bandeja"))))"#,
+            ],
+        ),
+        (
+            id: "linhas",
+            name: "Divisão em linhas",
+            icon: "lista",
+            role: Work,
+            description: "Divide cada pedido nas suas linhas (rótulo linhas); cada linha leva o número do pedido.",
+            name_base: "linhas",
+            fields: [
+                (key: "tempo", label: "Tempo de liberar o pedido (min)", default: "Const(0.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Separator(mode: SplitBy(count: "linhas", group: "pedido"), process: ${tempo}),
+                    symbol: "operacao")"#,
+            ],
+        ),
+        (
+            id: "separacao",
+            name: "Separação",
+            icon: "carrinho",
+            role: Work,
+            description: "Um separador da equipe busca cada linha; tempo por linha e quantas linhas são separadas ao mesmo tempo.",
+            name_base: "separacao",
+            fields: [
+                (key: "tempo", label: "Tempo por linha (min)", default: "Triangular(min: 1.0, mode: 2.0, max: 4.0)"),
+                (key: "equipe", label: "Equipe", default: "\"separadores\""),
+                (key: "vagas", label: "Linhas ao mesmo tempo", default: "4"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${vagas}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao",
+                    visual: Some((asset: Some("bancada"))))"#,
+            ],
+        ),
+        (
+            id: "consolidacao",
+            name: "Consolidação",
+            icon: "caixa",
+            role: Batch,
+            description: "Junta as linhas de cada pedido; o pedido segue quando chega a última.",
+            name_base: "consolidacao",
+            objects: [
+                r#"(name: "${name}", kind: Queue(gather: Some((group: "pedido", count: "linhas"))), symbol: "espera",
+                    visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "expedicao",
+            name: "Expedição",
+            icon: "caminhao",
+            role: Done,
+            description: "Onde os pedidos (ou os paletes) saem do armazém.",
+            name_base: "expedicao",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+        (
+            id: "empilhadeiras",
+            name: "Empilhadeiras",
+            icon: "empilhadeira",
+            role: Team,
+            description: "Frota de empilhadeiras (começa com duas): manutenção no campo downtime de cada uma e EPI no ppe.",
+            name_base: "empilhadeiras",
+            fields: [
+                (key: "regra", label: "Regra de escolha", default: "Nearest",
+                 help: "Nearest, FirstAvailable, LeastBusy"),
+                (key: "manutencao", label: "Quebras e manutenção", default: "None",
+                 help: "Some((mtbf: Exp(mean: 2400.0), mttr: Exp(mean: 60.0))): fica no nó de cada empilhadeira (aba Manutenção)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: ${regra}))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 120.0, load_time: Const(0.3), unload_time: Const(0.3)),
+                    position: (0.0, 2.0, 0.0), downtime: ${manutencao}, ppe: ["colete", "botina"],
+                    visual: Some((asset: Some("empilhadeira"))), preset: "logistica/empilhadeira")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 120.0, load_time: Const(0.3), unload_time: Const(0.3)),
+                    position: (0.0, -2.0, 0.0), downtime: ${manutencao}, ppe: ["colete", "botina"],
+                    visual: Some((asset: Some("empilhadeira"))), preset: "logistica/empilhadeira")"#,
+            ],
+        ),
+        (
+            id: "separadores",
+            name: "Separadores",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Equipe de separação (começa com duas pessoas), com horário.",
+            name_base: "separadores",
+            fields: [
+                (key: "regra", label: "Regra de escolha", default: "FirstAvailable"),
+                (key: "expediente", label: "Horário", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: ${regra}))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 72.0), position: (0.0, 1.5, 0.0), shifts: ${expediente},
+                    ppe: ["botina"], visual: Some((asset: Some("pessoa"))), person: Some(()), preset: "logistica/separador")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 72.0), position: (0.0, -1.5, 0.0), shifts: ${expediente},
+                    ppe: ["botina"], visual: Some((asset: Some("pessoa"))), person: Some(()), preset: "logistica/separador")"#,
+            ],
+        ),
+        (
+            id: "empilhadeira",
+            name: "Empilhadeira",
+            icon: "empilhadeira",
+            role: Person,
+            description: "Uma empilhadeira da frota: velocidade, quebras (downtime do nó) e EPI.",
+            name_base: "empilhadeira",
+            fields: [
+                (key: "manutencao", label: "Quebras e manutenção", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 120.0, load_time: Const(0.3), unload_time: Const(0.3)),
+                    downtime: ${manutencao}, ppe: ["colete", "botina"], visual: Some((asset: Some("empilhadeira"))))"#,
+            ],
+        ),
+        (
+            id: "separador",
+            name: "Separador",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Uma pessoa da equipe de separação.",
+            name_base: "separador",
+            fields: [
+                (key: "expediente", label: "Horário", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 72.0), shifts: ${expediente}, ppe: ["botina"],
+                    visual: Some((asset: Some("pessoa"))), person: Some(()))"#,
+            ],
+        ),
+    ],
+)

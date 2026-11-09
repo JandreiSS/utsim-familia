@@ -182,6 +182,7 @@ impl TelaModelo {
         self.pessoa = pessoa.to_string();
         self.mtime = modificado(caminho);
         self.arquivo = Some(caminho.to_path_buf());
+        self.caminho = caminho.display().to_string();
         self.doc = Some(doc);
         self.estado = Some(estado);
         self.revisao_gravada = 0;
