@@ -54,9 +54,9 @@ use utsim_fluid::{FluidDef, FluidNet};
 use utsim_objects::network::NetworkDef;
 use utsim_objects::traffic::Traffic;
 use utsim_objects::{
-    Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, LabelOrder,
-    Multitask, OnBlocked, OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement,
-    SeparateMode, Separator, Sink, Source, TaskPick, Transporter, TypedSink,
+    Access, Batch, CombineMode, Combiner, Conveyor, Discipline, DispatchRule, Dispatcher, Gather,
+    LabelOrder, Multitask, OnBlocked, OperatorUse, Preempt, Processor, Queue, Rack, RackPlacement,
+    SeparateMode, Separator, Sink, Source, TaskPick, Transporter, TypedSink, Waves,
 };
 
 pub use arrivals::{AreaDef, ItemTypeDef};
@@ -389,6 +389,13 @@ pub enum ObjectKind {
         /// drawn per item when it enters); absent: it waits forever.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         patience: Option<Dist>,
+        /// Consolidation: holds the lines of each order (label `group`) until all
+        /// (label `count`) are here, then the order leaves with its lines packed inside.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gather: Option<Gather>,
+        /// Wave release: items wait and leave together at the `times` of each `cycle`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        waves: Option<Waves>,
     },
     Processor {
         #[serde(default = "one_usize")]
@@ -480,6 +487,10 @@ pub enum ObjectKind {
         dwell: Option<Dist>,
         #[serde(default)]
         placement: RackPlacement,
+        /// Time to reach a position, per bay from the front and per level (put away or
+        /// pick), added to the dwell; absent: none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        access: Option<Access>,
         /// 3D spacing between bays and between levels.
         #[serde(default = "one_f64")]
         bay_width: f64,
@@ -703,9 +714,40 @@ impl Model {
                     order,
                     discipline,
                     patience,
+                    gather,
+                    waves,
                 } => {
                     if let Some(p) = patience {
                         dists.push(("patience".into(), p));
+                    }
+                    if let Some(g) = gather {
+                        if g.group.trim().is_empty() || g.count.trim().is_empty() {
+                            errors.push(format!(
+                                "{}: gather precisa do rótulo do grupo e do rótulo da contagem",
+                                obj.name
+                            ));
+                        }
+                    }
+                    if let Some(w) = waves {
+                        if !(w.cycle.is_finite() && w.cycle > 0.0) {
+                            errors.push(format!("{}: waves.cycle deve ser finito e > 0", obj.name));
+                        }
+                        if w.times.is_empty()
+                            || w.times
+                                .iter()
+                                .any(|t| !(t.is_finite() && *t >= 0.0 && *t < w.cycle))
+                        {
+                            errors.push(format!(
+                                "{}: waves.times precisa de horários em [0, cycle)",
+                                obj.name
+                            ));
+                        }
+                    }
+                    if batch.is_some() && (gather.is_some() || waves.is_some()) {
+                        errors.push(format!(
+                            "{}: batch não combina com gather nem com waves",
+                            obj.name
+                        ));
                     }
                     if let Some(o) = order {
                         if o.label().trim().is_empty() {
@@ -779,6 +821,14 @@ impl Model {
                     dists.push(("process".into(), process));
                 }
                 ObjectKind::Separator { mode, process } => {
+                    if let SeparateMode::SplitBy { count, group } = mode {
+                        if count.trim().is_empty() || group.trim().is_empty() {
+                            errors.push(format!(
+                                "{}: SplitBy precisa do rótulo da contagem e do rótulo do grupo",
+                                obj.name
+                            ));
+                        }
+                    }
                     if *mode == SeparateMode::Split(0) {
                         errors.push(format!("{}: Split(n) exige n >= 1", obj.name));
                     }
@@ -1365,9 +1415,13 @@ impl Model {
                     batch,
                     order,
                     patience,
+                    gather,
+                    waves,
                 } => Box::new(
                     Queue::new(*capacity)
                         .patience(patience.clone())
+                        .gather(gather.clone())
+                        .waves(waves.clone())
                         .discipline(*discipline)
                         .batch(*batch)
                         .order(order.clone()),
@@ -1381,7 +1435,7 @@ impl Model {
                     Combiner::new(components.clone(), *mode, process.clone()).setup(setup.clone()),
                 ),
                 ObjectKind::Separator { mode, process } => {
-                    Box::new(Separator::new(*mode, process.clone()))
+                    Box::new(Separator::new(mode.clone(), process.clone()))
                 }
                 ObjectKind::Processor {
                     capacity,
@@ -1442,8 +1496,9 @@ impl Model {
                     levels,
                     dwell,
                     placement,
+                    access,
                     ..
-                } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement)),
+                } => Box::new(Rack::new(*bays, *levels, dwell.clone(), *placement).access(*access)),
                 ObjectKind::Dispatcher {
                     team,
                     rule,

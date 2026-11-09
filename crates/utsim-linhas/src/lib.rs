@@ -6,9 +6,10 @@
 //! presets in a model being edited; [`registro`] holds the lines that come with UTSim.
 
 pub mod lean_office;
+pub mod logistica;
 pub mod pacote;
 pub mod registro;
 pub mod servicos;
 
 pub use pacote::{Field, Library, ModelRef, Pack, Placement, Preset, Role, Vocabulary};
-pub use registro::{LEAN_OFFICE, QUALIDADE, SEGURANCA, SERVICOS, active, builtin, find};
+pub use registro::{LEAN_OFFICE, LOGISTICA, QUALIDADE, SEGURANCA, SERVICOS, active, builtin, find};

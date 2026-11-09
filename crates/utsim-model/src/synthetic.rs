@@ -75,6 +75,8 @@ fn queue() -> ObjectKind {
         batch: None,
         order: None,
         patience: None,
+        gather: None,
+        waves: None,
     }
 }
 
@@ -204,6 +206,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
                             max: 60.0,
                         }),
                         placement: RackPlacement::FirstFree,
+                        access: None,
                         bay_width: 1.2,
                         level_height: 1.5,
                     },
