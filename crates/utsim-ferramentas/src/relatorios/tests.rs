@@ -234,3 +234,167 @@ fn charts_are_drawn_inside_the_pdf() {
     }
     assert!(pdf::page_count(&many, &t) >= 2);
 }
+
+/// A document with every block and chart kind, a cover and the contents.
+pub(crate) fn showcase() -> Document {
+    let mut d = Document::new("Relatório de demonstração", "Todos os blocos do gerador");
+    d.cover = Some(Cover {
+        app: "UTSim Seis Sigma".into(),
+        title: "Redução de refugo na usinagem da tampa".into(),
+        subtitle: "Relatório do tollgate Analisar".into(),
+        author: "Ana Souza".into(),
+        date: "08/11/2026".into(),
+        source: "Modelo linha_tampa.ron (hash 3f2a…), 10 replicações; coleta real de outubro"
+            .into(),
+        ..Cover::default()
+    });
+    d.toc = true;
+    d.heading("Resumo");
+    d.kpis(vec![
+        Kpi {
+            label: "Refugo".into(),
+            value: "4,2 %".into(),
+            note: "meta 2 %".into(),
+        },
+        Kpi {
+            label: "Cpk".into(),
+            value: "0,91".into(),
+            note: "era 0,62".into(),
+        },
+        Kpi {
+            label: "Ganho validado".into(),
+            value: "R$ 48.000".into(),
+            note: "12 meses".into(),
+        },
+    ]);
+    d.callout(Tone::Ok, "Conclusão", "A causa raiz verificada é o desgaste do gabarito; a troca a cada 5 mil peças reduz o refugo pela metade.");
+    d.callout(
+        Tone::Warn,
+        "Atenção",
+        "O MSA de atributos ainda não foi refeito depois da troca do critério.",
+    );
+    d.heading("Causas");
+    d.blocks.push(Block::Ishikawa {
+        effect: "Furo fora de posição".into(),
+        categories: vec![
+            (
+                "Máquina".into(),
+                vec!["Gabarito gasto".into(), "Folga no fuso".into()],
+            ),
+            ("Método".into(), vec!["Sem troca programada".into()]),
+            (
+                "Material".into(),
+                vec![
+                    "Chapa empenada".into(),
+                    "Lote fora".into(),
+                    "Rebarba".into(),
+                ],
+            ),
+            ("Mão de obra".into(), vec!["Treino do turno C".into()]),
+            ("Medição".into(), vec!["Calibrador vencido".into()]),
+            ("Meio ambiente".into(), vec!["Temperatura".into()]),
+        ],
+    });
+    d.chart(Chart {
+        title: "Pareto dos defeitos".into(),
+        kind: ChartKind::Pareto,
+        labels: vec![
+            "Rebarba".into(),
+            "Risco".into(),
+            "Mancha".into(),
+            "Outros".into(),
+        ],
+        series: vec![("ocorrências".into(), vec![48.0, 22.0, 9.0, 5.0])],
+        ..Chart::default()
+    });
+    d.heading("Medições");
+    let data: Vec<f64> = (0..80)
+        .map(|i| 10.0 + ((i * 37 % 23) as f64 - 11.0) / 40.0)
+        .collect();
+    d.chart(Chart {
+        title: "Histograma do diâmetro".into(),
+        kind: ChartKind::Histogram,
+        series: vec![("diâmetro".into(), data.clone())],
+        hlines: vec![("LIE".into(), 9.6), ("LSE".into(), 10.4)],
+        ..Chart::default()
+    });
+    d.chart(Chart {
+        title: "Carta I com zonas".into(),
+        labels: (1..=40).map(|i| i.to_string()).collect(),
+        series: vec![("diâmetro".into(), data[..40].to_vec())],
+        hlines: vec![("LSC".into(), 10.4), ("LIC".into(), 9.6)],
+        bands: vec![
+            ("zona C".into(), 9.87, 10.13),
+            ("zona B".into(), 10.13, 10.27),
+        ],
+        marks: vec![7],
+        ..Chart::default()
+    });
+    d.chart(Chart {
+        title: "Temperatura × diâmetro".into(),
+        kind: ChartKind::Scatter,
+        series: vec![
+            (
+                "temperatura".into(),
+                (0..20).map(|i| 20.0 + i as f64).collect(),
+            ),
+            (
+                "diâmetro".into(),
+                (0..20).map(|i| 9.8 + 0.02 * i as f64).collect(),
+            ),
+        ],
+        ..Chart::default()
+    });
+    d.heading("Riscos");
+    d.blocks.push(Block::RiskMatrix {
+        title: "Matriz de risco (probabilidade × severidade)".into(),
+        rows: vec!["Alta".into(), "Média".into(), "Baixa".into()],
+        cols: vec!["Leve".into(), "Moderada".into(), "Grave".into()],
+        levels: vec![vec![1, 2, 2], vec![0, 1, 2], vec![0, 0, 1]],
+        colours: vec!["#7FBF7F".into(), "#F2C94C".into(), "#D9534F".into()],
+        marks: vec![(0, 2, "Prensa sem trava".into()), (1, 1, "Ruído".into())],
+    });
+    d.table(
+        "Ações",
+        &["Ação", "Dono", "Prazo"],
+        (1..=6)
+            .map(|i| vec![format!("Ação {i}"), "Ana".into(), "30/11/2026".into()])
+            .collect(),
+        &[3.0, 1.0, 1.0],
+    );
+    d
+}
+
+#[test]
+fn cover_contents_and_new_blocks() {
+    let d = showcase();
+    let t = Template::default();
+    let a = pdf::render(&d, &t, "Impresso por Ana em 08/11/2026");
+    check_structure(&a);
+    assert_eq!(a, pdf::render(&d, &t, "Impresso por Ana em 08/11/2026"));
+    let text = String::from_utf8_lossy(&a);
+    assert!(text.contains(r"(Sum\341rio)"));
+    assert!(text.contains(r"(Redu\347\343o de refugo na"));
+    assert!(text.contains(r"(Furo fora de posi\347\343o)"));
+    assert!(text.contains("(80 %)"));
+    assert!(text.contains("(Prensa sem trava)"));
+    // The cover has no header nor "página 1 de N".
+    assert!(!text.contains(r"(p\341gina 1 de"));
+    // The contents point at the right pages: each heading's page holds its text.
+    let n = pdf::page_count(&d, &t);
+    assert!(n >= 4, "{n}");
+    assert_eq!(d.headings(), vec!["Resumo", "Causas", "Medições", "Riscos"]);
+    let p = d.plain_text();
+    assert!(p.contains("Gabarito gasto") && p.contains("Cpk: 0,91 era 0,62"));
+    // Without cover and contents nothing changes in an old document.
+    let old = sample(5);
+    assert_eq!(pdf::page_count(&old, &t), 1);
+    if let Some(dir) = std::env::var_os("UTSIM_CAPTURAS") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            std::path::Path::new(&dir).join("relatorio_demonstracao.pdf"),
+            &a,
+        )
+        .unwrap();
+    }
+}

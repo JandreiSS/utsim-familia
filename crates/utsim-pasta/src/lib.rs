@@ -213,3 +213,186 @@ mod tests {
         assert!(json_files(&dir.path().join("nada")).is_empty());
     }
 }
+
+/// One writer per model file (`docs/plano_integracao_familia.md`, section 3.2): whoever
+/// opens a model to edit it writes `.<file name>.trava` next to it and renews it while the
+/// model is open. Another app finds it and opens the model read only. A lock not renewed
+/// for [`TRAVA_EXPIRA_MS`] is abandoned (a crash, a machine turned off).
+pub mod trava {
+    use std::path::{Path, PathBuf};
+
+    use serde::{Deserialize, Serialize};
+
+    use crate::{Error, write_new, write_replace};
+
+    /// A lock older than this without renewal is ignored.
+    pub const TRAVA_EXPIRA_MS: u64 = 5 * 60 * 1000;
+    /// How often the holder renews it.
+    pub const RENOVAR_A_CADA_MS: u64 = 60 * 1000;
+
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct Trava {
+        /// Product holding it (`utsim`, `qualidade`, `seguranca`...).
+        pub app: String,
+        /// Who, as the app shows them.
+        pub pessoa: String,
+        /// Computer, to tell two windows of the same person apart.
+        #[serde(default)]
+        pub maquina: String,
+        pub desde_ms: u64,
+        pub renovada_ms: u64,
+    }
+
+    impl Trava {
+        pub fn expirada(&self, agora_ms: u64) -> bool {
+            agora_ms.saturating_sub(self.renovada_ms) > TRAVA_EXPIRA_MS
+        }
+
+        fn mesma_dona(&self, app: &str, pessoa: &str, maquina: &str) -> bool {
+            self.app == app && self.pessoa == pessoa && self.maquina == maquina
+        }
+    }
+
+    /// The result of trying to take the lock.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum Estado {
+        /// The lock is ours: edit and save.
+        Minha,
+        /// Someone else edits: open read only and say who.
+        DeOutro(Trava),
+    }
+
+    pub fn agora_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64)
+    }
+
+    /// The lock file of `modelo`.
+    pub fn caminho(modelo: &Path) -> PathBuf {
+        let nome = modelo
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        modelo.with_file_name(format!(".{nome}.trava"))
+    }
+
+    /// The current lock, when there is one that is not abandoned.
+    pub fn ler(modelo: &Path, agora_ms: u64) -> Option<Trava> {
+        let texto = std::fs::read_to_string(caminho(modelo)).ok()?;
+        let t: Trava = serde_json::from_str(&texto).ok()?;
+        (!t.expirada(agora_ms)).then_some(t)
+    }
+
+    /// Takes the lock for `app`/`pessoa`/`maquina`, or says who holds it.
+    pub fn travar(
+        modelo: &Path,
+        app: &str,
+        pessoa: &str,
+        maquina: &str,
+        agora_ms: u64,
+    ) -> Result<Estado, Error> {
+        let nova = Trava {
+            app: app.into(),
+            pessoa: pessoa.into(),
+            maquina: maquina.into(),
+            desde_ms: agora_ms,
+            renovada_ms: agora_ms,
+        };
+        let bytes = serde_json::to_vec_pretty(&nova).expect("trava");
+        let p = caminho(modelo);
+        match write_new(&p, &bytes) {
+            Ok(()) => Ok(Estado::Minha),
+            Err(Error::Exists(_)) => match ler(modelo, agora_ms) {
+                Some(t) if !t.mesma_dona(app, pessoa, maquina) => Ok(Estado::DeOutro(t)),
+                // Ours from before, or abandoned: take it over.
+                _ => {
+                    write_replace(&p, &bytes)?;
+                    Ok(Estado::Minha)
+                }
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Renews our lock; fails with the holder when someone else took it.
+    pub fn renovar(
+        modelo: &Path,
+        app: &str,
+        pessoa: &str,
+        maquina: &str,
+        agora_ms: u64,
+    ) -> Result<Estado, Error> {
+        match ler(modelo, agora_ms) {
+            Some(mut t) if t.mesma_dona(app, pessoa, maquina) => {
+                t.renovada_ms = agora_ms;
+                write_replace(
+                    &caminho(modelo),
+                    &serde_json::to_vec_pretty(&t).expect("trava"),
+                )?;
+                Ok(Estado::Minha)
+            }
+            Some(t) => Ok(Estado::DeOutro(t)),
+            None => travar(modelo, app, pessoa, maquina, agora_ms),
+        }
+    }
+
+    /// Releases our lock (someone else's is left alone).
+    pub fn soltar(modelo: &Path, app: &str, pessoa: &str, maquina: &str) -> Result<(), Error> {
+        let p = caminho(modelo);
+        let Ok(texto) = std::fs::read_to_string(&p) else {
+            return Ok(());
+        };
+        if let Ok(t) = serde_json::from_str::<Trava>(&texto)
+            && t.mesma_dona(app, pessoa, maquina)
+        {
+            std::fs::remove_file(&p).map_err(|e| Error::io(&p, e))?;
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn one_writer_per_model() {
+            let dir = tempfile::tempdir().unwrap();
+            let m = dir.path().join("linha.ron");
+            std::fs::write(&m, "Model()").unwrap();
+            assert_eq!(caminho(&m), dir.path().join(".linha.ron.trava"));
+            assert_eq!(
+                travar(&m, "utsim", "ana", "pc1", 1_000).unwrap(),
+                Estado::Minha
+            );
+            // Another app sees who edits.
+            match travar(&m, "qualidade", "bruno", "pc2", 2_000).unwrap() {
+                Estado::DeOutro(t) => {
+                    assert_eq!((t.app.as_str(), t.pessoa.as_str()), ("utsim", "ana"))
+                }
+                e => panic!("{e:?}"),
+            }
+            // Renewal keeps it, the same owner reopening keeps it.
+            assert_eq!(
+                renovar(&m, "utsim", "ana", "pc1", 200_000).unwrap(),
+                Estado::Minha
+            );
+            assert_eq!(
+                travar(&m, "utsim", "ana", "pc1", 210_000).unwrap(),
+                Estado::Minha
+            );
+            // Abandoned after five minutes without renewal: someone else takes it.
+            let depois = 210_000 + TRAVA_EXPIRA_MS + 1;
+            assert!(ler(&m, depois).is_none());
+            assert_eq!(
+                travar(&m, "qualidade", "bruno", "pc2", depois).unwrap(),
+                Estado::Minha
+            );
+            // Releasing someone else's lock does nothing; releasing ours removes it.
+            soltar(&m, "utsim", "ana", "pc1").unwrap();
+            assert!(ler(&m, depois).is_some());
+            soltar(&m, "qualidade", "bruno", "pc2").unwrap();
+            assert!(!caminho(&m).exists());
+        }
+    }
+}

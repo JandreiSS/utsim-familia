@@ -130,6 +130,14 @@ impl Sessao {
         }
     }
 
+    /// A unidade aberta tem algum posto ligado a um modelo (a tela de entrada dos apps
+    /// passa a ser a aba "Modelo").
+    pub fn tem_modelo(&self) -> bool {
+        self.unidade
+            .as_ref()
+            .is_some_and(|u| u.postos().iter().any(|p| p.modelo.is_some()))
+    }
+
     pub fn fechar(&mut self) {
         self.unidade = None;
         self.versao += 1;

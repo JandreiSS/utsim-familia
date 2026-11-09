@@ -48,6 +48,36 @@ pub struct QualityDef {
     /// warranty, return, claim). Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub escape_cost: Option<f64>,
+    /// Control plan lines of the measured characteristics (the Qualidade tab of the node,
+    /// owner's direction of 2026-11-08). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub control: Vec<ControlLineDef>,
+}
+
+/// One line of the control plan of a characteristic measured at this process.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ControlLineDef {
+    /// Name of a characteristic of this block.
+    pub characteristic: String,
+    /// Measurement method and instrument.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub method: String,
+    /// The measurement system passed its study (MSA); absent: not studied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msa_ok: Option<bool>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub frequency: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_size: Option<u32>,
+    /// Control chart (`imr`, `xbarr`, `xbars`, `p`, `np`, `c`, `u`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub chart: String,
+    /// What to do on a signal.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reaction: String,
+    /// FMEA line it covers (free reference).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub fmea: String,
 }
 
 /// A defect type: base probability per item, changed by factors.

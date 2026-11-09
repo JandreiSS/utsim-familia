@@ -17,6 +17,7 @@ mod multitask;
 mod person;
 pub mod quality;
 pub mod replay;
+pub mod safety;
 mod shifts;
 mod spans;
 pub mod state;
@@ -306,6 +307,10 @@ pub struct ObjectDef {
     /// [`quality::PPE_NAMES`] or others). Never read by the simulation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ppe: Vec<String>,
+    /// Hazards and ergonomics marks of this work station (the Segurança tab of the node).
+    /// Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safety: Option<Box<safety::SafetyDef>>,
 }
 
 impl ObjectDef {
@@ -1217,6 +1222,21 @@ impl Model {
 
     /// Quality blocks, sink roles and risk zones (`docs/formato_qualidade_seguranca.md`).
     fn validate_quality(&self, errors: &mut Vec<String>) {
+        for obj in &self.objects {
+            if let Some(sf) = &obj.safety {
+                errors.extend(safety::problems(&obj.name, sf));
+            }
+            if let Some(q) = &obj.quality {
+                for c in &q.control {
+                    if !q.characteristics.iter().any(|k| k.name == c.characteristic) {
+                        errors.push(format!(
+                            "'{}': plano de controle da característica '{}', que o bloco quality não mede",
+                            obj.name, c.characteristic
+                        ));
+                    }
+                }
+            }
+        }
         for obj in &self.objects {
             let outputs = self
                 .connections
