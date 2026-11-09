@@ -21,6 +21,7 @@
 //!   proportions;
 //! - [`doe`]: two-level factorial experiments, full and fractional, with aliases,
 //!   center points, Lenth's method and the data of the effects plots;
+//! - [`equivalence`]: two one-sided tests (TOST) for a mean, two means or paired data;
 //! - [`nonparametric`]: Mann-Whitney and Wilcoxon signed-rank tests, exact for small
 //!   samples without ties.
 //!
@@ -36,6 +37,7 @@ pub mod compare;
 pub mod correlation;
 pub mod descriptive;
 pub mod doe;
+pub mod equivalence;
 pub mod hypothesis;
 pub mod little;
 pub mod nonparametric;
