@@ -390,7 +390,9 @@ const PALETTE: [(f64, f64, f64); 6] = [
     (0.45, 0.33, 0.25),
 ];
 const SIGNAL: (f64, f64, f64) = (0.80, 0.05, 0.05);
-const REFERENCE: (f64, f64, f64) = (0.45, 0.10, 0.10);
+const REFERENCE: (f64, f64, f64) = (0.70, 0.12, 0.12);
+/// Width of the reference lines (limits, 80 %) and of their legend dash.
+const LINE_W: f64 = 1.2;
 
 /// A number on a chart axis, with a decimal comma.
 fn axis(x: f64) -> String {
@@ -599,37 +601,35 @@ impl Layout {
         for (_, v) in &c.hlines {
             if v.is_finite() {
                 let y = yy(*v);
-                self.line((left, y), (right, y), 0.7, REFERENCE);
+                self.line((left, y), (right, y), LINE_W, REFERENCE);
             }
         }
         // Legend.
         self.y = bottom - 16.0;
         if legend_h > 0.0 {
             let col = inner / 3.0;
-            let entries: Vec<(String, (f64, f64, f64))> = c
+            let _ = col;
+            let entries: Vec<(String, (f64, f64, f64), bool)> = c
                 .series
                 .iter()
                 .enumerate()
                 .filter(|(_, (s, _))| !s.is_empty())
-                .map(|(i, (s, _))| (s.clone(), PALETTE[i % PALETTE.len()]))
+                .map(|(i, (s, _))| (s.clone(), PALETTE[i % PALETTE.len()], !bars))
                 .chain(
                     c.hlines
                         .iter()
-                        .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE)),
+                        .map(|(s, v)| (format!("{s} = {}", axis(*v)), REFERENCE, true)),
                 )
                 .chain(c.bands.iter().enumerate().map(|(bi, (s, _, _))| {
-                    (s.clone(), light(PALETTE[(bi + 2) % PALETTE.len()], 0.35))
+                    (
+                        s.clone(),
+                        light(PALETTE[(bi + 2) % PALETTE.len()], 0.35),
+                        false,
+                    )
                 }))
                 .collect();
-            for (k, (s, rgb)) in entries.into_iter().enumerate() {
-                let x = MARGIN + (k % 3) as f64 * col;
-                if k % 3 == 0 {
-                    self.y -= 12.0;
-                }
-                let y = self.y;
-                self.rect(x, y, 7.0, 7.0, rgb);
-                self.text(x + 10.0, 7.5, false, BLACK, &fit(&s, col - 14.0, 7.5));
-            }
+            self.legend_rows(&entries);
+            self.y += 8.0;
         }
         self.y -= 8.0;
     }
@@ -1034,18 +1034,27 @@ impl Layout {
         }
     }
 
-    /// A legend line under a chart.
-    fn legend(&mut self, a: &Area, entries: &[(String, (f64, f64, f64))]) {
+    /// A legend under a chart: a square for areas (bars, points, zones), a dash in the
+    /// line's colour and width for lines (series of a line chart, limits, the 80 %).
+    fn legend(&mut self, a: &Area, entries: &[(String, (f64, f64, f64), bool)]) {
         self.y = a.bottom - 16.0;
+        self.legend_rows(entries);
+    }
+
+    fn legend_rows(&mut self, entries: &[(String, (f64, f64, f64), bool)]) {
         let col = self.inner() / 3.0;
-        for (k, (s, rgb)) in entries.iter().enumerate() {
+        for (k, (s, rgb, line)) in entries.iter().enumerate() {
             let x = MARGIN + (k % 3) as f64 * col;
             if k % 3 == 0 {
                 self.y -= 12.0;
             }
             let y = self.y;
-            self.rect(x, y, 7.0, 7.0, *rgb);
-            self.text(x + 10.0, 7.5, false, BLACK, &fit(s, col - 14.0, 7.5));
+            if *line {
+                self.line((x - 1.0, y + 3.5), (x + 9.0, y + 3.5), LINE_W, *rgb);
+            } else {
+                self.rect(x, y, 7.0, 7.0, *rgb);
+            }
+            self.text(x + 12.0, 7.5, false, BLACK, &fit(s, col - 16.0, 7.5));
         }
         self.y -= 8.0;
     }
@@ -1090,7 +1099,7 @@ impl Layout {
             self.y = keep;
         }
         let y80 = a.y(0.8 * total);
-        self.line((a.left, y80), (a.right, y80), 0.7, REFERENCE);
+        self.line((a.left, y80), (a.right, y80), LINE_W, REFERENCE);
         for pct in [0, 50, 80, 100] {
             let y = a.y(total * f64::from(pct) / 100.0);
             let keep = self.y;
@@ -1109,9 +1118,10 @@ impl Layout {
                         name
                     },
                     accent,
+                    false,
                 ),
-                ("acumulado (%)".into(), PALETTE[1]),
-                ("80 %".into(), REFERENCE),
+                ("acumulado (%)".into(), PALETTE[1], true),
+                ("80 %".into(), REFERENCE, true),
             ],
         );
     }
@@ -1156,16 +1166,17 @@ impl Layout {
                 .first()
                 .map_or(String::new(), |s| format!("{} (n = {})", s.0, data.len())),
             accent,
+            false,
         )];
         for (name, v) in &c.hlines {
             if v.is_finite() {
                 let x = px(*v);
-                self.line((x, a.bottom), (x, a.top), 1.0, REFERENCE);
+                self.line((x, a.bottom), (x, a.top), LINE_W, REFERENCE);
                 let keep = self.y;
                 self.y = a.top - 9.0;
                 self.text(x + 2.0, 7.0, true, REFERENCE, name);
                 self.y = keep;
-                legend.push((format!("{name} = {}", axis(*v)), REFERENCE));
+                legend.push((format!("{name} = {}", axis(*v)), REFERENCE, true));
             }
         }
         self.legend(&a, &legend);
@@ -1192,7 +1203,7 @@ impl Layout {
         }
         self.x_ticks(&a, x0, x1);
         let n = pts.len() as f64;
-        let mut legend = vec![(format!("{} × {}", ys.0, xs.0), accent)];
+        let mut legend = vec![(format!("{} × {}", ys.0, xs.0), accent, false)];
         if pts.len() >= 2 {
             let mx = pts.iter().map(|p| p.0).sum::<f64>() / n;
             let my = pts.iter().map(|p| p.1).sum::<f64>() / n;
@@ -1207,7 +1218,11 @@ impl Layout {
                     1.0,
                     PALETTE[1],
                 );
-                legend.push((format!("y = {} + {}·x", axis(b0), axis(b)), PALETTE[1]));
+                legend.push((
+                    format!("y = {} + {}·x", axis(b0), axis(b)),
+                    PALETTE[1],
+                    true,
+                ));
             }
         }
         self.legend(&a, &legend);
