@@ -360,8 +360,17 @@ pub fn columns(header: &[String]) -> (Vec<usize>, Option<usize>) {
             None => break,
         }
     }
-    let after = f.last().map(|c| c + 1 + f.len());
-    (f, after.filter(|c| *c < header.len()))
+    // The response: after the coded factors and their actual levels (a worksheet of the
+    // app), or right after the coded factors when there are no level columns.
+    let after = f.last().and_then(|c| {
+        let with_levels = c + 1 + f.len();
+        if with_levels < header.len() {
+            Some(with_levels)
+        } else {
+            Some(c + 1).filter(|x| *x < header.len())
+        }
+    });
+    (f, after)
 }
 
 #[cfg(test)]
