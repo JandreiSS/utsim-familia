@@ -50,6 +50,8 @@ pub mod designacao;
 pub mod mentoria;
 pub mod painel;
 pub mod perfis;
+// Import of the program's people from HR's CSV (P9).
+pub mod pessoas;
 pub mod privacidade;
 pub mod programa;
 pub mod revisao;

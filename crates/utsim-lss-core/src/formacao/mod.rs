@@ -28,6 +28,8 @@
 
 pub mod curriculum;
 pub mod exams;
+pub mod itens;
+pub mod reacao;
 pub mod teams;
 
 use std::collections::{BTreeMap, BTreeSet};
