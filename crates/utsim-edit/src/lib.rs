@@ -996,6 +996,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         rework: None,
         sink_role: None,
         ppe: Vec::new(),
+        safety: None,
     })
 }
 

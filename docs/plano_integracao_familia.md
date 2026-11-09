@@ -76,7 +76,7 @@ Tudo no próprio objeto do `.ron`, usando o que já existe e completando o resto
 | Qualidade | `inspection` | sim | frequência, detecção, alarme falso, medição com desvio, destino da rejeitada, limite de retrabalho, custo |
 | Qualidade | `rework` | sim | chance de corrigir por tipo, custo |
 | Qualidade | `sink_role` | sim | cliente ou refugo |
-| Qualidade | `quality.controle` | **novo** | linhas do plano de controle da característica (método, frequência, amostra, carta, reação) e plano de amostragem da inspeção |
+| Qualidade | `quality.control` | **novo** | linhas do plano de controle da característica (método, frequência, amostra, carta, reação) e plano de amostragem da inspeção |
 | Segurança | `ppe` | sim | EPI exigido no posto |
 | Segurança | `zones` do modelo | sim | zonas de risco desenhadas no piso (o nó só mostra as zonas que o tocam) |
 | Segurança | `safety` | **novo** | perigos do posto (grupo, descrição, fonte, probabilidade, severidade, controles, ações) e marcações de ergonomia por elemento |
@@ -128,4 +128,4 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | I4 | Dado do nó editado em dois apps ao mesmo tempo? | Um escritor por modelo, com trava ao lado do arquivo, e o outro só lê. |
 | I5 | Sem o Qualidade instalado, o Seis Sigma faz o quê? | Mostra o que falta e abre o launcher para instalar. Não cai para uma cópia local. |
 | I6 | Perigos e ergonomia do posto moram no nó ou na pasta de unidade? | No nó (`safety`), como o dono pediu. A pasta de unidade guarda o que não tem nó (incidentes, pessoas, 8D). |
-| I7 | Plano de controle mora no nó? | Sim, a linha da característica fica em `quality.controle`. Planos de postos sem modelo ficam na unidade. |
+| I7 | Plano de controle mora no nó? | Sim, a linha da característica fica em `quality.control`. Planos de postos sem modelo ficam na unidade. |
