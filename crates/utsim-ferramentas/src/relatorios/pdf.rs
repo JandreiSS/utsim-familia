@@ -381,7 +381,7 @@ impl Layout {
 }
 
 /// Colours of the series of a chart.
-const PALETTE: [(f64, f64, f64); 6] = [
+pub(crate) const PALETTE: [(f64, f64, f64); 6] = [
     (0.12, 0.42, 0.68),
     (0.85, 0.40, 0.05),
     (0.18, 0.55, 0.20),
@@ -389,13 +389,13 @@ const PALETTE: [(f64, f64, f64); 6] = [
     (0.50, 0.35, 0.68),
     (0.45, 0.33, 0.25),
 ];
-const SIGNAL: (f64, f64, f64) = (0.80, 0.05, 0.05);
-const REFERENCE: (f64, f64, f64) = (0.70, 0.12, 0.12);
+pub(crate) const SIGNAL: (f64, f64, f64) = (0.80, 0.05, 0.05);
+pub(crate) const REFERENCE: (f64, f64, f64) = (0.70, 0.12, 0.12);
 /// Width of the reference lines (limits, 80 %) and of their legend dash.
-const LINE_W: f64 = 1.2;
+pub(crate) const LINE_W: f64 = 1.2;
 
 /// A number on a chart axis, with a decimal comma.
-fn axis(x: f64) -> String {
+pub(crate) fn axis(x: f64) -> String {
     let a = x.abs();
     let s = if a >= 1000.0 || a == 0.0 {
         format!("{x:.0}")
@@ -636,7 +636,7 @@ impl Layout {
 }
 
 /// The fill and the bar colour of a callout's tone.
-fn tone_colours(t: Tone) -> ((f64, f64, f64), (f64, f64, f64)) {
+pub(crate) fn tone_colours(t: Tone) -> ((f64, f64, f64), (f64, f64, f64)) {
     match t {
         Tone::Info => ((0.91, 0.95, 0.99), (0.12, 0.42, 0.68)),
         Tone::Ok => ((0.91, 0.97, 0.92), (0.18, 0.55, 0.20)),
@@ -646,7 +646,7 @@ fn tone_colours(t: Tone) -> ((f64, f64, f64), (f64, f64, f64)) {
 }
 
 /// A light version of a colour (for fills).
-fn light((r, g, b): (f64, f64, f64), k: f64) -> (f64, f64, f64) {
+pub(crate) fn light((r, g, b): (f64, f64, f64), k: f64) -> (f64, f64, f64) {
     (
         1.0 - (1.0 - r) * k,
         1.0 - (1.0 - g) * k,
@@ -655,7 +655,7 @@ fn light((r, g, b): (f64, f64, f64), k: f64) -> (f64, f64, f64) {
 }
 
 /// Whether text on a colour should be white (the colour is dark).
-fn dark((r, g, b): (f64, f64, f64)) -> bool {
+pub(crate) fn dark((r, g, b): (f64, f64, f64)) -> bool {
     0.299 * r + 0.587 * g + 0.114 * b < 0.55
 }
 
@@ -953,7 +953,7 @@ impl Area {
 }
 
 /// `lo` and `hi` of the values, padded, never empty.
-fn range(vals: &[f64], from_zero: bool) -> (f64, f64) {
+pub(crate) fn range(vals: &[f64], from_zero: bool) -> (f64, f64) {
     let mut lo = vals
         .iter()
         .copied()

@@ -76,7 +76,7 @@ Tudo no próprio objeto do `.ron`, usando o que já existe e completando o resto
 | Qualidade | `inspection` | sim | frequência, detecção, alarme falso, medição com desvio, destino da rejeitada, limite de retrabalho, custo |
 | Qualidade | `rework` | sim | chance de corrigir por tipo, custo |
 | Qualidade | `sink_role` | sim | cliente ou refugo |
-| Qualidade | `quality.controle` | **novo** | linhas do plano de controle da característica (método, frequência, amostra, carta, reação) e plano de amostragem da inspeção |
+| Qualidade | `quality.control` | **novo** | linhas do plano de controle da característica (método, frequência, amostra, carta, reação) e plano de amostragem da inspeção |
 | Segurança | `ppe` | sim | EPI exigido no posto |
 | Segurança | `zones` do modelo | sim | zonas de risco desenhadas no piso (o nó só mostra as zonas que o tocam) |
 | Segurança | `safety` | **novo** | perigos do posto (grupo, descrição, fonte, probabilidade, severidade, controles, ações) e marcações de ergonomia por elemento |
@@ -109,18 +109,47 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | Ensino | Qualidade | missão que pede uma ferramenta (Pareto dos defeitos, carta) | a ferramenta feita pelo aluno, para conferir |
 | launcher | todos | onde cada app está instalado, versão ativa | nada |
 
-## 5. Ordem proposta
+## 5. Papel dos apps e ordem
 
-1. Crate `utsim-troca` com pedido, resposta, busca do app e vigia da resposta, mais testes de ida e volta entre dois processos de teste.
-2. Formato de troca das ferramentas que já existem em `utsim-ferramentas` e `utsim-quality`.
-3. Área "Ferramentas" no UTSim Qualidade, que funciona sozinha (sem projeto) e também atende pedidos.
-4. Seis Sigma abre Pareto, Ishikawa e FMEA no Qualidade e recebe o resultado como entregável (com a sessão do Seis Sigma).
-5. Abas Qualidade, Segurança e Manutenção no painel do nó do UTSim, com a trava de edição (com a sessão da interface).
-6. Os demais pares da seção 3, na ordem que o dono preferir.
+O dono esclareceu em 2026-11-08: "Os apps servem mais para gerar e analisar os resultados relacionados ao que foi simulado e colocado como info direto na simulação." O modelo da simulação é o centro. O UTSim Qualidade e o UTSim Segurança do Trabalho são, antes de tudo, análise e relatório sobre o que a simulação produziu e sobre os campos dos nós. A tela de entrada de cada um é o modelo com os resultados por nó, e não cadastros soltos. Os cadastros da unidade guardam só o que não tem nó (pessoas, incidentes, 8D) e sempre apontam para o modelo e o nó.
+
+| Análise | App | Vem de |
+|---|---|---|
+| Pareto de defeitos por nó e por tipo | Qualidade | defeitos simulados (`quality`, saídas com `sink_role`) |
+| Carta de controle e capacidade da característica do nó | Qualidade | medições simuladas (`quality.characteristics`), plano em `quality.control`, dado real comparado |
+| Eficácia da inspeção, escape, refugo, retrabalho, custo da qualidade | Qualidade | `inspection`, `rework`, custos do nó |
+| Exposição por zona e quase-conflitos | Segurança | `zones`, rotas simuladas, `ppe` |
+| Inventário de riscos do posto | Segurança | `safety.hazards` do nó |
+| Ergonomia dos postos | Segurança | estudo de tempos simulado e `safety.ergonomics` do nó |
+| Incidentes ligados aos nós | Segurança | registro da unidade, com o modelo e o nó |
+
+Ordem:
+
+1. Blocos do nó, comandos `Set*`, `utsim_edit::abas` e trava (feito).
+2. Abas Qualidade, Segurança e Manutenção no painel do nó do UTSim (sessão da interface).
+3. Tela "Modelo" como entrada dos dois apps: lista de nós com indicadores, resultados por nó primeiro, edição dos campos do nó com a trava.
+4. As telas atuais passam a abrir pelo nó: o Pareto, a carta e a capacidade da característica do nó selecionado, o inventário do posto lido de `safety.hazards`, a ergonomia gravada em `safety.ergonomics`, os incidentes com o nó. Os perigos e as marcações que estão na pasta de unidade migram para o nó, com um assistente que mostra o que vai mudar antes de gravar.
+5. Crate `utsim-troca` (pedido e resposta entre apps) e formato de troca das ferramentas.
+6. Área "Ferramentas" no UTSim Qualidade e no UTSim Segurança do Trabalho, com relatórios bonitos (seção 5.1).
+7. Seis Sigma abre Pareto, Ishikawa e FMEA no Qualidade e recebe o resultado como entregável.
+8. Os demais pares da seção 4.
+
+### 5.1 Ferramentas sem simulação e relatórios
+
+Direção do dono em 2026-11-08: "Seria legal gerar relatórios bonitos, com todas as ferramentas disponíveis para aplicar, caso não exista simulação relacionada".
+
+- **Com simulação:** a ferramenta puxa do modelo e dos campos do nó.
+- **Sem simulação:** a mesma ferramenta funciona sozinha, com dados digitados ou importados de CSV ou xlsx. Vale para as sete ferramentas básicas (folha de verificação, estratificação, Pareto, Ishikawa, histograma, dispersão, cartas de controle), FMEA, MSA, capacidade, CEP, amostragem, 8D, A3, 5 porquês, árvore, plano de controle, ergonomia, checklist e incidentes. Cada dado leva a origem: Simulado, Manual ou Importado (com o arquivo e o hash).
+- **Um estudo** junta as ferramentas aplicadas a um assunto (um nó, um posto, um problema), guardado como arquivo próprio na pasta de unidade e aberto também pelo nó quando houver modelo.
+- **Relatórios:** um por ferramenta e um consolidado do estudo, com as ferramentas escolhidas, em PDF e HTML. Têm capa (app, título, estudo, autor, data, origem dos dados), sumário, gráficos de verdade, tabelas legíveis e a identidade do app (cor e ícone).
+- **Um gerador só:** o gerador de relatórios já é comum (`utsim_ferramentas::relatorios`, vindo do Seis Sigma no QS7). Ele ganha capa, sumário, saída em HTML, gráficos de dispersão, Pareto com linha acumulada, histograma com limites e diagrama de Ishikawa, e o ícone do app. O Seis Sigma usa o mesmo gerador, sem cópia.
+- **Conferência:** um teste gera um relatório de exemplo de cada ferramenta e o consolidado. Os PDFs são conferidos como imagem, sob a trava de tela.
 
 ## 6. Decisões do dono
 
-| # | Pergunta | Proposta |
+Aceitas pelo dono em 2026-11-08 ("Siga com isso"), como propostas.
+
+| # | Pergunta | Decisão |
 |---|---|---|
 | I1 | Um app abre outro por arquivo de pedido e resposta, sem servidor? | Sim, como na seção 2. Funciona em qualquer máquina e pelo Drive. |
 | I2 | Quando o Seis Sigma abre uma ferramenta no Qualidade, o resultado fica guardado onde? | No projeto `.lss`, como entregável, no formato de troca. O Qualidade não guarda cópia. |
@@ -128,4 +157,5 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | I4 | Dado do nó editado em dois apps ao mesmo tempo? | Um escritor por modelo, com trava ao lado do arquivo, e o outro só lê. |
 | I5 | Sem o Qualidade instalado, o Seis Sigma faz o quê? | Mostra o que falta e abre o launcher para instalar. Não cai para uma cópia local. |
 | I6 | Perigos e ergonomia do posto moram no nó ou na pasta de unidade? | No nó (`safety`), como o dono pediu. A pasta de unidade guarda o que não tem nó (incidentes, pessoas, 8D). |
-| I7 | Plano de controle mora no nó? | Sim, a linha da característica fica em `quality.controle`. Planos de postos sem modelo ficam na unidade. |
+| I7 | Plano de controle mora no nó? | Sim, a linha da característica fica em `quality.control`. Planos de postos sem modelo ficam na unidade. |
+| I8 | Estudo sem simulação mora onde? | Na pasta de unidade, como arquivo do estudo com as ferramentas e os dados, ligado ao nó quando houver modelo. (proposta, ainda não decidida) |

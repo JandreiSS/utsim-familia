@@ -315,3 +315,62 @@ fn patch_keys_reach_the_quality_blocks() {
         .to_string();
     assert!(e.contains("não tem `inspection`"), "{e}");
 }
+
+#[test]
+fn node_blocks_of_the_tabs_round_trip_and_are_validated() {
+    use utsim_model::quality::ControlLineDef;
+    use utsim_model::safety::{ErgonomicsMark, HazardDef, HazardGroup, SafetyDef};
+    let mut m = Model::parse(INSPECTION).unwrap();
+    let torno = &mut m.objects[1];
+    torno.safety = Some(Box::new(SafetyDef {
+        hazards: vec![HazardDef {
+            id: "h1".into(),
+            group: HazardGroup::Accident,
+            description: "Cavaco quente".into(),
+            probability: 2,
+            severity: 3,
+            ..HazardDef::default()
+        }],
+        ergonomics: vec![ErgonomicsMark {
+            actor: "ana".into(),
+            element: "carregar torno".into(),
+            trunk: 2,
+            load_kg: 12.0,
+            ..ErgonomicsMark::default()
+        }],
+    }));
+    let q = torno.quality.get_or_insert_with(Default::default);
+    q.characteristics
+        .push(ron::from_str("(name: \"diametro\", value: Normal(mean: 25.0, sd: 0.01))").unwrap());
+    q.control.push(ControlLineDef {
+        characteristic: "diametro".into(),
+        chart: "imr".into(),
+        reaction: "parar e ajustar".into(),
+        ..ControlLineDef::default()
+    });
+    m.validate().unwrap();
+    let texto = ron::ser::to_string_pretty(&m, ron::ser::PrettyConfig::default()).unwrap();
+    let volta = Model::parse(&texto).unwrap();
+    assert_eq!(volta.objects[1].safety, m.objects[1].safety);
+    assert_eq!(volta.objects[1].quality, m.objects[1].quality);
+    // The simulation does not read the new blocks.
+    let mut sem = volta.clone();
+    sem.objects[1].safety = None;
+    sem.objects[1].quality.as_mut().unwrap().control.clear();
+    let a = sem.run_replications().unwrap();
+    let b = volta.run_replications().unwrap();
+    assert_eq!(
+        a[0].metrics()["cliente.input"],
+        b[0].metrics()["cliente.input"]
+    );
+    // Out-of-range steps, repeated ids and a control line without characteristic.
+    let mut ruim = volta.clone();
+    let s = ruim.objects[1].safety.as_mut().unwrap();
+    s.hazards[0].severity = 9;
+    s.hazards.push(s.hazards[0].clone());
+    ruim.objects[1].quality.as_mut().unwrap().control[0].characteristic = "x".into();
+    let e = ruim.validate().unwrap_err().to_string();
+    assert!(e.contains("fora de 0 a 4"), "{e}");
+    assert!(e.contains("repetido"), "{e}");
+    assert!(e.contains("não mede"), "{e}");
+}

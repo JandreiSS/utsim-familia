@@ -16,6 +16,7 @@
 //!
 //! The `.xlsx` is written by the store (one sheet per table).
 
+pub mod html;
 pub mod pdf;
 
 use serde::{Deserialize, Serialize};
