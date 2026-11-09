@@ -77,17 +77,28 @@ pub fn verificar(requisito: &str) -> Result<(), String> {
     if ok {
         Ok(())
     } else {
-        Err(format!("pede o núcleo {op} {versao}, esta versão tem o {NUCLEO}"))
+        Err(format!(
+            "pede o núcleo {op} {versao}, esta versão tem o {NUCLEO}"
+        ))
     }
 }
 
 fn operador(s: &str) -> Result<(&'static str, &str), String> {
-    for (op, nome) in [(">=", ">="), ("<=", "<="), ("==", "="), (">", ">"), ("<", "<"), ("=", "=")] {
+    for (op, nome) in [
+        (">=", ">="),
+        ("<=", "<="),
+        ("==", "="),
+        (">", ">"),
+        ("<", "<"),
+        ("=", "="),
+    ] {
         if let Some(v) = s.strip_prefix(op) {
             return Ok((nome, v.trim()));
         }
     }
-    Err(format!("operador ilegível em '{s}' (use >=, >, =, <= ou <)"))
+    Err(format!(
+        "operador ilegível em '{s}' (use >=, >, =, <= ou <)"
+    ))
 }
 
 /// `0.3`, `0.3.1` or `1` as three numbers; a suffix such as `-dev.15` is ignored.

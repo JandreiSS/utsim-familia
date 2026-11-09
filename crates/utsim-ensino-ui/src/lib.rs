@@ -490,10 +490,7 @@ impl App {
             ui.colored_label(AVISO, texto::requisitos(&p.faltando));
         }
         if let Some((pr, aberta)) = self.prova() {
-            ui.colored_label(
-                ROXO,
-                texto_prova(&pr, aberta, (self.relogio)()),
-            );
+            ui.colored_label(ROXO, texto_prova(&pr, aberta, (self.relogio)()));
         }
         self.atalhos_de_pacotes(ui);
         ui.add_space(8.0);
