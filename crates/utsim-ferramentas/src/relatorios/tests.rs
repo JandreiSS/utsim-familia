@@ -398,3 +398,21 @@ fn cover_contents_and_new_blocks() {
         .unwrap();
     }
 }
+
+#[test]
+fn header_names_the_app_that_made_the_document() {
+    let t = Template::default();
+    let mut d = sample(1);
+    assert_eq!(d.app_name(), "UTSim");
+    d.app = "UTSim Qualidade".into();
+    assert!(html::render(&d, &t, "").contains("UTSim Qualidade"));
+    assert!(!html::render(&d, &t, "").contains("Seis Sigma"));
+    d.app.clear();
+    d.cover = Some(Cover {
+        app: "UTSim Estatística".into(),
+        ..Cover::default()
+    });
+    assert_eq!(d.app_name(), "UTSim Estatística");
+    let b = pdf::render(&d, &t, "");
+    assert!(!b.windows(10).any(|w| w == b"Seis Sigma"));
+}
