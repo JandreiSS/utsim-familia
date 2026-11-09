@@ -16,6 +16,7 @@
 //! [`teams`] builds the commands of the team and request links (team members,
 //! `transport`, `operators`) that the editor creates by dragging.
 
+pub mod abas;
 pub mod aisles;
 pub mod arrange;
 pub mod fluids;
@@ -199,6 +200,50 @@ pub enum Command {
     RemoveZone {
         name: String,
     },
+    /// Replaces the quality block of object `name` (`None` removes it). The tabs of the node
+    /// (`docs/plano_integracao_familia.md`, section 3) build these through [`abas::editar`].
+    SetQuality {
+        name: String,
+        quality: Option<Box<utsim_model::quality::QualityDef>>,
+    },
+    /// Replaces the inspection block of object `name`.
+    SetInspection {
+        name: String,
+        inspection: Option<Box<utsim_model::quality::InspectionDef>>,
+    },
+    /// Replaces the rework block of object `name`.
+    SetRework {
+        name: String,
+        rework: Option<utsim_model::quality::ReworkDef>,
+    },
+    /// Replaces the role of sink `name` in the quality reports.
+    SetSinkRole {
+        name: String,
+        role: Option<utsim_model::quality::SinkRole>,
+    },
+    /// Replaces the protective equipment required at object `name`.
+    SetPpe {
+        name: String,
+        ppe: Vec<String>,
+    },
+    /// Replaces the safety block (hazards, ergonomics) of object `name`.
+    SetSafety {
+        name: String,
+        safety: Option<Box<utsim_model::safety::SafetyDef>>,
+    },
+    /// Replaces the breakdowns and maintenance of object `name`.
+    SetDowntime {
+        name: String,
+        downtime: Option<utsim_model::DowntimeDef>,
+    },
+}
+
+fn object_mut<'a>(model: &'a mut Model, name: &str) -> Result<&'a mut ObjectDef, String> {
+    model
+        .objects
+        .iter_mut()
+        .find(|o| o.name == name)
+        .ok_or_else(|| format!("o objeto '{name}' não existe"))
 }
 
 /// Where a distribution field gets its distribution from.
@@ -646,6 +691,49 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
                 .find(|z| &z.name == name)
                 .ok_or_else(|| format!("a zona '{name}' não existe"))?;
             *z = zone.clone();
+        }
+        Command::SetQuality { name, quality } => {
+            let o = object_mut(model, name)?;
+            if let Some(q) = quality {
+                for c in &q.control {
+                    if !q.characteristics.iter().any(|k| k.name == c.characteristic) {
+                        return Err(format!(
+                            "plano de controle da característica '{}', que '{name}' não mede",
+                            c.characteristic
+                        ));
+                    }
+                }
+            }
+            o.quality = quality.clone();
+        }
+        Command::SetInspection { name, inspection } => {
+            object_mut(model, name)?.inspection = inspection.clone();
+        }
+        Command::SetRework { name, rework } => object_mut(model, name)?.rework = rework.clone(),
+        Command::SetSinkRole { name, role } => object_mut(model, name)?.sink_role = *role,
+        Command::SetPpe { name, ppe } => {
+            let mut v: Vec<String> = Vec::new();
+            for p in ppe.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
+                if !v.iter().any(|x| x == p) {
+                    v.push(p.to_string());
+                }
+            }
+            object_mut(model, name)?.ppe = v;
+        }
+        Command::SetSafety { name, safety } => {
+            if let Some(sf) = safety {
+                let p = utsim_model::safety::problems(name, sf);
+                if !p.is_empty() {
+                    return Err(p.join(
+                        "
+",
+                    ));
+                }
+            }
+            object_mut(model, name)?.safety = safety.clone();
+        }
+        Command::SetDowntime { name, downtime } => {
+            object_mut(model, name)?.downtime = downtime.clone();
         }
         Command::RemoveZone { name } => {
             let before = model.zones.len();
