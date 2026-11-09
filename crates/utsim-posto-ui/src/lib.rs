@@ -4,17 +4,20 @@
 //!
 //! - [`sessao`]: a unidade aberta, o autor lembrado em arquivo e a atualização periódica;
 //! - [`inicial`]: criar ou abrir a pasta de unidade;
+//! - [`modelo`]: abre o `.ron` do UTSim, edita os campos de cada nó e grava de volta;
 //! - [`postos`]: lista, edição e importação dos postos de trabalho;
 //! - [`trabalho`]: uma tarefa pesada num fio de trabalho, sem travar a tela;
 //! - [`util`]: data de hoje, cores e leitura de modelos.
 
 pub mod inicial;
+pub mod modelo;
 pub mod postos;
 pub mod sessao;
 pub mod trabalho;
 pub mod util;
 
 pub use inicial::TelaInicial;
+pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};
 pub use postos::TelaPostos;
 pub use sessao::{Config, Sessao};
 pub use trabalho::Trabalho;
