@@ -7966,6 +7966,7 @@ dependencies = [
  "utsim-model",
  "utsim-quality",
  "utsim-stats",
+ "utsim-ui-tema",
  "winresource",
 ]
 

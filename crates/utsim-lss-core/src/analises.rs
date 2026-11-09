@@ -1168,22 +1168,35 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             let a = doe::analyze(&x, &y, (*order).max(1), LEVEL)?;
             let k = factors.len();
             let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+            // In a worksheet of the app the coded A, B... are followed by the actual levels
+            // under the factors' names; elsewhere the column's own name is the name.
             let name = |i: usize| {
                 let h = header(factors[i]);
-                if h == doe::letter(i).to_string() {
-                    let real = header(factors[k - 1] + 1 + i);
+                let col = factors[k - 1] + 1 + i;
+                if h == doe::letter(i).to_string() && col != *response && !factors.contains(&col) {
+                    let real = header(col);
                     if !real.is_empty() {
                         return real;
                     }
                 }
                 h
             };
-            o.notes.push(
-                (0..k)
-                    .map(|i| format!("{} = {}", doe::letter(i), name(i)))
-                    .collect::<Vec<_>>()
-                    .join("; "),
-            );
+            let label = |i: usize| {
+                let n = name(i);
+                if n == doe::letter(i).to_string() {
+                    n
+                } else {
+                    format!("{} {}", doe::letter(i), n)
+                }
+            };
+            if (0..k).any(|i| name(i) != doe::letter(i).to_string()) {
+                o.notes.push(
+                    (0..k)
+                        .map(|i| format!("{} = {}", doe::letter(i), name(i)))
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                );
+            }
             o.put("corridas", a.n as f64);
             o.put("média", a.mean);
             o.put("R²", a.r2);
@@ -1261,7 +1274,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 series: (0..k)
                     .map(|i| {
                         let (lo, hi) = doe::main_effect_means(&x, &y, i);
-                        (format!("{} {}", doe::letter(i), name(i)), vec![lo, hi])
+                        (label(i), vec![lo, hi])
                     })
                     .collect(),
             });
