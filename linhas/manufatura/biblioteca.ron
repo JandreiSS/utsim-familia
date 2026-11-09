@@ -147,7 +147,7 @@ Library(
                 (key: "capacidade", label: "Capacidade", default: "Some(10)"),
             ],
             objects: [
-                r#"(name: "${name}", kind: Queue(capacity: ${capacidade}), symbol: "estoque",
+                r#"(name: "${name}", kind: Queue(capacity: ${capacidade}), symbol: "armazenagem",
                     visual: Some((asset: Some("area"))))"#,
             ],
         ),
@@ -169,7 +169,7 @@ Library(
                     symbol: "operacao")"#,
                 r#"(name: "${name}_cartoes", kind: Source(interarrival: Const(0.01), first_at_zero: true, max_arrivals: Some(${cartoes}),
                     labels: {"cartao": Const(1.0)}), position: (0.0, -3.0, 0.0), symbol: "inicio")"#,
-                r#"(name: "${name}_quadro", kind: Queue(), position: (2.0, -3.0, 0.0), symbol: "estoque",
+                r#"(name: "${name}_quadro", kind: Queue(), position: (2.0, -3.0, 0.0), symbol: "armazenagem",
                     visual: Some((asset: Some("bandeja"))))"#,
                 r#"(name: "${name}_devolver", kind: Separator(mode: Unpack, process: Const(0.0)), position: (8.0, -3.0, 0.0),
                     output: Script("if label(item, \"cartao\", 0.0) == 1.0 { 1 } else { 2 }"), symbol: "operacao")"#,
