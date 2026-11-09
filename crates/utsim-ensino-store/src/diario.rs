@@ -1,13 +1,15 @@
-//! The signed attempt journal: each attempt is a JSON body signed by the student's key and
-//! chained by hash to the previous one, with date and time. The body carries decisions
+//! The signed attempt journal, on the shared crate `utsim-diario` (decision E12): each
+//! attempt is a JSON body signed by the student's key and chained by hash to the previous
+//! one, with date and time. The body carries decisions
 //! and answers, never the grade the teacher will use: the teacher simulates again.
+//! Files written before E12 stay valid: the link has the same JSON fields.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use utsim_diario::{Encadeado, Problema};
 use utsim_ensino_core::nota::Tentativa;
 
-use crate::chave::{Chave, verificar};
-use crate::{Erro, Result, hex};
+use crate::chave::Chave;
+use crate::{Erro, Result};
 
 /// What is signed.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -30,46 +32,47 @@ pub struct RegistroTentativa {
     pub nota_informada: Option<f64>,
 }
 
-/// A signed attempt: the body exactly as signed, its hash and the signature.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct TentativaAssinada {
-    pub corpo: String,
-    pub hash: String,
-    pub assinatura: String,
-}
+/// A signed attempt: the body exactly as signed, its hash and the signature (a link of
+/// the shared journal, same JSON fields as before E12).
+pub type TentativaAssinada = utsim_diario::Elo;
 
-impl TentativaAssinada {
-    pub fn registro(&self) -> Result<RegistroTentativa> {
-        serde_json::from_str(&self.corpo).map_err(|e| Erro::Invalido(format!("tentativa: {e}")))
+impl Encadeado for RegistroTentativa {
+    fn autor(&self) -> &str {
+        &self.aluno
+    }
+    fn sequencia(&self) -> u64 {
+        self.sequencia
+    }
+    fn anterior(&self) -> &str {
+        &self.anterior
+    }
+    fn encadear(&mut self, sequencia: u64, anterior: String) {
+        self.sequencia = sequencia;
+        self.anterior = anterior;
     }
 }
 
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    hex(&Sha256::digest(bytes))
+/// Reads the attempt in a signed link.
+pub trait LerRegistro {
+    fn registro(&self) -> Result<RegistroTentativa>;
 }
+
+impl LerRegistro for TentativaAssinada {
+    fn registro(&self) -> Result<RegistroTentativa> {
+        self.ler()
+            .map_err(|e| Erro::Invalido(format!("tentativa: {e}")))
+    }
+}
+
+pub use utsim_diario::sha256_hex;
 
 /// Signs `r`, completing its chain fields from `anterior` (the last attempt of the journal).
 pub fn assinar(
     chave: &Chave,
-    mut r: RegistroTentativa,
+    r: RegistroTentativa,
     anterior: Option<&TentativaAssinada>,
 ) -> Result<TentativaAssinada> {
-    match anterior {
-        Some(a) => {
-            r.sequencia = a.registro()?.sequencia + 1;
-            r.anterior = a.hash.clone();
-        }
-        None => {
-            r.sequencia = 1;
-            r.anterior = String::new();
-        }
-    }
-    let corpo = serde_json::to_string(&r).map_err(|e| Erro::Invalido(e.to_string()))?;
-    Ok(TentativaAssinada {
-        hash: sha256_hex(corpo.as_bytes()),
-        assinatura: chave.assinar(corpo.as_bytes()),
-        corpo,
-    })
+    utsim_diario::assinar(chave, r, anterior).map_err(Erro::from)
 }
 
 /// The attempts that pass, in order, and every problem found.
@@ -87,42 +90,30 @@ pub fn verificar_diario(
     aluno: &str,
     tentativas: &[TentativaAssinada],
 ) -> Verificacao {
-    let mut v = Verificacao::default();
-    let mut lidas: Vec<(RegistroTentativa, &TentativaAssinada)> = Vec::new();
-    for t in tentativas {
-        if sha256_hex(t.corpo.as_bytes()) != t.hash {
-            v.avisos
-                .push("tentativa com hash que não confere (arquivo alterado)".into());
-            continue;
-        }
-        if !verificar(publica, t.corpo.as_bytes(), &t.assinatura) {
-            v.avisos
-                .push("tentativa com assinatura inválida (arquivo alterado)".into());
-            continue;
-        }
-        match t.registro() {
-            Ok(r) if r.aluno != aluno => v
-                .avisos
-                .push(format!("tentativa assinada por outro aluno ({})", r.aluno)),
-            Ok(r) => lidas.push((r, t)),
-            Err(e) => v.avisos.push(e.to_string()),
+    let c = utsim_diario::conferir::<RegistroTentativa>(publica, aluno, tentativas);
+    let mut avisos: Vec<String> = Vec::new();
+    for p in &c.problemas {
+        let a = match p {
+            Problema::HashNaoConfere { .. } => {
+                "tentativa com hash que não confere (arquivo alterado)".to_string()
+            }
+            Problema::AssinaturaInvalida { .. } => {
+                "tentativa com assinatura inválida (arquivo alterado)".to_string()
+            }
+            Problema::OutroAutor { autor, .. } => {
+                format!("tentativa assinada por outro aluno ({autor})")
+            }
+            Problema::CorpoInvalido { erro, .. } => format!("tentativa: {erro}"),
+            Problema::Falta { .. } | Problema::ForaDeOrdem { .. } | Problema::Bifurcacao { .. } => {
+                "cadeia de tentativas quebrada: falta tentativa ou a ordem foi mudada".to_string()
+            }
+        };
+        if !avisos.contains(&a) {
+            avisos.push(a);
         }
     }
-    lidas.sort_by_key(|(r, _)| r.sequencia);
-    let mut esperado = 1;
-    let mut hash_anterior = String::new();
-    let mut quebrada = false;
-    for (r, t) in &lidas {
-        if r.sequencia != esperado || r.anterior != hash_anterior {
-            quebrada = true;
-        }
-        esperado = r.sequencia + 1;
-        hash_anterior = t.hash.clone();
+    Verificacao {
+        validas: c.validos,
+        avisos,
     }
-    if quebrada {
-        v.avisos
-            .push("cadeia de tentativas quebrada: falta tentativa ou a ordem foi mudada".into());
-    }
-    v.validas = lidas.into_iter().map(|(r, _)| r).collect();
-    v
 }

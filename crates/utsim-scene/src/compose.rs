@@ -1227,12 +1227,10 @@ pub fn role_of(name: &str, model: Option<&Model>) -> MobileRole {
     if serves_rack {
         return MobileRole::Forklift;
     }
-    let operates = model.objects.iter().any(|o| match &o.kind {
-        ObjectKind::Processor {
-            operators: Some(op),
-            ..
-        } => names.contains(&op.team.as_str()),
-        _ => false,
+    let operates = model.objects.iter().any(|o| {
+        o.kind
+            .operator_uses()
+            .any(|op| names.contains(&op.team.as_str()))
     });
     if operates {
         MobileRole::Person
