@@ -613,6 +613,12 @@ turno com `Finish` e ficam meia hora depois de fechar a porta.
 
 ### 7.9 Decisões do dono
 
+**Respondidas em 2026-11-08:** o dono aceitou as seis propostas ("Siga com isso"). Ficam como
+estão no código: nome "Serviços e atendimento", meta padrão de 80 % em até 15 min, quem
+desiste sai do modelo, painel de chamada só no relatório, dimensionamento por Erlang C e os
+três modelos prontos da seção 7.7. Painel ao vivo, Erlang A e quem volta outro dia ficam para
+depois.
+
 1. **S-D1 Nome exibido.** "Serviços e atendimento" (proposta) ou outro.
 2. **S-D2 Meta padrão do nível de serviço.** 80 % em até 15 min no presencial (proposta), com
    a meta mudável no relatório; ou outra.
@@ -707,10 +713,15 @@ armazenagem (ocupação e ABC) e equipes.
 **Estado em 2026-11-08: G1 a G4 feitos.** A doca ficou como divisor `SplitBy` em vez de um
 `per_label` no processo: o caminhão ocupa a doca até as empilhadeiras tirarem o último palete,
 o que dá o tempo de doca sem campo novo no `Processor`. Manual em
-`docs/manual/src/linhas/logistica/index.md`; as decisões G-D1 a G-D6 seguem com as propostas
-até o dono responder.
+`docs/manual/src/linhas/logistica/index.md`.
 
 ### 8.9 Decisões do dono
+
+**Respondidas em 2026-11-08:** o dono aceitou as seis propostas ("Siga com isso"). Ficam como
+estão no código: nome "Logística e armazém", tempo de acesso por coluna e por nível, ondas por
+horário fixo, só o pedido completo é expedido, meta de doca de 60 min e os três modelos prontos
+da seção 8.7. Rotas reais nos corredores, ondas dinâmicas e expedição parcial ficam para
+depois.
 
 1. **G-D1 Nome exibido.** "Logística e armazém" (proposta).
 2. **G-D2 Tempo no porta-paletes.** Tempo de acesso por coluna e nível da posição (proposta,
