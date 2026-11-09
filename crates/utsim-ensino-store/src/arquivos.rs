@@ -100,6 +100,8 @@ pub struct PacoteEncontrado {
     pub id: String,
     pub titulo: String,
     pub descricao: String,
+    /// Needs of `requer` this version does not meet (the package still opens).
+    pub faltando: Vec<utsim_ensino_core::requisitos::Falta>,
 }
 
 /// The packages inside `dir` (each subfolder with a `pacote.ron` and each `.utse`), by
@@ -124,6 +126,7 @@ pub fn pacotes_em(dir: &Path) -> Vec<PacoteEncontrado> {
                 caminho: p,
                 id: m.id,
                 titulo: m.titulo,
+                faltando: utsim_ensino_core::requisitos::faltando(&m.requer),
                 descricao: m.descricao,
             })
         })

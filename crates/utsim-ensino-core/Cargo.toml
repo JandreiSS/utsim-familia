@@ -8,6 +8,8 @@ rust-version.workspace = true
 [dependencies]
 utsim-core.workspace = true
 utsim-model.workspace = true
+# The lines a package may need (`requer: ["linha:lean_office"]`).
+utsim-linhas.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ron.workspace = true

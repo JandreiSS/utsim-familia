@@ -25,6 +25,11 @@ use utsim_ensino_core::progresso::Progresso;
 use utsim_ensino_core::turma::{Aluno, registro_valido};
 use utsim_ensino_store::perfil::{Config, Perfil};
 
+/// The color of UTSim Ensino in the family (`#8A5CE6`, the launcher icon).
+pub const ROXO: Color32 = Color32::from_rgb(0x8A, 0x5C, 0xE6);
+/// Warnings that do not stop anything (a need of the package this version does not meet).
+pub const AVISO: Color32 = Color32::from_rgb(240, 190, 80);
+
 /// Runs jobs away from the screen (a thread in the eframe app, inline in tests).
 pub trait Executor: Send + Sync {
     fn executar(&self, job: Box<dyn FnOnce() + Send>);
@@ -97,6 +102,9 @@ fn agora_ms() -> i64 {
 impl App {
     pub fn new(perfil: Perfil) -> App {
         let mut app = App::com(perfil, Arc::new(Fios), agora_ms);
+        if let Some(i) = &app.config.idioma {
+            texto::definir(texto::Idioma::de_codigo(i));
+        }
         app.cliente_3d = utsim_ensino_store::tres_d::cliente().is_some();
         match pasta_de_pacotes() {
             Some(dir) => app.procurar_pacotes(&dir),
@@ -190,9 +198,9 @@ impl App {
             && let Err(e) = app.abrir_pacote(&c)
         {
             app.config.pacote_aberto = None;
-            app.mensagem = Some(format!(
-                "o pacote {} não abriu ({e}); voltei à campanha",
-                c.display()
+            app.mensagem = Some(texto::f(
+                texto::pacote_nao_abriu_voltei(),
+                &[&c.display(), &e],
             ));
         }
         app
@@ -254,7 +262,7 @@ impl App {
     pub fn salvar_identidade(&mut self, nome: &str, registro: &str, apelido: &str) -> bool {
         let (nome, registro) = (nome.trim(), registro.trim());
         if nome.len() < 2 || !registro_valido(registro) {
-            self.mensagem = Some(texto::SEM_IDENTIDADE.into());
+            self.mensagem = Some(texto::sem_identidade().into());
             return false;
         }
         self.config.identidade = Some(Aluno {
@@ -274,7 +282,7 @@ impl App {
 
     pub fn salvar_config(&mut self) {
         if let Err(e) = self.perfil.salvar_config(&self.config) {
-            self.mensagem = Some(format!("não foi possível salvar a configuração: {e}"));
+            self.mensagem = Some(texto::f(texto::config_nao_salva(), &[&e]));
         }
     }
 
@@ -360,7 +368,7 @@ impl App {
             egui::Panel::bottom("mensagem").show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(m).color(Color32::from_rgb(236, 196, 76)));
-                    if ui.button("ok").clicked() {
+                    if ui.button(texto::ok()).clicked() {
                         self.mensagem = None;
                     }
                 });
@@ -400,9 +408,9 @@ impl App {
             ui.label(RichText::new(texto::NOME_APP).strong().size(18.0));
             ui.separator();
             for (t, nome) in [
-                (Tela::Mapa, "Campanha"),
-                (Tela::Glossario, "Glossário"),
-                (Tela::Turma, "Turma"),
+                (Tela::Mapa, texto::aba_campanha()),
+                (Tela::Glossario, texto::aba_glossario()),
+                (Tela::Turma, texto::aba_turma()),
             ] {
                 if ui.selectable_label(self.tela == t, nome).clicked() {
                     self.tela = t;
@@ -410,13 +418,13 @@ impl App {
             }
             if self.config.professor
                 && ui
-                    .selectable_label(self.tela == Tela::Professor, "Professor")
+                    .selectable_label(self.tela == Tela::Professor, texto::aba_professor())
                     .clicked()
             {
                 self.tela = Tela::Professor;
             }
             if ui
-                .selectable_label(self.tela == Tela::Ajustes, "Ajustes")
+                .selectable_label(self.tela == Tela::Ajustes, texto::aba_ajustes())
                 .clicked()
             {
                 self.tela = Tela::Ajustes;
@@ -440,27 +448,27 @@ impl App {
         ui.add_space(30.0);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(texto::NOME_APP).size(28.0).strong());
-            ui.label(texto::SUBTITULO);
+            ui.label(texto::subtitulo());
             ui.add_space(20.0);
-            ui.label(RichText::new(texto::IDENTIDADE_TITULO).size(18.0));
-            ui.label(texto::IDENTIDADE_TEXTO);
+            ui.label(RichText::new(texto::identidade_titulo()).size(18.0));
+            ui.label(texto::identidade_texto());
         });
         ui.add_space(10.0);
         egui::Grid::new("identidade").num_columns(2).show(ui, |ui| {
-            ui.label("Nome");
+            ui.label(texto::nome());
             ui.text_edit_singleline(&mut self.nome);
             ui.end_row();
-            ui.label("Registro acadêmico");
+            ui.label(texto::registro_academico());
             ui.text_edit_singleline(&mut self.registro);
             ui.end_row();
-            ui.label("Apelido no placar (opcional)");
+            ui.label(texto::apelido_opcional());
             ui.text_edit_singleline(&mut self.apelido);
             ui.end_row();
         });
         if let Some(m) = &self.mensagem {
             ui.colored_label(Color32::from_rgb(255, 112, 104), m);
         }
-        if ui.button("Começar").clicked() {
+        if ui.button(texto::comecar()).clicked() {
             let (n, r, a) = (
                 self.nome.clone(),
                 self.registro.clone(),
@@ -472,7 +480,10 @@ impl App {
 
     fn tela_mapa(&mut self, ui: &mut Ui) {
         let Some(p) = self.pacote.clone() else {
-            ui.colored_label(Color32::from_rgb(255, 112, 104), "A campanha não carregou:");
+            ui.colored_label(
+                Color32::from_rgb(255, 112, 104),
+                texto::campanha_nao_carregou(),
+            );
             for e in &self.erro_pacote {
                 ui.label(e);
             }
@@ -481,11 +492,17 @@ impl App {
         };
         ui.heading(&p.pacote.titulo);
         ui.label(&p.pacote.descricao);
-        if let Some((pr, aberta)) = self.prova() {
-            ui.colored_label(
-                Color32::from_rgb(242, 163, 58),
-                texto_prova(&pr, aberta, (self.relogio)()),
+        if !p.faltando.is_empty() {
+            ui.colored_label(AVISO, texto::requisitos(&p.faltando));
+        }
+        let lingua = texto::Idioma::de_codigo(&p.pacote.idioma);
+        if lingua != texto::idioma_atual() {
+            ui.label(
+                RichText::new(texto::f(texto::pacote_em_outra_lingua(), &[&lingua.nome()])).weak(),
             );
+        }
+        if let Some((pr, aberta)) = self.prova() {
+            ui.colored_label(ROXO, texto_prova(&pr, aberta, (self.relogio)()));
         }
         self.atalhos_de_pacotes(ui);
         ui.add_space(8.0);
@@ -494,7 +511,7 @@ impl App {
         for ato in &p.pacote.atos {
             ui.add_space(6.0);
             ui.label(
-                RichText::new(format!("Ato {}. {}", ato.numero, ato.titulo))
+                RichText::new(texto::f(texto::ato_titulo(), &[&ato.numero, &ato.titulo]))
                     .size(17.0)
                     .strong(),
             );
@@ -528,18 +545,18 @@ impl App {
                     if !liberada {
                         let primeira_do_ato = i == 0 || p.missoes[i - 1].ato != m.ato;
                         let txt = if primeira_do_ato {
-                            "bloqueada: resolva o ato anterior"
+                            texto::bloqueada_ato()
                         } else {
-                            "bloqueada: resolva a anterior"
+                            texto::bloqueada_anterior()
                         };
                         ui.label(RichText::new(txt).weak());
                     }
                     if let Some(r) = reg.filter(|_| p.pacote.prova.is_none()) {
-                        ui.label(format!(
-                            "melhor nota {:.1} em {} tentativa(s)",
-                            r.melhor_nota, r.tentativas
+                        ui.label(texto::f(
+                            texto::melhor_nota(),
+                            &[&format!("{:.1}", r.melhor_nota), &r.tentativas],
                         ));
-                        if r.resolvida && ui.button("Caixa de areia").clicked() {
+                        if r.resolvida && ui.button(texto::caixa_de_areia()).clicked() {
                             areia = Some(i);
                         }
                     }
@@ -565,8 +582,12 @@ impl App {
         let mut abrir = None;
         let mut campanha = false;
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Pacotes:").weak());
-            if ui.selectable_label(aberto.is_none(), "Campanha").clicked() && aberto.is_some() {
+            ui.label(RichText::new(texto::pacotes()).weak());
+            if ui
+                .selectable_label(aberto.is_none(), texto::aba_campanha())
+                .clicked()
+                && aberto.is_some()
+            {
                 campanha = true;
             }
             for p in &self.pacotes_instalados {
@@ -583,7 +604,7 @@ impl App {
         if let Some(c) = abrir {
             match self.abrir_pacote(&c) {
                 Ok(()) => self.mensagem = None,
-                Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+                Err(e) => self.mensagem = Some(texto::f(texto::pacote_nao_abriu(), &[&e])),
             }
         }
     }
@@ -592,7 +613,7 @@ impl App {
     fn outros_pacotes(&mut self, ui: &mut Ui) {
         ui.add_space(14.0);
         ui.separator();
-        ui.label(RichText::new(texto::OUTROS_PACOTES).strong());
+        ui.label(RichText::new(texto::outros_pacotes()).strong());
         let aberto = self.config.pacote_aberto.clone();
         let mut abrir = None;
         for p in &self.pacotes_instalados {
@@ -606,26 +627,30 @@ impl App {
                 {
                     abrir = Some(p.caminho.clone());
                 }
+                if !p.faltando.is_empty() {
+                    ui.colored_label(AVISO, "⚠")
+                        .on_hover_text(texto::requisitos(&p.faltando));
+                }
                 ui.add(egui::Label::new(RichText::new(&p.descricao).weak()).truncate());
             });
         }
         if let Some(c) = abrir {
             match self.abrir_pacote(&c) {
                 Ok(()) => self.mensagem = None,
-                Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+                Err(e) => self.mensagem = Some(texto::f(texto::pacote_nao_abriu(), &[&e])),
             }
         }
-        ui.label(texto::OUTROS_PACOTES_TEXTO);
+        ui.label(texto::outros_pacotes_texto());
         ui.horizontal(|ui| {
             ui.text_edit_singleline(&mut self.caminho_pacote);
-            if ui.button("Abrir pacote").clicked() {
+            if ui.button(texto::abrir_pacote()).clicked() {
                 let c = PathBuf::from(self.caminho_pacote.trim().trim_matches('"'));
                 match self.abrir_pacote(&c) {
                     Ok(()) => self.mensagem = None,
-                    Err(e) => self.mensagem = Some(format!("o pacote não abriu: {e}")),
+                    Err(e) => self.mensagem = Some(texto::f(texto::pacote_nao_abriu(), &[&e])),
                 }
             }
-            if self.pacote_externo() && ui.button("Voltar à campanha").clicked() {
+            if self.pacote_externo() && ui.button(texto::voltar_campanha()).clicked() {
                 self.voltar_campanha();
                 self.mensagem = None;
             }
@@ -636,8 +661,8 @@ impl App {
     }
 
     fn tela_glossario(&mut self, ui: &mut Ui) {
-        ui.heading("Glossário");
-        ui.label("Cada conceito aparece quando uma missão o usa. O texto completo está no manual.");
+        ui.heading(texto::aba_glossario());
+        ui.label(texto::glossario_texto());
         let Some(p) = self.pacote.clone() else { return };
         for t in &p.glossario.termos {
             let usado: Vec<String> = p
@@ -652,10 +677,10 @@ impl App {
             ui.label(&t.texto);
             let mut rodape = String::new();
             if !usado.is_empty() {
-                rodape.push_str(&format!("Missões: {}. ", usado.join(", ")));
+                rodape.push_str(&texto::f(texto::glossario_missoes(), &[&usado.join(", ")]));
             }
             if let Some(m) = &t.manual {
-                rodape.push_str(&format!("Manual: {m}"));
+                rodape.push_str(&texto::f(texto::glossario_manual(), &[m]));
             }
             if !rodape.is_empty() {
                 ui.label(RichText::new(rodape).weak());
@@ -664,10 +689,10 @@ impl App {
     }
 
     fn tela_ajustes(&mut self, ui: &mut Ui) {
-        ui.heading("Ajustes");
+        ui.heading(texto::aba_ajustes());
         let mut escala = self.config.escala_texto.unwrap_or(1.0);
         ui.horizontal(|ui| {
-            ui.label("Tamanho da letra");
+            ui.label(texto::tamanho_letra());
             if ui
                 .add(egui::Slider::new(&mut escala, 0.8..=1.6).step_by(0.1))
                 .changed()
@@ -676,35 +701,52 @@ impl App {
                 self.salvar_config();
             }
         });
+        ui.horizontal(|ui| {
+            ui.label(texto::idioma());
+            let atual = texto::idioma_atual();
+            egui::ComboBox::from_id_salt("idioma")
+                .selected_text(atual.nome())
+                .show_ui(ui, |ui| {
+                    for i in texto::Idioma::TODOS {
+                        if ui.selectable_label(i == atual, i.nome()).clicked() && i != atual {
+                            texto::definir(i);
+                            self.config.idioma = Some(i.codigo().to_string());
+                            self.salvar_config();
+                        }
+                    }
+                });
+        });
+        ui.label(RichText::new(texto::idioma_texto()).weak());
         ui.add_space(8.0);
         let mut prof = self.config.professor;
-        if ui
-            .checkbox(
-                &mut prof,
-                "Modo professor (turmas, correção em lote, matriz da turma)",
-            )
-            .changed()
-        {
+        if ui.checkbox(&mut prof, texto::modo_professor()).changed() {
             self.config.professor = prof;
             if prof && let Err(e) = self.perfil.chave_professor() {
-                self.mensagem = Some(format!("não foi possível criar a chave do professor: {e}"));
+                self.mensagem = Some(texto::f(texto::chave_professor_falhou(), &[&e]));
             }
             self.salvar_config();
         }
         ui.add_space(8.0);
-        ui.label(format!("Pasta do perfil: {}", self.perfil.dir.display()));
-        if ui.button("Trocar de aluno").clicked() {
+        ui.label(texto::f(
+            texto::pasta_perfil(),
+            &[&self.perfil.dir.display()],
+        ));
+        if ui.button(texto::trocar_aluno()).clicked() {
             self.tela = Tela::Identidade;
         }
         ui.add_space(8.0);
-        ui.label(RichText::new(format!("Núcleo {}", utsim_ensino_core::VERSAO_NUCLEO)).weak());
+        ui.label(
+            RichText::new(texto::f(
+                texto::nucleo_versao(),
+                &[&utsim_ensino_core::VERSAO_NUCLEO],
+            ))
+            .weak(),
+        );
         if let Some(p) = &self.pacote {
             ui.label(
-                RichText::new(format!(
-                    "Pacote {} {} ({})",
-                    p.pacote.id,
-                    p.pacote.versao,
-                    &p.hash[..12]
+                RichText::new(texto::f(
+                    texto::pacote_versao(),
+                    &[&p.pacote.id, &p.pacote.versao, &&p.hash[..12]],
                 ))
                 .weak(),
             );
@@ -727,26 +769,25 @@ pub fn texto_prova(
     agora: i64,
 ) -> String {
     use utsim_ensino_core::prova::data_hora;
-    let mut t = format!(
-        "Prova de {} a {}, {} rodada(s) por missão",
-        data_hora(pr.inicio, pr.fuso_min),
-        data_hora(pr.fim, pr.fuso_min),
-        pr.tentativas
+    let mut t = texto::f(
+        texto::prova_linha(),
+        &[
+            &data_hora(pr.inicio, pr.fuso_min),
+            &data_hora(pr.fim, pr.fuso_min),
+            &pr.tentativas,
+        ],
     );
     if pr.duracao_min > 0 {
-        t.push_str(&format!(
-            ", {} min a partir da primeira missão aberta",
-            pr.duracao_min
-        ));
+        t.push_str(&texto::f(texto::prova_tempo(), &[&pr.duracao_min]));
     }
     match pr.pode_rodar(agora, aberta) {
-        Ok(()) => t.push_str(&format!(
-            ". Restam {} min.",
-            (pr.restante(agora, aberta) + 59_999) / 60_000
+        Ok(()) => t.push_str(&texto::f(
+            texto::prova_restam(),
+            &[&((pr.restante(agora, aberta) + 59_999) / 60_000)],
         )),
-        Err(e) => t.push_str(&format!(". Agora não dá para simular: {e}.")),
+        Err(e) => t.push_str(&texto::f(texto::prova_nao_da(), &[&e])),
     }
-    t.push_str(" Sem dicas, sem nota na tela e sem caixa de areia: o professor corrige.");
+    t.push_str(texto::prova_sem_dicas());
     t
 }
 

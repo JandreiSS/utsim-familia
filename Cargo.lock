@@ -7756,6 +7756,7 @@ dependencies = [
  "utsim-core",
  "utsim-diagram",
  "utsim-fit",
+ "utsim-linhas",
  "utsim-model",
  "utsim-quality",
  "utsim-stats",
@@ -8197,6 +8198,7 @@ dependencies = [
  "rand_distr 0.5.1",
  "rand_pcg",
  "serde",
+ "serde_json",
  "utsim-stats",
 ]
 
@@ -8312,6 +8314,7 @@ dependencies = [
  "utsim-fluid",
  "utsim-look",
  "utsim-model",
+ "utsim-objects",
  "utsim-opt",
  "utsim-scene",
  "utsim-script",

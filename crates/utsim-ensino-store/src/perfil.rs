@@ -55,6 +55,9 @@ pub struct Config {
     /// in its competence map.
     #[serde(default)]
     pub programa_seis_sigma: Option<PathBuf>,
+    /// Language of the interface (`pt-BR`, `en`, `es`); Portuguese when absent.
+    #[serde(default)]
+    pub idioma: Option<String>,
 }
 
 pub struct Perfil {
