@@ -807,12 +807,42 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(texto::missao_sua_fabrica()).strong());
         a.mostrar(ui);
     }
-    if app.cliente_3d && m.animacao.is_some() && ui.button(texto::missao_ver_3d()).clicked() {
-        let dir = app.perfil.dir.join("3d");
-        // The client opens in its own window; only a failure is said here.
-        m.erro = utsim_ensino_store::tres_d::abrir_em_3d(&dir, &mc, &aluno, &m.tentativa.decisoes)
-            .err()
-            .map(|e| texto::f(texto::missao_erro_3d(), &[&e]));
+    if app.cliente_3d && m.animacao.is_some() {
+        ui.horizontal(|ui| {
+            if ui.button(texto::missao_ver_3d()).clicked() {
+                let dir = app.perfil.dir.join("3d");
+                // The client opens in its own window; only a failure is said here.
+                m.erro = utsim_ensino_store::tres_d::abrir_em_3d(
+                    &dir,
+                    &mc,
+                    &aluno,
+                    &m.tentativa.decisoes,
+                )
+                .err()
+                .map(|e| texto::f(texto::missao_erro_3d(), &[&e]));
+            }
+            // Out of an exam: the model goes on in the full simulator.
+            if prova.is_none()
+                && ui
+                    .button(texto::missao_levar_utsim())
+                    .on_hover_text(texto::missao_levar_utsim_dica())
+                    .clicked()
+            {
+                let dir = app.perfil.dir.join("modelos");
+                match utsim_ensino_store::tres_d::levar_para_utsim(
+                    &dir,
+                    &mc,
+                    &aluno,
+                    &m.tentativa.decisoes,
+                ) {
+                    Ok(p) => {
+                        app.mensagem =
+                            Some(texto::f(texto::missao_levado_utsim(), &[&p.display()]));
+                    }
+                    Err(e) => m.erro = Some(texto::f(texto::missao_erro_3d(), &[&e])),
+                }
+            }
+        });
     }
     // The 3D error is told by the start of its text, in the language now.
     let prefixo_3d = texto::missao_erro_3d()
