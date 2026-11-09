@@ -1,24 +1,153 @@
-//! The text catalogue of the interface (one place, for a future translation) and a small
-//! renderer of the statements' Markdown (headings, lists, bold).
+//! The text catalogue of the interface (EN13, `docs/plano_ensino_e_jogo.md`, 3.8): every
+//! text a screen shows comes from here, in Portuguese (Brazil), English and Spanish, and a
+//! small renderer of the statements' Markdown (headings, lists, bold).
+//!
+//! Each entry is a function that answers in the language chosen in "Ajustes"
+//! ([`definir`]). A text with values has `{}` (in order) or `{0}`, `{1}` (by position, for a
+//! language with another word order) and goes through [`f`]. The screens never write a
+//! literal text: the test `nenhum_texto_fora_do_catalogo` reads their source and fails on
+//! one. The mission packages bring their own texts, in the language of the package.
+
+use std::fmt::Display;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use egui::{RichText, Ui};
 
-pub const NOME_APP: &str = "UTSim Ensino";
-pub const SUBTITULO: &str = "Ensino pela simulação";
-pub const IDENTIDADE_TITULO: &str = "Quem está jogando?";
-pub const IDENTIDADE_TEXTO: &str = "O registro acadêmico identifica as suas entregas e gera a variante dos seus dados. Use o mesmo registro da lista do professor.";
-pub const PREVER_ANTES: &str = "Responda às previsões antes de simular. Elas valem pontos e ficam travadas depois da primeira rodada.";
-pub const SEM_IDENTIDADE: &str = "Preencha nome e registro (letras, números, - e _).";
-pub const MEDIR: &str = "Medir o estado atual";
-pub const SIMULAR: &str = "Simular";
-pub const CANCELAR: &str = "Cancelar";
-pub const AREIA_TEXTO: &str = "Sem meta e sem orçamento. Compare dois cenários com os mesmos números aleatórios. Nada aqui conta nota.";
-pub const LIMITE_COLA: &str = "Sem servidor, nada impede a consulta. A entrega leva as decisões e as tentativas assinadas, e o professor simula de novo: editar o arquivo não muda a nota e deixa a alteração visível.";
-pub const PROVA_TEXTO: &str = "O sorteio usa a semente registrada, entre as missões do pacote aberto. O aluno recebe a prova sem referência, sem dicas e sem gabarito, com janela de horário, tempo máximo e rodadas contadas. A correção acontece aqui, com a prova reconstruída pela semente.";
-pub const DESAFIO_TEXTO: &str = "O placar usa a última correção: a tentativa que conta de cada aluno até o prazo, pela nota e depois pelo custo. Quando os intervalos dos indicadores se sobrepõem, os alunos aparecem empatados. A turma vê só o apelido. As equipes entregam uma solução cada (a tentativa que conta entre as dos membros) e rodam na mesma fábrica, com os mesmos números aleatórios.";
-pub const PROGRAMA_TEXTO: &str = "Se você está num programa Lean Seis Sigma da empresa, indique a pasta do programa. Cada missão resolvida passa a registrar \"praticou\" no seu mapa de competências, nas ferramentas ligadas a ela. O registro usa a sua identidade do UTSim Seis Sigma neste computador.";
-pub const OUTROS_PACOTES: &str = "Outros pacotes de missões";
-pub const OUTROS_PACOTES_TEXTO: &str = "Também dá para abrir uma pasta ou um arquivo .utse que o professor passou. O progresso fica guardado por pacote, e a campanha continua onde parou.";
+/// The languages of the interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Idioma {
+    Pt,
+    En,
+    Es,
+}
+
+impl Idioma {
+    pub const TODOS: [Idioma; 3] = [Idioma::Pt, Idioma::En, Idioma::Es];
+
+    /// The code saved in the profile.
+    pub fn codigo(self) -> &'static str {
+        match self {
+            Idioma::Pt => "pt-BR",
+            Idioma::En => "en",
+            Idioma::Es => "es",
+        }
+    }
+
+    /// The name of the language in itself.
+    pub fn nome(self) -> &'static str {
+        match self {
+            Idioma::Pt => "Português",
+            Idioma::En => "English",
+            Idioma::Es => "Español",
+        }
+    }
+
+    /// From a code (`pt-BR`, `pt`, `en-US`, `es`...); Portuguese when unknown.
+    pub fn de_codigo(c: &str) -> Idioma {
+        let c = c.trim().to_ascii_lowercase();
+        if c.starts_with("en") {
+            Idioma::En
+        } else if c.starts_with("es") {
+            Idioma::Es
+        } else {
+            Idioma::Pt
+        }
+    }
+}
+
+static IDIOMA: AtomicU8 = AtomicU8::new(0);
+
+/// The language of the interface now.
+pub fn idioma_atual() -> Idioma {
+    match IDIOMA.load(Ordering::Relaxed) {
+        1 => Idioma::En,
+        2 => Idioma::Es,
+        _ => Idioma::Pt,
+    }
+}
+
+/// Chooses the language of the interface (for the whole program).
+pub fn definir(i: Idioma) {
+    IDIOMA.store(
+        match i {
+            Idioma::Pt => 0,
+            Idioma::En => 1,
+            Idioma::Es => 2,
+        },
+        Ordering::Relaxed,
+    );
+}
+
+/// One of the three texts, by the language now.
+pub fn escolher(pt: &'static str, en: &'static str, es: &'static str) -> &'static str {
+    match idioma_atual() {
+        Idioma::Pt => pt,
+        Idioma::En => en,
+        Idioma::Es => es,
+    }
+}
+
+/// Fills a text of the catalogue: `{}` takes the next value, `{n}` the value `n`.
+pub fn f(modelo: &str, valores: &[&dyn Display]) -> String {
+    let mut s = String::with_capacity(modelo.len() + 16);
+    let mut proximo = 0;
+    let mut resto = modelo;
+    while let Some(i) = resto.find('{') {
+        s.push_str(&resto[..i]);
+        let depois = &resto[i + 1..];
+        match depois.find('}') {
+            Some(j) if depois[..j].chars().all(|c| c.is_ascii_digit()) => {
+                let n = if j == 0 {
+                    proximo += 1;
+                    proximo - 1
+                } else {
+                    depois[..j].parse().unwrap_or(usize::MAX)
+                };
+                if let Some(v) = valores.get(n) {
+                    s.push_str(&v.to_string());
+                }
+                resto = &depois[j + 1..];
+            }
+            _ => {
+                s.push('{');
+                resto = depois;
+            }
+        }
+    }
+    s.push_str(resto);
+    s
+}
+
+/// Declares the entries of a catalogue: `nome: "pt", "en", "es";`. Each becomes
+/// `pub fn nome() -> &'static str`, and `TODOS` lists them for the tests.
+macro_rules! textos {
+    ($($(#[$m:meta])* $nome:ident: $pt:expr, $en:expr, $es:expr;)*) => {
+        $(
+            $(#[$m])*
+            pub fn $nome() -> &'static str {
+                $crate::texto::escolher($pt, $en, $es)
+            }
+        )*
+        /// Every entry: name, Portuguese, English, Spanish.
+        #[allow(dead_code)]
+        pub(super) const TODOS: &[(&str, &str, &str, &str)] = &[$((stringify!($nome), $pt, $en, $es)),*];
+    };
+}
+
+mod cat_missao;
+mod cat_turma;
+mod cat_vista;
+mod geral;
+pub use cat_missao::*;
+pub use cat_turma::*;
+pub use cat_vista::*;
+pub use geral::*;
+
+/// The warning of a package that needs more than this version has.
+pub fn requisitos(faltas: &[utsim_ensino_core::requisitos::Falta]) -> String {
+    let lista: Vec<String> = faltas.iter().map(|x| x.to_string()).collect();
+    f(requisitos_aviso(), &[&lista.join(", ")])
+}
 
 /// Draws a statement: `#` headings, `-` and `1.` lists, `**bold**` as strong text.
 pub fn markdown(ui: &mut Ui, md: &str) {
@@ -71,3 +200,6 @@ fn linha_rica(ui: &mut Ui, t: &str) {
         }
     }
 }
+
+#[cfg(test)]
+mod testes;
