@@ -56,6 +56,60 @@ pub fn carregar_modelo(u: &Unidade, caminho: &str) -> Result<Model, String> {
     carregar_arquivo(&u.caminho_modelo(caminho.trim()))
 }
 
+/// Um caminho escolhido no seletor, como a unidade guarda: relativo à pasta da unidade
+/// quando o arquivo está dentro dela (assim a pasta continua valendo no Drive de cada
+/// pessoa), senão absoluto.
+pub fn caminho_na_unidade(u: &Unidade, escolhido: &Path) -> String {
+    match escolhido.strip_prefix(u.raiz()) {
+        Ok(r) if !r.as_os_str().is_empty() => r.display().to_string().replace('\\', "/"),
+        _ => escolhido.display().to_string(),
+    }
+}
+
+/// O campo de um modelo `.ron` da unidade: a caixa de texto e o botão "Procurar…".
+pub fn campo_modelo(
+    ui: &mut egui::Ui,
+    texto: &mut String,
+    u: Option<&Unidade>,
+    largura: f32,
+) -> egui::Response {
+    use utsim_ui_tema::arquivos::{self, Tipo};
+    ui.horizontal(|ui| {
+        let mut r = ui.add(
+            egui::TextEdit::singleline(texto)
+                .hint_text("arquivo .ron: escreva ou clique em Procurar…")
+                .desired_width(largura),
+        );
+        if ui
+            .button(arquivos::PROCURAR)
+            .on_hover_text("Abre o explorador de arquivos para escolher o modelo.")
+            .clicked()
+        {
+            let atual = match u {
+                Some(u) if !texto.trim().is_empty() => {
+                    u.caminho_modelo(texto.trim()).display().to_string()
+                }
+                Some(u) => u.raiz().display().to_string(),
+                None => texto.clone(),
+            };
+            if let Some(p) = arquivos::procurar(
+                Tipo::Abrir,
+                "Escolha o modelo do UTSim",
+                &[arquivos::RON],
+                &atual,
+            ) {
+                *texto = match u {
+                    Some(u) => caminho_na_unidade(u, &p),
+                    None => p.display().to_string(),
+                };
+                r.mark_changed();
+            }
+        }
+        r
+    })
+    .inner
+}
+
 pub fn carregar_arquivo(c: &Path) -> Result<Model, String> {
     Model::load(c).map_err(|e| format!("{}: {e}", c.display()))
 }
