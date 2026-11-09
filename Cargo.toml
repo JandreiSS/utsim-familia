@@ -20,6 +20,7 @@ default-members = [
     "crates/utsim-exposicao",
     "crates/utsim-ferramentas",
     "crates/utsim-env",
+    "crates/utsim-estudo",
     "crates/utsim-fit",
     "crates/utsim-flow",
     "crates/utsim-fluid",
@@ -67,6 +68,7 @@ utsim-fluid = { path = "crates/utsim-fluid" }
 utsim-opt = { path = "crates/utsim-opt" }
 utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
+utsim-estudo = { path = "crates/utsim-estudo" }
 utsim-pasta = { path = "crates/utsim-pasta" }
 utsim-posto-ui = { path = "crates/utsim-posto-ui" }
 utsim-env = { path = "crates/utsim-env" }

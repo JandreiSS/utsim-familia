@@ -1,0 +1,16 @@
+[package]
+name = "utsim-estudo"
+description = "Estudos da família UTSim: ferramentas da qualidade e da segurança aplicadas a um assunto (nó, posto ou problema), com dados simulados, digitados ou importados, e relatórios por ferramenta e consolidados (sem interface)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+utsim-ferramentas.workspace = true
+utsim-quality.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = { version = "=0.10.9", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"

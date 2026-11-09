@@ -7836,6 +7836,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-estudo"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "utsim-ferramentas",
+ "utsim-quality",
+]
+
+[[package]]
 name = "utsim-exposicao"
 version = "0.1.0"
 dependencies = [
