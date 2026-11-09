@@ -76,6 +76,9 @@ pub mod roteiro;
 // Design of experiments (P3, `docs/plano_lean_seis_sigma.md`, 2.4 and 3.4).
 pub mod experimentos;
 
+// Control with the twin and the panel (P5, `docs/plano_lean_seis_sigma.md`, 3.5).
+pub mod controle;
+
 // Project templates of the specialised lines (`docs/plano_linhas_especializadas.md`, 1.8).
 pub mod modelos_linha;
 
