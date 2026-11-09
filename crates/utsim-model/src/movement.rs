@@ -129,14 +129,11 @@ impl Model {
                     names.insert(to.as_str());
                 }
             }
-            if let ObjectKind::Processor {
-                operators: Some(op),
-                ..
-            } = &o.kind
+            if o.kind
+                .operator_uses()
+                .any(|op| carriers.contains(op.team.as_str()))
             {
-                if carriers.contains(op.team.as_str()) {
-                    names.insert(o.name.as_str());
-                }
+                names.insert(o.name.as_str());
             }
         }
         self.objects
@@ -177,8 +174,9 @@ impl Model {
             return Role::Forklift;
         }
         let operator = self.objects.iter().any(|o| {
-            matches!(&o.kind, ObjectKind::Processor { operators: Some(op), .. }
-                if carriers.contains(op.team.as_str()))
+            o.kind
+                .operator_uses()
+                .any(|op| carriers.contains(op.team.as_str()))
         });
         if operator {
             Role::Person

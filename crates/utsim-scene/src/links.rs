@@ -56,11 +56,7 @@ pub fn team_links(model: &Model) -> Vec<LinkLine> {
         if let Some(t) = &obj.transport {
             out.extend(to_block(LinkKind::Transport, i, t));
         }
-        if let ObjectKind::Processor {
-            operators: Some(op),
-            ..
-        } = &obj.kind
-        {
+        for op in obj.kind.operator_uses() {
             out.extend(to_block(LinkKind::Operators, i, &op.team));
         }
         if let Some(crew) = obj.downtime.as_ref().and_then(|d| d.repair_crew.as_ref()) {

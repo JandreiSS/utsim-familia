@@ -413,9 +413,10 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             ],
         ),
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch", "order"]),
-        ObjectKind::Processor { .. } => {
-            ("Processor", &["capacity", "setup", "process", "operators"])
-        }
+        ObjectKind::Processor { .. } => (
+            "Processor",
+            &["capacity", "setup", "process", "operators", "also"],
+        ),
         ObjectKind::Transporter { .. } => (
             "Transporter",
             &[
@@ -482,6 +483,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Processor { setup, .. }, "setup") => set!(*setup),
         (ObjectKind::Processor { process, .. }, "process") => set!(*process),
         (ObjectKind::Processor { operators, .. }, "operators") => set!(*operators),
+        (ObjectKind::Processor { also, .. }, "also") => set!(*also),
         (ObjectKind::Transporter { speed, .. }, "speed") => set!(*speed),
         (ObjectKind::Transporter { acceleration, .. }, "acceleration") => set!(*acceleration),
         (ObjectKind::Transporter { deceleration, .. }, "deceleration") => set!(*deceleration),
@@ -829,7 +831,8 @@ mod tests {
     fn unknown_field_lists_valid_ones() {
         let e = set(&[("m.velocidade", "1")]).unwrap_err().to_string();
         assert!(
-            e.contains("Processor") && e.contains("capacity, setup, process, operators, output"),
+            e.contains("Processor")
+                && e.contains("capacity, setup, process, operators, also, output"),
             "{e}"
         );
         let e = set(&[("out.process", "Const(1.0)")])

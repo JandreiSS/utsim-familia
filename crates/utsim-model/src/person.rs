@@ -73,11 +73,7 @@ impl Model {
                     errors.push(format!("{}.person.{e}", obj.name));
                 }
             }
-            if let ObjectKind::Processor {
-                operators: Some(op),
-                ..
-            } = &obj.kind
-            {
+            for op in obj.kind.operator_uses() {
                 if op.requires.as_deref().is_some_and(|s| s.trim().is_empty()) {
                     errors.push(format!(
                         "{}: operators.requires precisa do nome de uma habilidade",
@@ -104,14 +100,11 @@ impl Model {
     /// Warnings about people: a skill nobody of the team has, manual loads above the
     /// reference limits.
     pub(crate) fn people_warnings(&self, out: &mut Vec<String>) {
-        for obj in &self.objects {
-            let ObjectKind::Processor {
-                operators: Some(op),
-                ..
-            } = &obj.kind
-            else {
-                continue;
-            };
+        for (obj, op) in self
+            .objects
+            .iter()
+            .flat_map(|o| o.kind.operator_uses().map(move |op| (o, op)))
+        {
             let Some(skill) = op.requires.as_deref() else {
                 continue;
             };
