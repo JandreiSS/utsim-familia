@@ -58,7 +58,7 @@ impl Idioma {
 static IDIOMA: AtomicU8 = AtomicU8::new(0);
 
 /// The language of the interface now.
-pub fn idioma() -> Idioma {
+pub fn idioma_atual() -> Idioma {
     match IDIOMA.load(Ordering::Relaxed) {
         1 => Idioma::En,
         2 => Idioma::Es,
@@ -80,7 +80,7 @@ pub fn definir(i: Idioma) {
 
 /// One of the three texts, by the language now.
 pub fn escolher(pt: &'static str, en: &'static str, es: &'static str) -> &'static str {
-    match idioma() {
+    match idioma_atual() {
         Idioma::Pt => pt,
         Idioma::En => en,
         Idioma::Es => es,
@@ -130,7 +130,7 @@ macro_rules! textos {
         )*
         /// Every entry: name, Portuguese, English, Spanish.
         #[allow(dead_code)]
-        pub const TODOS: &[(&str, &str, &str, &str)] = &[$((stringify!($nome), $pt, $en, $es)),*];
+        pub(super) const TODOS: &[(&str, &str, &str, &str)] = &[$((stringify!($nome), $pt, $en, $es)),*];
     };
 }
 

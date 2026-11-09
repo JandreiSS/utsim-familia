@@ -2,8 +2,11 @@
 
 use super::*;
 
+/// An entry: name, Portuguese, English, Spanish.
+type Entrada = (&'static str, &'static str, &'static str, &'static str);
+
 /// Every catalogue of the crate.
-fn catalogos() -> Vec<(&'static str, &'static [(&'static str, &'static str, &'static str, &'static str)])> {
+fn catalogos() -> Vec<(&'static str, &'static [Entrada])> {
     vec![
         ("geral", geral::TODOS),
         ("missao", cat_missao::TODOS),
@@ -113,7 +116,8 @@ fn literais(src: &str) -> Vec<(usize, String)> {
             } else {
                 i += 1;
             }
-        } else if ch == 'r' && (c.get(i + 1) == Some(&'"') || c.get(i + 1) == Some(&'#'))
+        } else if ch == 'r'
+            && (c.get(i + 1) == Some(&'"') || c.get(i + 1) == Some(&'#'))
             && (i == 0 || !(c[i - 1].is_alphanumeric() || c[i - 1] == '_'))
         {
             let mut j = i + 1;
@@ -174,12 +178,18 @@ fn literais(src: &str) -> Vec<(usize, String)> {
 /// A literal that is a text for people: it has letters and is not an identifier, a key, a
 /// path or a command line flag (lower case, digits, `_ . / : -` and no spaces).
 fn e_texto(s: &str) -> bool {
+    // Escapes are not letters (the literal keeps them as written in the source).
+    let s = &s
+        .replace("\\\\", "/")
+        .replace("\\n", " ")
+        .replace("\\t", " ")
+        .replace("\\\"", "\"");
     if !s.chars().any(|c| c.is_alphabetic()) {
         return false;
     }
-    let ident = s.chars().all(|c| {
-        c.is_ascii_lowercase() || c.is_ascii_digit() || "_./:-{}<>|=".contains(c)
-    });
+    let ident = s
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./:-{}<>|=".contains(c));
     if ident {
         return false;
     }
@@ -208,6 +218,7 @@ const NAO_SAO_TEXTO: &[&str] = &[
     "CARGO_PKG_VERSION",
     "Ok",
     "-V",
+    "utsim-ensino {}",
     "{}º",
     "{}º =",
     "Dispatcher",

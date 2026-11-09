@@ -16,6 +16,10 @@ pub const FORMATO_PACOTE: u32 = 1;
 /// The files of a package: path with `/` to bytes.
 pub type Arquivos = BTreeMap<String, Vec<u8>>;
 
+fn pt_br() -> String {
+    "pt-BR".into()
+}
+
 fn um() -> u32 {
     1
 }
@@ -33,6 +37,10 @@ pub struct Pacote {
     pub autor: String,
     #[serde(default)]
     pub descricao: String,
+    /// Language of the texts of the package (`pt-BR`, `en`, `es`); the interface says so
+    /// when it differs from the chosen one.
+    #[serde(default = "pt_br")]
+    pub idioma: String,
     /// What the package needs (`nucleo >= 0.1`, `linha:lean_office`), see [`crate::requisitos`].
     #[serde(default)]
     pub requer: Vec<String>,

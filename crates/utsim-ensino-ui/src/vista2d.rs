@@ -11,6 +11,8 @@ use egui::{
 use utsim_core::{State, TraceEvent};
 use utsim_model::replay::Replay;
 
+use crate::texto;
+
 /// Playback of one replay.
 pub struct Animacao {
     pub replay: Replay,
@@ -128,19 +130,19 @@ impl Animacao {
         ui.horizontal(|ui| {
             if ui
                 .button(if self.pausado {
-                    "▶ Continuar"
+                    texto::vista_continuar()
                 } else {
-                    "⏸ Pausar"
+                    texto::vista_pausar()
                 })
                 .clicked()
             {
                 self.pausado = !self.pausado;
             }
-            if ui.button("⟲ Do início").clicked() {
+            if ui.button(texto::vista_do_inicio()).clicked() {
                 self.ir_para(0.0);
                 self.pausado = false;
             }
-            ui.label("Velocidade:");
+            ui.label(texto::vista_velocidade());
             for v in [1.0, 5.0, 20.0, 60.0] {
                 if ui
                     .selectable_label((self.velocidade - v).abs() < 1e-9, format!("{v}×"))
@@ -149,9 +151,13 @@ impl Animacao {
                     self.velocidade = v;
                 }
             }
-            ui.label(format!(
-                "t = {:.1} {} de {:.0}",
-                self.t, self.unidade, self.replay.stop_time
+            ui.label(texto::f(
+                texto::vista_tempo(),
+                &[
+                    &format!("{:.1}", self.t),
+                    &self.unidade,
+                    &format!("{:.0}", self.replay.stop_time),
+                ],
             ));
         });
         let dt = ui.input(|i| i.stable_dt).min(0.1) as f64;
@@ -283,11 +289,11 @@ impl Animacao {
         }
         ui.horizontal_wrapped(|ui| {
             for (cor, nome) in [
-                (COR_TRABALHANDO, "trabalhando"),
-                (COR_OCIOSA, "ociosa"),
-                (COR_BLOQUEADA, "bloqueada"),
-                (COR_QUEBRADA, "parada ou quebrada"),
-                (COR_SETUP, "em setup"),
+                (COR_TRABALHANDO, texto::vista_trabalhando()),
+                (COR_OCIOSA, texto::vista_ociosa()),
+                (COR_BLOQUEADA, texto::vista_bloqueada()),
+                (COR_QUEBRADA, texto::vista_parada_ou_quebrada()),
+                (COR_SETUP, texto::vista_em_setup()),
             ] {
                 let (r, p) = ui.allocate_painter(vec2(12.0, 12.0), Sense::hover());
                 p.rect_filled(r.rect, CornerRadius::same(2), cor);
@@ -406,23 +412,25 @@ pub fn cor_estado(kind: &str, s: State, conteudo: usize) -> (Color32, &'static s
     match kind {
         "Queue" => {
             if conteudo == 0 {
-                (COR_OCIOSA, "vazia")
+                (COR_OCIOSA, texto::vista_vazia())
             } else {
-                (Color32::from_rgb(70, 76, 110), "fila")
+                (Color32::from_rgb(70, 76, 110), texto::vista_fila())
             }
         }
-        "Source" => (Color32::from_rgb(60, 90, 120), "chegadas"),
-        "Sink" => (Color32::from_rgb(60, 90, 120), "saída"),
+        "Source" => (Color32::from_rgb(60, 90, 120), texto::vista_chegadas()),
+        "Sink" => (Color32::from_rgb(60, 90, 120), texto::vista_saida()),
         _ => match s {
-            State::Processing | State::Utilize => (COR_TRABALHANDO, "trabalhando"),
-            State::Setup => (COR_SETUP, "setup"),
-            State::Blocked | State::WaitingTransport => (COR_BLOQUEADA, "bloqueada"),
+            State::Processing | State::Utilize => (COR_TRABALHANDO, texto::vista_trabalhando()),
+            State::Setup => (COR_SETUP, texto::vista_setup()),
+            State::Blocked | State::WaitingTransport => (COR_BLOQUEADA, texto::vista_bloqueada()),
             State::Down | State::WaitingRepair | State::Maintenance | State::Stopped => {
-                (COR_QUEBRADA, "parada")
+                (COR_QUEBRADA, texto::vista_parada())
             }
-            State::OffShift => (Color32::from_rgb(40, 42, 48), "fora do turno"),
-            State::WaitingOperator => (Color32::from_rgb(120, 80, 150), "sem operador"),
-            _ => (COR_OCIOSA, "ociosa"),
+            State::OffShift => (Color32::from_rgb(40, 42, 48), texto::vista_fora_do_turno()),
+            State::WaitingOperator => {
+                (Color32::from_rgb(120, 80, 150), texto::vista_sem_operador())
+            }
+            _ => (COR_OCIOSA, texto::vista_ociosa()),
         },
     }
 }

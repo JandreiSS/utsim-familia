@@ -7,6 +7,8 @@ use utsim_ensino_core::missao::Decisoes;
 use utsim_ensino_core::nota::fmt_num;
 use utsim_ensino_core::pecas::{Arranjo, Balanceamento};
 
+use crate::texto;
+
 const AMARELO: Color32 = Color32::from_rgb(236, 196, 76);
 const VERMELHO: Color32 = Color32::from_rgb(255, 112, 104);
 const VERDE: Color32 = Color32::from_rgb(110, 214, 120);
@@ -27,21 +29,18 @@ pub fn quadro_balanceamento(
     let atrib = b.atribuicao(d);
     let resumo = b.resumo(&atrib);
     ui.label(
-        RichText::new(format!(
-            "Takt {} s · soma dos tempos {} s · estações usadas {} · eficiência {}",
-            fmt_num(b.takt, 0),
-            fmt_num(b.soma(), 0),
-            resumo.estacoes_usadas,
-            fmt_num(resumo.eficiencia, 3)
+        RichText::new(texto::f(
+            texto::vista_balanc_resumo(),
+            &[
+                &fmt_num(b.takt, 0),
+                &fmt_num(b.soma(), 0),
+                &resumo.estacoes_usadas,
+                &fmt_num(resumo.eficiencia, 3),
+            ],
         ))
         .strong(),
     );
-    ui.label(
-        RichText::new(
-            "Arraste cada tarefa para uma estação, ou clique na tarefa e depois na estação.",
-        )
-        .weak(),
-    );
+    ui.label(RichText::new(texto::vista_balanc_ajuda()).weak());
     let mut mover: Option<(String, u32)> = None;
     egui::ScrollArea::horizontal()
         .id_salt("quadro")
@@ -65,7 +64,11 @@ pub fn quadro_balanceamento(
                                 if ui
                                     .add(
                                         egui::Label::new(
-                                            RichText::new(format!("Estação {s}")).strong(),
+                                            RichText::new(texto::f(
+                                                texto::vista_estacao_n(),
+                                                &[&s],
+                                            ))
+                                            .strong(),
                                         )
                                         .sense(Sense::click()),
                                     )
@@ -76,7 +79,10 @@ pub fn quadro_balanceamento(
                                 }
                                 ui.colored_label(
                                     cor,
-                                    format!("{} de {} s", fmt_num(carga, 0), fmt_num(b.takt, 0)),
+                                    texto::f(
+                                        texto::vista_carga_de_takt(),
+                                        &[&fmt_num(carga, 0), &fmt_num(b.takt, 0)],
+                                    ),
                                 );
                                 let (r, p) = ui.allocate_painter(vec2(106.0, 6.0), Sense::hover());
                                 p.rect_filled(
@@ -95,8 +101,10 @@ pub fn quadro_balanceamento(
                                         id,
                                         TarefaArrastada(t.id.clone()),
                                         |ui| {
-                                            let txt =
-                                                format!("{} · {} s", t.id, fmt_num(t.tempo, 0));
+                                            let txt = texto::f(
+                                                texto::vista_tarefa_tempo(),
+                                                &[&t.id, &fmt_num(t.tempo, 0)],
+                                            );
                                             let r = ui.add(egui::Button::new(txt).selected(sel));
                                             r.on_hover_text(format!(
                                                 "{}{}",
@@ -104,9 +112,9 @@ pub fn quadro_balanceamento(
                                                 if t.depois_de.is_empty() {
                                                     String::new()
                                                 } else {
-                                                    format!(
-                                                        " (depois de {})",
-                                                        t.depois_de.join(", ")
+                                                    texto::f(
+                                                        texto::vista_depois_de_lista(),
+                                                        &[&t.depois_de.join(", ")],
                                                     )
                                                 }
                                             ))
@@ -133,11 +141,17 @@ pub fn quadro_balanceamento(
     if let Some((t, s)) = mover {
         d.insert(Balanceamento::chave(&t), s as f64);
     }
-    egui::CollapsingHeader::new("Tarefas e precedências")
+    egui::CollapsingHeader::new(texto::vista_tarefas_precedencias())
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("tarefas").striped(true).show(ui, |ui| {
-                for h in ["Tarefa", "Descrição", "Tempo (s)", "Depois de", "Estação"] {
+                for h in [
+                    texto::vista_col_tarefa(),
+                    texto::vista_col_descricao(),
+                    texto::vista_col_tempo(),
+                    texto::vista_col_depois_de(),
+                    texto::vista_col_estacao(),
+                ] {
                     ui.label(RichText::new(h).strong());
                 }
                 ui.end_row();
@@ -161,14 +175,13 @@ pub fn quadro_balanceamento(
 pub fn grade_arranjo(ui: &mut Ui, a: &Arranjo, d: &mut Decisoes, selecionada: &mut Option<String>) {
     let pos = a.posicoes(d);
     ui.label(
-        RichText::new(format!(
-            "Momento de transporte: {} (viagens por dia × metros) · células de {} m",
-            fmt_num(a.momento(&pos), 0),
-            fmt_num(a.celula, 0)
+        RichText::new(texto::f(
+            texto::vista_arranjo_resumo(),
+            &[&fmt_num(a.momento(&pos), 0), &fmt_num(a.celula, 0)],
         ))
         .strong(),
     );
-    ui.label(RichText::new("Arraste cada máquina para uma célula, ou clique na máquina e depois na célula. A doca é fixa.").weak());
+    ui.label(RichText::new(texto::vista_arranjo_ajuda()).weak());
     let mut mover: Option<(String, u32)> = None;
     let lado = 96.0;
     egui::Grid::new("grade")
@@ -182,7 +195,11 @@ pub fn grade_arranjo(ui: &mut Ui, a: &Arranjo, d: &mut Decisoes, selecionada: &m
                     let (resp, solto) = ui.dnd_drop_zone::<MaquinaArrastada, ()>(frame, |ui| {
                         ui.set_width(lado);
                         ui.set_min_height(48.0);
-                        ui.label(RichText::new(format!("célula {c}")).weak().small());
+                        ui.label(
+                            RichText::new(texto::f(texto::vista_celula_n(), &[&c]))
+                                .weak()
+                                .small(),
+                        );
                         if let Some(m) = aqui {
                             if m.fixa {
                                 ui.label(RichText::new(&m.nome).strong().color(AMARELO));
@@ -229,10 +246,16 @@ pub fn grade_arranjo(ui: &mut Ui, a: &Arranjo, d: &mut Decisoes, selecionada: &m
             }
         }
     }
-    ui.collapsing("Matriz de-para (viagens por dia e momento)", |ui| {
+    ui.collapsing(texto::vista_matriz_de_para(), |ui| {
         let dp = a.de_para(&pos);
         egui::Grid::new("depara").striped(true).show(ui, |ui| {
-            for h in ["De", "Para", "Viagens", "Distância (m)", "Momento"] {
+            for h in [
+                texto::vista_col_de(),
+                texto::vista_col_para(),
+                texto::vista_col_viagens(),
+                texto::vista_col_distancia(),
+                texto::vista_col_momento(),
+            ] {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();

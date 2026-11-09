@@ -34,48 +34,45 @@ pub struct EstadoTurma {
 }
 
 pub fn tela_turma(app: &mut App, ui: &mut Ui) {
-    ui.heading("Turma");
+    ui.heading(texto::turma_titulo());
     match app.config.turma.clone() {
         Some(v) => {
-            ui.label(format!(
-                "Você está na turma {} {} ({})",
-                v.convite.nome, v.convite.periodo, v.convite.turma
+            ui.label(texto::f(
+                texto::turma_voce_esta(),
+                &[&v.convite.nome, &v.convite.periodo, &v.convite.turma],
             ));
             match &v.pasta {
                 Some(p) => {
-                    ui.label(format!("Pasta da turma: {}", p.display()));
-                    ui.label("Cada tentativa é gravada nessa pasta assim que termina. O Google Drive para computador sincroniza.");
-                    if ui
-                        .button("Copiar de novo todas as tentativas para a pasta")
-                        .clicked()
-                    {
+                    ui.label(texto::f(texto::turma_pasta_da_turma(), &[&p.display()]));
+                    ui.label(texto::turma_gravada_na_pasta());
+                    if ui.button(texto::turma_copiar_de_novo()).clicked() {
                         app.mensagem = Some(match app.perfil.sincronizar_pasta() {
-                            Ok(n) => format!("{n} tentativa(s) na pasta da turma"),
-                            Err(e) => format!("erro: {e}"),
+                            Ok(n) => texto::f(texto::turma_tentativas_na_pasta(), &[&n]),
+                            Err(e) => texto::f(texto::turma_erro(), &[&e]),
                         });
                     }
                 }
                 None => {
-                    ui.label("Esta turma recebe as entregas por arquivo.");
+                    ui.label(texto::turma_por_arquivo());
                 }
             }
-            if ui.button("Sair da turma").clicked() {
+            if ui.button(texto::turma_sair()).clicked() {
                 app.config.turma = None;
                 app.salvar_config();
                 app.atualizar_pacotes();
             }
         }
         None => {
-            ui.label("Para entrar numa turma, abra o convite (.utsc) que o professor enviou. Se a turma usa uma pasta compartilhada no Drive, indique também a pasta sincronizada.");
+            ui.label(texto::turma_como_entrar());
             egui::Grid::new("entrar").num_columns(2).show(ui, |ui| {
-                ui.label("Convite (.utsc)");
+                ui.label(texto::turma_convite());
                 ui.text_edit_singleline(&mut app.turma.convite);
                 ui.end_row();
-                ui.label("Pasta da turma (opcional)");
+                ui.label(texto::turma_pasta_opcional());
                 ui.text_edit_singleline(&mut app.turma.pasta);
                 ui.end_row();
             });
-            if ui.button("Entrar na turma").clicked() {
+            if ui.button(texto::turma_entrar()).clicked() {
                 match Convite::ler(Path::new(app.turma.convite.trim())) {
                     Ok(c) => {
                         let pasta = Some(app.turma.pasta.trim())
@@ -85,21 +82,21 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                         app.salvar_config();
                         app.atualizar_pacotes();
                         if let Err(e) = app.perfil.sincronizar_pasta() {
-                            app.mensagem = Some(format!("não foi possível gravar na pasta: {e}"));
+                            app.mensagem = Some(texto::f(texto::turma_nao_gravou_pasta(), &[&e]));
                         }
                     }
-                    Err(e) => app.mensagem = Some(format!("convite inválido: {e}")),
+                    Err(e) => app.mensagem = Some(texto::f(texto::turma_convite_invalido(), &[&e])),
                 }
             }
         }
     }
     ui.separator();
-    ui.label(RichText::new("Entrega por arquivo").strong());
-    ui.label("Grava todas as suas tentativas assinadas num arquivo .utsr para enviar ao professor (ambiente da disciplina, e-mail ou pen drive).");
+    ui.label(RichText::new(texto::turma_entrega_titulo()).strong());
+    ui.label(texto::turma_entrega_texto());
     ui.horizontal(|ui| {
-        ui.label("Arquivo");
+        ui.label(texto::turma_arquivo());
         ui.text_edit_singleline(&mut app.turma.destino_entrega);
-        if ui.button("Gravar entrega").clicked() {
+        if ui.button(texto::turma_gravar_entrega()).clicked() {
             let mut destino = PathBuf::from(app.turma.destino_entrega.trim());
             if destino.extension().is_none() {
                 destino.set_extension("utsr");
@@ -110,11 +107,8 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                     .entrega()
                     .and_then(|e| e.gravar(&destino).map(|_| e.tentativas.len()))
                 {
-                    Ok(n) => format!(
-                        "entrega com {n} tentativa(s) gravada em {}",
-                        destino.display()
-                    ),
-                    Err(e) => format!("não foi possível gravar a entrega: {e}"),
+                    Ok(n) => texto::f(texto::turma_entrega_gravada(), &[&n, &destino.display()]),
+                    Err(e) => texto::f(texto::turma_entrega_falhou(), &[&e]),
                 },
             );
         }
@@ -125,7 +119,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
         let ps = utsim_ensino_store::desafio::placares(&pasta);
         if !ps.is_empty() {
             ui.separator();
-            ui.label(RichText::new("Placares da turma").strong());
+            ui.label(RichText::new(texto::turma_placares()).strong());
             for (missao, csv) in ps {
                 // The mission title, when the open package has it.
                 let titulo = app
@@ -137,7 +131,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                             .find(|m| utsim_ensino_store::pasta::slug(&m.missao.id) == missao)
                     })
                     .map_or(missao.clone(), |m| m.missao.titulo.clone());
-                ui.collapsing(format!("Desafio: {titulo}"), |ui| {
+                ui.collapsing(texto::f(texto::turma_desafio_de(), &[&titulo]), |ui| {
                     egui::Grid::new(format!("pl_{missao}"))
                         .striped(true)
                         .show(ui, |ui| {
@@ -147,7 +141,7 @@ pub fn tela_turma(app: &mut App, ui: &mut Ui) {
                                     continue;
                                 }
                                 let pos = if i == 0 {
-                                    "Posição".to_string()
+                                    texto::turma_posicao().to_string()
                                 } else if c[4] == "sim" {
                                     format!("{}º =", c[0])
                                 } else {
@@ -235,16 +229,15 @@ impl EstadoProva {
     ) -> Result<utsim_ensino_core::prova::Montagem, String> {
         use utsim_ensino_core::prova::{Montagem, Prova, Regra, ler_data_hora};
         let fuso = -180;
-        let inicio =
-            ler_data_hora(&self.inicio, fuso).ok_or("início no formato AAAA-MM-DD HH:MM")?;
-        let fim = ler_data_hora(&self.fim, fuso).ok_or("fim no formato AAAA-MM-DD HH:MM")?;
+        let inicio = ler_data_hora(&self.inicio, fuso).ok_or(texto::turma_inicio_formato())?;
+        let fim = ler_data_hora(&self.fim, fuso).ok_or(texto::turma_fim_formato())?;
         let semente = if self.semente.trim().is_empty() {
             agora as u64
         } else {
             self.semente
                 .trim()
                 .parse()
-                .map_err(|_| "a semente é um número inteiro")?
+                .map_err(|_| texto::turma_semente_inteiro())?
         };
         let regras: Vec<Regra> = self
             .por_ato
@@ -289,7 +282,7 @@ impl EstadoProfessor {
             self.caso_trabalho = None;
             self.caso_relatorio = Some(match r {
                 Ok(t) => t,
-                Err(e) => format!("erro: {e}"),
+                Err(e) => texto::f(texto::turma_erro(), &[&e]),
             });
         }
         if let Some(r) = self
@@ -301,7 +294,10 @@ impl EstadoProfessor {
             self.desafio.trabalho = None;
             match r {
                 Ok(c) => self.desafio.comparacao = Some(c),
-                Err(e) => self.desafio.sem_solucao.push(format!("erro: {e}")),
+                Err(e) => self
+                    .desafio
+                    .sem_solucao
+                    .push(texto::f(texto::turma_erro(), &[&e])),
             }
         }
         let Some(c) = self.trabalho.as_ref().and_then(|t| t.rx.try_recv().ok()) else {
@@ -316,7 +312,7 @@ impl EstadoProfessor {
         let modelo = PathBuf::from(self.caso_modelo.trim());
         let pasta = PathBuf::from(self.caso_pasta.trim());
         let titulo = if self.caso_titulo.trim().is_empty() {
-            "Missão nova".to_string()
+            texto::turma_missao_nova().to_string()
         } else {
             self.caso_titulo.trim().to_string()
         };
@@ -436,41 +432,50 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     let pacote_aberto = app.config.pacote_aberto.clone();
     let perfil = utsim_ensino_store::perfil::Perfil::em(&app.perfil.dir);
     let agora = (app.relogio)();
-    ui.heading("Professor");
+    ui.heading(texto::turma_professor());
     let s = &mut app.professor;
 
-    ui.collapsing("Construtor de casos", |ui| {
-        ui.label("Gera uma missão de rascunho a partir de um modelo do UTSim: alavancas sugeridas (capacidades, filas limitadas, equipes), medidas de cada saída, referência pela busca exaustiva e metas a 5 % dela. Revise o texto, as faixas, os custos e as metas na pasta e confira de novo.");
+    ui.collapsing(texto::turma_construtor(), |ui| {
+        ui.label(texto::turma_construtor_texto());
         egui::Grid::new("caso").num_columns(2).show(ui, |ui| {
-            ui.label("Modelo (.ron)");
+            ui.label(texto::turma_modelo());
             ui.text_edit_singleline(&mut s.caso_modelo);
             ui.end_row();
-            ui.label("Título da missão");
+            ui.label(texto::turma_titulo_missao());
             ui.text_edit_singleline(&mut s.caso_titulo);
             ui.end_row();
-            ui.label("Pasta do pacote");
+            ui.label(texto::turma_pasta_pacote());
             ui.text_edit_singleline(&mut s.caso_pasta);
             ui.end_row();
         });
         ui.horizontal(|ui| {
             let livre = s.caso_trabalho.is_none();
-            if ui.add_enabled(livre, egui::Button::new("Criar e calibrar")).clicked() {
+            if ui
+                .add_enabled(livre, egui::Button::new(texto::turma_criar_calibrar()))
+                .clicked()
+            {
                 s.criar_caso(executor.as_ref(), Some(ctx.clone()));
             }
-            if ui.add_enabled(livre, egui::Button::new("Conferir de novo")).clicked() {
+            if ui
+                .add_enabled(livre, egui::Button::new(texto::turma_conferir_de_novo()))
+                .clicked()
+            {
                 s.conferir_caso(executor.as_ref(), Some(ctx.clone()));
             }
-            if ui.button("Gravar .utse").clicked() {
+            if ui.button(texto::turma_gravar_utse()).clicked() {
                 let pasta = PathBuf::from(s.caso_pasta.trim());
                 let destino = pasta.with_extension("utse");
-                s.caso_relatorio = Some(match utsim_ensino_store::caso::empacotar(&pasta, &destino) {
-                    Ok(p) => format!("pacote gravado em {}", p.display()),
-                    Err(e) => format!("erro: {e}"),
-                });
+                s.caso_relatorio = Some(
+                    match utsim_ensino_store::caso::empacotar(&pasta, &destino) {
+                        Ok(p) => texto::f(texto::turma_pacote_gravado(), &[&p.display()]),
+                        Err(e) => texto::f(texto::turma_erro(), &[&e]),
+                    },
+                );
             }
             if s.caso_trabalho.is_some() {
                 ui.spinner();
-                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(200));
             }
         });
         if let Some(r) = &s.caso_relatorio {
@@ -480,28 +485,28 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
         }
     });
 
-    ui.collapsing("Nova turma", |ui| {
+    ui.collapsing(texto::turma_nova(), |ui| {
         egui::Grid::new("nova_turma").num_columns(2).show(ui, |ui| {
-            ui.label("Pasta da turma (local ou no Drive)");
+            ui.label(texto::turma_pasta_local_drive());
             ui.text_edit_singleline(&mut s.pasta);
             ui.end_row();
-            ui.label("Nome");
+            ui.label(texto::turma_nome());
             ui.text_edit_singleline(&mut s.nome);
             ui.end_row();
-            ui.label("Período");
+            ui.label(texto::turma_periodo());
             ui.text_edit_singleline(&mut s.periodo);
             ui.end_row();
-            ui.label("Finalidade dos dados (LGPD)");
+            ui.label(texto::turma_finalidade());
             ui.text_edit_singleline(&mut s.finalidade);
             ui.end_row();
-            ui.label("Lista de alunos (.csv: nome;registro;apelido)");
+            ui.label(texto::turma_lista_csv());
             ui.text_edit_singleline(&mut s.csv);
             ui.end_row();
         });
-        if ui.button("Criar turma").clicked() {
+        if ui.button(texto::turma_criar()).clicked() {
             let r = (|| {
                 if s.nome.trim().is_empty() || s.pasta.trim().is_empty() {
-                    return Err("informe a pasta e o nome".to_string());
+                    return Err(texto::turma_informe_pasta_nome().to_string());
                 }
                 let alunos = if s.csv.trim().is_empty() {
                     Vec::new()
@@ -532,35 +537,32 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
                         app.config.turmas_professor.push(d.clone());
                     }
                     let _ = app.perfil.salvar_config(&app.config);
-                    format!(
-                        "turma criada em {}; envie o convite.utsc aos alunos",
-                        d.display()
-                    )
+                    texto::f(texto::turma_criada(), &[&d.display()])
                 }
-                Err(e) => format!("não foi possível criar a turma: {e}"),
+                Err(e) => texto::f(texto::turma_nao_criou(), &[&e]),
             });
         }
     });
 
     ui.horizontal(|ui| {
-        ui.label("Abrir turma:");
+        ui.label(texto::turma_abrir_turma());
         ui.text_edit_singleline(&mut s.pasta);
-        if ui.button("Abrir").clicked() {
+        if ui.button(texto::turma_abrir()).clicked() {
             let dir = PathBuf::from(s.pasta.trim());
             if let Err(e) = s.abrir(&dir) {
-                app.mensagem = Some(format!("não foi possível abrir: {e}"));
+                app.mensagem = Some(texto::f(texto::turma_nao_abriu(), &[&e]));
             }
         }
     });
     let recentes = app.config.turmas_professor.clone();
     if !recentes.is_empty() {
         ui.horizontal_wrapped(|ui| {
-            ui.label("Recentes:");
+            ui.label(texto::turma_recentes());
             for d in recentes {
                 if ui.button(d.display().to_string()).clicked() {
                     s.pasta = d.display().to_string();
                     if let Err(e) = s.abrir(&d) {
-                        app.mensagem = Some(format!("não foi possível abrir: {e}"));
+                        app.mensagem = Some(texto::f(texto::turma_nao_abriu(), &[&e]));
                     }
                 }
             }
@@ -572,23 +574,20 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     };
     ui.separator();
     ui.label(
-        RichText::new(format!(
-            "{} {} · {} aluno(s)",
-            turma.nome,
-            turma.periodo,
-            alunos.len()
+        RichText::new(texto::f(
+            texto::turma_cabecalho(),
+            &[&turma.nome, &turma.periodo, &alunos.len()],
         ))
         .strong(),
     );
-    ui.label(format!(
-        "Pasta: {} · convite: {}",
-        dir.display(),
-        dir.join("convite.utsc").display()
+    ui.label(texto::f(
+        texto::turma_pasta_convite(),
+        &[&dir.display(), &dir.join("convite.utsc").display()],
     ));
     ui.horizontal(|ui| {
-        ui.label("Importar lista de alunos (.csv):");
+        ui.label(texto::turma_importar_lista());
         ui.text_edit_singleline(&mut s.csv);
-        if ui.button("Importar").clicked() {
+        if ui.button(texto::turma_importar()).clicked() {
             let r = std::fs::read_to_string(s.csv.trim())
                 .map_err(|e| e.to_string())
                 .and_then(|t| importar_alunos(&t).map_err(|e| e.join("; ")))
@@ -599,18 +598,15 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
                         .map(|_| a.len())
                 });
             app.mensagem = Some(match r {
-                Ok(n) => format!("{n} aluno(s) importado(s)"),
-                Err(e) => format!("lista recusada: {e}"),
+                Ok(n) => texto::f(texto::turma_importados(), &[&n]),
+                Err(e) => texto::f(texto::turma_lista_recusada(), &[&e]),
             });
             let _ = s.abrir(&dir);
         }
     });
     let mut ultima = s.registro_ultima;
     if ui
-        .checkbox(
-            &mut ultima,
-            "Registrar a última tentativa (desmarcado: a melhor)",
-        )
+        .checkbox(&mut ultima, texto::turma_registrar_ultima())
         .changed()
     {
         s.registro_ultima = ultima;
@@ -621,19 +617,19 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
             Registro::Melhor
         };
         if let Err(e) = (PastaTurma { dir: dir.clone() }).salvar_turma(&t) {
-            app.mensagem = Some(format!("erro: {e}"));
+            app.mensagem = Some(texto::f(texto::turma_erro(), &[&e]));
         }
         let _ = s.abrir(&dir);
     }
     ui.horizontal(|ui| {
-        ui.label("Entregas por arquivo (pasta com .utsr, opcional):");
+        ui.label(texto::turma_entregas_utsr());
         ui.text_edit_singleline(&mut s.pasta_utsr);
     });
     ui.horizontal(|ui| {
         if ui
             .add_enabled(
                 s.trabalho.is_none(),
-                egui::Button::new("Corrigir todas as entregas"),
+                egui::Button::new(texto::turma_corrigir_todas()),
             )
             .clicked()
         {
@@ -642,17 +638,17 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
                 Some(id) => utsim_ensino_store::prova::provas_salvas(&perfil)
                     .into_iter()
                     .find(|m| m.id == id)
-                    .ok_or_else(|| format!("prova {id} não encontrada"))
+                    .ok_or_else(|| texto::f(texto::turma_prova_nao_encontrada(), &[&id]))
                     .and_then(|m| {
                         let base = crate::arquivos_de(pacote_aberto.as_deref())
-                            .ok_or("não foi possível ler o pacote aberto")?;
+                            .ok_or(texto::turma_nao_leu_pacote())?;
                         utsim_ensino_store::prova::pacote_da_prova(&base, &pacote, &m)
                     })
                     .map(Arc::new),
             };
             match alvo {
                 Ok(p) => s.corrigir(p, executor.as_ref(), Some(ctx.clone())),
-                Err(e) => app.mensagem = Some(format!("não foi possível corrigir: {e}")),
+                Err(e) => app.mensagem = Some(texto::f(texto::turma_nao_corrigiu(), &[&e])),
             }
         }
         if let Some(t) = &s.trabalho {
@@ -683,16 +679,16 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     let pacote = s.pacote_corrigido.clone().unwrap_or(pacote);
     let Some(c) = &s.correcao else { return };
     ui.separator();
-    ui.label(RichText::new("Matriz aluno por missão").strong());
+    ui.label(RichText::new(texto::turma_matriz()).strong());
     egui::ScrollArea::horizontal().show(ui, |ui| {
         egui::Grid::new("matriz").striped(true).show(ui, |ui| {
-            ui.label(RichText::new("Aluno").strong());
+            ui.label(RichText::new(texto::turma_aluno()).strong());
             for i in 0..c.matriz.missoes.len() {
                 ui.label(RichText::new(numero_missao(&pacote, i)).strong())
                     .on_hover_text(&c.matriz.titulos[i]);
             }
-            ui.label(RichText::new("Média").strong());
-            ui.label(RichText::new("Avisos").strong());
+            ui.label(RichText::new(texto::turma_media()).strong());
+            ui.label(RichText::new(texto::turma_avisos()).strong());
             ui.end_row();
             for l in &c.matriz.linhas {
                 ui.label(format!("{} ({})", l.aluno.nome, l.aluno.registro));
@@ -704,9 +700,9 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
                                 fmt_num(x.nota, 0),
                                 "★".repeat(x.estrelas as usize)
                             ))
-                            .on_hover_text(format!(
-                                "{} tentativa(s), dica até o nível {}",
-                                x.tentativas, x.dicas
+                            .on_hover_text(texto::f(
+                                texto::turma_celula_dica(),
+                                &[&x.tentativas, &x.dicas],
                             )),
                         None => ui.label("-"),
                     };
@@ -723,16 +719,19 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     });
     if !c.semelhancas.is_empty() {
         ui.separator();
-        ui.label(RichText::new("Pares para olhar de perto").strong());
-        ui.label(RichText::new("Semelhança não é prova de cópia: a decisão é sua.").weak());
+        ui.label(RichText::new(texto::turma_pares()).strong());
+        ui.label(RichText::new(texto::turma_semelhanca()).weak());
         for x in &c.semelhancas {
-            ui.label(format!("• {} e {} em {}: {}", x.a, x.b, x.missao, x.motivo));
+            ui.label(texto::f(
+                texto::turma_par(),
+                &[&x.a, &x.b, &x.missao, &x.motivo],
+            ));
         }
     }
     ui.separator();
-    ui.label(RichText::new("Erros mais comuns").strong());
+    ui.label(RichText::new(texto::turma_erros_comuns()).strong());
     if c.erros_comuns.values().all(Vec::is_empty) {
-        ui.label("Nenhum erro frequente nas entregas corrigidas.");
+        ui.label(texto::turma_nenhum_erro());
     }
     for (i, m) in pacote.missoes.iter().enumerate() {
         if let Some(es) = c.erros_comuns.get(&m.missao.id).filter(|es| !es.is_empty()) {
@@ -747,22 +746,19 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     }
     ui.separator();
     ui.horizontal(|ui| {
-        if ui
-            .button("Exportar notas (CSV e .xlsx em correcao/)")
-            .clicked()
-        {
+        if ui.button(texto::turma_exportar()).clicked() {
             let pasta = PastaTurma { dir: dir.clone() };
             let (cab, linhas) = c.matriz.tabela();
             let r = pasta
                 .gravar_correcao("notas.csv", c.matriz.csv().as_bytes())
-                .and_then(|_| xlsx(&[("Notas".into(), cab, linhas)]))
+                .and_then(|_| xlsx(&[(texto::turma_planilha_notas().into(), cab, linhas)]))
                 .and_then(|b| pasta.gravar_correcao("notas.xlsx", &b));
             app.mensagem = Some(match r {
-                Ok(p) => format!(
-                    "notas exportadas em {}",
-                    p.parent().unwrap_or(&dir).display()
+                Ok(p) => texto::f(
+                    texto::turma_notas_exportadas(),
+                    &[&p.parent().unwrap_or(&dir).display()],
                 ),
-                Err(e) => format!("não foi possível exportar: {e}"),
+                Err(e) => texto::f(texto::turma_nao_exportou(), &[&e]),
             });
         }
     });
@@ -799,18 +795,18 @@ fn secao_desafio(
     let c = s.correcao.as_ref()?;
     ui.separator();
     let aberto = s.desafio.placar.is_some() || s.desafio.comparacao.is_some();
-    egui::CollapsingHeader::new("Desafio da turma e equipes")
+    egui::CollapsingHeader::new(texto::turma_desafio_equipes())
         .default_open(aberto)
         .show(ui, |ui| {
             ui.label(texto::desafio_texto());
             let d = &mut s.desafio;
             if d.equipes.is_empty() && !turma.equipes.is_empty() {
-                d.equipes = turma
-                    .equipes
-                    .iter()
-                    .map(|e| format!("{}: {}", e.nome, e.membros.join(", ")))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                use std::fmt::Write;
+                let mut t = String::new();
+                for e in &turma.equipes {
+                    let _ = writeln!(t, "{}: {}", e.nome, e.membros.join(", "));
+                }
+                d.equipes = t.trim_end().to_string();
             }
             d.missao = d.missao.min(pacote.missoes.len().saturating_sub(1));
             let rotulo = |i: usize| {
@@ -820,7 +816,7 @@ fn secao_desafio(
                     pacote.missoes[i].missao.titulo
                 )
             };
-            egui::ComboBox::from_label("Missão")
+            egui::ComboBox::from_label(texto::turma_missao())
                 .selected_text(rotulo(d.missao))
                 .show_ui(ui, |ui| {
                     for i in 0..pacote.missoes.len() {
@@ -829,17 +825,17 @@ fn secao_desafio(
                 });
             let missao = pacote.missoes[d.missao].missao.id.clone();
             ui.horizontal(|ui| {
-                ui.label("Prazo (AAAA-MM-DD HH:MM, Brasília, opcional)");
+                ui.label(texto::turma_prazo());
                 ui.text_edit_singleline(&mut d.fim);
             });
             ui.horizontal(|ui| {
-                if ui.button("Montar o placar").clicked() {
+                if ui.button(texto::turma_montar_placar()).clicked() {
                     let fim = if d.fim.trim().is_empty() {
                         Ok(None)
                     } else {
                         utsim_ensino_core::prova::ler_data_hora(&d.fim, -180)
                             .map(Some)
-                            .ok_or("prazo no formato AAAA-MM-DD HH:MM")
+                            .ok_or(texto::turma_prazo_formato())
                     };
                     match fim {
                         Ok(fim) => {
@@ -861,14 +857,14 @@ fn secao_desafio(
                             })
                             .salvar_turma(&t)
                             {
-                                msg = Some(format!("erro: {e}"));
+                                msg = Some(texto::f(texto::turma_erro(), &[&e]));
                             }
                         }
                         Err(e) => msg = Some(e.to_string()),
                     }
                 }
                 if let Some(linhas) = &d.placar
-                    && ui.button("Publicar o placar na pasta da turma").clicked()
+                    && ui.button(texto::turma_publicar_placar()).clicked()
                 {
                     msg = Some(
                         match utsim_ensino_store::desafio::gravar_placar(
@@ -878,8 +874,8 @@ fn secao_desafio(
                             &missao,
                             linhas,
                         ) {
-                            Ok(p) => format!("placar publicado em {} (só apelidos)", p.display()),
-                            Err(e) => format!("não foi possível publicar: {e}"),
+                            Ok(p) => texto::f(texto::turma_placar_publicado(), &[&p.display()]),
+                            Err(e) => texto::f(texto::turma_nao_publicou(), &[&e]),
                         },
                     );
                 }
@@ -888,13 +884,13 @@ fn secao_desafio(
                 placar_tabela(ui, linhas);
             }
             ui.separator();
-            ui.label("Equipes, uma por linha (Equipe: registro, registro):");
+            ui.label(texto::turma_equipes_texto());
             ui.add(egui::TextEdit::multiline(&mut d.equipes).desired_rows(3));
             ui.horizontal(|ui| {
                 if ui
                     .add_enabled(
                         d.trabalho.is_none(),
-                        egui::Button::new("Comparar as equipes nesta missão"),
+                        egui::Button::new(texto::turma_comparar_equipes()),
                     )
                     .clicked()
                 {
@@ -915,10 +911,7 @@ fn secao_desafio(
                             d.sem_solucao = sem;
                             d.comparacao = None;
                             if sol.len() < 2 {
-                                msg = Some(
-                                    "é preciso ao menos duas equipes com tentativas corrigidas"
-                                        .into(),
-                                );
+                                msg = Some(texto::turma_duas_equipes().into());
                             } else {
                                 let m = pacote.missoes[d.missao].clone();
                                 d.trabalho = Some(Trabalho::iniciar(
@@ -940,10 +933,7 @@ fn secao_desafio(
                 }
             });
             for e in &d.sem_solucao {
-                ui.colored_label(
-                    AMARELO,
-                    format!("{e}: sem tentativa corrigida nesta missão"),
-                );
+                ui.colored_label(AMARELO, texto::f(texto::turma_sem_tentativa(), &[&e]));
             }
             if let Some(k) = &d.comparacao {
                 comparacao_tabela(ui, k);
@@ -955,7 +945,12 @@ fn secao_desafio(
 /// A scoreboard: position (= for ties), nickname, grade and cost.
 pub fn placar_tabela(ui: &mut Ui, linhas: &[utsim_ensino_core::desafio::Linha]) {
     egui::Grid::new("placar").striped(true).show(ui, |ui| {
-        for h in ["Posição", "Apelido", "Nota", "Custo"] {
+        for h in [
+            texto::turma_posicao(),
+            texto::turma_apelido(),
+            texto::turma_nota(),
+            texto::turma_custo(),
+        ] {
             ui.label(RichText::new(h).strong());
         }
         ui.end_row();
@@ -972,29 +967,24 @@ pub fn placar_tabela(ui: &mut Ui, linhas: &[utsim_ensino_core::desafio::Linha]) 
         }
     });
     if linhas.iter().any(|l| l.empate) {
-        ui.label(
-            RichText::new(
-                "= empate estatístico: os intervalos se sobrepõem, a diferença pode ser ruído.",
-            )
-            .weak(),
-        );
+        ui.label(RichText::new(texto::turma_empate()).weak());
     }
 }
 
 fn comparacao_tabela(ui: &mut Ui, k: &utsim_ensino_core::desafio::ComparacaoEquipes) {
     ui.label(
-        RichText::new(format!(
-            "{} ({}), mesma fábrica e mesmos números aleatórios para todas as equipes",
-            k.metrica, k.unidade
+        RichText::new(texto::f(
+            texto::turma_comparacao_titulo(),
+            &[&k.metrica, &k.unidade],
         ))
         .strong(),
     );
     egui::Grid::new("equipes").striped(true).show(ui, |ui| {
-        ui.label(RichText::new("Posição").strong());
-        ui.label(RichText::new("Equipe").strong());
-        ui.label(RichText::new("Média").strong());
+        ui.label(RichText::new(texto::turma_posicao()).strong());
+        ui.label(RichText::new(texto::turma_equipe()).strong());
+        ui.label(RichText::new(texto::turma_media()).strong());
         for n in &k.equipes {
-            ui.label(RichText::new(format!("menos {n}")).strong());
+            ui.label(RichText::new(texto::f(texto::turma_menos(), &[&n])).strong());
         }
         ui.end_row();
         for i in 0..k.equipes.len() {
@@ -1025,9 +1015,7 @@ fn comparacao_tabela(ui: &mut Ui, k: &utsim_ensino_core::desafio::ComparacaoEqui
             ui.end_row();
         }
     });
-    ui.label(
-        RichText::new("Uma equipe só fica à frente de outra quando o intervalo da diferença pareada não contém o zero.").weak(),
-    );
+    ui.label(RichText::new(texto::turma_a_frente()).weak());
 }
 
 /// The exam: draw, window and runs, published in the class folder; and which exam the
@@ -1042,47 +1030,46 @@ fn secao_prova(
     agora: i64,
 ) -> Option<String> {
     let mut msg = None;
-    ui.collapsing("Prova", |ui| {
+    ui.collapsing(texto::turma_prova(), |ui| {
         ui.label(texto::prova_texto());
         let p = &mut s.prova;
         if p.tentativas == 0 {
             p.tentativas = 1;
         }
         egui::Grid::new("prova").num_columns(2).show(ui, |ui| {
-            ui.label("Id da prova");
+            ui.label(texto::turma_id_prova());
             ui.text_edit_singleline(&mut p.id);
             ui.end_row();
-            ui.label("Título");
+            ui.label(texto::turma_titulo_campo());
             ui.text_edit_singleline(&mut p.titulo);
             ui.end_row();
-            ui.label("Início (AAAA-MM-DD HH:MM, Brasília)");
+            ui.label(texto::turma_inicio());
             ui.text_edit_singleline(&mut p.inicio);
             ui.end_row();
-            ui.label("Fim");
+            ui.label(texto::turma_fim());
             ui.text_edit_singleline(&mut p.fim);
             ui.end_row();
-            ui.label("Tempo máximo (min, 0 para só a janela)");
+            ui.label(texto::turma_tempo_maximo());
             ui.add(egui::DragValue::new(&mut p.duracao_min).range(0..=600));
             ui.end_row();
-            ui.label("Rodadas por missão");
+            ui.label(texto::turma_rodadas());
             ui.add(egui::DragValue::new(&mut p.tentativas).range(1..=20));
             ui.end_row();
-            ui.label("Semente (vazia: sorteada agora)");
+            ui.label(texto::turma_semente());
             ui.text_edit_singleline(&mut p.semente);
             ui.end_row();
         });
-        ui.label("Missões sorteadas por ato (as de entregar modelo ficam de fora):");
+        ui.label(texto::turma_por_ato());
         ui.horizontal_wrapped(|ui| {
             for ato in &pacote.pacote.atos {
                 let n = p.por_ato.entry(ato.numero).or_default();
-                ui.label(format!("Ato {}", ato.numero));
+                ui.label(texto::f(texto::turma_ato(), &[&ato.numero]));
                 ui.add(egui::DragValue::new(n).range(0..=ato.missoes.len()));
             }
         });
-        if ui.button("Sortear e publicar na pasta da turma").clicked() {
+        if ui.button(texto::turma_sortear()).clicked() {
             let r = p.montagem(pacote, agora).and_then(|m| {
-                let base = crate::arquivos_de(pacote_aberto)
-                    .ok_or("não foi possível ler o pacote aberto")?;
+                let base = crate::arquivos_de(pacote_aberto).ok_or(texto::turma_nao_leu_pacote())?;
                 let caminho = utsim_ensino_store::prova::publicar_prova(
                     &PastaTurma {
                         dir: dir.to_path_buf(),
@@ -1099,25 +1086,23 @@ fn secao_prova(
                 Ok((m, c)) => {
                     p.semente = m.prova.semente.to_string();
                     p.corrigir = Some(m.id.clone());
-                    format!(
-                        "prova {} publicada em {} (semente {}). A montagem fica só no seu perfil.",
-                        m.id,
-                        c.display(),
-                        m.prova.semente
+                    texto::f(
+                        texto::turma_prova_publicada(),
+                        &[&m.id, &c.display(), &m.prova.semente],
                     )
                 }
-                Err(e) => format!("prova não publicada: {e}"),
+                Err(e) => texto::f(texto::turma_prova_nao_publicada(), &[&e]),
             });
         }
         let salvas = utsim_ensino_store::prova::provas_salvas(perfil);
         ui.horizontal_wrapped(|ui| {
-            ui.label("A correção usa:");
-            ui.selectable_value(&mut p.corrigir, None, "o pacote aberto");
+            ui.label(texto::turma_correcao_usa());
+            ui.selectable_value(&mut p.corrigir, None, texto::turma_pacote_aberto());
             for m in &salvas {
                 ui.selectable_value(
                     &mut p.corrigir,
                     Some(m.id.clone()),
-                    format!("a prova {}", m.id),
+                    texto::f(texto::turma_a_prova(), &[&m.id]),
                 );
             }
         });
@@ -1129,12 +1114,12 @@ fn secao_prova(
 /// competence map, by the student themself.
 fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
     ui.separator();
-    ui.label(RichText::new("Programa Lean Seis Sigma da empresa").strong());
+    ui.label(RichText::new(texto::turma_programa_titulo()).strong());
     ui.label(texto::programa_texto());
     ui.horizontal(|ui| {
-        ui.label("Pasta do programa");
+        ui.label(texto::turma_pasta_programa());
         ui.text_edit_singleline(&mut app.turma.programa);
-        if ui.button("Ligar").clicked() {
+        if ui.button(texto::turma_ligar()).clicked() {
             let dir = PathBuf::from(app.turma.programa.trim().trim_matches('"'));
             let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
                 utsim_lss_store::program::teaching_check(&dir, &me)
@@ -1145,18 +1130,18 @@ fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
                 Ok(me) => {
                     app.config.programa_seis_sigma = Some(dir);
                     app.salvar_config();
-                    app.mensagem = Some(format!("programa ligado para {}", me.name));
+                    app.mensagem = Some(texto::f(texto::turma_programa_ligado(), &[&me.name]));
                 }
-                Err(e) => app.mensagem = Some(format!("não foi possível ligar: {e}")),
+                Err(e) => app.mensagem = Some(texto::f(texto::turma_nao_ligou(), &[&e])),
             }
         }
     });
     let Some(prog) = app.config.programa_seis_sigma.clone() else {
         return;
     };
-    ui.label(format!("Ligado a {}", prog.display()));
+    ui.label(texto::f(texto::turma_ligado_a(), &[&prog.display()]));
     ui.horizontal(|ui| {
-        if ui.button("Registrar as missões já resolvidas").clicked() {
+        if ui.button(texto::turma_registrar_missoes()).clicked() {
             let r = match &app.pacote {
                 Some(p) => utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
                     utsim_ensino_store::seis_sigma::registrar_competencias(
@@ -1168,18 +1153,17 @@ fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
                         None,
                     )
                 }),
-                None => Err("nenhum pacote aberto".into()),
+                None => Err(texto::turma_nenhum_pacote().into()),
             };
             app.mensagem = Some(match r {
-                Ok(x) if x.erros.is_empty() => format!(
-                    "{} competência(s) enviadas ao programa (as que já estavam lá não se repetem)",
-                    x.gravadas.len()
-                ),
-                Ok(x) => format!("algumas não foram: {}", x.erros.join("; ")),
-                Err(e) => format!("não foi possível registrar: {e}"),
+                Ok(x) if x.erros.is_empty() => {
+                    texto::f(texto::turma_competencias(), &[&x.gravadas.len()])
+                }
+                Ok(x) => texto::f(texto::turma_algumas_nao(), &[&x.erros.join("; ")]),
+                Err(e) => texto::f(texto::turma_nao_registrou(), &[&e]),
             });
         }
-        if ui.button("Desligar").clicked() {
+        if ui.button(texto::turma_desligar()).clicked() {
             app.config.programa_seis_sigma = None;
             app.salvar_config();
         }
