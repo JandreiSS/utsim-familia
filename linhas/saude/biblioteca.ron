@@ -1,0 +1,306 @@
+// Biblioteca da linha Saúde e hospital (docs/plano_linhas_especializadas.md, seção 9): as
+// predefinições sobre os objetos comuns do UTSim. Pronto-socorro com classificação de risco,
+// ambulatório com agenda, exames, medicação e observação, internação em leitos.
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "saude/<id>".
+//
+// Parada de equipamentos, EPI e conferência ficam nos campos do próprio nó (downtime, ppe,
+// quality), os mesmos que as abas do painel de propriedades e os apps da família editam
+// (docs/plano_integracao_familia.md, seção 3): a linha não guarda dados paralelos.
+//
+// Unidade de tempo: minuto. Rótulos dos pacientes lidos pelos indicadores da linha:
+// - gravidade: cor da classificação de risco, 1 vermelho (emergência), 2 laranja (muito
+//   urgente), 3 amarelo (urgente), 4 verde (pouco urgente), 5 azul (não urgente); a espera
+//   com order: Asc("gravidade") chama primeiro o mais grave. Sorteada na chegada (decisão
+//   H-D3): a classificação de risco só consome o tempo da enfermagem;
+// - agendado: 1 nas consultas marcadas;
+// - presenca: 1 compareceu, 2 faltou (a agenda manda quem faltou pela saída 2);
+// - abandonou: 1 quando o paciente foi embora sem atendimento (gravado pela espera com
+//   patience).
+Library(
+    line: "saude",
+    name: "Saúde e hospital",
+    description: "Pacientes, classificação de risco em cinco cores, consultas, exames, medicação, agenda com faltas e leitos: espera até o médico por cor, saídas sem atendimento, permanência e ocupação dos leitos.",
+    models: [
+        (
+            file: "examples/pronto_socorro.ron",
+            name: "Pronto-socorro com classificação de risco",
+            description: "Chegada por período do dia, cinco cores, consulta, exames com parada do tomógrafo, medicação e sala de procedimento com médico e enfermagem juntos.",
+        ),
+        (
+            file: "examples/ambulatorio_agenda.ron",
+            name: "Ambulatório com agenda",
+            description: "Consultas marcadas com faltas, encaixes sem hora e especialidades por habilidade.",
+        ),
+        (
+            file: "examples/internacao_leitos.ron",
+            name: "Internação e leitos",
+            description: "Entradas do pronto-socorro e eletivas, tempo de permanência, ocupação e espera por leito.",
+        ),
+    ],
+    presets: [
+        (
+            id: "chegada",
+            name: "Chegada de pacientes",
+            icon: "porta",
+            role: Entry,
+            description: "Pacientes que chegam sem hora marcada: intervalo (ou taxa por período do dia) e a mistura das cores da classificação de risco.",
+            name_base: "chegada",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre pacientes (min)", default: "Exp(mean: 6.0)"),
+                (key: "cores", label: "Cores da classificação", default: "Discrete([(1.0, 0.01), (2.0, 0.09), (3.0, 0.3), (4.0, 0.45), (5.0, 0.15)])",
+                 help: "gravidade 1 vermelho, 2 laranja, 3 amarelo, 4 verde, 5 azul, com a fração de cada"),
+                (key: "periodos", label: "Chegadas por período do dia", default: "None",
+                 help: "Some((cycle: 1440.0, periods: [(start: 0.0, end: 480.0, arrivals: Interarrival(Exp(mean: 15.0))), (start: 480.0, end: 1440.0)])) para menos chegadas de madrugada"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo}, labels: {"gravidade": ${cores}}, schedule: ${periodos}),
+                    symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "agenda",
+            name: "Agenda de consultas",
+            icon: "relogio_balao",
+            role: Entry,
+            description: "Consultas marcadas: horários da agenda e o comparecimento. Quem falta sai pela saída 2 (ligue-a a uma alta \"faltas\").",
+            name_base: "agenda",
+            fields: [
+                (key: "horarios", label: "Horários (tabela da agenda)", default: "(mode: Times, repeat: Cycle(1440.0), rows: [(at: 480.0, count: 3), (at: 540.0, count: 3), (at: 600.0, count: 3), (at: 660.0, count: 3)])",
+                 help: "cada linha: minuto do dia e quantos pacientes marcados nele"),
+                (key: "comparecimento", label: "Comparecimento", default: "Discrete([(1.0, 0.85), (2.0, 0.15)])",
+                 help: "1 compareceu, 2 faltou, com a fração de cada"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: Const(1440.0), labels: {"agendado": Const(1.0), "gravidade": Const(5.0),
+                    "presenca": ${comparecimento}}, table: Some(${horarios})),
+                    output: ByLabel("presenca"), symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "recepcao",
+            name: "Recepção",
+            icon: "balcao",
+            role: Work,
+            description: "Cadastro do paciente: tempo e quantos guichês.",
+            name_base: "recepcao",
+            fields: [
+                (key: "tempo", label: "Tempo de cadastro (min)", default: "Triangular(min: 1.0, mode: 2.0, max: 5.0)"),
+                (key: "guiches", label: "Guichês", default: "2"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${guiches}, process: ${tempo}), symbol: "operacao",
+                    visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "espera",
+            name: "Espera por gravidade",
+            icon: "fila",
+            role: Inbox,
+            description: "Os pacientes esperam a vez, o mais grave primeiro (gravidade 1 antes de 5); quem esperar mais que a paciência vai embora sem atendimento.",
+            name_base: "espera",
+            fields: [
+                (key: "paciencia", label: "Paciência (min)", default: "None",
+                 help: "Some(Exp(mean: 240.0)) para pacientes que vão embora sem atendimento"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(order: Some(Asc("gravidade")), patience: ${paciencia}), symbol: "espera",
+                    visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "triagem",
+            name: "Classificação de risco",
+            icon: "lupa",
+            role: Work,
+            description: "A enfermagem avalia o paciente e confirma a cor; a cor já vem da chegada (decisão H-D3), aqui só se gasta o tempo.",
+            name_base: "triagem",
+            fields: [
+                (key: "tempo", label: "Tempo da classificação (min)", default: "Triangular(min: 2.0, mode: 4.0, max: 8.0)"),
+                (key: "equipe", label: "Quem classifica", default: "\"enfermagem\""),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}, operators: Some(OperatorUse(team: ${equipe}))),
+                    symbol: "inspecao", visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "consultorio",
+            name: "Consultório",
+            icon: "mesa",
+            role: Work,
+            description: "Consulta médica: tempo, quantas salas e a equipe médica (com a habilidade, se a sala for de uma especialidade).",
+            name_base: "consultorio",
+            fields: [
+                (key: "tempo", label: "Tempo da consulta (min)", default: "Triangular(min: 6.0, mode: 10.0, max: 20.0)"),
+                (key: "salas", label: "Salas", default: "2"),
+                (key: "equipe", label: "Equipe médica", default: "\"medicos\""),
+                (key: "habilidade", label: "Especialidade exigida", default: "None",
+                 help: "Some(\"pediatria\") para só quem tem essa habilidade atender"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${salas}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}, requires: ${habilidade}))), symbol: "operacao",
+                    visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "procedimento",
+            name: "Sala de procedimento",
+            icon: "chave",
+            role: Work,
+            description: "Sutura, imobilização, pequena cirurgia: o médico e a enfermagem precisam estar juntos (also) para a etapa começar.",
+            name_base: "procedimento",
+            fields: [
+                (key: "tempo", label: "Tempo do procedimento (min)", default: "Triangular(min: 15.0, mode: 25.0, max: 45.0)"),
+                (key: "medicos", label: "Equipe médica", default: "\"medicos\""),
+                (key: "enfermagem", label: "Enfermagem", default: "\"enfermagem\""),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}, operators: Some(OperatorUse(team: ${medicos})),
+                    also: [OperatorUse(team: ${enfermagem})]), symbol: "operacao", ppe: ["luvas", "mascara", "avental"],
+                    visual: Some((asset: Some("bancada"))))"#,
+            ],
+        ),
+        (
+            id: "exame",
+            name: "Exame",
+            icon: "engrenagem",
+            role: Work,
+            description: "Laboratório ou imagem: tempo do exame com o resultado, quantos ao mesmo tempo e a parada do equipamento (no downtime do nó, aba Manutenção).",
+            name_base: "exame",
+            fields: [
+                (key: "tempo", label: "Tempo até o resultado (min)", default: "Triangular(min: 20.0, mode: 40.0, max: 90.0)"),
+                (key: "vagas", label: "Exames ao mesmo tempo", default: "1"),
+                (key: "parada", label: "Parada do equipamento", default: "None",
+                 help: "Some((mtbf: Exp(mean: 2880.0), mttr: Exp(mean: 120.0))): fica no nó do exame"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${vagas}, process: ${tempo}), downtime: ${parada},
+                    symbol: "operacao", visual: Some((asset: Some("maquina"))))"#,
+            ],
+        ),
+        (
+            id: "medicacao",
+            name: "Medicação e observação",
+            icon: "pessoa_sentada",
+            role: Work,
+            description: "A enfermagem prepara e aplica a medicação (preparo) e o paciente fica em observação na poltrona. A dupla checagem da medicação fica no quality do nó.",
+            name_base: "medicacao",
+            fields: [
+                (key: "poltronas", label: "Poltronas", default: "8"),
+                (key: "preparo", label: "Preparo e aplicação (min)", default: "Triangular(min: 3.0, mode: 5.0, max: 10.0)"),
+                (key: "observacao", label: "Observação (min)", default: "Triangular(min: 30.0, mode: 60.0, max: 120.0)"),
+                (key: "equipe", label: "Enfermagem", default: "\"enfermagem\""),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${poltronas}, setup: Some(${preparo}), process: ${observacao},
+                    operators: Some(OperatorUse(team: ${equipe}, process: false))), symbol: "operacao",
+                    ppe: ["luvas"], visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "leitos",
+            name: "Leitos de internação",
+            icon: "pasta_arquivada",
+            role: Work,
+            description: "Os leitos de uma unidade: quantos e o tempo de permanência. A espera por leito é a espera ligada antes.",
+            name_base: "leitos",
+            fields: [
+                (key: "leitos", label: "Leitos", default: "20"),
+                (key: "permanencia", label: "Permanência (min)", default: "LogNormal(mean: 5760.0, sd: 4320.0)",
+                 help: "5760 min são 4 dias"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${leitos}, process: ${permanencia}), symbol: "operacao",
+                    visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "alta",
+            name: "Alta",
+            icon: "porta",
+            role: Done,
+            description: "Onde o paciente sai do serviço: alta, transferência, faltas ou quem foi embora.",
+            name_base: "alta",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+        (
+            id: "medicos",
+            name: "Equipe médica",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Médicos do plantão (começa com dois), com as habilidades e o EPI de cada um.",
+            name_base: "medicos",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"clinica\"]"),
+                (key: "plantao", label: "Plantão", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: FirstAvailable))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 60.0), position: (0.0, 1.5, 0.0), shifts: ${plantao},
+                    ppe: ["luvas", "mascara"], visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})),
+                    preset: "saude/medico")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 60.0), position: (0.0, -1.5, 0.0), shifts: ${plantao},
+                    ppe: ["luvas", "mascara"], visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})),
+                    preset: "saude/medico")"#,
+            ],
+        ),
+        (
+            id: "enfermagem",
+            name: "Enfermagem",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Enfermeiros e técnicos do plantão (começa com dois), com EPI.",
+            name_base: "enfermagem",
+            fields: [
+                (key: "plantao", label: "Plantão", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: FirstAvailable))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 60.0), position: (0.0, 1.5, 0.0), shifts: ${plantao},
+                    ppe: ["luvas", "mascara"], visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "saude/enfermeiro")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 60.0), position: (0.0, -1.5, 0.0), shifts: ${plantao},
+                    ppe: ["luvas", "mascara"], visual: Some((asset: Some("pessoa"))), person: Some(()),
+                    preset: "saude/enfermeiro")"#,
+            ],
+        ),
+        (
+            id: "medico",
+            name: "Médico",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Um médico da equipe: habilidades (especialidades), plantão e EPI.",
+            name_base: "medico",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"clinica\"]"),
+                (key: "plantao", label: "Plantão", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 60.0), shifts: ${plantao}, ppe: ["luvas", "mascara"],
+                    visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})))"#,
+            ],
+        ),
+        (
+            id: "enfermeiro",
+            name: "Profissional de enfermagem",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Um enfermeiro ou técnico de enfermagem: plantão e EPI.",
+            name_base: "enfermeiro",
+            fields: [
+                (key: "plantao", label: "Plantão", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 60.0), shifts: ${plantao}, ppe: ["luvas", "mascara"],
+                    visual: Some((asset: Some("pessoa"))), person: Some(()))"#,
+            ],
+        ),
+    ],
+)

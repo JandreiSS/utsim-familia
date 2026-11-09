@@ -1,0 +1,35 @@
+// Vocabulário da linha Saúde e hospital: termo do núcleo -> termo do serviço de saúde,
+// aplicado na interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam de
+// nome.
+Vocabulary(
+    line: "saude",
+    terms: {
+        // Coisas e objetos.
+        "item": "paciente",
+        "itens": "pacientes",
+        "Source": "chegada",
+        "Queue": "espera",
+        "Processor": "atendimento",
+        "Sink": "alta",
+        "Transporter": "profissional",
+        "Dispatcher": "equipe",
+        "operador": "profissional",
+        "operadores": "profissionais",
+        // Medidas.
+        "time_in_system": "permanência",
+        "process_time": "tempo de atendimento",
+        "content": "pacientes presentes",
+        "throughput": "pacientes por dia",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "livre",
+        "processing": "atendendo",
+        "setup": "preparando",
+        "blocked": "sem vaga adiante",
+        "waiting_operator": "esperando o profissional",
+        "off_shift": "fora do plantão",
+        "utilize": "atendendo",
+        "travel_empty": "indo ao paciente",
+        "empty": "vazia",
+    },
+)

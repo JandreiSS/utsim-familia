@@ -19,6 +19,15 @@ pub struct ConjuntoMissao {
     /// Draw the affected group from the student's seed (shifted means).
     #[serde(default)]
     pub sortear_afetado: bool,
+    /// The tool of UTSim Qualidade that opens this set (`carta`, `capacidade`, `msa`,
+    /// `estratificacao`, ...), sent as `--utsim-ferramenta`.
+    #[serde(default)]
+    pub ferramenta: Option<String>,
+    /// Specification limits sent with the set (`--utsim-lie`, `--utsim-lse`).
+    #[serde(default)]
+    pub lie: Option<f64>,
+    #[serde(default)]
+    pub lse: Option<f64>,
 }
 
 impl ConjuntoMissao {
@@ -74,6 +83,25 @@ pub enum QuestaoDados {
     /// The effect of factor `fator` (0 is the first) in a two-level factorial: the mean
     /// response at the high level minus the mean at the low level.
     Efeito { fator: usize },
+    /// Half-width of the Student-t interval of the mean of the values, at `confianca`
+    /// (0.95 for 95 %).
+    MeiaLargura { confianca: f64 },
+    /// Replications needed for a 95 % interval of half-width `meia_largura`, from these
+    /// values as the pilot: `n = ⌈(t · s / h)²⌉`, with `t` of the pilot's degrees of
+    /// freedom (never fewer than the pilot itself).
+    Replicacoes { meia_largura: f64 },
+    /// Mean of B − A of paired results.
+    DiferencaMedia,
+    /// Whether B differs from A by the paired t test at 5 %: 0 yes, 1 no.
+    DiferencaSignificativa,
+    /// The first subgroup (1-based) after the first `base` with a point beyond the limits
+    /// of an X̄-R chart whose limits come from the first `base` subgroups.
+    PrimeiroSubgrupoFora { base: usize },
+    /// The capability Cpk of subgroups (sigma within from R̄/d2) against the limits.
+    Cpk { lie: Option<f64>, lse: Option<f64> },
+    /// The larger source of the measurement variation in a gauge study: 0 repeatability
+    /// (the instrument), 1 reproducibility (the operators).
+    FonteDominante,
 }
 
 impl QuestaoDados {
@@ -81,7 +109,10 @@ impl QuestaoDados {
     pub fn e_escolha(&self) -> bool {
         matches!(
             self,
-            QuestaoDados::RrVeredito | QuestaoDados::GrupoDeslocado
+            QuestaoDados::RrVeredito
+                | QuestaoDados::GrupoDeslocado
+                | QuestaoDados::DiferencaSignificativa
+                | QuestaoDados::FonteDominante
         )
     }
 
@@ -94,6 +125,14 @@ impl QuestaoDados {
                 "Inaceitável (acima de 30 %)".into(),
             ],
             QuestaoDados::GrupoDeslocado => conjunto.grupos(),
+            QuestaoDados::DiferencaSignificativa => vec![
+                "Sim, a diferença é significativa a 5 %".into(),
+                "Não, a diferença pode ser só ruído".into(),
+            ],
+            QuestaoDados::FonteDominante => vec![
+                "Repetibilidade (o instrumento)".into(),
+                "Reprodutibilidade (os operadores)".into(),
+            ],
             _ => Vec::new(),
         }
     }
@@ -196,6 +235,77 @@ impl QuestaoDados {
                 }
                 Ok(a / na - b / nb)
             }
+            QuestaoDados::MeiaLargura { confianca } => {
+                let xs = coluna(c);
+                let (_, s, n) = media_sd(&xs)?;
+                Ok(utsim_stats::t_quantile(*confianca, n - 1) * s / (n as f64).sqrt())
+            }
+            QuestaoDados::Replicacoes { meia_largura } => {
+                let xs = coluna(c);
+                let (_, s, n) = media_sd(&xs)?;
+                if *meia_largura <= 0.0 {
+                    return Err("meia largura deve ser positiva".into());
+                }
+                let t = utsim_stats::t_quantile(0.95, n - 1);
+                Ok(((t * s / meia_largura).powi(2).ceil()).max(n as f64))
+            }
+            QuestaoDados::DiferencaMedia | QuestaoDados::DiferencaSignificativa => {
+                let a: Vec<f64> = c
+                    .valores
+                    .iter()
+                    .filter_map(|v| v.first().copied())
+                    .collect();
+                let b: Vec<f64> = c.valores.iter().filter_map(|v| v.get(1).copied()).collect();
+                let t = utsim_stats::hypothesis::t_paired(
+                    &b,
+                    &a,
+                    0.0,
+                    0.95,
+                    utsim_stats::hypothesis::Alternative::TwoSided,
+                )
+                .ok_or("dados pareados insuficientes")?;
+                Ok(match self {
+                    QuestaoDados::DiferencaMedia => t.estimate,
+                    _ if t.p_value < 0.05 => 0.0,
+                    _ => 1.0,
+                })
+            }
+            QuestaoDados::PrimeiroSubgrupoFora { base } => {
+                use utsim_quality::charts::{ChartData, ChartKind, apply, estimate_limits};
+                if c.valores.len() <= *base || *base < 2 {
+                    return Err("poucos subgrupos".into());
+                }
+                let base_dados = ChartData::Variables(c.valores[..*base].to_vec());
+                let limites = estimate_limits(ChartKind::XbarR, &base_dados, &[])?;
+                let carta = apply(
+                    &limites,
+                    &ChartData::Variables(c.valores.clone()),
+                    &utsim_quality::RuleSet::basic(),
+                    &[],
+                )?;
+                carta
+                    .panels
+                    .iter()
+                    .flat_map(|p| p.out_of_limits())
+                    .filter(|i| *i >= *base)
+                    .min()
+                    .map(|i| (i + 1) as f64)
+                    .ok_or_else(|| "nenhum subgrupo fora dos limites".into())
+            }
+            QuestaoDados::Cpk { lie, lse } => {
+                let spec = utsim_quality::capability::Spec {
+                    lsl: *lie,
+                    usl: *lse,
+                    target: None,
+                };
+                let cap =
+                    utsim_quality::capability::capability(&c.valores, &spec, &Default::default())?;
+                Ok(cap.cpk.value)
+            }
+            QuestaoDados::FonteDominante => {
+                let (rep, reprod) = fontes_rr(c)?;
+                Ok(if rep >= reprod { 0.0 } else { 1.0 })
+            }
         }
     }
 
@@ -212,8 +322,23 @@ impl QuestaoDados {
     }
 }
 
-/// %R&R (study variation) of a gauge data set (columns part, operator, repetition, value).
-pub fn rr_percentual(c: &Conjunto) -> Result<f64, String> {
+/// The values of a one-column set (the last column of each row).
+fn coluna(c: &Conjunto) -> Vec<f64> {
+    c.valores.iter().filter_map(|v| v.last().copied()).collect()
+}
+
+/// Mean, sample standard deviation and size, with at least two values.
+fn media_sd(xs: &[f64]) -> Result<(f64, f64, usize), String> {
+    let n = xs.len();
+    if n < 2 {
+        return Err("são precisos ao menos 2 valores".into());
+    }
+    let m = xs.iter().sum::<f64>() / n as f64;
+    let s = (xs.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt();
+    Ok((m, s, n))
+}
+
+fn gage(c: &Conjunto) -> Result<utsim_quality::msa::GageRR, String> {
     let ms: Vec<utsim_quality::msa::Measurement> = c
         .valores
         .iter()
@@ -224,7 +349,27 @@ pub fn rr_percentual(c: &Conjunto) -> Result<f64, String> {
         })
         .collect();
     let data = utsim_quality::msa::GageData::from_measurements(&ms)?;
-    let rr = utsim_quality::msa::gage_anova(&data, &Default::default())?;
+    utsim_quality::msa::gage_anova(&data, &Default::default())
+}
+
+/// The repeatability and reproducibility of a gauge study, in % of the study variation.
+pub fn fontes_rr(c: &Conjunto) -> Result<(f64, f64), String> {
+    let rr = gage(c)?;
+    let pct = |nome: &str| {
+        rr.components
+            .iter()
+            .find(|k| k.name == nome)
+            .map_or(0.0, |k| k.pct_study_var)
+    };
+    Ok((
+        pct(utsim_quality::msa::REPEATABILITY),
+        pct(utsim_quality::msa::REPRODUCIBILITY),
+    ))
+}
+
+/// %R&R (study variation) of a gauge data set (columns part, operator, repetition, value).
+pub fn rr_percentual(c: &Conjunto) -> Result<f64, String> {
+    let rr = gage(c)?;
     rr.components
         .iter()
         .find(|k| k.name == utsim_quality::msa::GRR)
@@ -236,13 +381,72 @@ pub fn rr_percentual(c: &Conjunto) -> Result<f64, String> {
 /// Seis Sigma app shows in full.
 pub fn ferramenta(conjunto: &ConjuntoMissao, c: &Conjunto) -> Vec<String> {
     match &conjunto.gerador {
-        Gerador::Msa { .. } => match rr_percentual(c) {
-            Ok(p) => vec![format!(
-                "Estudo de R&R (ANOVA): %R&R da variação do estudo = {} %",
-                fmt_num(p, 1)
-            )],
-            Err(e) => vec![e],
+        Gerador::Msa { .. } => match (rr_percentual(c), fontes_rr(c)) {
+            (Ok(p), Ok((rep, reprod))) => vec![
+                format!(
+                    "Estudo de R&R (ANOVA): %R&R da variação do estudo = {} %",
+                    fmt_num(p, 1)
+                ),
+                format!(
+                    "repetibilidade {} %, reprodutibilidade {} %",
+                    fmt_num(rep, 1),
+                    fmt_num(reprod, 1)
+                ),
+            ],
+            (Err(e), _) | (_, Err(e)) => vec![e],
         },
+        Gerador::Pareado { .. } => {
+            let a: Vec<f64> = c.valores.iter().map(|v| v[0]).collect();
+            let b: Vec<f64> = c.valores.iter().map(|v| v[1]).collect();
+            let d: Vec<f64> = b.iter().zip(&a).map(|(y, x)| y - x).collect();
+            let mut out = Vec::new();
+            for (nome, xs) in [("A", &a), ("B", &b), ("B − A", &d)] {
+                if let Ok((m, s, n)) = media_sd(xs) {
+                    let h = utsim_stats::t_quantile(0.95, n - 1) * s / (n as f64).sqrt();
+                    out.push(format!(
+                        "{nome}: média {}, desvio padrão {}, IC 95 % {} a {}",
+                        fmt_num(m, 3),
+                        fmt_num(s, 3),
+                        fmt_num(m - h, 3),
+                        fmt_num(m + h, 3)
+                    ));
+                }
+            }
+            out
+        }
+        Gerador::Subgrupos { .. } => {
+            let k = c.valores.len() as f64;
+            let medias: Vec<f64> = c
+                .valores
+                .iter()
+                .map(|g| g.iter().sum::<f64>() / g.len().max(1) as f64)
+                .collect();
+            let amps: Vec<f64> = c
+                .valores
+                .iter()
+                .map(|g| {
+                    g.iter().copied().fold(f64::MIN, f64::max)
+                        - g.iter().copied().fold(f64::MAX, f64::min)
+                })
+                .collect();
+            let n = c.valores.first().map_or(1, Vec::len);
+            let xbb = medias.iter().sum::<f64>() / k.max(1.0);
+            let rb = amps.iter().sum::<f64>() / k.max(1.0);
+            let d2 = utsim_quality::constants::d2(n);
+            vec![
+                format!(
+                    "{} subgrupos de {n}: média das médias {}, amplitude média {}",
+                    c.valores.len(),
+                    fmt_num(xbb, 4),
+                    fmt_num(rb, 4)
+                ),
+                format!(
+                    "sigma dentro = amplitude média / d2 ({}) = {}",
+                    fmt_num(d2, 3),
+                    fmt_num(rb / d2, 4)
+                ),
+            ]
+        }
         Gerador::MediaDeslocada { grupos, .. } => grupos
             .iter()
             .enumerate()

@@ -1011,6 +1011,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             setup: None,
             process: Dist::Const(1.0),
             operators: None,
+            also: Vec::new(),
         },
         "Combiner" => ObjectKind::Combiner {
             components: vec![1],

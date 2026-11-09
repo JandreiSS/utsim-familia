@@ -45,11 +45,7 @@ impl Model {
                     .or_default()
                     .insert(o.name.as_str());
             }
-            if let ObjectKind::Processor {
-                operators: Some(op),
-                ..
-            } = &o.kind
-            {
+            for op in o.kind.operator_uses() {
                 served
                     .entry(op.team.as_str())
                     .or_default()

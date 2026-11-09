@@ -679,3 +679,27 @@ fn pacote_com_requisito_ausente_abre_com_aviso() {
     app.abrir_missao(0);
     frames(&mut app, &ctx, 2);
 }
+
+#[test]
+fn pacote_de_estatistica_e_qualidade_com_o_botao_de_analise() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut app = app_em(dir.path());
+    assert!(app.salvar_identidade("Ana Lima", "2027001", ""));
+    let pacotes = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ensino/pacotes");
+    app.procurar_pacotes(&pacotes);
+    let eq = app
+        .pacotes_instalados
+        .iter()
+        .find(|p| p.id == "estatistica_qualidade")
+        .expect("pacote de estatística e qualidade")
+        .clone();
+    assert!(eq.faltando.is_empty());
+    app.abrir_pacote(&eq.caminho).unwrap();
+    // The apps as if the launcher had installed them: the buttons are drawn.
+    app.apps_analise = vec!["estatistica".into(), "qualidade".into()];
+    for i in 0..6 {
+        app.abrir_missao(i);
+        frames(&mut app, &ctx, 2);
+    }
+}

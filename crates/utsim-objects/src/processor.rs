@@ -113,6 +113,8 @@ pub struct Processor {
     timers: Vec<Timer>,
     /// Operator team and usage.
     operators: Option<(BlockId, OperatorUse)>,
+    /// Other teams needed at the same time (see [`Processor::also`]).
+    also: Vec<(BlockId, OperatorUse)>,
     pending: Vec<Pending>,
     held: Vec<(ItemId, Crew)>,
     /// Servers in setup or processing over time (zero while the block is stopped).
@@ -136,6 +138,7 @@ impl Processor {
             phases: Vec::new(),
             timers: Vec::new(),
             operators: None,
+            also: Vec::new(),
             pending: Vec::new(),
             held: Vec::new(),
             busy: TimeWeighted::default(),
@@ -152,6 +155,15 @@ impl Processor {
 
     pub fn setup(mut self, setup: Option<Dist>) -> Self {
         self.setup = setup;
+        self
+    }
+
+    /// Other teams asked for together with `operators` (a doctor and a nurse): a stage
+    /// starts only when the operators of every team needing it have arrived. When the
+    /// teams of the setup and of the process differ, the crew is given back after the
+    /// setup and a new one is asked for the process.
+    pub fn also(mut self, also: Vec<(BlockId, OperatorUse)>) -> Self {
+        self.also = also;
         self
     }
 
@@ -314,41 +326,51 @@ impl Processor {
         self.set_phase(item, Phase::WaitingOperator);
     }
 
+    /// The teams (and what is asked of each) that `stage` needs.
+    fn teams(&self, stage: Phase) -> Vec<(BlockId, OperatorUse)> {
+        self.operators
+            .iter()
+            .chain(&self.also)
+            .filter(|(_, op)| match stage {
+                Phase::Setup => op.setup,
+                Phase::Processing => op.process,
+                _ => false,
+            })
+            .cloned()
+            .collect()
+    }
+
     fn needs_operators(&self, stage: Phase) -> bool {
-        match (&self.operators, stage) {
-            (Some((_, op)), Phase::Setup) => op.setup,
-            (Some((_, op)), Phase::Processing) => op.process,
-            _ => false,
-        }
+        !self.teams(stage).is_empty()
     }
 
     /// Starts `stage` for `item`, first getting operators if the stage needs them
     /// and the item does not already hold them.
     fn begin(&mut self, cx: &mut Ctx, item: ItemId, stage: Phase) {
         if self.needs_operators(stage) && !self.held.iter().any(|(i, _)| *i == item) {
-            let (team, op) = self.operators.clone().expect("checked by needs_operators");
             let tag = if stage == Phase::Setup {
                 SETUP_DONE
             } else {
                 PROCESS_DONE
             };
             let me = cx.me();
-            let skill = op.requires.as_deref();
-            let priority = request_priority(
-                cx.item(item),
-                op.priority.unwrap_or(0),
-                op.priority_label.as_deref(),
-            );
-            let requests = (0..op.count)
-                .map(|_| {
-                    cx.request_task_requiring(
+            let mut requests = Vec::new();
+            for (team, op) in self.teams(stage) {
+                let skill = op.requires.as_deref();
+                let priority = request_priority(
+                    cx.item(item),
+                    op.priority.unwrap_or(0),
+                    op.priority_label.as_deref(),
+                );
+                for _ in 0..op.count {
+                    requests.push(cx.request_task_requiring(
                         team,
                         TaskKind::Operate { station: me, tag },
                         priority,
                         skill,
-                    )
-                })
-                .collect();
+                    ));
+                }
+            }
             self.pending.push(Pending {
                 item,
                 stage,
@@ -609,8 +631,8 @@ impl Behavior for Processor {
         self.timers.retain(|t| !(t.item == item && t.tag == tag));
         match tag {
             SETUP_DONE => {
-                // Keep the operators only if the process phase needs them too.
-                if !self.needs_operators(Phase::Processing) {
+                // Keep the crew only if the process phase needs the same teams.
+                if self.teams(Phase::Processing) != self.teams(Phase::Setup) {
                     self.release_operators(cx, item);
                 }
                 self.begin(cx, item, Phase::Processing);

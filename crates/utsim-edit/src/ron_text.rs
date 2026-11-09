@@ -74,6 +74,12 @@ pub fn operator_use(o: &utsim_objects::OperatorUse) -> String {
     text
 }
 
+/// RON of a list of operator uses (`also` of a processor).
+pub fn operator_uses(list: &[utsim_objects::OperatorUse]) -> String {
+    let parts: Vec<String> = list.iter().map(operator_use).collect();
+    format!("[{}]", parts.join(", "))
+}
+
 pub fn string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {

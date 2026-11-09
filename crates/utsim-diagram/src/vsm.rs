@@ -77,12 +77,12 @@ pub fn montar(model: &Model, graph: &FlowGraph, rastro: &Rastro) -> Vsm {
                     ObjectKind::Processor {
                         process,
                         setup,
-                        operators,
                         capacity,
+                        ..
                     } => (
                         media(process),
                         setup.as_ref().map_or(0.0, media),
-                        operators.as_ref().map_or(0, |o| o.count),
+                        obj.kind.operator_uses().map(|o| o.count).sum(),
                         *capacity,
                     ),
                     ObjectKind::Combiner { process, setup, .. } => {

@@ -1,0 +1,20 @@
+// Linha de três máquinas em série, a fábrica das missões de replicações e de alternativas. Tempo em minutos.
+Model(
+    name: "Linha de usinagem com três máquinas",
+    run: (stop_time: 20000.0, warmup: 1000.0, seed: 7, replications: 10),
+    objects: [
+        (name: "chegada",      kind: Source(interarrival: Exp(mean: 4.0)),   position: (0.0, 0.0, 0.0)),
+        (name: "fila_corte",   kind: Queue(),                                position: (4.0, 0.0, 0.0)),
+        (name: "corte",        kind: Processor(process: Exp(mean: 2.8)),     position: (8.0, 0.0, 0.0)),
+        (name: "fila_furacao", kind: Queue(),                                position: (12.0, 0.0, 0.0)),
+        (name: "furacao",      kind: Processor(process: Exp(mean: 3.6)),     position: (16.0, 0.0, 0.0)),
+        (name: "fila_pintura", kind: Queue(),                                position: (20.0, 0.0, 0.0)),
+        (name: "pintura",      kind: Processor(process: Exp(mean: 2.5)),     position: (24.0, 0.0, 0.0)),
+        (name: "saida",        kind: Sink,                                   position: (28.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "fila_corte"), ("fila_corte", "corte"), ("corte", "fila_furacao"),
+        ("fila_furacao", "furacao"), ("furacao", "fila_pintura"), ("fila_pintura", "pintura"),
+        ("pintura", "saida"),
+    ],
+)
