@@ -645,3 +645,37 @@ fn mesma_nota_nos_dois_hospedeiros() {
         .nota;
     assert_eq!(nota_janela, nota_ponte);
 }
+
+#[test]
+fn pacote_com_requisito_ausente_abre_com_aviso() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut app = app_em(dir.path());
+    assert!(app.salvar_identidade("Ana Lima", "2027001", ""));
+    let mut a = pacote_do_professor();
+    let p = String::from_utf8(a["pacote.ron"].clone()).unwrap();
+    let p = p.replacen(
+        r#"requer: ["nucleo >= 0.1"]"#,
+        r#"requer: ["nucleo >= 0.1", "linha:mineracao"]"#,
+        1,
+    );
+    a.insert("pacote.ron".into(), p.into_bytes());
+    let raiz = dir.path().join("pacotes");
+    let pasta = raiz.join("novo");
+    for (k, v) in a {
+        let f = pasta.join(&k);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, v).unwrap();
+    }
+    // The list shows the warning before it opens, and it opens all the same.
+    app.procurar_pacotes(&raiz);
+    let achado = app.pacotes_instalados[0].clone();
+    assert_eq!(achado.faltando.len(), 1);
+    assert_eq!(achado.faltando[0].requisito, "linha:mineracao");
+    frames(&mut app, &ctx, 2);
+    app.abrir_pacote(&pasta).unwrap();
+    assert_eq!(app.pacote.as_ref().unwrap().faltando.len(), 1);
+    frames(&mut app, &ctx, 2);
+    app.abrir_missao(0);
+    frames(&mut app, &ctx, 2);
+}
