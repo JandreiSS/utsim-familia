@@ -1,0 +1,41 @@
+// Vocabulário da linha Logística e armazém: termo do núcleo -> termo do armazém, aplicado na
+// interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam de nome.
+Vocabulary(
+    line: "logistica",
+    terms: {
+        // Coisas e objetos.
+        "item": "carga",
+        "itens": "cargas",
+        "Source": "chegada",
+        "Queue": "área de espera",
+        "Processor": "estação",
+        "Separator": "doca ou divisão",
+        "Rack": "porta-paletes",
+        "Sink": "expedição",
+        "Transporter": "empilhadeira ou separador",
+        "Dispatcher": "equipe",
+        "operador": "separador",
+        "operadores": "separadores",
+        // Medidas.
+        "time_in_system": "tempo no armazém",
+        "process_time": "tempo de trabalho",
+        "content": "cargas paradas",
+        "throughput": "cargas por dia",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "livre",
+        "processing": "trabalhando",
+        "blocked": "sem espaço adiante",
+        "waiting_operator": "esperando o separador",
+        "waiting_transport": "esperando a empilhadeira",
+        "off_shift": "fora do turno",
+        "utilize": "separando",
+        "travel_empty": "indo buscar",
+        "travel_loaded": "levando",
+        "loading": "pegando",
+        "unloading": "deixando",
+        "collecting": "juntando",
+        "releasing": "liberando",
+        "empty": "vazia",
+    },
+)

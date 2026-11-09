@@ -624,3 +624,101 @@ turno com `Finish` e ficam meia hora depois de fechar a porta.
    Erlang A, com abandono, depois.
 6. **S-D6 Modelos prontos.** Os três da seção 7.7 (proposta) ou outros (clínica, loja,
    cartório).
+
+---
+
+## 8. Terceira linha: Logística e armazém
+
+Plano curto, no formato das seções 1 e 7, escrito em 2026-11-08 (ordem da seção 3: depois de
+serviços, logística). O núcleo já é forte aqui (porta-paletes, empilhadeiras, AGV, rede,
+corredores, despachante, tabela de chegadas, exemplos de CD); falta empacotar e completar
+quatro peças pequenas. Vale a direção do dono de 2026-11-08 (`docs/plano_integracao_familia.md`,
+seção 3): manutenção das empilhadeiras e dos AGVs fica no `downtime` do próprio nó, EPI e
+zonas de risco no `ppe` e nas `zones`, qualidade (avaria, conferência) no `quality` e no
+`inspection` do nó. A linha não cria dados paralelos: as predefinições preenchem esses
+campos e os apps da família editam os mesmos.
+
+### 8.1 O que se estuda num armazém
+
+Recebimento (caminhões nas docas com agenda), armazenagem (endereçamento, ocupação do
+porta-paletes), separação (por pedido, em ondas, por zona), consolidação e expedição.
+Perguntas típicas: quantas linhas por hora a separação faz e com quantas pessoas; quanto
+tempo o caminhão fica na doca e no pátio; se as ondas cabem no corte da transportadora; o
+ganho de pôr os itens de giro alto (curva A) perto da frente; quantas empilhadeiras e
+docas são precisas.
+
+### 8.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Caminhão com agenda | `Source` com `table` (horários e rótulo `paletes`) | existe |
+| Pátio | fila | existe |
+| Doca e descarga por paletes | **`SplitBy(count: "paletes", group: "caminhao")` no `Separator`**, com as empilhadeiras no `transport`: o caminhão vira os seus paletes e ocupa a doca até sair o último (uma doca por divisor) | **novo** |
+| Palete, caixa, pedido | item com rótulos (`classe` A/B/C, `linhas`, `prazo`) | existe |
+| Pedido com várias linhas | **`SplitBy(count, group)` no `Separator`**: uma linha por unidade do rótulo `linhas`, todas com o rótulo `pedido` | **novo** |
+| Consolidação do pedido | **`gather` na `Queue`**: segura as linhas até chegarem todas do mesmo `pedido` e solta o pedido | **novo** |
+| Onda de separação | **`waves` na `Queue`**: junta os pedidos e solta todos nos horários das ondas | **novo** |
+| Endereçamento por curva ABC | **`Abc` no `placement` do `Rack`** (zonas pela fração das posições) e **`access`** (tempo por coluna e por nível) | **novo** |
+| Empilhadeira, separador | `Transporter` (empilhadeira ou pessoa) e `Dispatcher` | existe |
+
+### 8.3 Biblioteca
+
+Chegada de caminhões (agenda), pátio, doca (que desmonta o caminhão em paletes),
+porta-paletes (com ABC), entrada de pedidos (com linhas), onda de separação, divisão em
+linhas, separação, consolidação, expedição, empilhadeiras e separadores (equipe e pessoa).
+
+### 8.4 Vocabulário
+
+item → palete ou pedido conforme o objeto (o vocabulário geral usa "carga"); `Processor` →
+estação; `Rack` → porta-paletes; `Transporter` → empilhadeira ou separador; `Dispatcher` →
+equipe; `time_in_system` → tempo no armazém.
+
+### 8.5 Indicadores
+
+Com IC de 95 % entre replicações: **linhas separadas por hora** (por hora do dia e por hora
+de operação), pedidos expedidos por dia, linhas por pedido, tempo de ciclo do pedido e %
+expedido no prazo; **tempo de doca** do caminhão (espera no pátio, na doca, total) e % dentro
+da meta (padrão 60 min); ocupação das docas, das empilhadeiras e dos separadores; ocupação
+média do porta-paletes; tempo de acesso por classe ABC.
+
+### 8.6 Relatório
+
+`utsim linha logistica relatorio` com texto, HTML e JSON: cartões, recebimento (doca),
+separação (linhas por hora em gráfico por hora do dia), expedição (ciclo do pedido e prazo),
+armazenagem (ocupação e ABC) e equipes.
+
+### 8.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| CD com recebimento e expedição | agenda de caminhões, docas, descarga por paletes, armazenagem ABC, separação e expedição |
+| Separação em ondas | pedidos de e-commerce com várias linhas, ondas por horário, consolidação e corte da transportadora |
+| Cross-docking | paletes que passam da doca de entrada à de saída sem armazenar |
+
+### 8.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| G1 | `SplitBy`, `gather`, `waves`, ABC e `access` no núcleo, com testes à mão; golden inalterados | 12–16 | Opus |
+| G2 | Pacote `linhas/logistica/` (predefinições com manutenção, EPI e qualidade nos campos do nó) | 3–4 | Sonnet |
+| G3 | Indicadores e relatório da linha, `utsim linha logistica relatorio` e `--linha logistica` | 8–10 | Opus |
+| G4 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Estado em 2026-11-08: G1 a G4 feitos.** A doca ficou como divisor `SplitBy` em vez de um
+`per_label` no processo: o caminhão ocupa a doca até as empilhadeiras tirarem o último palete,
+o que dá o tempo de doca sem campo novo no `Processor`. Manual em
+`docs/manual/src/linhas/logistica/index.md`; as decisões G-D1 a G-D6 seguem com as propostas
+até o dono responder.
+
+### 8.9 Decisões do dono
+
+1. **G-D1 Nome exibido.** "Logística e armazém" (proposta).
+2. **G-D2 Tempo no porta-paletes.** Tempo de acesso por coluna e nível da posição (proposta,
+   simples e suficiente para a curva ABC) ou a rota real do separador nos corredores (mais
+   fiel, bem mais trabalho).
+3. **G-D3 Ondas.** Por horário fixo do dia (proposta) ou por quantidade de pedidos e janela
+   dinâmica.
+4. **G-D4 Expedição.** O pedido só sai completo (proposta) ou pode sair parcial.
+5. **G-D5 Meta do tempo de doca.** 60 minutos por caminhão (proposta), mudável no relatório.
+6. **G-D6 Modelos prontos.** Os três da seção 8.7 (proposta) ou outros (armazém frigorífico,
+   centro de distribuição de varejo com loja, armazém com AGV).

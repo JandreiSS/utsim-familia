@@ -7,6 +7,8 @@ use crate::timer::PausableTimer;
 const MAX_WAIT: u32 = 0;
 /// An item's patience ran out (the item is the event's).
 const PATIENCE: u32 = 1;
+/// The time of a wave came.
+const WAVE: u32 = 2;
 
 /// Label set to 1 on an item that gave up waiting (read by the reports before it leaves).
 pub const ABANDONED_LABEL: &str = "abandonou";
@@ -51,8 +53,62 @@ pub struct Batch {
     pub flush: bool,
 }
 
+/// Consolidation: the lines of an order are held until all are here (see [`Queue`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Gather {
+    /// Label with the order the line belongs to (`pedido`).
+    pub group: String,
+    /// Label with how many lines the order has (`linhas`).
+    pub count: String,
+}
+
+/// Wave release: items wait and leave together at the `times` of each `cycle` (see
+/// [`Queue`]).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Waves {
+    /// Length of the cycle (1440 for a day in minutes, 10080 for a week).
+    pub cycle: f64,
+    /// Instants of the waves inside the cycle.
+    pub times: Vec<f64>,
+}
+
+impl Waves {
+    /// Delay from `now` to the next wave (`strict`: a wave exactly at `now` does not count).
+    fn next(&self, now: f64, strict: bool) -> Option<f64> {
+        if self.cycle.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
+            || self.times.is_empty()
+        {
+            return None;
+        }
+        let base = (now / self.cycle).floor() * self.cycle;
+        let mut best: Option<f64> = None;
+        for k in 0..2 {
+            for t in &self.times {
+                let at = base + k as f64 * self.cycle + t;
+                let ok = if strict {
+                    at > now + 1e-9
+                } else {
+                    at >= now - 1e-9
+                };
+                if ok && best.is_none_or(|b| at < b) {
+                    best = Some(at);
+                }
+            }
+        }
+        best.map(|at| (at - now).max(0.0))
+    }
+}
+
 /// Buffer that releases every item as soon as it enters, or, with a [`Batch`],
 /// holds items and releases them in groups.
+///
+/// **Consolidation** ([`Queue::gather`]). A line with the `group` label waits until as
+/// many lines of the same group are here as its `count` label says; then the first one
+/// leaves as the whole order, with the other lines packed inside it. An item without the
+/// label leaves as usual.
+///
+/// **Waves** ([`Queue::waves`]). Items (whole orders, with consolidation) wait and all
+/// leave together at each wave time of the cycle, in the queue's order.
 ///
 /// **Patience** ([`Queue::patience`]). Each item draws its patience when it enters; if it
 /// is still here when that time is over (it did not get into the next object), it gives up:
@@ -75,6 +131,14 @@ pub struct Queue {
     giving_up: Vec<(ItemId, EventId)>,
     /// Items that gave up since the warm-up.
     abandoned: u64,
+    gather: Option<Gather>,
+    /// Lines held per order: (group value bits, lines, lines needed).
+    groups: Vec<(u64, Vec<ItemId>, usize)>,
+    waves: Option<Waves>,
+    /// Items waiting for the next wave.
+    wave_held: Vec<ItemId>,
+    /// Waves released since the warm-up.
+    waves_released: u64,
 }
 
 impl Queue {
@@ -91,7 +155,82 @@ impl Queue {
             patience: None,
             giving_up: Vec::new(),
             abandoned: 0,
+            gather: None,
+            groups: Vec::new(),
+            waves: None,
+            wave_held: Vec::new(),
+            waves_released: 0,
         }
+    }
+
+    /// Holds the lines of each order until all are here (see [`Queue`]).
+    pub fn gather(mut self, gather: Option<Gather>) -> Self {
+        self.gather = gather;
+        self
+    }
+
+    /// Releases the items in waves (see [`Queue`]).
+    pub fn waves(mut self, waves: Option<Waves>) -> Self {
+        self.waves = waves;
+        self
+    }
+
+    /// The item goes on after consolidation: held for the next wave, put in the batch or
+    /// released.
+    fn admit(&mut self, cx: &mut Ctx, item: ItemId) {
+        if self.waves.is_some() {
+            self.wave_held.push(item);
+            cx.set_state(State::Collecting);
+            return;
+        }
+        let Some(batch) = self.batch else {
+            self.release_one(cx, item);
+            cx.set_state(State::Releasing);
+            return;
+        };
+        self.held.push(item);
+        if self.held.len() >= batch.size {
+            self.release_held(cx);
+        } else if self.held.len() == 1 && batch.max_wait > 0.0 {
+            self.timer.start(cx, batch.max_wait, MAX_WAIT, None);
+        }
+        self.update_state(cx);
+    }
+
+    /// Consolidation of one line: `Some(order)` when it completes an order (the other
+    /// lines packed inside it), `None` while the order waits for more lines.
+    fn consolidate(&mut self, cx: &mut Ctx, g: &Gather, item: ItemId) -> Option<ItemId> {
+        let key = match cx.item(item).label(&g.group).and_then(|v| v.as_num()) {
+            Some(v) if v.is_finite() => v.to_bits(),
+            _ => return Some(item),
+        };
+        let needed = cx
+            .item(item)
+            .label(&g.count)
+            .and_then(|v| v.as_num())
+            .filter(|v| v.is_finite())
+            .map_or(1, |v| v.round().max(1.0) as usize);
+        let at = match self.groups.iter().position(|(k, _, _)| *k == key) {
+            Some(at) => at,
+            None => {
+                self.groups.push((key, Vec::new(), needed));
+                self.groups.len() - 1
+            }
+        };
+        self.groups[at].1.push(item);
+        if self.groups[at].1.len() < self.groups[at].2 {
+            return None;
+        }
+        let (_, lines, _) = self.groups.remove(at);
+        let order = lines[0];
+        for line in &lines[1..] {
+            if let Some(i) = self.giving_up.iter().position(|(x, _)| x == line) {
+                let (_, event) = self.giving_up.remove(i);
+                cx.cancel(event);
+            }
+            cx.pack(order, *line);
+        }
+        Some(order)
     }
 
     /// How long an item waits before giving up (see [`Queue`]); `None`: forever.
@@ -112,6 +251,11 @@ impl Queue {
         cx.record("abandon_wait", waited);
         self.abandoned += 1;
         self.held.retain(|i| *i != item);
+        self.wave_held.retain(|i| *i != item);
+        for (_, lines, _) in &mut self.groups {
+            lines.retain(|i| *i != item);
+        }
+        self.groups.retain(|(_, lines, _)| !lines.is_empty());
         cx.destroy(item);
     }
 
@@ -150,13 +294,14 @@ impl Queue {
     }
 
     fn update_state(&self, cx: &mut Ctx) {
-        let state = if !self.held.is_empty() {
-            State::Collecting
-        } else if cx.content_len() > 0 {
-            State::Releasing
-        } else {
-            State::Empty
-        };
+        let state =
+            if !self.held.is_empty() || !self.wave_held.is_empty() || !self.groups.is_empty() {
+                State::Collecting
+            } else if cx.content_len() > 0 {
+                State::Releasing
+            } else {
+                State::Empty
+            };
         cx.set_state(state);
     }
 }
@@ -172,6 +317,12 @@ impl Behavior for Queue {
         self.timer = PausableTimer::default();
         self.giving_up.clear();
         self.abandoned = 0;
+        self.groups.clear();
+        self.wave_held.clear();
+        self.waves_released = 0;
+        if let Some(delay) = self.waves.as_ref().and_then(|w| w.next(cx.now(), false)) {
+            cx.schedule(delay, WAVE, None);
+        }
         cx.set_state(State::Empty);
     }
 
@@ -229,18 +380,17 @@ impl Behavior for Queue {
             let event = cx.schedule(wait, PATIENCE, Some(item));
             self.giving_up.push((item, event));
         }
-        let Some(batch) = self.batch else {
-            self.release_one(cx, item);
-            cx.set_state(State::Releasing);
-            return;
+        let item = match self.gather.clone() {
+            Some(g) => match self.consolidate(cx, &g, item) {
+                Some(order) => order,
+                None => {
+                    cx.set_state(State::Collecting);
+                    return;
+                }
+            },
+            None => item,
         };
-        self.held.push(item);
-        if self.held.len() >= batch.size {
-            self.release_held(cx);
-        } else if self.held.len() == 1 && batch.max_wait > 0.0 {
-            self.timer.start(cx, batch.max_wait, MAX_WAIT, None);
-        }
-        self.update_state(cx);
+        self.admit(cx, item);
     }
 
     fn on_event(&mut self, cx: &mut Ctx, tag: u32, item: Option<ItemId>) {
@@ -249,6 +399,20 @@ impl Behavior for Queue {
                 self.give_up(cx, item);
                 self.update_state(cx);
             }
+            return;
+        }
+        if tag == WAVE {
+            let wave = std::mem::take(&mut self.wave_held);
+            if !wave.is_empty() {
+                self.waves_released += 1;
+            }
+            for id in wave {
+                self.release_one(cx, id);
+            }
+            if let Some(delay) = self.waves.as_ref().and_then(|w| w.next(cx.now(), true)) {
+                cx.schedule(delay, WAVE, None);
+            }
+            self.update_state(cx);
             return;
         }
         self.timer.clear();
@@ -269,14 +433,20 @@ impl Behavior for Queue {
 
     fn on_warmup(&mut self, _cx: &mut Ctx) {
         self.abandoned = 0;
+        self.waves_released = 0;
     }
 
-    /// With patience: `abandoned.count` (items that gave up since the warm-up).
+    /// With patience: `abandoned.count` (items that gave up since the warm-up). With
+    /// waves: `waves.count` (waves that released something since the warm-up).
     fn custom_metrics(&self, _now: Time) -> Vec<(String, f64)> {
-        if self.patience.is_none() {
-            return Vec::new();
+        let mut out = Vec::new();
+        if self.patience.is_some() {
+            out.push(("abandoned.count".to_string(), self.abandoned as f64));
         }
-        vec![("abandoned.count".to_string(), self.abandoned as f64)]
+        if self.waves.is_some() {
+            out.push(("waves.count".to_string(), self.waves_released as f64));
+        }
+        out
     }
 
     fn on_stop(&mut self, cx: &mut Ctx) {

@@ -487,6 +487,9 @@ fn describe(obj: &ObjectDef) -> (Option<f64>, Vec<String>, Vec<String>) {
             notes.push(match mode {
                 SeparateMode::Unpack => "desembala o conteúdo".to_string(),
                 SeparateMode::Split(n) => format!("divide cada item em {n}"),
+                SeparateMode::SplitBy { count, .. } => {
+                    format!("divide cada pedido em linhas pelo rótulo {count}")
+                }
             });
         }
         ObjectKind::Sink => {}

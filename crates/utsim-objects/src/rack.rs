@@ -2,16 +2,34 @@ use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, Time, WorkPhase};
 
+/// Label with the ABC class of an item (1 = A, 2 = B, 3 = C) read by [`RackPlacement::Abc`].
+pub const CLASS_LABEL: &str = "classe";
+
 const DWELL_DONE: u32 = 0;
 
 /// Which free position a rack gives to an incoming item.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum RackPlacement {
     /// Lowest level first, then lowest bay.
     #[default]
     FirstFree,
     /// Uniformly among free positions (block's random stream).
     Random,
+    /// By ABC class (label `classe`: 1 = A, 2 = B, 3 = C; other values and items without
+    /// it count as C). The positions are ordered by access time (with [`Access`]; else
+    /// lowest level and bay first): class A takes the first fraction `a` of them, B the
+    /// next `b`, C the rest. An item takes the best free position of its zone; a full zone
+    /// sends it to the next worse one, then to the better ones.
+    Abc { a: f64, b: f64 },
+}
+
+/// Time to reach a position (put away or pick), in addition to the dwell: `per_bay` for
+/// each bay from the front (bay 0 costs nothing) and `per_level` for each level above
+/// the floor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Access {
+    pub per_bay: f64,
+    pub per_level: f64,
 }
 
 /// An item stored in the rack whose dwell time is running.
@@ -37,6 +55,7 @@ pub struct Rack {
     pub levels: usize,
     pub dwell: Option<Dist>,
     pub placement: RackPlacement,
+    pub access: Option<Access>,
     /// Item in each position, indexed by `level * bays + bay`.
     slots: Vec<Option<ItemId>>,
     stays: Vec<Stay>,
@@ -49,9 +68,58 @@ impl Rack {
             levels,
             dwell,
             placement,
+            access: None,
             slots: vec![None; bays * levels],
             stays: Vec::new(),
         }
+    }
+
+    /// Time to reach the positions (see [`Access`]); `None`: no extra time.
+    pub fn access(mut self, access: Option<Access>) -> Self {
+        self.access = access;
+        self
+    }
+
+    /// Access time of position `slot`.
+    fn access_time(&self, slot: usize) -> Time {
+        let Some(a) = self.access else { return 0.0 };
+        let (bay, level) = (slot % self.bays.max(1), slot / self.bays.max(1));
+        bay as f64 * a.per_bay + level as f64 * a.per_level
+    }
+
+    /// The positions from the cheapest to reach to the dearest (ties: lowest index).
+    fn by_cost(&self) -> Vec<usize> {
+        let mut v: Vec<usize> = (0..self.slots.len()).collect();
+        v.sort_by(|x, y| {
+            self.access_time(*x)
+                .total_cmp(&self.access_time(*y))
+                .then(x.cmp(y))
+        });
+        v
+    }
+
+    /// ABC class of an item: 0 (A), 1 (B) or 2 (C).
+    fn class_of(cx: &Ctx, item: ItemId) -> usize {
+        match cx.item(item).label(CLASS_LABEL).and_then(|v| v.as_num()) {
+            Some(v) if (v - 1.0).abs() < 0.5 => 0,
+            Some(v) if (v - 2.0).abs() < 0.5 => 1,
+            _ => 2,
+        }
+    }
+
+    /// Best free position for an item of class `class` with zones `a` and `b`.
+    fn abc_slot(&self, class: usize, a: f64, b: f64) -> Option<usize> {
+        let order = self.by_cost();
+        let n = order.len();
+        let na = ((a.clamp(0.0, 1.0) * n as f64).ceil() as usize).min(n);
+        let nb = ((b.clamp(0.0, 1.0) * n as f64).ceil() as usize).min(n - na);
+        let zones = [&order[..na], &order[na..na + nb], &order[na + nb..]];
+        // Own zone, then the worse ones, then the better ones.
+        let mut try_order: Vec<usize> = (class..3).collect();
+        try_order.extend((0..class).rev());
+        try_order
+            .into_iter()
+            .find_map(|z| zones[z].iter().copied().find(|s| self.slots[*s].is_none()))
     }
 
     /// The storage position currently holding `item`, if it is stored here.
@@ -59,9 +127,10 @@ impl Rack {
         self.slots.iter().position(|s| *s == Some(item))
     }
 
-    /// Chooses a free position for the next item, or `None` if the rack is full.
-    fn pick_slot(&self, cx: &mut Ctx) -> Option<usize> {
+    /// Chooses a free position for `item`, or `None` if the rack is full.
+    fn pick_slot(&self, cx: &mut Ctx, item: ItemId) -> Option<usize> {
         match self.placement {
+            RackPlacement::Abc { a, b } => self.abc_slot(Self::class_of(cx, item), a, b),
             RackPlacement::FirstFree => self.slots.iter().position(|s| s.is_none()),
             RackPlacement::Random => {
                 let free: Vec<usize> = self
@@ -170,7 +239,7 @@ impl Behavior for Rack {
             let slot = match it.slot {
                 Some(s) => s,
                 None => {
-                    let s = self.pick_slot(cx).expect("capacity checked above");
+                    let s = self.pick_slot(cx, id).expect("capacity checked above");
                     self.slots[s] = Some(id);
                     s
                 }
@@ -219,15 +288,22 @@ impl Behavior for Rack {
     }
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
-        let Some(slot) = self.pick_slot(cx) else {
+        let Some(slot) = self.pick_slot(cx, item) else {
             cx.error("porta-paletes cheio: item recebido sem posição livre");
             return;
         };
         self.slots[slot] = Some(item);
         cx.trace_slot(item, slot);
         let duration = self.dwell.as_ref().map(|dwell| cx.sample_duration(dwell));
+        let access = self.access_time(slot);
+        if self.access.is_some() {
+            cx.record("access_time", access);
+            let class = ["A", "B", "C"][Self::class_of(cx, item)];
+            cx.record(&format!("access_time.{class}"), access);
+        }
         match duration {
-            Some(d) => self.start_stay(cx, item, d),
+            Some(d) => self.start_stay(cx, item, d + access),
+            None if access > 0.0 => self.start_stay(cx, item, access),
             None => cx.release(item),
         }
         self.update_state(cx);
