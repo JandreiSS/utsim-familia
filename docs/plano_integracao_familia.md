@@ -40,6 +40,18 @@ utsim-qualidade --utsim-pedido <caminho do pedido>
 | `resposta` | caminho onde gravar a resposta |
 | `somente_leitura` | abre só para ver |
 
+**Abrir um nó do UTSim 3D no Qualidade ou no Segurança (combinado em 2026-11-09, já em uso):** o botão "Abrir no UTSim Qualidade" ou "Abrir no UTSim Segurança" da aba do nó salva o modelo e chama
+
+```text
+utsim-qualidade --utsim-abrir=<modelo .ron, caminho absoluto> --utsim-no=<nome do nó>
+utsim-seguranca --utsim-abrir=<modelo .ron, caminho absoluto> --utsim-no=<nome do nó>
+```
+
+- Cada argumento vai inteiro para o processo, sem shell, então espaços e acentos não precisam de aspas. Os apps também aceitam a forma separada (`--utsim-abrir <modelo>`).
+- O app abre na tela Modelo, com o nó selecionado e a aba do app. Se a trava for de outro, abre só para leitura. Se o nó não existir no modelo, avisa. Não há resposta para o 3D.
+- O 3D solta a sua trava e a cede ao app (`TravaModelo::ceder`): durante até 1 minuto não a toma de volta, para o app conseguir pegá-la.
+- Quando o app pega a trava, o 3D fica só de leitura. Quando ele a solta, o 3D a retoma na renovação seguinte e relê o que o app gravou (seção 3.2).
+
 Argumentos diretos continuam valendo para os casos simples: `utsim <modelo.ron>`, `utsim --utsim-no <nome>` para abrir o editor já no nó.
 
 ### 2.3 Resposta
@@ -112,7 +124,8 @@ O que não é de um nó continua na pasta de unidade: pessoas e dados de saúde 
 | Estatística | Qualidade | pedido `abrir_ferramenta` (`carta`, `capacidade`, `msa`, `pareto`) com a coluna escolhida | a ferramenta pronta, citada no histórico de análises |
 | Qualidade | Estatística | pedido `analisar` (teste, ANOVA, regressão) ou `ajustar_distribuicao` sobre uma característica | receita, resultado e relatório com hash; a `Dist` quando pedida |
 | Seis Sigma | Estatística | pedido `analisar` com o conjunto de dados do projeto, ou `planejar_experimento` (decisão 4 do plano do Estatística: migração gradual) | resultado e relatório gravados como entregável do projeto `.lss` |
-| Ensino | Estatística | missão que pede uma análise (teste, regressão) | a análise feita pelo aluno, para conferir |
+| Ensino | Estatística | missão que pede uma análise (teste, regressão): "Analisar no UTSim Estatística" abre o app com `--utsim-abrir=<dados.csv ou .xlsx>`, que carrega o arquivo numa planilha nova (na última unidade usada, se houver) | a análise feita pelo aluno, para conferir |
+| UTSim 3D, Seis Sigma | Estatística | `--utsim-abrir=<dados.csv ou .xlsx>` com o conjunto de dados a analisar (previsto) | nada pela linha de comando; o resultado fica no histórico da unidade |
 | launcher | todos | onde cada app está instalado, versão ativa | nada |
 
 ## 5. Papel dos apps e ordem

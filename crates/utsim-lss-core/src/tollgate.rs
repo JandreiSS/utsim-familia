@@ -561,7 +561,7 @@ pub fn default_checklist(approach: Approach, phase_index: usize) -> Vec<Template
             (
                 "Conceitos gerados e escolhidos (matriz de Pugh)",
                 true,
-                None,
+                Some(Check::DeliverableExists("selecao_solucoes".into())),
             ),
             ("Análise funcional", false, None),
         ],
@@ -579,7 +579,11 @@ pub fn default_checklist(approach: Approach, phase_index: usize) -> Vec<Template
             v
         }
         (Approach::Kaizen, 0) => vec![
-            ("Escopo, dados, equipe e logística do evento", true, None),
+            (
+                "Escopo, dados, equipe e logística do evento",
+                true,
+                Some(Check::DeliverableExists("evento_kaizen".into())),
+            ),
             (
                 "Termo de abertura completo",
                 true,

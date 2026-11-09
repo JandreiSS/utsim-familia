@@ -430,7 +430,7 @@ pub fn record_exercises(
 ) -> std::result::Result<Vec<Id>, TeachingError> {
     use utsim_lss_core::mentoria::{self, Level, Source};
     let tools = mentoria::all_tools();
-    if let Some(it) = items.iter().find(|it| !tools.iter().any(|t| *t == it.tool)) {
+    if let Some(it) = items.iter().find(|it| !tools.contains(&it.tool)) {
         return Err(TeachingError::Tool(it.tool.clone()));
     }
     let mut pf = ProjectFolder::open(program_root, me, None)?;
@@ -529,6 +529,6 @@ pub fn members(
         .into_iter()
         .filter(|m| !m.anonymised)
         .map(|m| (m.id, m.email.trim().to_lowercase()))
-        .filter(|(_, e)| !e.is_empty() && Value::from(e.as_str()) != redacted)
+        .filter(|(_, e)| !e.is_empty() && redacted != e.as_str())
         .collect())
 }
