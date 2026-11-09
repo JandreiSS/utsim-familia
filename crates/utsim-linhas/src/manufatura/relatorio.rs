@@ -17,23 +17,27 @@ fn linhas(k: &Manufatura) -> Vec<(&'static str, String)> {
             "Tempo de atravessamento",
             format!("{} min", mhw(&k.resumo(|r| r.atravessamento), 1.0)),
         ),
-        (
-            "Material em processo",
-            mhw(&k.resumo(|r| r.wip), 1.0),
-        ),
+        ("Material em processo", mhw(&k.resumo(|r| r.wip), 1.0)),
     ];
     if let Some(s) = k.resumo_opt(|r| r.no_prazo) {
         v.push(("Ordens no prazo", pct_hw(&s)));
     }
     if let Some(s) = k.resumo_opt(|r| r.atraso) {
-        v.push(("Atraso médio das atrasadas", format!("{} min", mhw(&s, 1.0))));
+        v.push((
+            "Atraso médio das atrasadas",
+            format!("{} min", mhw(&s, 1.0)),
+        ));
     }
     if k.reps.iter().any(|r| r.refugo > 0) {
         v.push((
             "Refugo",
             pct_hw(&k.resumo(|r| {
                 let t = r.ordens + r.refugo;
-                if t == 0 { 0.0 } else { r.refugo as f64 / t as f64 }
+                if t == 0 {
+                    0.0
+                } else {
+                    r.refugo as f64 / t as f64
+                }
             })),
         ));
     }
@@ -107,12 +111,7 @@ fn linha_produto(k: &Manufatura, p: i64) -> [String; 4] {
     [format!("produto {p}"), ordens, lead, prazo]
 }
 
-const COLUNAS_PRODUTO: [&str; 4] = [
-    "Produto",
-    "Ordens no período",
-    "Atravessamento",
-    "No prazo",
-];
+const COLUNAS_PRODUTO: [&str; 4] = ["Produto", "Ordens no período", "Atravessamento", "No prazo"];
 
 /// The indicators as text.
 pub fn texto(k: &Manufatura) -> String {
@@ -166,7 +165,13 @@ pub fn texto(k: &Manufatura) -> String {
     t
 }
 
-fn tabela<const N: usize>(h: &mut String, titulo: &str, nota: &str, colunas: &[&str; N], linhas: Vec<[String; N]>) {
+fn tabela<const N: usize>(
+    h: &mut String,
+    titulo: &str,
+    nota: &str,
+    colunas: &[&str; N],
+    linhas: Vec<[String; N]>,
+) {
     if linhas.is_empty() {
         return;
     }
@@ -223,7 +228,10 @@ pub fn html(k: &Manufatura) -> String {
         "Por produto",
         "",
         &COLUNAS_PRODUTO,
-        produtos(k).into_iter().map(|p| linha_produto(k, p)).collect(),
+        produtos(k)
+            .into_iter()
+            .map(|p| linha_produto(k, p))
+            .collect(),
     );
     let gente = nomes(k, |r| r.ocupacao.keys().collect());
     tabela(

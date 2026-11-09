@@ -41,7 +41,11 @@ fn lead_time_due_dates_and_oee_by_hand() {
     near("atraso", r.atraso.unwrap(), 2.0);
     assert_eq!(r.por_produto[&1].ordens, 3);
     near("produto 1", r.por_produto[&1].atravessamento, 11.0 / 3.0);
-    near("produto 1 prazo", r.por_produto[&1].no_prazo.unwrap(), 2.0 / 3.0);
+    near(
+        "produto 1 prazo",
+        r.por_produto[&1].no_prazo.unwrap(),
+        2.0 / 3.0,
+    );
     near("produto 2 prazo", r.por_produto[&2].no_prazo.unwrap(), 1.0);
     // OEE: 8 of 100 minutes in changeover, so availability 0.92; 4 parts of 2 minutes in
     // 92 running minutes; no scrap.
@@ -51,7 +55,11 @@ fn lead_time_due_dates_and_oee_by_hand() {
     near("qualidade", m.qualidade, 1.0);
     near("oee", m.oee, 0.08);
     near("em troca", m.em_troca, 0.08);
-    near("trocas por dia", m.trocas_dia.unwrap(), 2.0 * 1440.0 / 100.0);
+    near(
+        "trocas por dia",
+        m.trocas_dia.unwrap(),
+        2.0 * 1440.0 / 100.0,
+    );
 }
 
 #[test]

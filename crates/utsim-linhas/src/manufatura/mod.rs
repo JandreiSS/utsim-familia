@@ -126,9 +126,12 @@ fn fracao(xs: &[bool]) -> Option<f64> {
 pub fn ciclo_ideal(o: &utsim_model::ObjectDef) -> Option<f64> {
     if o.inspection.is_some()
         || o.rework.is_some()
-        || o.preset
-            .as_deref()
-            .is_some_and(|p| p == "manufatura/cartoes" || p.starts_with("qualidade/estacao") || p == "qualidade/inspecao_medicao" || p == "qualidade/retrabalho")
+        || o.preset.as_deref().is_some_and(|p| {
+            p == "manufatura/cartoes"
+                || p.starts_with("qualidade/estacao")
+                || p == "qualidade/inspecao_medicao"
+                || p == "qualidade/retrabalho"
+        })
     {
         return None;
     }

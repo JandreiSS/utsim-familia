@@ -97,7 +97,11 @@ pub fn changeover(c: &utsim_objects::Changeover) -> String {
     if rows.is_empty() {
         format!("(label: {})", string(&c.label))
     } else {
-        format!("(label: {}, matrix: [{}])", string(&c.label), rows.join(", "))
+        format!(
+            "(label: {}, matrix: [{}])",
+            string(&c.label),
+            rows.join(", ")
+        )
     }
 }
 

@@ -93,7 +93,11 @@ fn orders_without_the_label_never_change() {
     );
     let r = run(&text);
     near("setup", state(&r, "maquina", "setup"), 0.0);
-    near("changeovers", r.block("maquina").unwrap().custom["changeovers"], 0.0);
+    near(
+        "changeovers",
+        r.block("maquina").unwrap().custom["changeovers"],
+        0.0,
+    );
 }
 
 #[test]

@@ -63,8 +63,8 @@ pub use arrivals::{AreaDef, ItemTypeDef};
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
-    ArrivalPeriod, Changeover, ChangeoverTime, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
-    TableRepeat,
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, Changeover, ChangeoverTime,
+    PeriodArrivals, Release, TableMode, TableRepeat,
 };
 
 /// Reads only the `format` field; every other field is ignored.
@@ -896,7 +896,10 @@ impl Model {
                                     obj.name
                                 ));
                             }
-                            if c.matrix[..k].iter().any(|p| p.from == m.from && p.to == m.to) {
+                            if c.matrix[..k]
+                                .iter()
+                                .any(|p| p.from == m.from && p.to == m.to)
+                            {
                                 errors.push(format!(
                                     "{}: changeover.matrix tem a troca {} -> {} repetida",
                                     obj.name, m.from, m.to

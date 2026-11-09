@@ -415,7 +415,14 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         ObjectKind::Queue { .. } => ("Queue", &["capacity", "discipline", "batch", "order"]),
         ObjectKind::Processor { .. } => (
             "Processor",
-            &["capacity", "setup", "process", "operators", "also", "changeover"],
+            &[
+                "capacity",
+                "setup",
+                "process",
+                "operators",
+                "also",
+                "changeover",
+            ],
         ),
         ObjectKind::Transporter { .. } => (
             "Transporter",
