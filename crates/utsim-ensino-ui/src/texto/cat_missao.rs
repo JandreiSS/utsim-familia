@@ -230,6 +230,18 @@ textos! {
         "Ver em 3D",
         "View in 3D",
         "Ver en 3D";
+    missao_levar_utsim:
+        "Levar para o UTSim",
+        "Take to UTSim",
+        "Llevar a UTSim";
+    missao_levar_utsim_dica:
+        "Grava o modelo desta tentativa, com as suas decisões, e abre no UTSim para você continuar no simulador completo. A missão não muda.",
+        "Saves the model of this attempt, with your decisions, and opens it in UTSim so you can go on in the full simulator. The mission does not change.",
+        "Guarda el modelo de este intento, con sus decisiones, y lo abre en UTSim para que usted continúe en el simulador completo. La misión no cambia.";
+    missao_levado_utsim:
+        "modelo gravado em {} e aberto no UTSim",
+        "model saved to {} and opened in UTSim",
+        "modelo guardado en {} y abierto en UTSim";
     missao_erro_3d:
         "não foi possível abrir em 3D: {}",
         "could not open in 3D: {}",

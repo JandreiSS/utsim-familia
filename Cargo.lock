@@ -8193,6 +8193,7 @@ dependencies = [
  "rand_distr 0.5.1",
  "rand_pcg",
  "serde",
+ "serde_json",
  "utsim-stats",
 ]
 
