@@ -563,6 +563,28 @@ pub fn num(v: f64, casas: usize) -> String {
     s.replace('.', ",")
 }
 
+/// A data de hoje (UTC) como é mostrada nos estudos e relatórios: `09/11/2026`.
+pub fn hoje() -> String {
+    let dias = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| (d.as_secs() / 86_400) as i64);
+    data_de_dias(dias)
+}
+
+/// Dias desde 01/01/1970 para `DD/MM/AAAA` (calendário civil).
+pub fn data_de_dias(dias: i64) -> String {
+    let z = dias + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{d:02}/{m:02}/{y:04}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -605,5 +627,7 @@ mod tests {
         assert_eq!(num(2.0, 3), "2");
         assert_eq!(num(-0.0001, 2), "0");
         assert_eq!(num(f64::NAN, 2), "—");
+        assert_eq!(data_de_dias(0), "01/01/1970");
+        assert_eq!(data_de_dias(20_766), "09/11/2026");
     }
 }

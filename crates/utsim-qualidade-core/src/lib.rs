@@ -6,6 +6,7 @@
 pub mod amostragem;
 pub mod cep;
 pub mod custos;
+pub mod estudo;
 pub mod oito_d;
 pub mod planos;
 pub mod relatorio;

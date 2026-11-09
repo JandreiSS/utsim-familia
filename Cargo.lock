@@ -8188,6 +8188,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "utsim-core",
+ "utsim-estudo",
  "utsim-ferramentas",
  "utsim-lss-core",
  "utsim-lss-store",

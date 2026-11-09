@@ -11,6 +11,7 @@ utsim-model.workspace = true
 utsim-quality.workspace = true
 utsim-stats.workspace = true
 utsim-ferramentas.workspace = true
+utsim-estudo.workspace = true
 # 8D sent to the Seis Sigma portfolio (QS13).
 utsim-lss-core = { path = "../utsim-lss-core" }
 utsim-lss-store = { path = "../utsim-lss-store" }
