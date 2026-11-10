@@ -22,3 +22,6 @@ docs/guia/main.pdf
 dist/
 # One-writer lock of an open model (utsim_pasta::trava).
 .*.trava
+
+# Cache do Python (scripts do Blender)
+__pycache__/
