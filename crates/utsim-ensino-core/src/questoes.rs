@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use utsim_model::Model;
+
 use crate::dados::{Conjunto, Gerador, Receita};
 use crate::nota::fmt_num;
 
@@ -39,25 +41,40 @@ impl ConjuntoMissao {
             crate::variante::semente(&format!("{missao}/{}", self.id), aluno)
         };
         let mut gerador = self.gerador.clone();
-        if self.sortear_afetado
-            && let Gerador::MediaDeslocada {
-                grupos, afetado, ..
-            } = &mut gerador
-            && !grupos.is_empty()
-        {
-            *afetado = (semente % grupos.len() as u64) as usize;
+        if self.sortear_afetado {
+            match &mut gerador {
+                Gerador::MediaDeslocada {
+                    grupos, afetado, ..
+                }
+                | Gerador::Simulacao {
+                    estacoes: grupos,
+                    afetado,
+                    ..
+                } if !grupos.is_empty() => {
+                    *afetado = (semente % grupos.len() as u64) as usize;
+                }
+                _ => {}
+            }
         }
         Receita { gerador, semente }
     }
 
+    /// The set of a generator that needs no model. A simulation set needs
+    /// [`ConjuntoMissao::gerar_com`].
     pub fn gerar(&self, missao: &str, aluno: &str) -> Conjunto {
         self.receita(missao, aluno).gerar()
+    }
+
+    /// The set, run on the mission's model when it is a simulation set.
+    pub fn gerar_com(&self, missao: &str, aluno: &str, modelo: &Model) -> Conjunto {
+        self.receita(missao, aluno).gerar_com(Some(modelo))
     }
 
     /// The group names, for the questions that ask for a group.
     pub fn grupos(&self) -> Vec<String> {
         match &self.gerador {
             Gerador::MediaDeslocada { grupos, .. } => grupos.clone(),
+            Gerador::Simulacao { estacoes, .. } => estacoes.clone(),
             _ => Vec::new(),
         }
     }
@@ -102,6 +119,10 @@ pub enum QuestaoDados {
     /// The larger source of the measurement variation in a gauge study: 0 repeatability
     /// (the instrument), 1 reproducibility (the operators).
     FonteDominante,
+    /// The group with the largest mean (the slowest station of a simulation run).
+    GrupoMaiorMedia,
+    /// The group with the largest sample standard deviation (the least steady station).
+    GrupoMaisVariavel,
 }
 
 impl QuestaoDados {
@@ -113,6 +134,8 @@ impl QuestaoDados {
                 | QuestaoDados::GrupoDeslocado
                 | QuestaoDados::DiferencaSignificativa
                 | QuestaoDados::FonteDominante
+                | QuestaoDados::GrupoMaiorMedia
+                | QuestaoDados::GrupoMaisVariavel
         )
     }
 
@@ -124,7 +147,9 @@ impl QuestaoDados {
                 "Marginal (de 10 % a 30 %)".into(),
                 "Inaceitável (acima de 30 %)".into(),
             ],
-            QuestaoDados::GrupoDeslocado => conjunto.grupos(),
+            QuestaoDados::GrupoDeslocado
+            | QuestaoDados::GrupoMaiorMedia
+            | QuestaoDados::GrupoMaisVariavel => conjunto.grupos(),
             QuestaoDados::DiferencaSignificativa => vec![
                 "Sim, a diferença é significativa a 5 %".into(),
                 "Não, a diferença pode ser só ruído".into(),
@@ -306,6 +331,38 @@ impl QuestaoDados {
                 let (rep, reprod) = fontes_rr(c)?;
                 Ok(if rep >= reprod { 0.0 } else { 1.0 })
             }
+            QuestaoDados::GrupoMaiorMedia | QuestaoDados::GrupoMaisVariavel => {
+                let n = c
+                    .valores
+                    .iter()
+                    .map(|v| v[0] as usize)
+                    .max()
+                    .map_or(0, |m| m + 1);
+                let mut melhor: Option<(usize, f64)> = None;
+                for g in 0..n {
+                    let xs: Vec<f64> = c
+                        .valores
+                        .iter()
+                        .filter(|v| v[0] as usize == g)
+                        .map(|v| v[1])
+                        .collect();
+                    if xs.len() < 2 {
+                        continue;
+                    }
+                    let (media, sd, _) = media_sd(&xs)?;
+                    let x = if *self == QuestaoDados::GrupoMaiorMedia {
+                        media
+                    } else {
+                        sd
+                    };
+                    if melhor.is_none_or(|(_, m)| x > m) {
+                        melhor = Some((g, x));
+                    }
+                }
+                melhor
+                    .map(|(g, _)| g as f64)
+                    .ok_or_else(|| "nenhum grupo com dois valores ou mais".into())
+            }
         }
     }
 
@@ -447,7 +504,10 @@ pub fn ferramenta(conjunto: &ConjuntoMissao, c: &Conjunto) -> Vec<String> {
                 ),
             ]
         }
-        Gerador::MediaDeslocada { grupos, .. } => grupos
+        Gerador::MediaDeslocada { grupos, .. }
+        | Gerador::Simulacao {
+            estacoes: grupos, ..
+        } => grupos
             .iter()
             .enumerate()
             .map(|(g, nome)| {

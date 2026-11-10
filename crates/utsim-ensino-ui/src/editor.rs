@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use egui::{Color32, RichText, Ui};
 use utsim_core::Dist;
-use utsim_ensino_core::dados::{Conjunto, Gerador, Padrao};
+use utsim_ensino_core::dados::{Conjunto, Gerador, Padrao, estacoes_do_modelo};
 use utsim_ensino_core::editor::{
     Calibragem, Edicao, PacoteProfessor, calibrar, chaves_do_modelo, glossario_da_campanha, slug,
 };
@@ -1449,6 +1449,7 @@ fn nome_tipo(t: TipoGerador) -> &'static str {
         TipoGerador::Fatorial => texto::ed_tg_fatorial(),
         TipoGerador::Pareado => texto::ed_tg_pareado(),
         TipoGerador::Subgrupos => texto::ed_tg_subgrupos(),
+        TipoGerador::Simulacao => texto::ed_tg_simulacao(),
     }
 }
 
@@ -1467,6 +1468,8 @@ fn nome_questao(q: &QuestaoDados) -> &'static str {
         QuestaoDados::PrimeiroSubgrupoFora { .. } => texto::ed_q_primeiro_sub(),
         QuestaoDados::Cpk { .. } => texto::ed_q_cpk(),
         QuestaoDados::FonteDominante => texto::ed_q_fonte(),
+        QuestaoDados::GrupoMaiorMedia => texto::ed_q_maior_media(),
+        QuestaoDados::GrupoMaisVariavel => texto::ed_q_mais_variavel(),
     }
 }
 
@@ -1485,6 +1488,8 @@ fn descricao_questao(q: &QuestaoDados) -> &'static str {
         QuestaoDados::PrimeiroSubgrupoFora { .. } => texto::ed_qd_primeiro_sub(),
         QuestaoDados::Cpk { .. } => texto::ed_qd_cpk(),
         QuestaoDados::FonteDominante => texto::ed_qd_fonte(),
+        QuestaoDados::GrupoMaiorMedia => texto::ed_qd_maior_media(),
+        QuestaoDados::GrupoMaisVariavel => texto::ed_qd_mais_variavel(),
     }
 }
 
@@ -1545,7 +1550,10 @@ fn campo_opcional(ui: &mut Ui, rotulo: &str, v: &mut Option<f64>, inicial: f64) 
 /// The mean and a spread of a generator, to start the specification limits around.
 fn centro_escala(g: &Gerador) -> (f64, f64) {
     match g {
-        Gerador::Tempos { dist, .. } => {
+        Gerador::Tempos { dist, .. }
+        | Gerador::Simulacao {
+            processo: dist, ..
+        } => {
             let m = dist.mean();
             let m = if m.is_finite() { m } else { 0.0 };
             (m, (m.abs() * 0.1).max(1.0))
@@ -1589,6 +1597,7 @@ fn secao_dados(
     let mut pergunta: Option<String> = None;
     let mut tirar: Option<usize> = None;
     let mut tirar_fator: Option<(usize, usize)> = None;
+    let maquinas = estacoes_do_modelo(&ed.modelo);
     for i in 0..ed.base.dados.len() {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1629,7 +1638,14 @@ fn secao_dados(
                 }
             });
             let mut fator = None;
-            form_gerador(ui, i, &mut cj.gerador, &mut cj.sortear_afetado, &mut fator);
+            form_gerador(
+                ui,
+                i,
+                &mut cj.gerador,
+                &mut cj.sortear_afetado,
+                &mut fator,
+                &maquinas,
+            );
             if let Some(j) = fator {
                 tirar_fator = Some((i, j));
             }
@@ -1750,8 +1766,72 @@ fn form_gerador(
     g: &mut Gerador,
     sortear: &mut bool,
     tirar_fator: &mut Option<usize>,
+    maquinas: &[String],
 ) {
     match g {
+        Gerador::Simulacao {
+            estacoes,
+            afetado,
+            processo,
+            duracao,
+        } => {
+            ui.label(texto::ed_g_estacoes());
+            if maquinas.is_empty() {
+                ui.colored_label(AMARELO, texto::ed_g_sem_maquinas());
+            }
+            let antes = estacoes.get(*afetado).cloned();
+            ui.horizontal_wrapped(|ui| {
+                for m in maquinas {
+                    let mut marcada = estacoes.contains(m);
+                    if ui.checkbox(&mut marcada, m.as_str()).changed() {
+                        if marcada {
+                            estacoes.push(m.clone());
+                        } else {
+                            estacoes.retain(|x| x != m);
+                        }
+                    }
+                }
+                // A station read from a file that the model does not have stays listed,
+                // so the teacher sees it and the check names it.
+                let fora: Vec<String> = estacoes
+                    .iter()
+                    .filter(|x| !maquinas.contains(x))
+                    .cloned()
+                    .collect();
+                for x in fora {
+                    let mut marcada = true;
+                    if ui
+                        .checkbox(&mut marcada, RichText::new(&x).color(VERMELHO))
+                        .changed()
+                    {
+                        estacoes.retain(|y| *y != x);
+                    }
+                }
+            });
+            // The planted cause stays on its machine when the list changes.
+            if let Some(a) = antes
+                && let Some(j) = estacoes.iter().position(|x| *x == a)
+            {
+                *afetado = j;
+            }
+            *afetado = (*afetado).min(estacoes.len().saturating_sub(1));
+            ui.horizontal_wrapped(|ui| {
+                ui.label(texto::ed_g_estacao_afetada());
+                egui::ComboBox::from_id_salt(("ed_dados_estacao", i))
+                    .selected_text(estacoes.get(*afetado).cloned().unwrap_or_default())
+                    .show_ui(ui, |ui| {
+                        for (j, nome) in estacoes.iter().enumerate() {
+                            ui.selectable_value(afetado, j, nome.as_str());
+                        }
+                    });
+                ui.checkbox(sortear, texto::ed_g_sortear_estacao());
+            });
+            ui.label(texto::ed_g_processo_plantado());
+            campo_dist(ui, i, processo);
+            ui.horizontal_wrapped(|ui| {
+                campo_media(ui, texto::ed_g_duracao(), duracao);
+            });
+        }
         Gerador::Tempos { dist, n } => {
             ui.horizontal_wrapped(|ui| inteiro(ui, texto::ed_g_valores(), n, 2, MAX_LINHAS));
             campo_dist(ui, i, dist);
@@ -2195,6 +2275,15 @@ fn campo_dados(
                         texto::f(
                             texto::ed_sem_resposta_n(),
                             &[&a.sem_resposta, &ALUNOS_DE_TESTE],
+                        ),
+                    );
+                }
+                if a.fora_do_plantado > 0 {
+                    ui.colored_label(
+                        AMARELO,
+                        texto::f(
+                            texto::ed_fora_do_plantado_n(),
+                            &[&a.fora_do_plantado, &ALUNOS_DE_TESTE],
                         ),
                     );
                 }

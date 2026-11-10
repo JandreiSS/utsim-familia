@@ -541,6 +541,34 @@ textos! {
         "Subgrupos de medidas",
         "Subgroups of measures",
         "Subgrupos de medidas";
+    ed_tg_simulacao:
+        "Registros da simulação",
+        "Simulation records",
+        "Registros de la simulación";
+    ed_g_estacoes:
+        "Máquinas registradas (o tempo de cada peça em cada uma)",
+        "Recorded machines (the time of each item at each one)",
+        "Máquinas registradas (el tiempo de cada pieza en cada una)";
+    ed_g_sem_maquinas:
+        "O modelo não tem máquinas para registrar.",
+        "The model has no machines to record.",
+        "El modelo no tiene máquinas para registrar.";
+    ed_g_estacao_afetada:
+        "Máquina com a causa plantada",
+        "Machine with the planted cause",
+        "Máquina con la causa plantada";
+    ed_g_sortear_estacao:
+        "Sortear a máquina por aluno",
+        "Draw the machine by student",
+        "Sortear la máquina por alumno";
+    ed_g_processo_plantado:
+        "Tempo de processo plantado",
+        "Planted process time",
+        "Tiempo de proceso plantado";
+    ed_g_duracao:
+        "Duração da coleta",
+        "Collection length",
+        "Duración de la recolección";
     ed_dist:
         "Distribuição",
         "Distribution",
@@ -765,6 +793,14 @@ textos! {
         "Fonte dominante da variação",
         "Dominant source of variation",
         "Fuente dominante de la variación";
+    ed_q_maior_media:
+        "Máquina mais lenta",
+        "Slowest machine",
+        "Máquina más lenta";
+    ed_q_mais_variavel:
+        "Máquina menos estável",
+        "Least steady machine",
+        "Máquina menos estable";
     ed_qd_rr_pct:
         "Pede o %R&R do estudo, pelo método da análise de variância.",
         "Asks for the %R&R of the study, by the analysis of variance method.",
@@ -817,6 +853,14 @@ textos! {
         "O aluno aponta a maior fonte de variação da medição: o instrumento ou os operadores.",
         "The student points out the larger source of the measurement variation: the instrument or the operators.",
         "El alumno señala la mayor fuente de variación de la medición: el instrumento o los operadores.";
+    ed_qd_maior_media:
+        "O aluno estratifica os registros por máquina e aponta a de maior tempo médio.",
+        "The student stratifies the records by machine and points out the one with the largest mean time.",
+        "El alumno estratifica los registros por máquina y señala la de mayor tiempo medio.";
+    ed_qd_mais_variavel:
+        "O aluno estratifica os registros por máquina e aponta a de maior desvio padrão.",
+        "The student stratifies the records by machine and points out the one with the largest standard deviation.",
+        "El alumno estratifica los registros por máquina y señala la de mayor desviación estándar.";
     ed_qp_base_pontos:
         "Pontos da base dos limites",
         "Points of the limits base",
@@ -853,6 +897,10 @@ textos! {
         "{} de {} alunos de teste recebem dados sem resposta",
         "{} of {} test students get data with no answer",
         "{} de {} alumnos de prueba reciben datos sin respuesta";
+    ed_fora_do_plantado_n:
+        "Para {} de {} alunos de teste os dados apontam outro grupo que não o do efeito plantado",
+        "For {} of {} test students the data point to another group than the one with the planted effect",
+        "Para {} de {} alumnos de prueba los datos señalan otro grupo que no es el del efecto plantado";
     ed_questao_invalida:
         "Corrija os problemas da pergunta e do conjunto para conferir.",
         "Fix the problems of the question and of the set to check.",

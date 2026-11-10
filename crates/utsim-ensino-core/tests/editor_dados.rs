@@ -65,7 +65,7 @@ fn cada_gerador_comeca_valido_e_cada_pergunta_tem_resposta() {
         }
         assert!(ed.amostra_de_dados(&id).is_some());
     }
-    assert_eq!(ed.base.dados.len(), 7);
+    assert_eq!(ed.base.dados.len(), 8);
     // The series and the subgroups need a pattern for the "first signal" questions.
     for cj in ed.base.dados.iter_mut() {
         if let Gerador::Subgrupos { padrao, .. } = &mut cj.gerador {

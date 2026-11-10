@@ -96,6 +96,9 @@ pub struct EstadoMissao {
     /// Where the data of the mission are written (CSV or the Seis Sigma project).
     pub pasta_dados: String,
     pub aviso_dados: Option<String>,
+    /// The data sets of the student (whose id comes first), made once: a simulation set
+    /// runs the model.
+    pub dados_gerados: Option<(String, Vec<utsim_ensino_core::dados::Conjunto>)>,
 }
 
 impl EstadoMissao {
@@ -122,6 +125,7 @@ impl EstadoMissao {
             aviso_modelo: None,
             pasta_dados: String::new(),
             aviso_dados: None,
+            dados_gerados: None,
             pacote,
         }
     }
@@ -462,8 +466,16 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     if !missao.dados.is_empty() {
         ui.label(RichText::new(texto::missao_dados_titulo()).strong());
         ui.label(RichText::new(texto::missao_dados_texto()).weak());
-        for cj in &missao.dados {
-            let c = cj.gerar(&missao.id, &aluno);
+        if m.dados_gerados.as_ref().is_none_or(|(a, _)| *a != aluno) {
+            let v = missao
+                .dados
+                .iter()
+                .map(|cj| cj.gerar_com(&missao.id, &aluno, &mc.modelo))
+                .collect();
+            m.dados_gerados = Some((aluno.clone(), v));
+        }
+        let gerados = m.dados_gerados.as_ref().map_or(&[][..], |(_, v)| v.as_slice());
+        for (cj, c) in missao.dados.iter().zip(gerados) {
             ui.collapsing(
                 texto::f(texto::missao_dados_linhas(), &[&cj.nome, &c.linhas.len()]),
                 |ui| {
@@ -491,7 +503,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                         );
                     }
                     ui.label(RichText::new(texto::missao_ferramentas()).strong());
-                    for l in utsim_ensino_core::questoes::ferramenta(cj, &c) {
+                    for l in utsim_ensino_core::questoes::ferramenta(cj, c) {
                         ui.label(l);
                     }
                 },
@@ -513,7 +525,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                     .map_err(|e| e.to_string())
                     .and_then(|_| {
                         for cj in &missao.dados {
-                            let c = cj.gerar(&missao.id, &aluno);
+                            let c = cj.gerar_com(&missao.id, &aluno, &mc.modelo);
                             std::fs::write(pasta.join(format!("{}.csv", cj.id)), c.csv())
                                 .map_err(|e| e.to_string())?;
                         }

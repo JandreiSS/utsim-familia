@@ -430,7 +430,7 @@ Fica no app (modo professor) e num comando `utsim ensino caso` para o autor.
 6. **Gerar o texto inicial** do enunciado a partir de um modelo de texto próprio, que o professor reescreve.
 7. **Exportar** a missão para um pacote.
 
-**Editor de missões** (pedido do coordenador em 2026-11-09, entregue por etapas). A etapa A (**feita**) traz os passos 1, 2, 4, 5 e 7 na tela, na aba "Editor de missões" (`utsim_ensino_core::editor`, `utsim-ensino-ui/src/editor.rs`), com o pacote próprio do professor (vários atos, reabrir, reordenar, remover, conferir, `.utse`). A etapa B (**feita**) traz o enunciado com prévia igual à do aluno, as medições, as perguntas de previsão e de justificativa, as dicas e os conceitos do glossário, que o pacote leva num `glossario.ron`. A etapa C (**feita**) traz as missões de dados, com os geradores da seção 6.3 num formulário, a amostra com o efeito plantado, as perguntas que servem a cada tipo e o teste com 30 alunos fictícios (`utsim_ensino_core::editor_dados`). Os dados vindos da simulação ainda não têm gerador no núcleo, então não entram no formulário. Missões de modelagem e de peças continuam fora do editor.
+**Editor de missões** (pedido do coordenador em 2026-11-09, entregue por etapas). A etapa A (**feita**) traz os passos 1, 2, 4, 5 e 7 na tela, na aba "Editor de missões" (`utsim_ensino_core::editor`, `utsim-ensino-ui/src/editor.rs`), com o pacote próprio do professor (vários atos, reabrir, reordenar, remover, conferir, `.utse`). A etapa B (**feita**) traz o enunciado com prévia igual à do aluno, as medições, as perguntas de previsão e de justificativa, as dicas e os conceitos do glossário, que o pacote leva num `glossario.ron`. A etapa C (**feita**) traz as missões de dados, com os geradores da seção 6.3 num formulário, a amostra com o efeito plantado, as perguntas que servem a cada tipo e o teste com 30 alunos fictícios (`utsim_ensino_core::editor_dados`). Os dados vindos da simulação (**feito**) entram no formulário como "Registros da simulação", com as máquinas do modelo da missão. Missões de modelagem e de peças continuam fora do editor.
 
 ### 6.3 Dados com efeitos plantados
 
@@ -441,7 +441,7 @@ Geradores com semente, em `utsim-ensino-core`, sobre `utsim-stats` e `utsim-mode
 - **Média deslocada** por turno, operador ou máquina, com o tamanho do efeito em desvios padrão.
 - **Série com padrão** para cada regra de Nelson (tendência, deriva, mistura, estratificação).
 - **Fatorial** com efeitos principais e interação definidos.
-- **Dados vindos da simulação**: o gerador roda o modelo com o efeito plantado (por exemplo, mais variabilidade numa estação ou uma quebra mais frequente num turno) e exporta os registros como CSV de coleta.
+- **Dados vindos da simulação**: o gerador roda o modelo com o efeito plantado (por exemplo, mais variabilidade numa estação ou uma quebra mais frequente num turno) e exporta os registros como CSV de coleta. **Feito** para o tempo de processo de uma máquina (`Gerador::Simulacao`): o modelo da missão roda com a semente do aluno, sem aquecimento, e o CSV traz estação, peça, entrada, saída e tempo, até 5000 registros. As perguntas pedem a máquina mais lenta ou a menos estável. A quebra mais frequente num turno fica para depois.
 
 Cada conjunto guarda a receita (gerador, parâmetros, semente) e a resposta conhecida, que a correção usa. Os dados são próprios do UTSim.
 
