@@ -4,7 +4,8 @@
 //! replay). The outcome must be Ok or a Portuguese error; a panic, a hang or an English
 //! message is a bug.
 
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use proptest::prelude::*;
@@ -41,12 +42,23 @@ fn check_error(e: &dyn std::fmt::Display, stage: &str) -> Result<(), String> {
     }
 }
 
-/// The whole pipeline on one text. Returns Err with a description on a contract breach.
-fn pipeline(text: &str) -> Result<(), String> {
+/// Phases of the pipeline, in order: a hang names the one it was in.
+const PHASES: [&str; 4] = [
+    "leitura e ajuste dos dados (Model::parse)",
+    "validação",
+    "rodada",
+    "replay",
+];
+
+/// The whole pipeline on one text. Returns Err with a description on a contract breach;
+/// writes the index of the phase it is in to `phase` (for the hang report).
+fn pipeline_in(text: &str, phase: &AtomicUsize) -> Result<(), String> {
+    phase.store(0, Ordering::SeqCst);
     let mut model = match Model::parse(text) {
         Ok(m) => m,
         Err(e) => return check_error(&e, "parse"),
     };
+    phase.store(1, Ordering::SeqCst);
     if let Err(e) = model.validate() {
         if let utsim_model::ModelError::Invalid(list) = &e {
             if list.is_empty() {
@@ -62,12 +74,14 @@ fn pipeline(text: &str) -> Result<(), String> {
     model.run.warmup = model.run.warmup.min(model.run.stop_time / 2.0);
     model.run.replications = 1;
     model.run.sample_interval = model.run.sample_interval.map(|v| v.max(1.0));
+    phase.store(2, Ordering::SeqCst);
     let mut sim = model.build(0);
     sim.limit_events(EVENT_LIMIT);
     if let Err(e) = model.drive(&mut sim) {
         check_error(&e, "run")?;
     }
     // The replay: the same run with the trace on, then the static part of the replay.
+    phase.store(3, Ordering::SeqCst);
     let mut sim = model.build(0);
     sim.enable_trace();
     sim.limit_events(EVENT_LIMIT);
@@ -81,7 +95,9 @@ fn pipeline(text: &str) -> Result<(), String> {
 /// Events each run of the pipeline may process before it stops with an error.
 const EVENT_LIMIT: u64 = 2_000_000;
 
-/// Wall-clock fallback for what the event budget cannot stop (a loop inside one event).
+/// Wall-clock fallback for what the event budget cannot stop: a loop inside one event, or
+/// a phase without events (reading the model and fitting its data). The report names the
+/// phase.
 const WALL_LIMIT: Duration = Duration::from_secs(300);
 
 /// File that holds the input of the running case of this test thread until it ends: when
@@ -105,7 +121,7 @@ fn case_file() -> std::path::PathBuf {
     dir.join(format!("{name}.ron"))
 }
 
-/// Runs `pipeline` in a thread: a panic or a hang (> [`WALL_LIMIT`]) is reported, not
+/// Runs [`pipeline_in`] in a thread: a panic or a hang (> [`WALL_LIMIT`]) is reported, not
 /// propagated. The input stays in [`case_file`] while the case runs.
 fn guarded(text: &str) -> Result<(), String> {
     // Debugging aid: an abort (out of memory, stack overflow) kills the process and leaves
@@ -124,8 +140,10 @@ fn guarded(text: &str) -> Result<(), String> {
 fn guarded_run(text: &str) -> Result<(), String> {
     let (tx, rx) = mpsc::channel();
     let owned = text.to_string();
+    let phase = Arc::new(AtomicUsize::new(0));
+    let in_thread = Arc::clone(&phase);
     std::thread::spawn(move || {
-        let result = std::panic::catch_unwind(|| pipeline(&owned));
+        let result = std::panic::catch_unwind(|| pipeline_in(&owned, &in_thread));
         let _ = tx.send(match result {
             Ok(r) => r,
             Err(p) => {
@@ -145,8 +163,12 @@ fn guarded_run(text: &str) -> Result<(), String> {
             // `eprintln!` is captured by the test harness and lost on `exit`, so the input
             // goes straight to the process stderr and to a file in `target/`.
             use std::io::Write;
+            let fase = PHASES
+                .get(phase.load(Ordering::SeqCst))
+                .copied()
+                .unwrap_or("?");
             let msg = format!(
-                "TRAVOU (> {} s)\n--- entrada ---\n{text}\n",
+                "TRAVOU (> {} s) na fase: {fase}\n--- entrada ---\n{text}\n",
                 WALL_LIMIT.as_secs()
             );
             let _ = std::io::stderr().lock().write_all(msg.as_bytes());
@@ -334,6 +356,26 @@ fn known_findings_are_errors() {
     assert!(
         Model::parse(flow).unwrap().validate().is_err(),
         "fluxo com intervalo zero deve ser inválido"
+    );
+    // The largest f64 among the values of a data entry (examples/dados_reais.ron mutated):
+    // the bootstrap samples summed past the largest f64 and the refits got an infinite
+    // mean, whose quantiles crawled for tens of minutes. Now the fit refuses those values
+    // and the empirical choice ends at once.
+    let values = "0.3295, 0.2603, 1.7976931348623157e308, 0.229, 0.4144, 0.3463, 0.2232, 0.403, \
+        0.215, 0.3735, 0.2279, 0.2363, 0.3698, 0.5307, 0.2495, 0.2893, 0.451, 0.5791, 0.4308, \
+        0.3587, 0.5905, 0.2186, 0.5434, 0.3158, 0.2577, 0.2471, 0.3234, 0.5265, 0.2723, 0.4326";
+    let dados = format!(
+        "Model(name: \"m\", run: (stop_time: 100.0), objects: [{src},
+            (name: \"p\", kind: Processor(process: Const(1.0), setup: None)), {sink}],
+         connections: [(\"a\", \"p\"), (\"p\", \"s\")],
+         data: [(field: \"p.setup\", values: [{values}], choose: Empirical)])"
+    );
+    let started = std::time::Instant::now();
+    guarded(&dados).unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(120),
+        "o ajuste com 1.8e308 nos dados levou {:?}",
+        started.elapsed()
     );
 }
 

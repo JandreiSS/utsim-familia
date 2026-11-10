@@ -1,0 +1,37 @@
+// Vocabulário da linha Processos contínuos e batelada: termo do núcleo -> termo do processo,
+// aplicado na interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam.
+Vocabulary(
+    line: "processos",
+    terms: {
+        // Coisas e objetos.
+        "item": "lote",
+        "itens": "lotes",
+        "Source": "programação",
+        "Queue": "fila de lotes",
+        "Processor": "reator",
+        "Combiner": "mistura",
+        "Separator": "divisão",
+        "Sink": "tanque de produto",
+        "Transporter": "operador",
+        "Dispatcher": "equipe",
+        "operador": "operador",
+        "operadores": "operadores",
+        // Medidas.
+        "time_in_system": "tempo de atravessamento do lote",
+        "process_time": "tempo da batelada",
+        "content": "lotes em processo",
+        "throughput": "lotes por dia",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "sem lote",
+        "processing": "produzindo",
+        "setup": "em limpeza",
+        "blocked": "bloqueado",
+        "down": "quebrado",
+        "waiting_operator": "esperando o operador",
+        "off_shift": "fora do turno",
+        "utilize": "operando",
+        "travel_empty": "indo ao reator",
+        "empty": "vazio",
+    },
+)

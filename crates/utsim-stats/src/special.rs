@@ -79,7 +79,11 @@ pub fn trigamma(mut x: f64) -> f64 {
 
 /// Regularised lower incomplete gamma function `P(a, x)`.
 pub fn gamma_p(a: f64, x: f64) -> f64 {
-    if x <= 0.0 {
+    if x.is_nan() || a.is_nan() {
+        f64::NAN
+    } else if x == f64::INFINITY {
+        1.0
+    } else if x <= 0.0 {
         0.0
     } else if x < a + 1.0 {
         gamma_series(a, x)
@@ -90,7 +94,11 @@ pub fn gamma_p(a: f64, x: f64) -> f64 {
 
 /// Regularised upper incomplete gamma function `Q(a, x) = 1 - P(a, x)`.
 pub fn gamma_q(a: f64, x: f64) -> f64 {
-    if x <= 0.0 {
+    if x.is_nan() || a.is_nan() {
+        f64::NAN
+    } else if x == f64::INFINITY {
+        0.0
+    } else if x <= 0.0 {
         1.0
     } else if x < a + 1.0 {
         1.0 - gamma_series(a, x)

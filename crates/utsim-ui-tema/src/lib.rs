@@ -117,6 +117,21 @@ pub fn style() -> Style {
     style
 }
 
+/// O destaque do app: a aba ou o item selecionado (e o texto selecionado) na cor do app,
+/// a mesma do lançador, em vez do azul do tema. Chame depois de [`install`].
+pub fn usar_cor_do_app(ctx: &Context, cor: Color32) {
+    // Um pouco mais escura, para o texto branco ler bem.
+    let fundo = Color32::from_rgb(
+        (f32::from(cor.r()) * 0.78) as u8,
+        (f32::from(cor.g()) * 0.78) as u8,
+        (f32::from(cor.b()) * 0.78) as u8,
+    );
+    ctx.all_styles_mut(|s| {
+        s.visuals.selection.bg_fill = fundo;
+        s.visuals.selection.stroke.color = Color32::WHITE;
+    });
+}
+
 /// Maximiza a janela de verdade nos primeiros quadros. No Windows, o pedido do construtor
 /// (`with_maximized`) às vezes marca a janela como maximizada sem mudar o tamanho; tirar e
 /// pôr de novo resolve. Chame em todo quadro: só age uma vez.
@@ -264,6 +279,9 @@ pub mod captura;
 
 #[cfg(feature = "abertura")]
 pub mod abertura;
+
+#[cfg(feature = "abertura")]
+pub mod navegacao;
 
 pub mod arquivos;
 

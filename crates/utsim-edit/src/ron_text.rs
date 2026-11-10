@@ -80,6 +80,20 @@ pub fn operator_uses(list: &[utsim_objects::OperatorUse]) -> String {
     format!("[{}]", parts.join(", "))
 }
 
+/// RON of a process time by recipe (`recipe` of a processor).
+pub fn recipe(r: &utsim_objects::Recipe) -> String {
+    let rows: Vec<String> = r
+        .times
+        .iter()
+        .map(|t| format!("(value: {}, time: {})", float(t.value), dist(&t.time)))
+        .collect();
+    format!(
+        "(label: {}, times: [{}])",
+        string(&r.label),
+        rows.join(", ")
+    )
+}
+
 /// RON of a product changeover (`changeover` of a processor).
 pub fn changeover(c: &utsim_objects::Changeover) -> String {
     let rows: Vec<String> = c
