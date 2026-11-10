@@ -7,7 +7,7 @@ use utsim_core::task::{
 };
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind,
-    Time, WorkPhase,
+    Time, Value, WorkPhase,
 };
 
 /// Operators a processor needs (phase 4, contract): `count` members of `team`
@@ -36,6 +36,40 @@ pub struct OperatorUse {
 
 fn one() -> usize {
     1
+}
+
+/// Product changeover (sequence-dependent setup): the processor's `setup` happens only when
+/// the item's `label` differs from that of the last item that started on the processor,
+/// and the time of each change comes from `matrix` (from, to) or, without a row, from
+/// `setup`. The processor starts ready for the first product that arrives (no setup).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Changeover {
+    /// Item label naming the product (`produto`).
+    pub label: String,
+    /// Time of each change, by the label values before and after.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matrix: Vec<ChangeoverTime>,
+}
+
+/// One cell of the changeover matrix: from product `from` to product `to` takes `time`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChangeoverTime {
+    pub from: f64,
+    pub to: f64,
+    pub time: Dist,
+}
+
+impl Changeover {
+    /// Time of the change from `from` to `to` (`None`: use the processor's `setup`).
+    pub fn time(&self, from: &Value, to: &Value) -> Option<&Dist> {
+        let (Some(a), Some(b)) = (from.as_num(), to.as_num()) else {
+            return None;
+        };
+        self.matrix
+            .iter()
+            .find(|c| c.from == a && c.to == b)
+            .map(|c| &c.time)
+    }
 }
 
 fn yes() -> bool {
@@ -115,6 +149,14 @@ pub struct Processor {
     operators: Option<(BlockId, OperatorUse)>,
     /// Other teams needed at the same time (see [`Processor::also`]).
     also: Vec<(BlockId, OperatorUse)>,
+    /// Product changeover (see [`Changeover`]).
+    changeover: Option<Changeover>,
+    /// Product of the last item that started (changeover only).
+    last_product: Option<Value>,
+    /// Setup time chosen for each item in a changeover (a matrix cell).
+    change_time: Vec<(ItemId, Dist)>,
+    /// Changeovers done (changeover only).
+    changes: u64,
     pending: Vec<Pending>,
     held: Vec<(ItemId, Crew)>,
     /// Servers in setup or processing over time (zero while the block is stopped).
@@ -139,6 +181,10 @@ impl Processor {
             timers: Vec::new(),
             operators: None,
             also: Vec::new(),
+            changeover: None,
+            last_product: None,
+            change_time: Vec::new(),
+            changes: 0,
             pending: Vec::new(),
             held: Vec::new(),
             busy: TimeWeighted::default(),
@@ -165,6 +211,35 @@ impl Processor {
     pub fn also(mut self, also: Vec<(BlockId, OperatorUse)>) -> Self {
         self.also = also;
         self
+    }
+
+    /// Setup only when the product changes (see [`Changeover`]).
+    pub fn changeover(mut self, changeover: Option<Changeover>) -> Self {
+        self.changeover = changeover;
+        self
+    }
+
+    /// First stage of an item that enters: setup unless there is none or, with a
+    /// changeover, the product is the same as the last one (the first product is free).
+    fn first_stage(&mut self, cx: &Ctx, item: ItemId) -> Phase {
+        if self.setup.is_none() {
+            return Phase::Processing;
+        }
+        let Some(c) = &self.changeover else {
+            return Phase::Setup;
+        };
+        let product = cx.item(item).label(&c.label).cloned();
+        let previous = std::mem::replace(&mut self.last_product, product.clone());
+        match (previous, product) {
+            (Some(a), Some(b)) if a != b => {
+                if let Some(d) = c.time(&a, &b) {
+                    self.change_time.push((item, d.clone()));
+                }
+                self.changes += 1;
+                Phase::Setup
+            }
+            _ => Phase::Processing,
+        }
     }
 
     pub fn operators(mut self, operators: Option<(BlockId, OperatorUse)>) -> Self {
@@ -392,7 +467,10 @@ impl Processor {
             .position(|(i, _)| *i == item)
             .map(|at| self.resume.remove(at).1);
         let (dist, tag) = if stage == Phase::Setup {
-            let setup = self.setup.as_ref().expect("setup stage needs a setup time");
+            let setup = match self.change_time.iter().position(|(i, _)| *i == item) {
+                Some(at) => &self.change_time[at].1,
+                None => self.setup.as_ref().expect("setup stage needs a setup time"),
+            };
             (setup, SETUP_DONE)
         } else {
             (&self.process, PROCESS_DONE)
@@ -506,6 +584,9 @@ impl Behavior for Processor {
         self.held.clear();
         self.resume.clear();
         self.suspended.clear();
+        self.last_product = None;
+        self.change_time.clear();
+        self.changes = 0;
         self.busy = TimeWeighted::default();
         self.blocked = TimeWeighted::default();
         cx.set_state(State::Idle);
@@ -527,15 +608,10 @@ impl Behavior for Processor {
         if n > self.capacity {
             return Err(format!("{n} itens, mas a capacidade é {}", self.capacity));
         }
-        let first = if self.setup.is_some() {
-            Phase::Setup
-        } else {
-            Phase::Processing
-        };
         let ids = cx.contents().to_vec();
         for (k, (&id, it)) in ids.iter().zip(&state.items).enumerate() {
             let stage = match it.phase {
-                None => first,
+                None => self.first_stage(cx, id),
                 Some(WorkPhase::Setup) if self.setup.is_none() => {
                     return Err(format!(
                         "item {}: fase Setup, mas o processador não tem setup",
@@ -617,11 +693,7 @@ impl Behavior for Processor {
     }
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
-        let first = if self.setup.is_some() {
-            Phase::Setup
-        } else {
-            Phase::Processing
-        };
+        let first = self.first_stage(cx, item);
         self.begin(cx, item, first);
         self.update_state(cx);
     }
@@ -631,6 +703,7 @@ impl Behavior for Processor {
         self.timers.retain(|t| !(t.item == item && t.tag == tag));
         match tag {
             SETUP_DONE => {
+                self.change_time.retain(|(i, _)| *i != item);
                 // Keep the crew only if the process phase needs the same teams.
                 if self.teams(Phase::Processing) != self.teams(Phase::Setup) {
                     self.release_operators(cx, item);
@@ -649,6 +722,7 @@ impl Behavior for Processor {
 
     fn on_exit(&mut self, cx: &mut Ctx, item: ItemId) {
         self.phases.retain(|(id, _)| *id != item);
+        self.change_time.retain(|(id, _)| *id != item);
         self.resume.retain(|(id, _)| *id != item);
         self.update_state(cx);
     }
@@ -708,14 +782,20 @@ impl Behavior for Processor {
         let now = cx.now();
         self.busy.reset(now);
         self.blocked.reset(now);
+        self.changes = 0;
     }
 
     fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
-        vec![
+        let mut m = vec![
             ("servers.busy".to_string(), self.busy.mean(now)),
             ("servers.blocked".to_string(), self.blocked.mean(now)),
             ("servers.capacity".to_string(), self.capacity as f64),
-        ]
+        ];
+        // Only with a changeover, so the reports of other models stay as they were.
+        if self.changeover.is_some() {
+            m.push(("changeovers".to_string(), self.changes as f64));
+        }
+        m
     }
 
     fn on_resume(&mut self, cx: &mut Ctx) {

@@ -80,6 +80,31 @@ pub fn operator_uses(list: &[utsim_objects::OperatorUse]) -> String {
     format!("[{}]", parts.join(", "))
 }
 
+/// RON of a product changeover (`changeover` of a processor).
+pub fn changeover(c: &utsim_objects::Changeover) -> String {
+    let rows: Vec<String> = c
+        .matrix
+        .iter()
+        .map(|m| {
+            format!(
+                "(from: {}, to: {}, time: {})",
+                float(m.from),
+                float(m.to),
+                dist(&m.time)
+            )
+        })
+        .collect();
+    if rows.is_empty() {
+        format!("(label: {})", string(&c.label))
+    } else {
+        format!(
+            "(label: {}, matrix: [{}])",
+            string(&c.label),
+            rows.join(", ")
+        )
+    }
+}
+
 pub fn string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {

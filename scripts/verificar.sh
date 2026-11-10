@@ -17,7 +17,14 @@ passo() {
 }
 
 passo "1/7 Formatação (cargo fmt --check)"
-cargo fmt --all -- --check || falha "formatação fora do padrão. Rode: cargo fmt --all"
+# Pacote por pacote: com o workspace grande, `cargo fmt --all` passa da linha de comando
+# máxima do Windows (os error 206).
+for toml in crates/*/Cargo.toml; do
+    # Crates fora do workspace (o `exclude` do Cargo.toml da raiz) ficam de fora.
+    grep -q "\"$(dirname "$toml")\"" <(grep '^exclude' Cargo.toml) && continue
+    pacote=$(awk -F'"' '/^name = /{print $2; exit}' "$toml")
+    cargo fmt -p "$pacote" -- --check || falha "formatação fora do padrão em $pacote. Rode: cargo fmt -p $pacote"
+done
 
 passo "2/7 Lints (cargo clippy -D warnings)"
 cargo clippy --workspace --exclude utsim-viewer --exclude utsim-godot --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
