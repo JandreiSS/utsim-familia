@@ -30,6 +30,9 @@ pub const FORMAT: u32 = 1;
 pub const STABLE: &str = "estavel";
 /// The test channel.
 pub const TESTING: &str = "testes";
+/// Id of the launcher itself in the manifest: its NSIS installer, published so an installed
+/// launcher updates itself. Never shown as an app card.
+pub const LAUNCHER: &str = "launcher";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Envelope {
@@ -244,6 +247,24 @@ impl Manifest {
 
     pub fn product_mut(&mut self, id: &str) -> Option<&mut Product> {
         self.products.iter_mut().find(|p| p.id == id)
+    }
+
+    /// The products shown as apps: every one but the launcher itself.
+    pub fn apps(&self) -> impl Iterator<Item = &Product> {
+        self.products.iter().filter(|p| p.id != LAUNCHER)
+    }
+
+    /// The launcher release newer than `running` (the version of this launcher) in `channel`
+    /// with a package for `platform`, if any.
+    pub fn launcher_update(
+        &self,
+        channel: &str,
+        platform: &str,
+        running: &str,
+    ) -> Option<&Release> {
+        self.product(LAUNCHER)?
+            .latest(channel, platform)
+            .filter(|r| compare_versions(&r.version, running).is_gt())
     }
 }
 
@@ -712,5 +733,57 @@ mod tests {
         assert_eq!(compare_versions("0.9.1-rc10", "0.9.1-rc9"), Greater);
         assert_eq!(compare_versions("1.0", "1.0.0"), Equal);
         assert_eq!(compare_versions("1.0.0+abc", "1.0.0"), Equal);
+        assert_eq!(compare_versions("0.2.0", "0.2.0-dev"), Greater);
+        assert_eq!(compare_versions("0.2.0-rc1", "0.2.0-dev"), Greater);
+        assert_eq!(compare_versions("0.2.0-rc1", "0.1.9"), Greater);
+    }
+
+    fn launcher_release(version: &str, channel: &str) -> Release {
+        Release {
+            version: version.into(),
+            channel: channel.into(),
+            executable: "utsim-launcher-instalador.exe".into(),
+            packages: vec![Package {
+                platform: "windows-x64".into(),
+                size: 1,
+                sha256: "00".into(),
+                cipher: crate::crypto::PACKAGE_CIPHER.into(),
+                ..Package::default()
+            }],
+            ..Release::default()
+        }
+    }
+
+    #[test]
+    fn launcher_update_compares_versions() {
+        let mut m = sample();
+        assert!(m.launcher_update(STABLE, "windows-x64", "0.1.0").is_none());
+        m.products.push(Product {
+            id: LAUNCHER.into(),
+            name: "UTSim Launcher".into(),
+            releases: vec![
+                launcher_release("0.2.0", STABLE),
+                launcher_release("0.3.0-rc1", TESTING),
+            ],
+            ..Product::default()
+        });
+        let up = |ch, running| {
+            m.launcher_update(ch, "windows-x64", running)
+                .map(|r| r.version.clone())
+        };
+        assert_eq!(up(STABLE, "0.1.0").as_deref(), Some("0.2.0"));
+        assert_eq!(up(STABLE, "0.2.0-dev").as_deref(), Some("0.2.0"));
+        assert_eq!(up(STABLE, "0.2.0-rc3").as_deref(), Some("0.2.0"));
+        assert_eq!(up(STABLE, "0.2.0"), None);
+        assert_eq!(up(STABLE, "0.2.1"), None);
+        // The test channel sees the release candidate too; stable never does.
+        assert_eq!(up(TESTING, "0.2.0").as_deref(), Some("0.3.0-rc1"));
+        assert_eq!(up(TESTING, "0.3.0-rc1"), None);
+        assert_eq!(up(TESTING, "0.3.0"), None);
+        // No package for this platform: nothing to offer.
+        assert_eq!(m.launcher_update(STABLE, "linux-x64", "0.1.0"), None);
+        // The launcher is not an app.
+        assert!(m.apps().all(|p| p.id != LAUNCHER));
+        assert_eq!(m.apps().count(), m.products.len() - 1);
     }
 }
