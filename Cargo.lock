@@ -8012,7 +8012,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8035,9 +8035,9 @@ dependencies = [
  "utsim-qualidade-core",
  "utsim-quality",
  "utsim-stats",
+ "utsim-troca",
  "utsim-ui-tema",
  "winresource",
- "zip 2.6.1",
 ]
 
 [[package]]
@@ -8490,6 +8490,19 @@ dependencies = [
  "rand_pcg",
  "serde",
  "utsim-core",
+]
+
+[[package]]
+name = "utsim-troca"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "utsim-estudo",
+ "utsim-pasta",
 ]
 
 [[package]]

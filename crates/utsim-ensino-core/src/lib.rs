@@ -27,6 +27,7 @@ pub mod dados;
 pub mod desafio;
 pub mod dicas;
 pub mod editor;
+pub mod editor_dados;
 pub mod missao;
 pub mod modelagem;
 pub mod motor;

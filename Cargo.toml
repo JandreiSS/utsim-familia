@@ -42,6 +42,7 @@ default-members = [
     "crates/utsim-script",
     "crates/utsim-seguranca-core",
     "crates/utsim-stats",
+    "crates/utsim-troca",
     "crates/utsim-twin",
     "crates/utsim-ui-tema",
     "crates/utsim-web",
@@ -71,6 +72,7 @@ utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
 utsim-estudo = { path = "crates/utsim-estudo" }
 utsim-pasta = { path = "crates/utsim-pasta" }
+utsim-troca = { path = "crates/utsim-troca" }
 utsim-posto-ui = { path = "crates/utsim-posto-ui" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }

@@ -581,14 +581,7 @@ impl App {
         }
         ui.label(texto::outros_pacotes_texto());
         ui.horizontal(|ui| {
-            abertura::campo(
-                ui,
-                &mut self.caminho_pacote,
-                utsim_ui_tema::arquivos::Tipo::Abrir,
-                texto::ab_pacote(),
-                &[abertura::filtro_pacote()],
-                360.0,
-            );
+            abertura::campo_pacote(ui, &mut self.caminho_pacote, 360.0);
             if ui.button(texto::abrir_pacote()).clicked() {
                 let c = PathBuf::from(self.caminho_pacote.trim().trim_matches('"'));
                 match self.abrir_pacote(&c) {

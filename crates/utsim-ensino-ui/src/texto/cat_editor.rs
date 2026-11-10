@@ -402,9 +402,9 @@ textos! {
         "answer: {}",
         "respuesta: {}";
     ed_pv_dados:
-        "pergunta sobre dados (editada na etapa C)",
-        "question about data (edited in stage C)",
-        "pregunta sobre datos (editada en la etapa C)";
+        "Pergunta sobre dados",
+        "Question about data",
+        "Pregunta sobre datos";
     ed_justificativa:
         "Perguntas de justificativa",
         "Justification questions",
@@ -437,4 +437,444 @@ textos! {
         "Adicionar dica",
         "Add hint",
         "Agregar pista";
+    ed_calibrar_sem_alavanca:
+        "Uma missão só de perguntas não precisa de calibração: marque ao menos uma alavanca para calibrar.",
+        "A mission of questions only needs no calibration: tick at least one lever to calibrate.",
+        "Una misión solo de preguntas no necesita calibración: marque al menos una palanca para calibrar.";
+    ed_dados:
+        "Dados da missão",
+        "Mission data",
+        "Datos de la misión";
+    ed_dados_dica:
+        "Cada aluno recebe os próprios dados, gerados pela receita a partir da semente dele, e a resposta certa é calculada sobre esses dados.",
+        "Each student gets their own data, made by the recipe from their seed, and the right answer is computed from those data.",
+        "Cada alumno recibe sus propios datos, generados por la receta a partir de su semilla, y la respuesta correcta se calcula sobre esos datos.";
+    ed_novo_conjunto:
+        "Novo conjunto",
+        "New set",
+        "Nuevo conjunto";
+    ed_tipo:
+        "Tipo",
+        "Kind",
+        "Tipo";
+    ed_nome_conjunto:
+        "Nome",
+        "Name",
+        "Nombre";
+    ed_ferramenta:
+        "Ferramenta",
+        "Tool",
+        "Herramienta";
+    ed_sem_ferramenta:
+        "nenhuma",
+        "none",
+        "ninguna";
+    ed_lie:
+        "Limite inferior",
+        "Lower limit",
+        "Límite inferior";
+    ed_lse:
+        "Limite superior",
+        "Upper limit",
+        "Límite superior";
+    ed_add_pergunta_dados:
+        "+ pergunta",
+        "+ question",
+        "+ pregunta";
+    ed_add_pergunta_sobre_dados:
+        "Adicionar pergunta sobre dados",
+        "Add question about data",
+        "Agregar pregunta sobre datos";
+    ed_amostra:
+        "Amostra dos dados",
+        "Data sample",
+        "Muestra de los datos";
+    ed_amostra_efeito:
+        "Efeito plantado: {}",
+        "Planted effect: {}",
+        "Efecto plantado: {}";
+    ed_amostra_mais:
+        "… {} linhas",
+        "… {} rows",
+        "… {} filas";
+    ed_amostra_invalida:
+        "Corrija os problemas do conjunto para ver a amostra.",
+        "Fix the problems of the set to see the sample.",
+        "Corrija los problemas del conjunto para ver la muestra.";
+    ed_analisar_em:
+        "Analisar em",
+        "Analyse in",
+        "Analizar en";
+    ed_app_estatistica:
+        "UTSim Estatística",
+        "UTSim Estatística",
+        "UTSim Estatística";
+    ed_app_qualidade:
+        "UTSim Qualidade",
+        "UTSim Qualidade",
+        "UTSim Qualidade";
+    ed_tg_tempos:
+        "Tempos de processo",
+        "Process times",
+        "Tiempos de proceso";
+    ed_tg_msa:
+        "Estudo de R&R",
+        "Gauge R&R study",
+        "Estudio de R&R";
+    ed_tg_media:
+        "Grupos com uma média deslocada",
+        "Groups with one shifted mean",
+        "Grupos con una media desplazada";
+    ed_tg_serie:
+        "Série com um padrão",
+        "Series with a pattern",
+        "Serie con un patrón";
+    ed_tg_fatorial:
+        "Experimento fatorial",
+        "Factorial experiment",
+        "Experimento factorial";
+    ed_tg_pareado:
+        "Comparação pareada",
+        "Paired comparison",
+        "Comparación pareada";
+    ed_tg_subgrupos:
+        "Subgrupos de medidas",
+        "Subgroups of measures",
+        "Subgrupos de medidas";
+    ed_dist:
+        "Distribuição",
+        "Distribution",
+        "Distribución";
+    ed_dist_normal:
+        "Normal",
+        "Normal",
+        "Normal";
+    ed_dist_exp:
+        "Exponencial",
+        "Exponential",
+        "Exponencial";
+    ed_dist_uniforme:
+        "Uniforme",
+        "Uniform",
+        "Uniforme";
+    ed_dist_triangular:
+        "Triangular",
+        "Triangular",
+        "Triangular";
+    ed_dist_lognormal:
+        "Log-normal",
+        "Log-normal",
+        "Log-normal";
+    ed_g_valores:
+        "Valores",
+        "Values",
+        "Valores";
+    ed_g_media:
+        "Média",
+        "Mean",
+        "Media";
+    ed_g_sd:
+        "Desvio padrão",
+        "Standard deviation",
+        "Desviación estándar";
+    ed_g_min:
+        "Mínimo",
+        "Minimum",
+        "Mínimo";
+    ed_g_moda:
+        "Moda",
+        "Mode",
+        "Moda";
+    ed_g_max:
+        "Máximo",
+        "Maximum",
+        "Máximo";
+    ed_g_pecas:
+        "Peças",
+        "Parts",
+        "Piezas";
+    ed_g_operadores:
+        "Operadores",
+        "Operators",
+        "Operadores";
+    ed_g_repeticoes:
+        "Repetições",
+        "Repeats",
+        "Repeticiones";
+    ed_g_sd_peca:
+        "Desvio das peças",
+        "Part deviation",
+        "Desviación de las piezas";
+    ed_g_sd_operador:
+        "Desvio dos operadores",
+        "Operator deviation",
+        "Desviación de los operadores";
+    ed_g_sd_repet:
+        "Desvio da repetibilidade",
+        "Repeatability deviation",
+        "Desviación de la repetibilidad";
+    ed_g_grupos:
+        "Grupos",
+        "Groups",
+        "Grupos";
+    ed_g_add_grupo:
+        "Adicionar grupo",
+        "Add group",
+        "Agregar grupo";
+    ed_g_afetado:
+        "Grupo deslocado",
+        "Shifted group",
+        "Grupo desplazado";
+    ed_g_sortear:
+        "Sortear o grupo por aluno",
+        "Draw the group by student",
+        "Sortear el grupo por alumno";
+    ed_g_por_grupo:
+        "Valores por grupo",
+        "Values per group",
+        "Valores por grupo";
+    ed_g_deslocamento:
+        "Deslocamento (em desvios padrão)",
+        "Shift (in standard deviations)",
+        "Desplazamiento (en desviaciones estándar)";
+    ed_g_fatores:
+        "Fatores",
+        "Factors",
+        "Factores";
+    ed_g_add_fator:
+        "Adicionar fator",
+        "Add factor",
+        "Agregar factor";
+    ed_g_efeito:
+        "Efeito",
+        "Effect",
+        "Efecto";
+    ed_g_replicas:
+        "Réplicas",
+        "Replicates",
+        "Réplicas";
+    ed_g_interacao:
+        "Interação dos dois primeiros fatores",
+        "Interaction of the first two factors",
+        "Interacción de los dos primeros factores";
+    ed_g_diferenca:
+        "Diferença (B menos A)",
+        "Difference (B minus A)",
+        "Diferencia (B menos A)";
+    ed_g_sd_diferenca:
+        "Desvio da diferença",
+        "Deviation of the difference",
+        "Desviación de la diferencia";
+    ed_g_subgrupos:
+        "Subgrupos",
+        "Subgroups",
+        "Subgrupos";
+    ed_g_tamanho:
+        "Medidas por subgrupo",
+        "Measures per subgroup",
+        "Medidas por subgrupo";
+    ed_g_com_padrao:
+        "Com um padrão",
+        "With a pattern",
+        "Con un patrón";
+    ed_pad:
+        "Padrão",
+        "Pattern",
+        "Patrón";
+    ed_pad_deslocamento:
+        "Deslocamento",
+        "Shift",
+        "Desplazamiento";
+    ed_pad_tendencia:
+        "Tendência",
+        "Trend",
+        "Tendencia";
+    ed_pad_inicio_ponto:
+        "Começa no ponto",
+        "Starts at point",
+        "Empieza en el punto";
+    ed_pad_inicio_subgrupo:
+        "Começa no subgrupo",
+        "Starts at subgroup",
+        "Empieza en el subgrupo";
+    ed_pad_tamanho:
+        "Tamanho (em desvios padrão)",
+        "Size (in standard deviations)",
+        "Tamaño (en desviaciones estándar)";
+    ed_pad_inclinacao:
+        "Inclinação (desvios padrão por ponto)",
+        "Slope (standard deviations per point)",
+        "Pendiente (desviaciones estándar por punto)";
+    ed_conjunto:
+        "Conjunto de dados",
+        "Data set",
+        "Conjunto de datos";
+    ed_questao:
+        "Questão",
+        "Question",
+        "Cuestión";
+    ed_q_rr_pct:
+        "%R&R do estudo",
+        "%R&R of the study",
+        "%R&R del estudio";
+    ed_q_rr_veredito:
+        "Veredito do R&R",
+        "Verdict of the R&R",
+        "Veredicto del R&R";
+    ed_q_ppk:
+        "Capacidade Ppk",
+        "Capability Ppk",
+        "Capacidad Ppk";
+    ed_q_grupo:
+        "Grupo deslocado",
+        "Shifted group",
+        "Grupo desplazado";
+    ed_q_primeiro_sinal:
+        "Primeiro sinal na carta de individuais",
+        "First signal on the individuals chart",
+        "Primera señal en la carta de individuales";
+    ed_q_efeito:
+        "Efeito de um fator",
+        "Effect of a factor",
+        "Efecto de un factor";
+    ed_q_meia_largura:
+        "Meia largura do intervalo da média",
+        "Half-width of the interval of the mean",
+        "Semiancho del intervalo de la media";
+    ed_q_replicacoes:
+        "Replicações necessárias",
+        "Replications needed",
+        "Replicaciones necesarias";
+    ed_q_dif_media:
+        "Diferença média entre B e A",
+        "Mean difference between B and A",
+        "Diferencia media entre B y A";
+    ed_q_dif_signif:
+        "A diferença é significativa",
+        "The difference is significant",
+        "La diferencia es significativa";
+    ed_q_primeiro_sub:
+        "Primeiro subgrupo fora dos limites",
+        "First subgroup beyond the limits",
+        "Primer subgrupo fuera de los límites";
+    ed_q_cpk:
+        "Capacidade Cpk",
+        "Capability Cpk",
+        "Capacidad Cpk";
+    ed_q_fonte:
+        "Fonte dominante da variação",
+        "Dominant source of variation",
+        "Fuente dominante de la variación";
+    ed_qd_rr_pct:
+        "Pede o %R&R do estudo, pelo método da análise de variância.",
+        "Asks for the %R&R of the study, by the analysis of variance method.",
+        "Pide el %R&R del estudio, por el método del análisis de varianza.";
+    ed_qd_rr_veredito:
+        "Pede a classe do sistema de medição: aceitável, marginal ou inaceitável.",
+        "Asks for the class of the measurement system: acceptable, marginal or unacceptable.",
+        "Pide la clase del sistema de medición: aceptable, marginal o inaceptable.";
+    ed_qd_ppk:
+        "Pede o Ppk dos valores individuais frente aos limites de especificação.",
+        "Asks for the Ppk of the individual values against the specification limits.",
+        "Pide el Ppk de los valores individuales frente a los límites de especificación.";
+    ed_qd_grupo:
+        "O aluno aponta o grupo cuja média foi deslocada.",
+        "The student points out the group whose mean was shifted.",
+        "El alumno señala el grupo cuya media fue desplazada.";
+    ed_qd_primeiro_sinal:
+        "Pede o primeiro ponto, depois da base, que quebra uma regra de Nelson, com limites tirados dos primeiros pontos.",
+        "Asks for the first point, after the base, that breaks a Nelson rule, with limits taken from the first points.",
+        "Pide el primer punto, después de la base, que rompe una regla de Nelson, con límites tomados de los primeros puntos.";
+    ed_qd_efeito:
+        "Pede o efeito do fator: a média no nível alto menos a média no nível baixo.",
+        "Asks for the effect of the factor: the mean at the high level minus the mean at the low level.",
+        "Pide el efecto del factor: la media en el nivel alto menos la media en el nivel bajo.";
+    ed_qd_meia_largura:
+        "Pede a meia largura do intervalo de confiança da média dos valores.",
+        "Asks for the half-width of the confidence interval of the mean of the values.",
+        "Pide el semiancho del intervalo de confianza de la media de los valores.";
+    ed_qd_replicacoes:
+        "Pede quantas replicações dão a meia largura desejada, usando estes valores como piloto.",
+        "Asks how many replications give the wanted half-width, using these values as the pilot.",
+        "Pide cuántas replicaciones dan el semiancho deseado, usando estos valores como piloto.";
+    ed_qd_dif_media:
+        "Pede a média das diferenças B menos A dos pares.",
+        "Asks for the mean of the B minus A differences of the pairs.",
+        "Pide la media de las diferencias B menos A de los pares.";
+    ed_qd_dif_signif:
+        "O aluno diz se B difere de A pelo teste t pareado a 5 %.",
+        "The student says whether B differs from A by the paired t test at 5 %.",
+        "El alumno dice si B difiere de A por la prueba t pareada al 5 %.";
+    ed_qd_primeiro_sub:
+        "Pede o primeiro subgrupo, depois da base, com um ponto fora dos limites da carta de médias.",
+        "Asks for the first subgroup, after the base, with a point beyond the limits of the averages chart.",
+        "Pide el primer subgrupo, después de la base, con un punto fuera de los límites de la carta de medias.";
+    ed_qd_cpk:
+        "Pede o Cpk dos subgrupos frente aos limites de especificação.",
+        "Asks for the Cpk of the subgroups against the specification limits.",
+        "Pide el Cpk de los subgrupos frente a los límites de especificación.";
+    ed_qd_fonte:
+        "O aluno aponta a maior fonte de variação da medição: o instrumento ou os operadores.",
+        "The student points out the larger source of the measurement variation: the instrument or the operators.",
+        "El alumno señala la mayor fuente de variación de la medición: el instrumento o los operadores.";
+    ed_qp_base_pontos:
+        "Pontos da base dos limites",
+        "Points of the limits base",
+        "Puntos de la base de los límites";
+    ed_qp_base_subgrupos:
+        "Subgrupos da base dos limites",
+        "Subgroups of the limits base",
+        "Subgrupos de la base de los límites";
+    ed_qp_fator:
+        "Fator",
+        "Factor",
+        "Factor";
+    ed_qp_confianca:
+        "Confiança (%)",
+        "Confidence (%)",
+        "Confianza (%)";
+    ed_qp_meia_largura:
+        "Meia largura desejada",
+        "Wanted half-width",
+        "Semiancho deseado";
+    ed_conferir_questao:
+        "Conferir com os dados",
+        "Check with the data",
+        "Comprobar con los datos";
+    ed_resposta_exemplo:
+        "Resposta com os dados de exemplo: {}",
+        "Answer with the sample data: {}",
+        "Respuesta con los datos de ejemplo: {}";
+    ed_sem_resposta_exemplo:
+        "Os dados de exemplo não têm resposta: {}",
+        "The sample data have no answer: {}",
+        "Los datos de ejemplo no tienen respuesta: {}";
+    ed_sem_resposta_n:
+        "{} de {} alunos de teste recebem dados sem resposta",
+        "{} of {} test students get data with no answer",
+        "{} de {} alumnos de prueba reciben datos sin respuesta";
+    ed_questao_invalida:
+        "Corrija os problemas da pergunta e do conjunto para conferir.",
+        "Fix the problems of the question and of the set to check.",
+        "Corrija los problemas de la pregunta y del conjunto para comprobar.";
+    ed_conferir_dados:
+        "Conferir os dados",
+        "Check the data",
+        "Comprobar los datos";
+    ed_conferir_dados_dica:
+        "Gera dados para 30 alunos de teste e avisa onde falta resposta ou pergunta.",
+        "Generates data for 30 test students and warns where an answer or a question is missing.",
+        "Genera datos para 30 alumnos de prueba y avisa dónde falta respuesta o pregunta.";
+    ed_g_grupo_novo:
+        "Grupo {}",
+        "Group {}",
+        "Grupo {}";
+    ed_g_fator_novo:
+        "Fator {}",
+        "Factor {}",
+        "Factor {}";
+    ed_dados_sem_avisos:
+        "Os dados não têm avisos.",
+        "The data have no warnings.",
+        "Los datos no tienen avisos.";
 }

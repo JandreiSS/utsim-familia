@@ -752,7 +752,7 @@ impl TelaFerramentas {
             });
             ui.horizontal(|ui| {
                 ui.label("Modelo");
-                ui.add(egui::TextEdit::singleline(&mut n.modelo).desired_width(130.0));
+                crate::util::campo_modelo(ui, &mut n.modelo, s.unidade.as_ref(), 130.0);
                 if !modelos.is_empty() {
                     egui::ComboBox::from_id_salt("novo_modelo")
                         .selected_text("dos postos")
@@ -926,9 +926,11 @@ impl TelaFerramentas {
                                 });
                             ui.end_row();
                             ui.label("Modelo");
-                            ui.add(
-                                egui::TextEdit::singleline(&mut e.assunto.modelo)
-                                    .desired_width(260.0),
+                            crate::util::campo_modelo(
+                                ui,
+                                &mut e.assunto.modelo,
+                                s.unidade.as_ref(),
+                                260.0,
                             );
                             ui.end_row();
                             ui.label("Nó");
@@ -1200,10 +1202,17 @@ impl TelaFerramentas {
         egui::CollapsingHeader::new("Importar e exportar dados")
             .id_salt(("csv", a.id.clone()))
             .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.csv)
-                        .hint_text("caminho do arquivo .csv ou .xlsx")
-                        .desired_width(f32::INFINITY),
+                let largura = (ui.available_width() - 110.0).max(160.0);
+                utsim_ui_tema::arquivos::campo(
+                    ui,
+                    &mut self.csv,
+                    utsim_ui_tema::arquivos::Tipo::Abrir,
+                    "Importar dados",
+                    &[utsim_ui_tema::arquivos::Filtro {
+                        nome: "Planilha (.csv, .xlsx)",
+                        extensoes: &["csv", "xlsx"],
+                    }],
+                    largura,
                 );
                 let caminho = self.csv.trim().to_string();
                 let xlsx = caminho.to_lowercase().ends_with(".xlsx");
