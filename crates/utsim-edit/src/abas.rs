@@ -600,6 +600,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         )
         .ajuda("As zonas são desenhadas no piso, com a ferramenta Zona do editor."),
     );
+    operacao(model, obj, out);
     let s = bloco(obj, "safety");
     out.push(campo(
         "safety",
@@ -774,6 +775,77 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
             )
             .faixa(0.0, 2.0)
             .ajuda("0 nenhuma, 1 alguma, 2 forte"),
+        );
+    }
+}
+
+/// The operation rule of a process (`operation`): who may operate it (skills and protective
+/// equipment) and the time to get in and out.
+fn operacao(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
+    if !matches!(obj.kind, ObjectKind::Processor { .. }) {
+        return;
+    }
+    let op = bloco(obj, "operation");
+    out.push(
+        campo(
+            "operation",
+            "Regra de operação (quem pode operar)",
+            Tipo::Bloco,
+            sim(!op.is_null()),
+            0,
+        )
+        .ajuda("Sem a regra, qualquer pessoa da equipe opera o posto, sem tempo de entrar e sair."),
+    );
+    let Some(regra) = obj.operation.as_deref() else {
+        return;
+    };
+    let mut habilidades = campo(
+        "operation.skills",
+        "Habilidades exigidas",
+        Tipo::Conjunto,
+        regra.skills.join(", "),
+        1,
+    )
+    .ajuda("Todo operador precisa de todas, além das exigidas por cada equipe.");
+    for o in &model.objects {
+        for s in o.person.iter().flat_map(|p| p.skills.iter()) {
+            if !habilidades.escolhas.contains(s) {
+                habilidades.escolhas.push(s.clone());
+            }
+        }
+    }
+    habilidades.escolhas.sort();
+    out.push(habilidades);
+    out.push(
+        campo(
+            "operation.require_ppe",
+            "Exigir o EPI do posto e das zonas",
+            Tipo::Booleano,
+            sim(regra.require_ppe),
+            1,
+        )
+        .ajuda("O EPI que a pessoa veste é o EPI do nó dela."),
+    );
+    if regra.require_ppe {
+        out.push(campo(
+            "",
+            "EPI exigido de quem opera",
+            Tipo::Info,
+            model.required_ppe(obj).join(", "),
+            1,
+        ));
+    }
+    for (chave, rotulo) in [("enter", "Tempo para entrar"), ("leave", "Tempo para sair")] {
+        out.push(
+            campo(
+                format!("operation.{chave}"),
+                rotulo,
+                Tipo::Distribuicao,
+                dist_text(get(&op, chave)),
+                1,
+            )
+            .unidade("s")
+            .ajuda("Vazio: sem tempo. Exemplo: Const(15.0)"),
         );
     }
 }
@@ -1060,6 +1132,7 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
                 .map(|s| Value::String(s.into()))
                 .collect(),
         ),
+        Tipo::Distribuicao if t.is_empty() && c.caminho.starts_with("operation.") => Value::Null,
         Tipo::Distribuicao => {
             let d: Dist = ron::from_str(t)
                 .map_err(|e| format!("'{}': distribuição inválida ({e})", c.rotulo))?;
@@ -1307,5 +1380,55 @@ Model(
             mt.iter()
                 .any(|c| c.caminho == "downtime.mttr" && c.valor.contains("120"))
         );
+    }
+
+    #[test]
+    fn operation_rule_in_the_safety_tab() {
+        let mut d = doc();
+        let s = campos(d.model(), "torno", Aba::Seguranca).unwrap();
+        let regra = s.iter().find(|c| c.caminho == "operation").unwrap();
+        assert_eq!(regra.valor, "não");
+        assert!(!s.iter().any(|c| c.caminho == "operation.skills"));
+        // Only a process takes the rule.
+        let c = campos(d.model(), "cliente", Aba::Seguranca).unwrap();
+        assert!(!c.iter().any(|c| c.caminho == "operation"));
+
+        aplica(&mut d, |m| editar(m, "torno", "operation", "sim"));
+        aplica(&mut d, |m| editar(m, "torno", "ppe", "oculos"));
+        aplica(&mut d, |m| {
+            editar(m, "torno", "operation.skills", "torno, cnc, torno")
+        });
+        aplica(&mut d, |m| {
+            editar(m, "torno", "operation.require_ppe", "sim")
+        });
+        aplica(&mut d, |m| {
+            editar(m, "torno", "operation.enter", "Const(15.0)")
+        });
+        let op = d.model().objects[1].operation.as_deref().unwrap();
+        assert_eq!(op.skills, ["torno", "cnc"]);
+        assert!(op.require_ppe);
+        assert_eq!(op.enter, Some(Dist::Const(15.0)));
+        assert_eq!(op.leave, None);
+        let s = campos(d.model(), "torno", Aba::Seguranca).unwrap();
+        let epi = s
+            .iter()
+            .find(|c| c.rotulo == "EPI exigido de quem opera")
+            .unwrap();
+        assert_eq!(epi.valor, "oculos");
+        assert!(
+            s.iter()
+                .any(|c| c.caminho == "operation.enter" && c.valor.contains("15"))
+        );
+
+        // Empty time removes it, and the switch removes the rule.
+        aplica(&mut d, |m| editar(m, "torno", "operation.enter", ""));
+        assert_eq!(
+            d.model().objects[1].operation.as_deref().unwrap().enter,
+            None
+        );
+        aplica(&mut d, |m| editar(m, "torno", "operation", "não"));
+        assert!(d.model().objects[1].operation.is_none());
+        d.undo();
+        d.model().validate().unwrap();
     }
 }
