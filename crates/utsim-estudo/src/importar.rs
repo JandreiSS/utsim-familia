@@ -26,6 +26,9 @@ pub fn chave(f: Ferramenta) -> &'static str {
         Ferramenta::CincoPorques => "cinco_porques",
         Ferramenta::Fmea => "fmea",
         Ferramenta::A3 => "a3",
+        Ferramenta::Qfd => "qfd",
+        Ferramenta::Tolerancias => "tolerancias",
+        Ferramenta::PokaYoke => "poka_yoke",
     }
 }
 

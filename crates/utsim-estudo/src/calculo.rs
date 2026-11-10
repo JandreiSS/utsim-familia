@@ -14,6 +14,7 @@
 //! | Carta de controle | subgrupo (rótulo), valor; nas de atributos: amostra, contagem, tamanho |
 //! | MSA | peça, operador, valor |
 //! | FMEA | as de [`COLUNAS_FMEA`] |
+//! | QFD, tolerâncias, poka-yoke | pelo nome, ver [`projeto`] |
 
 use utsim_ferramentas::ap::{Ap, ApTable};
 use utsim_ferramentas::relatorios::{Chart, ChartKind, Kpi, Tone};
@@ -24,6 +25,13 @@ use utsim_quality::rules::RuleSet;
 
 use crate::tabela::numero;
 use crate::{Aplicacao, Ferramenta, num};
+
+pub mod projeto;
+
+pub use projeto::{
+    COLUNAS_POKA_YOKE, COLUNAS_QFD, COLUNAS_QFD_REQUISITOS, COLUNAS_QFD_TELHADO,
+    COLUNAS_TOLERANCIAS, COLUNAS_VERIFICACOES,
+};
 
 /// As colunas da FMEA, na ordem da tabela.
 pub const COLUNAS_FMEA: [&str; 10] = [
@@ -193,6 +201,9 @@ pub fn calcular(a: &Aplicacao, problema: &str) -> Resultado {
         Ferramenta::CincoPorques => porques(a, problema, &mut r),
         Ferramenta::Fmea => fmea(a, &mut r),
         Ferramenta::A3 => a3(a, &mut r),
+        Ferramenta::Qfd => projeto::qfd(a, &mut r),
+        Ferramenta::Tolerancias => projeto::tolerancias(a, &mut r),
+        Ferramenta::PokaYoke => projeto::poka_yoke(a, &mut r),
     }
     r
 }
