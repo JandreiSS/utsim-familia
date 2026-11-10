@@ -26,8 +26,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utsim_diario::{self as diario, Encadeado};
 pub use utsim_diario::{Chave, Elo, Problema, Selo};
+use utsim_lss_core::certificacao::Certification;
 use utsim_lss_core::domain::fields::saving as sf;
 use utsim_lss_core::op::Op;
+use utsim_lss_core::perfis::{Grant, Profile};
 use utsim_lss_core::tollgate::DecisionRecord;
 use utsim_lss_core::{EntityRef, Id, Kind, State, digest, format, privacidade};
 
@@ -522,7 +524,8 @@ pub fn check(root: &Path) -> Integrity {
 pub struct Approval {
     #[serde(rename = "projeto")]
     pub project: Id,
-    /// [`APPROVAL_TOLLGATE`] or [`APPROVAL_SAVING`].
+    /// [`APPROVAL_TOLLGATE`], [`APPROVAL_SAVING`], [`APPROVAL_CERTIFICATE`] or
+    /// [`APPROVAL_ROLES`].
     #[serde(rename = "tipo")]
     pub kind: String,
     /// The decision or the saving.
@@ -536,10 +539,15 @@ pub struct Approval {
     /// Hash of the content decided on.
     #[serde(rename = "conteudo")]
     pub content: String,
+    /// The signed items themselves, when the content is a list (the role list).
+    #[serde(rename = "itens", default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }
 
 pub const APPROVAL_TOLLGATE: &str = "tollgate";
 pub const APPROVAL_SAVING: &str = "ganho";
+pub const APPROVAL_CERTIFICATE: &str = "certificado";
+pub const APPROVAL_ROLES: &str = "papeis";
 
 /// The approval of a tollgate decision: the decision and the frozen content hash.
 pub fn tollgate_approval(project: Id, d: &DecisionRecord) -> Option<Approval> {
@@ -552,6 +560,7 @@ pub fn tollgate_approval(project: Id, d: &DecisionRecord) -> Option<Approval> {
         person,
         decision: decision.as_str().unwrap_or_default().to_string(),
         content: d.hash.clone(),
+        items: Vec::new(),
     })
 }
 
@@ -581,7 +590,159 @@ pub fn saving_approval(state: &State, project: Id, saving: Id) -> Option<Approva
         person,
         decision: "validado".into(),
         content: digest::hash_map(&content),
+        items: Vec::new(),
     })
+}
+
+/// The approval of an issued certificate by its issuer (the MBB): the number, the person,
+/// the level, the dates and the requirements met with their evidence.
+pub fn certificate_approval(program: Id, c: &Certification) -> Option<Approval> {
+    let person = c.issuer?;
+    let number = c.number?;
+    let level = serde_json::to_value(c.level).ok()?;
+    let mut content: BTreeMap<String, Value> = BTreeMap::new();
+    content.insert("numero".into(), Value::from(number));
+    content.insert(
+        "pessoa".into(),
+        Value::from(c.person.map(|p| p.to_string()).unwrap_or_default()),
+    );
+    content.insert("nivel".into(), level.clone());
+    content.insert(
+        "data".into(),
+        Value::from(c.date.map(|d| d.to_string()).unwrap_or_default()),
+    );
+    content.insert(
+        "valida_ate".into(),
+        Value::from(c.valid_until.map(|d| d.to_string()).unwrap_or_default()),
+    );
+    content.insert(
+        "requisitos".into(),
+        serde_json::to_value(&c.met).unwrap_or_default(),
+    );
+    content.insert("manual".into(), Value::from(c.manual));
+    content.insert("observacao".into(), Value::from(c.note.clone()));
+    Some(Approval {
+        project: program,
+        kind: APPROVAL_CERTIFICATE.into(),
+        record: c.id,
+        person,
+        decision: level.as_str().unwrap_or_default().to_string(),
+        content: digest::hash_map(&content),
+        items: Vec::new(),
+    })
+}
+
+/// One grant of the role list as signed: `<pessoa>:<perfil>:<unidade>`.
+pub fn grant_item(g: &Grant) -> String {
+    let profile = serde_json::to_value(g.profile)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
+    format!(
+        "{}:{profile}:{}",
+        g.person.map(|p| p.to_string()).unwrap_or_default(),
+        g.unit.map(|u| u.to_string()).unwrap_or_default()
+    )
+}
+
+/// The role list of the program as `signer` signs it: every grant, sorted.
+pub fn roles_approval(program: Id, grants: &[Grant], signer: Id) -> Approval {
+    let mut items: Vec<String> = grants.iter().map(grant_item).collect();
+    items.sort();
+    items.dedup();
+    let text = items.join("\n");
+    Approval {
+        project: program,
+        kind: APPROVAL_ROLES.into(),
+        record: program,
+        person: signer,
+        decision: "lista".into(),
+        content: diario::sha256_hex(text.as_bytes()),
+        items,
+    }
+}
+
+/// How the current role list stands against its signatures.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RolesCheck {
+    /// The last list signed by someone entitled to: who, when.
+    pub signed: Option<(Id, i64)>,
+    /// Grants of the current list that are not in the last signed list.
+    pub unsigned: Vec<Grant>,
+    /// Items of the last signed list that are no longer in the current one.
+    pub removed: Vec<String>,
+    /// Seals of the list by people who were not entitled to sign it (not the founder nor
+    /// an MBB of the list signed before).
+    pub not_entitled: Vec<Id>,
+}
+
+impl RolesCheck {
+    /// The current list is the signed one.
+    pub fn current(&self) -> bool {
+        self.signed.is_some() && self.unsigned.is_empty() && self.removed.is_empty()
+    }
+}
+
+/// Checks the role list of the program `program` (created by `founder`) against the seals
+/// of its folder: the signatures count in order, each one by the founder or by an MBB of
+/// the list signed before it, with an accepted key of the signer.
+pub fn roles_check(
+    seals: &Seals,
+    integrity: &Integrity,
+    program: Id,
+    founder: Id,
+    grants: &[Grant],
+) -> RolesCheck {
+    let mut list: Vec<(&Selo, &Approval)> = seals
+        .valid
+        .iter()
+        .filter(|(_, a)| a.kind == APPROVAL_ROLES && a.record == program)
+        .filter(|(s, a)| integrity.keys_of(a.person).contains(&s.publica.as_str()))
+        .filter(|(_, a)| {
+            let mut items = a.items.clone();
+            items.sort();
+            diario::sha256_hex(items.join("\n").as_bytes()) == a.content
+        })
+        .map(|(s, a)| (s, a))
+        .collect();
+    list.sort_by_key(|(s, _)| s.quando);
+    let mbb = serde_json::to_value(Profile::Mbb)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
+    let mut out = RolesCheck::default();
+    let mut last: Option<&Approval> = None;
+    for (s, a) in list {
+        let entitled = a.person == founder
+            || last.is_some_and(|l| {
+                l.items
+                    .iter()
+                    .any(|i| i.starts_with(&format!("{}:{mbb}:", a.person)))
+            });
+        if !entitled {
+            if !out.not_entitled.contains(&a.person) {
+                out.not_entitled.push(a.person);
+            }
+            continue;
+        }
+        out.signed = Some((a.person, s.quando));
+        last = Some(a);
+    }
+    if let Some(l) = last {
+        let current: Vec<String> = grants.iter().map(grant_item).collect();
+        out.unsigned = grants
+            .iter()
+            .filter(|g| !l.items.contains(&grant_item(g)))
+            .cloned()
+            .collect();
+        out.removed = l
+            .items
+            .iter()
+            .filter(|i| !current.contains(i))
+            .cloned()
+            .collect();
+    }
+    out
 }
 
 /// Seals `approval` with `signer` and writes it in `assinaturas/`.
@@ -648,6 +809,15 @@ impl Seals {
             }
         }
         out
+    }
+
+    /// The seal of `expected` by an accepted key of the person, over the same content.
+    pub fn valid_seal(&self, integrity: &Integrity, expected: &Approval) -> Option<&Selo> {
+        let keys = integrity.keys_of(expected.person);
+        self.valid
+            .iter()
+            .find(|(s, a)| a == expected && keys.contains(&s.publica.as_str()))
+            .map(|(s, _)| s)
     }
 
     /// How `expected` stands: sealed by an accepted key of the person who decided, over
