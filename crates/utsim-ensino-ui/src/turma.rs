@@ -854,7 +854,14 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
     ui.label(texto::turma_programa_turma_texto());
     ui.horizontal(|ui| {
         ui.label(texto::turma_pasta_programa());
-        ui.text_edit_singleline(&mut s.programa);
+        crate::abertura::campo(
+            ui,
+            &mut s.programa,
+            seletor::Tipo::Pasta,
+            texto::sel_pasta_programa(),
+            &[],
+            360.0,
+        );
         if ui.button(texto::turma_registrar_turma()).clicked() {
             let prog = PathBuf::from(s.programa.trim().trim_matches('"'));
             let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
