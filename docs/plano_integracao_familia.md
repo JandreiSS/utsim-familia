@@ -60,7 +60,7 @@ Argumentos diretos continuam valendo para os casos simples: `utsim <modelo.ron>`
 |---|---|---|
 | `utsim-qualidade --utsim-abrir=<dados.csv ou .xlsx> [--utsim-abrir=<outro>] --utsim-ferramenta=<chave> [--utsim-aba=<aba>] [--utsim-lie=<n>] [--utsim-lse=<n>] [--utsim-subgrupo=<n>]` | Ensino ("Analisar no UTSim Qualidade") | Cria o estudo "Análise de <arquivos>" com uma ferramenta por arquivo, de origem Importado (arquivo, aba e hash). As opções valem para todos os arquivos. O estudo fica na última unidade aberta. Sem unidade, fica na unidade "Análises avulsas", ao lado da configuração do app. Sem `--utsim-ferramenta`, a tela Ferramentas pede a escolha. Não há resposta. |
 
-Chaves de `--utsim-ferramenta`: `folha`, `estratificacao`, `pareto`, `histograma`, `dispersao`, `carta`, `capacidade`, `msa` e `fmea` (as ferramentas com tabela). Os números aceitam vírgula ou ponto. Ajustes da tabela por ferramenta (`utsim_estudo::importar`):
+Chaves de `--utsim-ferramenta`: `folha`, `estratificacao`, `pareto`, `histograma`, `dispersao`, `carta`, `capacidade`, `msa`, `fmea`, `qfd`, `tolerancias` e `poka_yoke` (as ferramentas com tabela). Os números aceitam vírgula ou ponto. Ajustes da tabela por ferramenta (`utsim_estudo::importar`):
 
 - carta e capacidade: o formato largo `subgrupo;x1;...;xn` vira uma linha por valor, e n é o tamanho do subgrupo. Uma carta com uma coluna só ganha a coluna do subgrupo;
 - capacidade e histograma: a última coluna numérica;
