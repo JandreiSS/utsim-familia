@@ -239,8 +239,9 @@ impl Pedido {
         vec![format!("{OPCAO_PEDIDO}={}", caminho_pedido.display())]
     }
 
-    /// Os argumentos diretos equivalentes, para os apps que ainda não leem pedidos
-    /// (`utsim_posto_ui::abrir::Abrir` no Qualidade e no Segurança). Não há resposta por
+    /// Os argumentos diretos equivalentes, para os apps que não leem pedidos (o Qualidade e
+    /// o Segurança já leem `--utsim-pedido`; os diretos servem às versões instaladas antes,
+    /// em `utsim_posto_ui::abrir::Abrir`). Não há resposta por
     /// esse caminho, e `entrada.conteudo` e `entrada.colunas` não passam: grave o conteúdo
     /// num arquivo antes. Os caminhos saem absolutos; LIE e LSE que não são números e
     /// subgrupo 0 ficam de fora.
