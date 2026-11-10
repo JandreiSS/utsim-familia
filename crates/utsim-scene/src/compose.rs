@@ -304,9 +304,21 @@ impl Scene {
             .collect();
         let kinds: Vec<&str> = replay.blocks.iter().map(|b| b.kind.as_str()).collect();
         let mut geoms = geometry::build(&kinds, &handlings, &positions, &replay.connections);
-        for (geom, kind) in geoms.iter_mut().zip(&kinds) {
+        for (b, (geom, kind)) in geoms.iter_mut().zip(&kinds).enumerate() {
             if hidden_kind(kind) {
                 geom.half = [0.0; 3];
+            }
+            // A belt turned by the user (`visual.yaw`) points that way, not to its
+            // connection, as the navigation sees it (`Model::nav_bodies`).
+            let yaw = object(&replay.blocks[b].name)
+                .and_then(|o| o.visual.as_ref())
+                .and_then(|v| v.yaw)
+                .filter(|y| y.is_finite());
+            if geom.shape == Shape::Belt
+                && let Some(y) = yaw
+            {
+                let r = y.to_radians() as f32;
+                *geom = Geom::new(kind, geom.handling, Some([r.cos(), -r.sin()]));
             }
         }
 
@@ -464,6 +476,27 @@ impl Scene {
         self.blocks.get(b).and_then(|x| x.visual.as_ref())
     }
 
+    /// How fixed block `b` is turned about the vertical (radians, counter-clockwise seen
+    /// from above): a belt's heading ([`Geom::yaw`], `visual.yaw` when set), else the
+    /// model's `visual.yaw`; 0 for the mobiles, whose `visual.yaw` only turns the drawing.
+    /// The items resting on it and the rack cells turn with it.
+    pub fn turn(&self, b: usize) -> f32 {
+        let Some(info) = self.blocks.get(b) else {
+            return 0.0;
+        };
+        if info.role.is_some() {
+            return 0.0;
+        }
+        if self.geoms[b].shape == Shape::Belt {
+            return self.geoms[b].yaw;
+        }
+        info.visual
+            .as_ref()
+            .and_then(|v| v.yaw)
+            .filter(|y| y.is_finite())
+            .map_or(0.0, |y| (y as f32).to_radians())
+    }
+
     /// Level and rate of fluid node `node` at `t`; before the first sample a tank is at
     /// its initial level and idle.
     pub fn fluid_sample(&self, node: usize, t: f64) -> FluidSample {
@@ -609,8 +642,14 @@ impl Scene {
                     if let Some((rack, slot)) = self.rack_target(b, t)
                         && let Some((offset, _)) = self.geoms[rack].rack_item(slot)
                     {
-                        (position, yaw) =
-                            rack_approach(position, yaw, progress, self.positions[rack], offset[0]);
+                        (position, yaw) = rack_approach(
+                            position,
+                            yaw,
+                            progress,
+                            self.positions[rack],
+                            offset[0],
+                            self.turn(rack),
+                        );
                     }
                 }
                 if pickup {
@@ -809,13 +848,9 @@ impl Scene {
             let base = self.base_at(b, t);
             let parent = Some(EntityId::Block(b as u32));
             let carrier = self.mobile_at(b, t);
-            let yaw = if let Some(m) = carrier {
-                m.yaw
-            } else if geom.shape == Shape::Belt {
-                geom.yaw
-            } else {
-                0.0
-            };
+            // On a fixed block the items turn with it (a belt: its heading).
+            let turn = self.turn(b);
+            let yaw = if let Some(m) = carrier { m.yaw } else { turn };
             let hidden = |i: usize| ItemPlacement {
                 item: i,
                 id: id(i),
@@ -855,7 +890,15 @@ impl Scene {
                         };
                         placed.push(match spot {
                             Some((offset, size)) => ItemPlacement {
-                                center: add(base, offset),
+                                // A belt's offset already follows its heading.
+                                center: add(
+                                    base,
+                                    if geom.shape == Shape::Belt {
+                                        offset
+                                    } else {
+                                        turned(offset, turn)
+                                    },
+                                ),
                                 scale: size / ITEM_SIZE,
                                 drawn: true,
                                 ..hidden(i)
@@ -872,7 +915,7 @@ impl Scene {
                             continue;
                         }
                         placed.push(ItemPlacement {
-                            center: add(base, style::slot_offset(shape, slot)),
+                            center: add(base, turned(style::slot_offset(shape, slot), turn)),
                             drawn: true,
                             ..hidden(i)
                         });
@@ -919,7 +962,13 @@ impl Scene {
             if hidden_kind(&info.kind) {
                 continue;
             }
-            let (pos, h) = (self.positions[b], self.geoms[b].half);
+            let (pos, mut h) = (self.positions[b], self.geoms[b].half);
+            // The box around the turned footprint (a belt's `half` already is).
+            let turn = self.turn(b);
+            if turn != 0.0 && self.geoms[b].shape != Shape::Belt {
+                let (s, c) = (turn.sin().abs(), turn.cos().abs());
+                h = [c * h[0] + s * h[2], h[1], s * h[0] + c * h[2]];
+            }
             grow(layout::to_model([pos[0] - h[0], pos[1], pos[2] - h[2]]));
             grow(layout::to_model([
                 pos[0] + h[0],
@@ -1117,14 +1166,17 @@ pub fn rack_approach(
     progress: f32,
     rack_base: [f32; 3],
     cell_x: f32,
+    rack_yaw: f32,
 ) -> ([f32; 3], f32) {
+    // In front of the cell (the rack's local +Z side), turned with the rack.
+    let front = turned([cell_x, 0.0, FORK_REACH], rack_yaw);
     let target = [
-        rack_base[0] + cell_x,
+        rack_base[0] + front[0],
         position[1],
-        rack_base[2] + FORK_REACH,
+        rack_base[2] + front[2],
     ];
-    // Facing -Z (towards the rack) is a heading of +pi/2.
-    let facing = PI / 2.0;
+    // Facing the rack's local -Z is a heading of +pi/2 plus the rack's turn.
+    let facing = PI / 2.0 + rack_yaw;
     let u = (progress.min(1.0 - progress) / 0.15).clamp(0.0, 1.0);
     let u = u * u * (3.0 - 2.0 * u);
     let mut turn = (facing - yaw).rem_euclid(2.0 * PI);
@@ -1143,6 +1195,16 @@ pub fn rack_approach(
 
 fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+/// A vector of a block's own frame turned by `yaw` about the vertical (layout space:
+/// `x' = x cos + z sin`, `z' = -x sin + z cos`).
+pub fn turned(v: [f32; 3], yaw: f32) -> [f32; 3] {
+    if yaw == 0.0 {
+        return v;
+    }
+    let (s, c) = yaw.sin_cos();
+    [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c]
 }
 
 /// Motion of a fixed block from its state.
