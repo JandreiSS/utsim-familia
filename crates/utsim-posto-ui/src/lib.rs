@@ -21,7 +21,7 @@ pub mod util;
 
 pub use abrir::{Abrir, Destino};
 pub use ferramentas::{FnLeituras, FnLimites, FnPuxar, FnSimular, TelaFerramentas};
-pub use inicial::TelaInicial;
+pub use inicial::{Marca, Saida, TelaInicial};
 pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};
 pub use postos::TelaPostos;
 pub use sessao::{Config, Sessao};

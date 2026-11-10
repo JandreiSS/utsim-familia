@@ -363,6 +363,97 @@ fn ensino_records_own_practice_in_the_program() {
 }
 
 #[test]
+fn an_instructor_records_the_practice_of_a_class_from_ensino() {
+    use utsim_lss_store::program::{ExerciseItem, TeachingError};
+    let dir = tempfile::tempdir().unwrap();
+    let ana = who(1, "Ana Souza", "ana@empresa.com");
+    let bia = who(2, "Bia Reis", " Bia@Empresa.com ");
+    let carla = who(3, "Carla Lima", "carla@empresa.com");
+    let davi = who(4, "Davi Melo", "davi@empresa.com");
+    let ca = TestClock::new(1);
+    let cb = TestClock::new(2);
+    let cc = TestClock::new(3);
+    let cd = TestClock::new(4);
+    let mut prog =
+        ProjectFolder::create_program(&dir.path().join("Programa"), "Programa LSS", &ana, &ca)
+            .unwrap();
+    let root = prog.root().to_path_buf();
+    for (w, c) in [(&bia, &cb), (&carla, &cc), (&davi, &cd)] {
+        let mut f = ProjectFolder::open(&root, w, None).unwrap();
+        f.register_me(c).unwrap();
+    }
+    // Ana (MBB, the founder) makes Davi an instructor.
+    prog.refresh(&ca).unwrap();
+    let p = prog.project_id();
+    prog.commit(
+        perfis::grant(
+            p,
+            ca.new_id(),
+            davi.person,
+            perfis::Profile::Instructor,
+            None,
+        ),
+        &ca,
+    )
+    .unwrap();
+    let item = |w: &Identity, t: &str| ExerciseItem {
+        person: w.person,
+        tool: t.into(),
+        evidence: " UTSim Ensino, pacote nucleo 0.1.0, missão 4.2, melhor nota 9,0 ".into(),
+    };
+    // The e-mails, normalised, only for who may record learning.
+    let m = program::members(&root, &davi).unwrap();
+    assert!(m.contains(&(bia.person, "bia@empresa.com".into())));
+    assert_eq!(m.len(), 4);
+    assert!(matches!(
+        program::members(&root, &bia),
+        Err(TeachingError::Denied(_))
+    ));
+    // Two belts, the same item twice in the batch: one id for it.
+    let batch = [item(&bia, "msa"), item(&carla, "msa"), item(&bia, "msa")];
+    let ids = program::record_exercises(&root, &davi, &cd, &batch).unwrap();
+    assert_eq!(ids.len(), 3);
+    assert_eq!(ids[0], ids[2]);
+    assert_ne!(ids[0], ids[1]);
+    // Again: the same ids, nothing new.
+    assert_eq!(
+        program::record_exercises(&root, &davi, &cd, &batch).unwrap(),
+        ids
+    );
+    assert_eq!(
+        program::record_exercises(&root, &davi, &cd, &[]).unwrap(),
+        Vec::<Id>::new()
+    );
+    let pf = ProjectFolder::open(&root, &ana, None).unwrap();
+    let e = mentoria::entries(pf.state());
+    assert_eq!(e.iter().filter(|x| x.tool == "msa").count(), 2);
+    assert!(e.iter().all(|x| x.source == mentoria::Source::Exercise
+        && x.by == Some(davi.person)
+        && x.evidence.starts_with("UTSim Ensino")));
+    let map = mentoria::competence_map(&e, &[], |w| w == ana.person);
+    assert_eq!(
+        map.level(carla.person, "msa"),
+        Some(mentoria::Level::Practiced)
+    );
+    let rep = perfis::replay(pf.all_ops(), ana.person);
+    assert!(rep.unauthorized.is_empty(), "{:?}", rep.unauthorized);
+    // Refusals: a common belt, a person out of the program, an unknown tool.
+    assert!(matches!(
+        program::record_exercises(&root, &bia, &cb, &[item(&carla, "cep")]),
+        Err(TeachingError::Denied(_))
+    ));
+    let fora = who(9, "Fora", "fora@empresa.com");
+    assert!(matches!(
+        program::record_exercises(&root, &davi, &cd, &[item(&fora, "cep")]),
+        Err(TeachingError::NotAPerson(x)) if x == fora.person
+    ));
+    assert!(matches!(
+        program::record_exercises(&root, &davi, &cd, &[item(&bia, "xyz")]),
+        Err(TeachingError::Tool(_))
+    ));
+}
+
+#[test]
 fn local_identity_and_the_tools_of_ensino() {
     use utsim_lss_store::user::{AppDirs, UserConfig};
     let dir = tempfile::tempdir().unwrap();

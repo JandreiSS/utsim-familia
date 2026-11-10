@@ -11,7 +11,7 @@ utsim-posto.workspace = true
 utsim-model.workspace = true
 utsim-edit.workspace = true
 utsim-pasta.workspace = true
-utsim-ui-tema.workspace = true
+utsim-ui-tema = { workspace = true, features = ["abertura", "arquivos"] }
 utsim-estudo.workspace = true
 utsim-ferramentas.workspace = true
 serde.workspace = true

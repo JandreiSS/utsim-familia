@@ -56,6 +56,82 @@ pub fn carregar_modelo(u: &Unidade, caminho: &str) -> Result<Model, String> {
     carregar_arquivo(&u.caminho_modelo(caminho.trim()))
 }
 
+/// Um caminho escolhido no seletor, como a unidade guarda: relativo à pasta da unidade
+/// quando o arquivo está dentro dela (assim a pasta continua valendo no Drive de cada
+/// pessoa), senão absoluto.
+pub fn caminho_na_unidade(u: &Unidade, escolhido: &Path) -> String {
+    relativo(u.raiz(), escolhido).unwrap_or_else(|| escolhido.display().to_string())
+}
+
+/// `caminho` relativo a `raiz`, com `/`, se estiver dentro dela. No Windows a comparação
+/// ignora maiúsculas e o prefixo de caminho longo.
+fn relativo(raiz: &Path, caminho: &Path) -> Option<String> {
+    let partes = |p: &Path| -> Vec<String> {
+        let t = p.display().to_string().replace('\\', "/");
+        let t = t.strip_prefix("//?/").unwrap_or(&t).to_string();
+        t.split('/')
+            .filter(|x| !x.is_empty() && *x != ".")
+            .map(str::to_string)
+            .collect()
+    };
+    let (r, c) = (partes(raiz), partes(caminho));
+    let igual = |a: &String, b: &String| {
+        if cfg!(windows) {
+            a.to_lowercase() == b.to_lowercase()
+        } else {
+            a == b
+        }
+    };
+    if c.len() <= r.len() || !r.iter().zip(&c).all(|(a, b)| igual(a, b)) {
+        return None;
+    }
+    Some(c[r.len()..].join("/"))
+}
+
+/// O campo de um modelo `.ron` da unidade: a caixa de texto e o botão "Procurar…".
+pub fn campo_modelo(
+    ui: &mut egui::Ui,
+    texto: &mut String,
+    u: Option<&Unidade>,
+    largura: f32,
+) -> egui::Response {
+    use utsim_ui_tema::arquivos::{self, Tipo};
+    ui.horizontal(|ui| {
+        let mut r = ui.add(
+            egui::TextEdit::singleline(texto)
+                .hint_text("arquivo .ron: escreva ou clique em Procurar…")
+                .desired_width(largura),
+        );
+        if ui
+            .button(arquivos::PROCURAR)
+            .on_hover_text("Abre o explorador de arquivos para escolher o modelo.")
+            .clicked()
+        {
+            let atual = match u {
+                Some(u) if !texto.trim().is_empty() => {
+                    u.caminho_modelo(texto.trim()).display().to_string()
+                }
+                Some(u) => u.raiz().display().to_string(),
+                None => texto.clone(),
+            };
+            if let Some(p) = arquivos::procurar(
+                Tipo::Abrir,
+                "Escolha o modelo do UTSim",
+                &[arquivos::RON],
+                &atual,
+            ) {
+                *texto = match u {
+                    Some(u) => caminho_na_unidade(u, &p),
+                    None => p.display().to_string(),
+                };
+                r.mark_changed();
+            }
+        }
+        r
+    })
+    .inner
+}
+
 pub fn carregar_arquivo(c: &Path) -> Result<Model, String> {
     Model::load(c).map_err(|e| format!("{}: {e}", c.display()))
 }
@@ -91,6 +167,23 @@ mod tests {
     fn datas() {
         assert_eq!(data_de_dias(0), "1970-01-01");
         assert_eq!(data_de_dias(19_723), "2024-01-01");
+    }
+
+    #[test]
+    fn caminho_relativo() {
+        let r = Path::new("C:/Drive/Fábrica");
+        assert_eq!(
+            relativo(r, Path::new("C:/Drive/Fábrica/modelos/a.ron")).as_deref(),
+            Some("modelos/a.ron")
+        );
+        assert_eq!(relativo(r, Path::new("C:/Outro/a.ron")), None);
+        assert_eq!(relativo(r, r), None);
+        if cfg!(windows) {
+            assert_eq!(
+                relativo(r, Path::new(r"\\?\c:\drive\fábrica\a.ron")).as_deref(),
+                Some("a.ron")
+            );
+        }
     }
 
     #[test]

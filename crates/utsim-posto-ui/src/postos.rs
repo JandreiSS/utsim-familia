@@ -150,7 +150,7 @@ impl TelaPostos {
             ui.text_edit_singleline(&mut self.epi);
             ui.end_row();
             ui.label("Modelo (.ron)");
-            ui.text_edit_singleline(&mut self.modelo);
+            crate::util::campo_modelo(ui, &mut self.modelo, s.unidade.as_ref(), 260.0);
             ui.end_row();
             ui.label("Objeto do modelo");
             ui.text_edit_singleline(&mut self.objeto);
@@ -194,7 +194,7 @@ impl TelaPostos {
         ui.strong("Importar postos do modelo");
         ui.horizontal(|ui| {
             ui.label("Modelo (.ron):");
-            ui.add(egui::TextEdit::singleline(&mut self.importar).desired_width(420.0));
+            crate::util::campo_modelo(ui, &mut self.importar, s.unidade.as_ref(), 420.0);
             if ui
                 .add_enabled(
                     !self.importar.trim().is_empty(),
