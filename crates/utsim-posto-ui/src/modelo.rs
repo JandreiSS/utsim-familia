@@ -528,55 +528,22 @@ impl TelaModelo {
         }
         self.atalhos(ui.ctx());
 
-        ui.heading("Modelo (mão dupla com o UTSim)");
-        ui.horizontal(|ui| {
-            ui.label("Modelo (.ron):");
-            crate::util::campo_modelo(ui, &mut self.caminho, s.unidade.as_ref(), 420.0);
-            if !modelos.is_empty() {
-                egui::ComboBox::from_id_salt("modelos_da_aba_modelo")
-                    .selected_text("modelos dos postos")
-                    .show_ui(ui, |ui| {
-                        for m in &modelos {
-                            ui.selectable_value(&mut self.caminho, m.clone(), m);
-                        }
-                    });
-            }
-            if ui
-                .add_enabled(!self.caminho.trim().is_empty(), egui::Button::new("Abrir"))
-                .clicked()
-            {
-                let c = match s.unidade.as_ref() {
-                    Some(u) => Some(u.caminho_modelo(self.caminho.trim())),
-                    None => Some(PathBuf::from(self.caminho.trim())),
-                };
-                if let Some(c) = c
-                    && let Err(e) = self.abrir(&c, &pessoa)
-                {
-                    self.falhar(e);
-                }
-            }
-            if self.aberto() && ui.button("Fechar modelo").clicked() {
-                self.fechar();
-            }
-        });
-        if !self.mensagem.is_empty() {
-            let cor = if self.erro {
-                egui::Color32::from_rgb(230, 90, 80)
-            } else {
-                ui.visuals().text_color()
-            };
-            ui.colored_label(cor, &self.mensagem);
-        }
+        self.faixa_arquivo(ui, s, &modelos, &pessoa);
         if !self.aberto() {
+            ui.add_space(24.0);
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("Nenhum modelo aberto")
+                        .size(18.0)
+                        .strong(),
+                );
+                ui.weak("Escolha o .ron do simulador acima e clique em Abrir.");
+            });
             return;
         }
         self.contar_estudos(s);
-        self.barra_estado(ui);
-        ui.separator();
-        ui.columns(2, |cols| {
-            self.lista(&mut cols[0]);
-            self.painel_campos(&mut cols[1]);
-        });
+        ui.add_space(8.0);
+        self.zonas(ui);
     }
 
     /// O caminho do modelo como os estudos o guardam: relativo à pasta da unidade quando
@@ -647,20 +614,58 @@ impl TelaModelo {
         }
     }
 
-    fn barra_estado(&mut self, ui: &mut egui::Ui) {
-        let laranja = egui::Color32::from_rgb(230, 160, 40);
-        if !self.pode_editar() {
-            ui.horizontal(|ui| {
-                let texto = match self.aviso_trava() {
-                    Some(av) => format!("{av}. Só leitura."),
-                    None => "Só leitura.".to_string(),
-                };
-                ui.colored_label(laranja, texto);
-                if ui.button("Tentar editar").clicked() {
-                    self.tentar_editar();
-                }
+    /// A faixa fina do arquivo: o modelo, "Procurar…", Abrir e Fechar à esquerda; a trava,
+    /// Desfazer, Refazer e Gravar à direita. Embaixo, o aviso do momento.
+    fn faixa_arquivo(&mut self, ui: &mut egui::Ui, s: &Sessao, modelos: &[String], pessoa: &str) {
+        let v = ui.visuals().clone();
+        egui::Frame::new()
+            .fill(v.faint_bg_color)
+            .stroke(v.widgets.noninteractive.bg_stroke)
+            .corner_radius(8)
+            .inner_margin(egui::Margin::symmetric(12, 8))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("MODELO")
+                            .size(11.0)
+                            .strong()
+                            .color(v.weak_text_color()),
+                    );
+                    let largura = (ui.available_width() - 640.0).clamp(200.0, 420.0);
+                    crate::util::campo_modelo(ui, &mut self.caminho, s.unidade.as_ref(), largura);
+                    if !modelos.is_empty() {
+                        egui::ComboBox::from_id_salt("modelos_da_aba_modelo")
+                            .selected_text("dos postos")
+                            .width(90.0)
+                            .show_ui(ui, |ui| {
+                                for m in modelos {
+                                    ui.selectable_value(&mut self.caminho, m.clone(), m);
+                                }
+                            });
+                    }
+                    if ui
+                        .add_enabled(!self.caminho.trim().is_empty(), egui::Button::new("Abrir"))
+                        .clicked()
+                    {
+                        let c = match s.unidade.as_ref() {
+                            Some(u) => u.caminho_modelo(self.caminho.trim()),
+                            None => PathBuf::from(self.caminho.trim()),
+                        };
+                        if let Err(e) = self.abrir(&c, pessoa) {
+                            self.falhar(e);
+                        }
+                    }
+                    if self.aberto() && ui.button("Fechar").clicked() {
+                        self.fechar();
+                    }
+                    if self.aberto() {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            self.controles_edicao(ui);
+                        });
+                    }
+                });
             });
-        }
+        let laranja = egui::Color32::from_rgb(230, 160, 40);
         if self.mudou_no_disco {
             ui.horizontal(|ui| {
                 ui.colored_label(
@@ -676,77 +681,335 @@ impl TelaModelo {
                 }
             });
         }
+        if !self.mensagem.is_empty() {
+            let cor = if self.erro {
+                egui::Color32::from_rgb(230, 90, 80)
+            } else {
+                v.weak_text_color()
+            };
+            ui.add_space(2.0);
+            ui.colored_label(cor, &self.mensagem);
+        }
+    }
+
+    /// Da direita para a esquerda: Gravar, Refazer, Desfazer, o estado da trava e o aviso
+    /// de mudança sem gravar.
+    fn controles_edicao(&mut self, ui: &mut egui::Ui) {
+        let laranja = egui::Color32::from_rgb(230, 160, 40);
+        let verde = egui::Color32::from_rgb(70, 180, 110);
         let editavel = self.pode_editar();
-        ui.horizontal(|ui| {
-            let (desf, refaz) = self
-                .doc
-                .as_ref()
-                .map_or((false, false), |d| (d.can_undo(), d.can_redo()));
-            if ui
-                .add_enabled(editavel && desf, egui::Button::new("Desfazer"))
-                .clicked()
-            {
-                self.desfazer();
-            }
-            if ui
-                .add_enabled(editavel && refaz, egui::Button::new("Refazer"))
-                .clicked()
-            {
-                self.refazer();
-            }
-            if ui
-                .add_enabled(editavel, egui::Button::new("Gravar no modelo"))
-                .clicked()
-            {
-                self.gravar_com_aviso();
-            }
-            if editavel && ui.button("Soltar edição").clicked() {
+        let (desf, refaz) = self
+            .doc
+            .as_ref()
+            .map_or((false, false), |d| (d.can_undo(), d.can_redo()));
+        let gravar = egui::Button::new(egui::RichText::new("Gravar").strong()).fill(
+            if editavel && self.pendente() {
+                ui.visuals().selection.bg_fill
+            } else {
+                ui.visuals().widgets.inactive.weak_bg_fill
+            },
+        );
+        if ui
+            .add_enabled(editavel, gravar)
+            .on_hover_text("Grava no modelo (Ctrl+S)")
+            .clicked()
+        {
+            self.gravar_com_aviso();
+        }
+        if ui
+            .add_enabled(editavel && refaz, egui::Button::new("Refazer"))
+            .on_hover_text("Ctrl+Y")
+            .clicked()
+        {
+            self.refazer();
+        }
+        if ui
+            .add_enabled(editavel && desf, egui::Button::new("Desfazer"))
+            .on_hover_text("Ctrl+Z")
+            .clicked()
+        {
+            self.desfazer();
+        }
+        ui.add_space(6.0);
+        if editavel {
+            let r = selo(ui, "EDITANDO", verde)
+                .on_hover_text("Você tem a trava do arquivo. Clique para soltar e ficar só lendo.");
+            if r.clicked() {
                 self.soltar_edicao();
             }
-            if ui.button("Recarregar do disco").clicked() {
-                if self.pendente() {
-                    self.mudou_no_disco = true;
-                } else {
-                    self.recarregar();
-                }
+        } else {
+            let dica = self
+                .aviso_trava()
+                .unwrap_or_else(|| "Ninguém edita. Clique para editar.".to_string());
+            if selo(ui, "SÓ LEITURA", laranja)
+                .on_hover_text(format!("{dica} Clique para tentar editar."))
+                .clicked()
+            {
+                self.tentar_editar();
             }
+        }
+        if self.pendente() {
+            ui.colored_label(laranja, "mudança sem gravar");
+        }
+        if ui
+            .small_button("⟳")
+            .on_hover_text("Recarregar do disco")
+            .clicked()
+        {
             if self.pendente() {
-                ui.colored_label(laranja, "mudança sem gravar");
+                self.mudou_no_disco = true;
+            } else {
+                self.recarregar();
             }
-        });
+        }
+    }
+
+    /// As três zonas: os nós à esquerda, o nó escolhido no centro e os resultados à
+    /// direita. Cada uma rola sozinha.
+    fn zonas(&mut self, ui: &mut egui::Ui) {
+        let total = ui.available_rect_before_wrap();
+        let estreita = total.width() < 1000.0;
+        let (le, ld) = if estreita {
+            (220.0, 240.0)
+        } else {
+            (270.0, 300.0)
+        };
+        let gap = 12.0;
+        let esq = egui::Rect::from_min_size(total.min, egui::vec2(le, total.height()));
+        let dir = egui::Rect::from_min_size(
+            egui::pos2(total.right() - ld, total.top()),
+            egui::vec2(ld, total.height()),
+        );
+        let centro = egui::Rect::from_min_max(
+            egui::pos2(esq.right() + gap, total.top()),
+            egui::pos2(dir.left() - gap, total.bottom()),
+        );
+        for (r, qual) in [(esq, 0), (centro, 1), (dir, 2)] {
+            zona_fundo(ui, r);
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(r.shrink(12.0))
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| match qual {
+                    0 => self.lista(ui),
+                    1 => self.painel_no(ui),
+                    _ => self.painel_resumo(ui),
+                },
+            );
+        }
+        ui.allocate_rect(total, egui::Sense::hover());
     }
 
     fn lista(&mut self, ui: &mut egui::Ui) {
-        ui.strong("Objetos do modelo");
+        let nomes_todos = self.doc.as_ref().map_or(0, |d| d.model().objects.len());
+        titulo_zona(ui, &format!("Nós do modelo · {nomes_todos}"));
         ui.add(
             egui::TextEdit::singleline(&mut self.filtro)
-                .hint_text("filtrar por nome")
+                .hint_text("Filtrar por nome")
                 .desired_width(f32::INFINITY),
         );
+        ui.add_space(6.0);
         let nomes = self.objetos();
         let mut escolhido: Option<String> = None;
         egui::ScrollArea::vertical()
             .id_salt("lista_objetos_modelo")
-            .max_height(420.0)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 for n in &nomes {
                     let tags = self.etiquetas(n);
                     let destaque = self.destaque(n);
-                    let mut texto = n.clone();
-                    if !tags.is_empty() {
-                        texto.push_str(&format!("  [{}]", tags.join(", ")));
-                    }
-                    if let Some(d) = destaque {
-                        texto.push_str(&format!("  {d}"));
-                    }
-                    if ui.selectable_label(self.selecionado == *n, texto).clicked() {
+                    if linha_no(ui, n, &tags, destaque.as_deref(), self.selecionado == *n) {
                         escolhido = Some(n.clone());
                     }
+                }
+                if nomes.is_empty() {
+                    ui.weak("Nenhum nó com esse nome.");
                 }
             });
         if let Some(n) = escolhido {
             self.selecionar(&n);
         }
+    }
+
+    /// O centro: o nó escolhido, as abas (a do app e a Manutenção) e cada bloco de campos
+    /// num quadro com título.
+    fn painel_no(&mut self, ui: &mut egui::Ui) {
+        if self.selecionado.is_empty() {
+            titulo_zona(ui, "Nó");
+            ui.add_space(30.0);
+            ui.vertical_centered(|ui| {
+                ui.weak("Escolha um nó na lista à esquerda.");
+            });
+            return;
+        }
+        let tipo = self
+            .doc
+            .as_ref()
+            .and_then(|d| {
+                d.model()
+                    .objects
+                    .iter()
+                    .find(|o| o.name == self.selecionado)
+            })
+            .map(|o| tipo_do_no(&format!("{:?}", o.kind)));
+        titulo_zona(ui, tipo.unwrap_or("Nó"));
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(&self.selecionado)
+                    .size(22.0)
+                    .strong()
+                    .color(ui.visuals().strong_text_color()),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Abrir em Ferramentas").clicked() {
+                    self.pedido_ferramentas =
+                        Some((self.modelo_rel.clone(), self.selecionado.clone()));
+                }
+                let n = self.estudos_do_selecionado();
+                ui.weak(match n {
+                    0 => "nenhum estudo".to_string(),
+                    1 => "1 estudo".to_string(),
+                    n => format!("{n} estudos"),
+                });
+            });
+        });
+        ui.add_space(8.0);
+        let abas = [self.principal, Aba::Manutencao];
+        if !abas.contains(&self.aba) {
+            self.aba = self.principal;
+        }
+        if let Some(a) = segmentos(
+            ui,
+            &abas.map(|a| a.nome()),
+            abas.iter().position(|a| *a == self.aba).unwrap_or(0),
+        ) {
+            self.aba = abas[a];
+        }
+        ui.add_space(8.0);
+        let aba = self.aba;
+        let editavel = self.pode_editar() && aba == self.principal;
+        if aba == Aba::Manutencao {
+            ui.weak("Manutenção: só leitura aqui. Edite no UTSim.");
+            ui.add_space(4.0);
+        }
+        let campos = self.campos(aba);
+        if campos.is_empty() {
+            ui.weak("Nada para mostrar neste nó.");
+        }
+        // Cada campo de profundidade 0 abre um quadro; os de dentro vão nele.
+        let mut grupos: Vec<Vec<&Campo>> = Vec::new();
+        for c in &campos {
+            if c.profundidade == 0 || grupos.is_empty() {
+                grupos.push(Vec::new());
+            }
+            if let Some(g) = grupos.last_mut() {
+                g.push(c);
+            }
+        }
+        let mut acoes: Vec<Acao> = Vec::new();
+        egui::ScrollArea::vertical()
+            .id_salt("campos_modelo")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for g in &grupos {
+                    let v = ui.visuals().clone();
+                    egui::Frame::new()
+                        .fill(v.extreme_bg_color)
+                        .stroke(v.widgets.noninteractive.bg_stroke)
+                        .corner_radius(8)
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            let mut ocultar: Option<u8> = None;
+                            for (k, c) in g.iter().enumerate() {
+                                if let Some(p) = ocultar {
+                                    if c.profundidade > p {
+                                        continue;
+                                    }
+                                    ocultar = None;
+                                }
+                                if c.tipo == Tipo::Item {
+                                    let chave = format!("{}#{}", self.selecionado, c.caminho);
+                                    if self.fechados.contains(&chave) {
+                                        ocultar = Some(c.profundidade);
+                                    }
+                                }
+                                self.campo_ui(ui, c, editavel, &mut acoes);
+                                if k == 0 && g.len() > 1 {
+                                    ui.add_space(4.0);
+                                    ui.separator();
+                                }
+                            }
+                        });
+                    ui.add_space(10.0);
+                }
+            });
+        for a in acoes {
+            let r = match a {
+                Acao::Editar(c, v) => self.editar(&c, &v),
+                Acao::Adicionar(l) => self.adicionar(&l),
+                Acao::Remover(l, i) => self.remover(&l, i),
+            };
+            if r.is_ok() {
+                self.mensagem.clear();
+            }
+        }
+    }
+
+    /// A direita: os resultados simulados do nó e do modelo inteiro em blocos de números,
+    /// com a origem "Simulado" bem marcada.
+    fn painel_resumo(&mut self, ui: &mut egui::Ui) {
+        let laranja = egui::Color32::from_rgb(230, 160, 40);
+        ui.horizontal(|ui| {
+            titulo_zona(ui, "Resultados");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                selo(ui, "SIMULADO", laranja)
+                    .on_hover_text("Resultado do modelo, não é medição da fábrica.");
+            });
+        });
+        ui.weak("Do modelo, não é medição da fábrica.");
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(
+                    !self.trabalho.ocupado(),
+                    egui::Button::new("Simular de novo"),
+                )
+                .clicked()
+            {
+                self.calcular_resumo();
+            }
+            if self.trabalho.ocupado() {
+                ui.spinner();
+            }
+        });
+        ui.add_space(10.0);
+        let Some(r) = self.trabalho.ok() else {
+            if let Some(e) = self.trabalho.erro() {
+                ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
+            }
+            return;
+        };
+        let r = r.clone();
+        egui::ScrollArea::vertical()
+            .id_salt("resumo_modelo")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                if !self.selecionado.is_empty() {
+                    subtitulo(ui, &format!("Nó {}", self.selecionado));
+                    match r.get(&self.selecionado) {
+                        Some(l) => blocos(ui, l),
+                        None => {
+                            ui.weak("Sem resultado simulado para este nó.");
+                        }
+                    }
+                    ui.add_space(12.0);
+                }
+                if let Some(l) = r.get("") {
+                    subtitulo(ui, "Modelo inteiro");
+                    blocos(ui, l);
+                }
+            });
     }
 
     /// O que o nó tem: qualidade, inspeção, retrabalho, EPI, perigos, quebras.
@@ -790,79 +1053,8 @@ impl TelaModelo {
             .map(|(_, v)| v.clone())
     }
 
-    /// Painel do nó: primeiro os resultados simulados, depois os campos editáveis.
-    fn painel_campos(&mut self, ui: &mut egui::Ui) {
-        self.painel_resumo(ui);
-        ui.separator();
-        if self.selecionado.is_empty() {
-            ui.label("Escolha um objeto na lista.");
-            return;
-        }
-        ui.strong(format!("Nó: {}", self.selecionado));
-        ui.horizontal(|ui| {
-            let n = self.estudos_do_selecionado();
-            ui.label(match n {
-                0 => "Estudos deste nó: nenhum".to_string(),
-                1 => "Estudos deste nó: 1".to_string(),
-                n => format!("Estudos deste nó: {n}"),
-            });
-            if ui.button("Abrir em Ferramentas").clicked() {
-                self.pedido_ferramentas = Some((self.modelo_rel.clone(), self.selecionado.clone()));
-            }
-        });
-        let abas = [self.principal, Aba::Manutencao];
-        ui.horizontal(|ui| {
-            for a in abas {
-                ui.selectable_value(&mut self.aba, a, a.nome());
-            }
-        });
-        if !abas.contains(&self.aba) {
-            self.aba = self.principal;
-        }
-        let aba = self.aba;
-        let editavel = self.pode_editar() && aba == self.principal;
-        if aba == Aba::Manutencao {
-            ui.weak("Manutenção: só leitura aqui. Edite no UTSim.");
-        }
-        let campos = self.campos(aba);
-        if campos.is_empty() {
-            ui.weak("Nada para mostrar neste nó.");
-        }
-        let mut acoes: Vec<Acao> = Vec::new();
-        egui::ScrollArea::vertical()
-            .id_salt("campos_modelo")
-            .show(ui, |ui| {
-                let mut ocultar: Option<u8> = None;
-                for c in &campos {
-                    if let Some(p) = ocultar {
-                        if c.profundidade > p {
-                            continue;
-                        }
-                        ocultar = None;
-                    }
-                    if c.tipo == Tipo::Item {
-                        let chave = format!("{}#{}", self.selecionado, c.caminho);
-                        if self.fechados.contains(&chave) {
-                            ocultar = Some(c.profundidade);
-                        }
-                    }
-                    self.campo_ui(ui, c, editavel, &mut acoes);
-                }
-            });
-        for a in acoes {
-            let r = match a {
-                Acao::Editar(c, v) => self.editar(&c, &v),
-                Acao::Adicionar(l) => self.adicionar(&l),
-                Acao::Remover(l, i) => self.remover(&l, i),
-            };
-            if r.is_ok() {
-                self.mensagem.clear();
-            }
-        }
-    }
-
     fn campo_ui(&mut self, ui: &mut egui::Ui, c: &Campo, editavel: bool, acoes: &mut Vec<Acao>) {
-        let recuo = f32::from(c.profundidade) * 16.0;
+        let recuo = f32::from(c.profundidade.saturating_sub(1)) * 16.0;
         let vermelho = egui::Color32::from_rgb(230, 90, 80);
         let mut nova_acao: Option<Acao> = None;
         ui.horizontal_wrapped(|ui| {
@@ -883,7 +1075,11 @@ impl TelaModelo {
                 Tipo::Item => {
                     let chave = format!("{}#{}", self.selecionado, c.caminho);
                     let fechado = self.fechados.contains(&chave);
-                    if ui.small_button(if fechado { "▸" } else { "▾" }).clicked() {
+                    if ui
+                        .small_button(if fechado { "+" } else { "−" })
+                        .on_hover_text(if fechado { "Mostrar" } else { "Esconder" })
+                        .clicked()
+                    {
                         if fechado {
                             self.fechados.remove(&chave);
                         } else {
@@ -1023,57 +1219,312 @@ impl TelaModelo {
             acoes.push(a);
         }
     }
+}
 
-    fn painel_resumo(&mut self, ui: &mut egui::Ui) {
-        ui.strong("Resultados da simulação");
-        ui.colored_label(
-            egui::Color32::from_rgb(230, 160, 40),
-            "Origem: Simulado (resultado do modelo, não é medição da fábrica)",
-        );
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    !self.trabalho.ocupado(),
-                    egui::Button::new("Simular de novo"),
-                )
-                .clicked()
-            {
-                self.calcular_resumo();
-            }
-            if self.trabalho.ocupado() {
-                ui.spinner();
-            }
-        });
-        let Some(r) = self.trabalho.ok() else {
-            if let Some(e) = self.trabalho.erro() {
-                ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
-            }
-            return;
-        };
-        if !self.selecionado.is_empty() {
-            ui.label(format!("Nó {} (Simulado)", self.selecionado));
-            match r.get(&self.selecionado) {
-                Some(l) => linhas(ui, "resumo_no", l),
-                None => {
-                    ui.weak("Sem resultado simulado para este nó.");
-                }
-            }
-        }
-        if let Some(l) = r.get("") {
-            ui.label("Modelo inteiro (Simulado)");
-            linhas(ui, "resumo_geral", l);
-        }
+/// O tipo do nó em palavras (do nome da variante do modelo).
+fn tipo_do_no(depurado: &str) -> &'static str {
+    let nome = depurado
+        .split(|c: char| !c.is_alphanumeric())
+        .next()
+        .unwrap_or("");
+    match nome {
+        "Source" => "Chegada",
+        "Processor" => "Processo",
+        "Queue" => "Fila",
+        "Sink" => "Saída",
+        "Conveyor" => "Transportador",
+        "Combiner" => "Montagem",
+        "Separator" => "Separação",
+        "Transporter" => "Transporte",
+        "Rack" => "Estante",
+        "Dispatcher" => "Despacho",
+        _ => "Nó",
     }
 }
 
-fn linhas(ui: &mut egui::Ui, id: &str, l: &[(String, String)]) {
-    egui::Grid::new(id).striped(true).show(ui, |ui| {
-        for (k, v) in l {
-            ui.label(k);
-            ui.label(v);
-            ui.end_row();
+/// O fundo de uma zona: um quadro arredondado do tamanho dela.
+fn zona_fundo(ui: &egui::Ui, r: egui::Rect) {
+    let v = ui.visuals();
+    ui.painter().rect(
+        r,
+        egui::CornerRadius::same(10),
+        v.faint_bg_color,
+        v.widgets.noninteractive.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// O título pequeno, em maiúsculas, no alto de cada zona.
+fn titulo_zona(ui: &mut egui::Ui, t: &str) {
+    ui.label(
+        egui::RichText::new(t.to_uppercase())
+            .size(11.0)
+            .strong()
+            .color(ui.visuals().weak_text_color()),
+    );
+    ui.add_space(4.0);
+}
+
+fn subtitulo(ui: &mut egui::Ui, t: &str) {
+    ui.label(
+        egui::RichText::new(t)
+            .size(13.0)
+            .strong()
+            .color(ui.visuals().strong_text_color()),
+    );
+    ui.add_space(4.0);
+}
+
+/// Um selo: texto curto em maiúsculas num contorno da cor. Clicável.
+fn selo(ui: &mut egui::Ui, t: &str, cor: egui::Color32) -> egui::Response {
+    let g = ui
+        .painter()
+        .layout_no_wrap(t.to_string(), egui::FontId::proportional(10.5), cor);
+    let tam = g.size() + egui::vec2(14.0, 6.0);
+    let (r, resp) = ui.allocate_exact_size(tam, egui::Sense::click());
+    let p = ui.painter();
+    p.rect(
+        r,
+        egui::CornerRadius::same(5),
+        cor.gamma_multiply(if resp.hovered() { 0.25 } else { 0.12 }),
+        egui::Stroke::new(1.0, cor.gamma_multiply(0.7)),
+        egui::StrokeKind::Inside,
+    );
+    p.galley(r.center() - g.size() / 2.0, g, cor);
+    resp
+}
+
+/// A cor do selo de cada etiqueta de nó.
+fn cor_etiqueta(t: &str) -> egui::Color32 {
+    match t {
+        "qualidade" => egui::Color32::from_rgb(0x5B, 0x8D, 0xEF),
+        "inspeção" => egui::Color32::from_rgb(0x2E, 0xB8, 0xA6),
+        "retrabalho" => egui::Color32::from_rgb(0xA7, 0x7B, 0xE8),
+        "EPI" => egui::Color32::from_rgb(0xF2, 0x8C, 0x1E),
+        "perigos" => egui::Color32::from_rgb(0xE5, 0x5A, 0x50),
+        _ => egui::Color32::from_rgb(0x9A, 0xA3, 0xAD),
+    }
+}
+
+/// Uma linha da lista de nós: o nome, o número em destaque à direita e os selos embaixo.
+/// Devolve `true` no clique.
+fn linha_no(
+    ui: &mut egui::Ui,
+    nome: &str,
+    tags: &[&str],
+    destaque: Option<&str>,
+    escolhido: bool,
+) -> bool {
+    let alto = if tags.is_empty() && destaque.is_none() {
+        34.0
+    } else {
+        52.0
+    };
+    let (r, resp) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), alto), egui::Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let resp = match destaque {
+        Some(d) => resp.on_hover_text(d),
+        None => resp,
+    };
+    if !ui.is_rect_visible(r) {
+        return resp.clicked();
+    }
+    let v = ui.visuals().clone();
+    let p = ui.painter();
+    if escolhido {
+        p.rect_filled(
+            r,
+            egui::CornerRadius::same(6),
+            v.selection.bg_fill.gamma_multiply(0.35),
+        );
+        p.rect_filled(
+            egui::Rect::from_min_size(r.min + egui::vec2(0.0, 6.0), egui::vec2(3.0, alto - 12.0)),
+            egui::CornerRadius::same(2),
+            v.selection.bg_fill,
+        );
+    } else if resp.hovered() {
+        p.rect_filled(
+            r,
+            egui::CornerRadius::same(6),
+            v.widgets.hovered.weak_bg_fill,
+        );
+    }
+    let x = r.left() + 12.0;
+    let y = r.top() + 9.0;
+    let mut job = egui::text::LayoutJob::simple_singleline(
+        nome.to_string(),
+        egui::FontId::proportional(14.0),
+        if escolhido {
+            v.strong_text_color()
+        } else {
+            v.text_color()
+        },
+    );
+    job.wrap = egui::text::TextWrapping::truncate_at_width((r.width() - 24.0).max(20.0));
+    let g = p.layout_job(job);
+    p.galley(egui::pos2(x, y), g, v.text_color());
+    // Na segunda linha: os selos e, no que sobra à direita, o número em destaque.
+    let mut tx = x;
+    for t in tags {
+        let cor = cor_etiqueta(t);
+        let g = p.layout_no_wrap(t.to_string(), egui::FontId::proportional(10.0), cor);
+        let caixa =
+            egui::Rect::from_min_size(egui::pos2(tx, y + 21.0), g.size() + egui::vec2(10.0, 4.0));
+        if caixa.right() > r.right() - 8.0 {
+            break;
         }
-    });
+        p.rect_filled(caixa, egui::CornerRadius::same(4), cor.gamma_multiply(0.16));
+        p.galley(caixa.min + egui::vec2(5.0, 2.0), g, cor);
+        tx = caixa.right() + 4.0;
+    }
+    if let Some(d) = destaque {
+        let livre = r.right() - 10.0 - (tx + 6.0);
+        if livre > 30.0 {
+            let mut job = egui::text::LayoutJob::simple_singleline(
+                d.to_string(),
+                egui::FontId::monospace(11.0),
+                v.weak_text_color(),
+            );
+            job.wrap = egui::text::TextWrapping::truncate_at_width(livre);
+            let g = p.layout_job(job);
+            p.galley(
+                egui::pos2(r.right() - 10.0 - g.size().x, y + 22.0),
+                g,
+                v.weak_text_color(),
+            );
+        }
+    }
+    resp.clicked()
+}
+
+/// Abas segmentadas: botões colados num contorno. Devolve o índice clicado.
+fn segmentos(ui: &mut egui::Ui, nomes: &[&str], atual: usize) -> Option<usize> {
+    let v = ui.visuals().clone();
+    let alto = 30.0;
+    let larguras: Vec<f32> = nomes
+        .iter()
+        .map(|n| {
+            ui.painter()
+                .layout_no_wrap(
+                    n.to_string(),
+                    egui::FontId::proportional(13.5),
+                    v.text_color(),
+                )
+                .size()
+                .x
+                + 32.0
+        })
+        .collect();
+    let total: f32 = larguras.iter().sum::<f32>() + 4.0;
+    let (r, _) = ui.allocate_exact_size(egui::vec2(total, alto), egui::Sense::hover());
+    ui.painter().rect(
+        r,
+        egui::CornerRadius::same(8),
+        v.extreme_bg_color,
+        v.widgets.noninteractive.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+    let mut x = r.left() + 2.0;
+    let mut clicado = None;
+    for (k, (n, w)) in nomes.iter().zip(larguras).enumerate() {
+        let c = egui::Rect::from_min_size(egui::pos2(x, r.top() + 2.0), egui::vec2(w, alto - 4.0));
+        let resp = ui
+            .interact(c, ui.id().with(("segmento", k)), egui::Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        let sel = k == atual;
+        if sel {
+            ui.painter()
+                .rect_filled(c, egui::CornerRadius::same(6), v.selection.bg_fill);
+        } else if resp.hovered() {
+            ui.painter().rect_filled(
+                c,
+                egui::CornerRadius::same(6),
+                v.widgets.hovered.weak_bg_fill,
+            );
+        }
+        ui.painter().text(
+            c.center(),
+            egui::Align2::CENTER_CENTER,
+            *n,
+            egui::FontId::proportional(13.5),
+            if sel {
+                egui::Color32::WHITE
+            } else {
+                v.text_color()
+            },
+        );
+        if resp.clicked() && !sel {
+            clicado = Some(k);
+        }
+        x += w;
+    }
+    clicado
+}
+
+/// Os números do resumo em blocos, dois por linha: o rótulo pequeno em cima e o valor
+/// grande embaixo. "(%)" no rótulo vira " %" no valor; a origem e o destaque ficam de
+/// fora (a origem já está no selo).
+fn blocos(ui: &mut egui::Ui, l: &[(String, String)]) {
+    let itens: Vec<(String, String)> = l
+        .iter()
+        .filter(|(k, _)| k != DESTAQUE && k != "Origem")
+        .map(|(k, v)| match k.strip_suffix(" (%)") {
+            Some(base) => (base.to_string(), format!("{v} %")),
+            None => (k.clone(), v.clone()),
+        })
+        .collect();
+    let vis = ui.visuals().clone();
+    let gap = 8.0;
+    let w = ((ui.available_width() - gap) / 2.0).floor();
+    let alto = 70.0;
+    for par in itens.chunks(2) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (k, v) in par {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(w, alto), egui::Sense::hover());
+                let p = ui.painter();
+                p.rect(
+                    r,
+                    egui::CornerRadius::same(8),
+                    vis.extreme_bg_color,
+                    vis.widgets.noninteractive.bg_stroke,
+                    egui::StrokeKind::Inside,
+                );
+                let rot = p.layout(
+                    k.clone(),
+                    egui::FontId::proportional(11.0),
+                    vis.weak_text_color(),
+                    w - 20.0,
+                );
+                p.galley(r.min + egui::vec2(10.0, 8.0), rot, vis.weak_text_color());
+                // O valor grande; se não cabe, menor e em até duas linhas.
+                let grande = p.layout_no_wrap(
+                    v.clone(),
+                    egui::FontId::proportional(20.0),
+                    vis.strong_text_color(),
+                );
+                let g = if grande.size().x <= w - 20.0 {
+                    grande
+                } else {
+                    let mut job = egui::text::LayoutJob::simple(
+                        v.clone(),
+                        egui::FontId::proportional(13.0),
+                        vis.strong_text_color(),
+                        w - 20.0,
+                    );
+                    job.wrap.max_rows = 2;
+                    p.layout_job(job)
+                };
+                p.galley(
+                    egui::pos2(r.left() + 10.0, r.bottom() - 8.0 - g.size().y),
+                    g,
+                    vis.strong_text_color(),
+                );
+            }
+        });
+        ui.add_space(gap - ui.spacing().item_spacing.y);
+    }
 }
 
 impl Drop for TelaModelo {
