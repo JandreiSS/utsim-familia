@@ -41,5 +41,5 @@ pub use maintenance::{
 pub use person::{Fatigue, Learning, Lift, LoadedWalk, Person, Variation};
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, Utilization, summarize};
 pub use stats::Histogram;
-pub use task::{RequestId, Router, TaskKind, TaskRequest};
+pub use task::{RequestId, Requirement, Router, TaskKind, TaskRequest};
 pub use trace::{Observer, TraceEvent, TraceRecord};

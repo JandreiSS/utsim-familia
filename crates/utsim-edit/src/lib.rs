@@ -231,6 +231,12 @@ pub enum Command {
         name: String,
         safety: Option<Box<utsim_model::safety::SafetyDef>>,
     },
+    /// Replaces the operation rule of work station `name`: who may operate it and the
+    /// time to get in and out (`None` removes it).
+    SetOperation {
+        name: String,
+        operation: Option<Box<utsim_model::OperationDef>>,
+    },
     /// Replaces the breakdowns and maintenance of object `name`.
     SetDowntime {
         name: String,
@@ -735,6 +741,26 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::SetDowntime { name, downtime } => {
             object_mut(model, name)?.downtime = downtime.clone();
         }
+        Command::SetOperation { name, operation } => {
+            let obj = object_mut(model, name)?;
+            if operation.is_some() && !matches!(obj.kind, utsim_model::ObjectKind::Processor { .. })
+            {
+                return Err(format!(
+                    "{name}: a regra de operação só vale para um processo"
+                ));
+            }
+            let mut operation = operation.clone();
+            if let Some(op) = operation.as_deref_mut() {
+                let mut skills: Vec<String> = Vec::new();
+                for s in op.skills.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                    if !skills.iter().any(|x| x == s) {
+                        skills.push(s.to_string());
+                    }
+                }
+                op.skills = skills;
+            }
+            obj.operation = operation;
+        }
         Command::RemoveZone { name } => {
             let before = model.zones.len();
             model.zones.retain(|z| &z.name != name);
@@ -1091,6 +1117,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         sink_role: None,
         ppe: Vec::new(),
         safety: None,
+        operation: None,
     })
 }
 
@@ -1136,6 +1163,35 @@ mod tests {
             .unwrap();
         }
         doc
+    }
+
+    #[test]
+    fn operation_rule_is_set_cleaned_and_undone() {
+        let mut doc = line();
+        let rule = utsim_model::OperationDef {
+            skills: vec![" torno ".into(), "torno".into(), "".into()],
+            require_ppe: true,
+            enter: Some(utsim_core::Dist::Const(2.0)),
+            leave: None,
+        };
+        doc.apply(Command::SetOperation {
+            name: "maquina".into(),
+            operation: Some(Box::new(rule)),
+        })
+        .unwrap();
+        let op = doc.model().objects[2].operation.as_deref().unwrap();
+        assert_eq!(op.skills, vec!["torno".to_string()]);
+        assert!(op.require_ppe);
+        // Only a processor has an operation rule.
+        assert!(
+            doc.apply(Command::SetOperation {
+                name: "fila".into(),
+                operation: Some(Box::default()),
+            })
+            .is_err()
+        );
+        doc.undo();
+        assert!(doc.model().objects[2].operation.is_none());
     }
 
     #[test]

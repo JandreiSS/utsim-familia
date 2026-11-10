@@ -43,6 +43,10 @@ pub enum State {
     Maintenance,
     /// A person pausing to recover from fatigue ([`crate::person`]).
     Resting,
+    /// A station whose operators are entering it (door, guard, cell) before the work.
+    Entering,
+    /// A station whose operators are leaving it after the work.
+    Leaving,
 }
 
 impl State {
@@ -69,6 +73,8 @@ impl State {
             State::WaitingRepair => "waiting_repair",
             State::Maintenance => "maintenance",
             State::Resting => "resting",
+            State::Entering => "entering",
+            State::Leaving => "leaving",
         }
     }
 }

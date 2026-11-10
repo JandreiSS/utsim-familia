@@ -73,6 +73,20 @@ impl Model {
                     errors.push(format!("{}.person.{e}", obj.name));
                 }
             }
+            if let Some(rule) = obj.operation.as_deref() {
+                if !matches!(obj.kind, ObjectKind::Processor { .. }) {
+                    errors.push(format!(
+                        "{}: a regra de operação (operation) só vale para um Processor",
+                        obj.name
+                    ));
+                }
+                if rule.skills.iter().any(|s| s.trim().is_empty()) {
+                    errors.push(format!(
+                        "{}: operation.skills: os nomes das habilidades não podem ser vazios",
+                        obj.name
+                    ));
+                }
+            }
             for op in obj.kind.operator_uses() {
                 if op.requires.as_deref().is_some_and(|s| s.trim().is_empty()) {
                     errors.push(format!(
@@ -81,6 +95,40 @@ impl Model {
                     ));
                 }
             }
+        }
+    }
+
+    /// Protective equipment an operator of `obj` must wear: the station's own `ppe` and
+    /// that of the risk zones its position is in, without repeats.
+    pub fn required_ppe(&self, obj: &ObjectDef) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let at = [obj.position[0], obj.position[1]];
+        let zones = self
+            .zones
+            .iter()
+            .filter(|z| crate::exposure::contains(&z.polygon, at));
+        for e in obj.ppe.iter().chain(zones.flat_map(|z| z.ppe.iter())) {
+            if !out.contains(e) {
+                out.push(e.clone());
+            }
+        }
+        out
+    }
+
+    /// The processor's operation rule ([`crate::OperationDef`]) as the simulation uses it.
+    pub(crate) fn operation_of(&self, obj: &ObjectDef) -> utsim_objects::Operation {
+        let Some(rule) = obj.operation.as_deref() else {
+            return utsim_objects::Operation::default();
+        };
+        utsim_objects::Operation {
+            skills: rule.skills.clone(),
+            ppe: if rule.require_ppe {
+                self.required_ppe(obj)
+            } else {
+                Vec::new()
+            },
+            enter: rule.enter.clone(),
+            leave: rule.leave.clone(),
         }
     }
 
@@ -134,6 +182,39 @@ impl Model {
                     "{}: precisa de {} operadores com '{skill}', mas a equipe '{}' só tem {qualified}",
                     obj.name, op.count, op.team
                 ));
+            }
+        }
+        // Operation rules: skills and protective equipment every operator must have.
+        for obj in &self.objects {
+            let rule = self.operation_of(obj);
+            if rule.skills.is_empty() && rule.ppe.is_empty() {
+                continue;
+            }
+            for op in obj.kind.operator_uses() {
+                let mut skills = rule.skills.clone();
+                skills.extend(op.requires.iter().cloned());
+                let ok = |m: &&&ObjectDef| {
+                    let has = skills.is_empty()
+                        || m.person
+                            .as_ref()
+                            .is_some_and(|p| skills.iter().all(|s| p.has_skill(s)));
+                    has && rule.ppe.iter().all(|e| m.ppe.contains(e))
+                };
+                let qualified = self.team_members(&op.team).iter().filter(ok).count();
+                let mut need: Vec<String> = skills.iter().map(|s| format!("'{s}'")).collect();
+                need.extend(rule.ppe.iter().map(|e| format!("EPI '{e}'")));
+                let need = need.join(", ");
+                if qualified == 0 {
+                    out.push(format!(
+                        "{}: ninguém da equipe '{}' atende à regra de operação ({need}): a operação ficaria esperando para sempre",
+                        obj.name, op.team
+                    ));
+                } else if qualified < op.count {
+                    out.push(format!(
+                        "{}: precisa de {} operadores com {need}, mas a equipe '{}' só tem {qualified}",
+                        obj.name, op.count, op.team
+                    ));
+                }
             }
         }
         // People who carry items (directly or as members of a dispatcher).

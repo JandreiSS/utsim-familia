@@ -65,6 +65,7 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         sink_role: None,
         ppe: Vec::new(),
         safety: None,
+        operation: None,
     }
 }
 

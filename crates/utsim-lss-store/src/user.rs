@@ -88,6 +88,33 @@ pub struct UserConfig {
     pub recent: Vec<PathBuf>,
     #[serde(rename = "tema", default)]
     pub theme: Theme,
+    #[serde(rename = "idioma", default)]
+    pub language: Language,
+}
+
+/// Language of the interface (stage P8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Language {
+    #[default]
+    #[serde(rename = "pt-BR")]
+    PtBr,
+    #[serde(rename = "en")]
+    En,
+    #[serde(rename = "es")]
+    Es,
+}
+
+impl Language {
+    pub const ALL: [Language; 3] = [Language::PtBr, Language::En, Language::Es];
+
+    /// The name of the language in the language itself.
+    pub fn native_name(self) -> &'static str {
+        match self {
+            Language::PtBr => "Português (Brasil)",
+            Language::En => "English",
+            Language::Es => "Español",
+        }
+    }
 }
 
 impl UserConfig {
