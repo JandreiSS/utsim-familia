@@ -299,6 +299,7 @@ fn corrigir_trabalho(
             base: cenarios[0].clone(),
             aluno: c,
             referencia: cenarios[1].clone(),
+            modelo: m.modelo.clone(),
         };
         let r = corrigir(&m.missao, &pacote.pacote.pesos, &sim, tent).map_err(|e| e.to_string())?;
         out.push((tent.clone(), r));

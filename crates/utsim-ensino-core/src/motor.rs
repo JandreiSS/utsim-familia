@@ -28,6 +28,8 @@ pub struct Simulacao {
     pub aluno: Cenario,
     /// The reference solution.
     pub referencia: Cenario,
+    /// The mission's model, which the simulation data sets run on.
+    pub modelo: Model,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -128,6 +130,7 @@ pub fn simular(
         base,
         aluno,
         referencia,
+        modelo: m.modelo.clone(),
     })
 }
 
