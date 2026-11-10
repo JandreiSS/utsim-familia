@@ -8358,6 +8358,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-edit",
+ "utsim-ensino-core",
+ "utsim-ensino-store",
  "utsim-estudo",
  "utsim-ferramentas",
  "utsim-model",
