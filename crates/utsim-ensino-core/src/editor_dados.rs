@@ -2,14 +2,15 @@
 //! sets of a mission, made by the seeded generators with a planted effect, the questions
 //! about them and the apps of the family where the student analyses them. The screen is
 //! in `utsim-ensino-ui`; here are the defaults of each generator, the questions that fit
-//! it, the checks and the sample the teacher sees before writing.
+//! it, the checks and the sample the teacher sees before writing. A simulation set runs
+//! the mission's own model, so its checks and samples need the model of the edition.
 
 use std::collections::BTreeSet;
 use std::mem::discriminant;
 
 use utsim_core::Dist;
 
-use crate::dados::{Conjunto, Gerador, Padrao};
+use crate::dados::{Conjunto, Gerador, Padrao, erros_da_simulacao, estacoes_do_modelo};
 use crate::editor::{Edicao, id_valido};
 use crate::missao::{APPS_DE_ANALISE, Previsao, Tolerancia};
 use crate::questoes::{ConjuntoMissao, QuestaoDados};
@@ -46,10 +47,11 @@ pub enum TipoGerador {
     Fatorial,
     Pareado,
     Subgrupos,
+    Simulacao,
 }
 
 impl TipoGerador {
-    pub const TODOS: [TipoGerador; 7] = [
+    pub const TODOS: [TipoGerador; 8] = [
         TipoGerador::Tempos,
         TipoGerador::Msa,
         TipoGerador::MediaDeslocada,
@@ -57,6 +59,7 @@ impl TipoGerador {
         TipoGerador::Fatorial,
         TipoGerador::Pareado,
         TipoGerador::Subgrupos,
+        TipoGerador::Simulacao,
     ];
 
     pub fn de(g: &Gerador) -> TipoGerador {
@@ -68,6 +71,7 @@ impl TipoGerador {
             Gerador::Fatorial { .. } => TipoGerador::Fatorial,
             Gerador::Pareado { .. } => TipoGerador::Pareado,
             Gerador::Subgrupos { .. } => TipoGerador::Subgrupos,
+            Gerador::Simulacao { .. } => TipoGerador::Simulacao,
         }
     }
 
@@ -132,6 +136,13 @@ impl TipoGerador {
                     tamanho: 2.0,
                 }),
             },
+            // The stations come from the model ([`Edicao::novo_conjunto`]).
+            TipoGerador::Simulacao => Gerador::Simulacao {
+                estacoes: Vec::new(),
+                afetado: 0,
+                processo: Dist::Normal { mean: 5.0, sd: 0.5 },
+                duracao: 960.0,
+            },
         }
     }
 
@@ -178,6 +189,10 @@ impl TipoGerador {
                     lse: None,
                 },
             ],
+            TipoGerador::Simulacao => vec![
+                QuestaoDados::GrupoMaiorMedia,
+                QuestaoDados::GrupoMaisVariavel,
+            ],
         }
     }
 
@@ -193,7 +208,7 @@ impl TipoGerador {
         match self {
             TipoGerador::Tempos => Some("histograma"),
             TipoGerador::Msa => Some("msa"),
-            TipoGerador::MediaDeslocada => Some("estratificacao"),
+            TipoGerador::MediaDeslocada | TipoGerador::Simulacao => Some("estratificacao"),
             TipoGerador::Serie | TipoGerador::Subgrupos => Some("carta"),
             TipoGerador::Fatorial | TipoGerador::Pareado => None,
         }
@@ -209,6 +224,7 @@ impl TipoGerador {
             TipoGerador::Fatorial => "Experimento fatorial",
             TipoGerador::Pareado => "Comparação pareada",
             TipoGerador::Subgrupos => "Subgrupos de medidas",
+            TipoGerador::Simulacao => "Registros da simulação",
         }
     }
 }
@@ -261,6 +277,8 @@ pub fn linhas(g: &Gerador) -> usize {
             }
         }
         Gerador::Subgrupos { k, .. } => *k,
+        // Capped by the generator itself (`dados::MAX_REGISTROS`).
+        Gerador::Simulacao { .. } => 0,
     }
 }
 
@@ -432,6 +450,17 @@ pub fn erros_do_gerador(g: &Gerador) -> Vec<String> {
                 e.extend(erros_do_padrao(p, *k));
             }
         }
+        // The stations are checked against the model ([`Edicao::erros_do_conjunto`]).
+        Gerador::Simulacao {
+            processo, duracao, ..
+        } => {
+            if !(duracao.is_finite() && *duracao > 0.0) {
+                e.push("a duração da coleta deve ser positiva".into());
+            }
+            if let Err(x) = processo.validate() {
+                e.push(format!("tempo de processo plantado: {x}"));
+            }
+        }
     }
     let n = linhas(g);
     if n > MAX_LINHAS {
@@ -512,9 +541,74 @@ pub struct Amostra {
     pub resposta: Result<String, String>,
     /// How many of the [`ALUNOS_DE_TESTE`] students have data with no answer.
     pub sem_resposta: usize,
+    /// For a question that asks for a group: how many test students whose data point to
+    /// another group than the one with the planted effect (the effect lost in the noise).
+    pub fora_do_plantado: usize,
+}
+
+/// Whether the set draws its affected group by default (shifted means and simulation
+/// records, so neighbours do not share the answer).
+fn sorteia(tipo: TipoGerador) -> bool {
+    matches!(tipo, TipoGerador::MediaDeslocada | TipoGerador::Simulacao)
+}
+
+/// The group with the planted effect in the recipe of a set.
+fn grupo_plantado(g: &Gerador) -> Option<usize> {
+    match g {
+        Gerador::MediaDeslocada { afetado, .. } | Gerador::Simulacao { afetado, .. } => {
+            Some(*afetado)
+        }
+        _ => None,
+    }
 }
 
 impl Edicao {
+    /// The first values of a set of kind `tipo` for this model: a simulation set records
+    /// every machine of the model, and the planted cause makes the first one half as slow
+    /// again, with little spread.
+    pub fn gerador_padrao(&self, tipo: TipoGerador) -> Gerador {
+        let mut g = tipo.padrao();
+        if let Gerador::Simulacao {
+            estacoes, processo, ..
+        } = &mut g
+        {
+            *estacoes = estacoes_do_modelo(&self.modelo);
+            let media = self
+                .modelo
+                .objects
+                .iter()
+                .find_map(|o| match &o.kind {
+                    utsim_model::ObjectKind::Processor { process, .. }
+                        if estacoes.first() == Some(&o.name) =>
+                    {
+                        Some(process.mean())
+                    }
+                    _ => None,
+                })
+                .filter(|m| m.is_finite() && *m > 0.0);
+            if let Some(m) = media {
+                *processo = Dist::Normal {
+                    mean: crate::dados::arredondar(m * 1.5),
+                    sd: crate::dados::arredondar(m * 0.15),
+                };
+            }
+        }
+        g
+    }
+
+    /// The problems of the generator of `cj`, with the stations of a simulation set
+    /// checked against the model.
+    pub fn erros_do_conjunto(&self, cj: &ConjuntoMissao) -> Vec<String> {
+        let mut e = erros_do_gerador(&cj.gerador);
+        e.extend(erros_da_simulacao(&cj.gerador, &self.modelo));
+        e
+    }
+
+    /// The data of `cj` for `aluno` (empty: the fixed seed of the samples).
+    fn dados_de(&self, cj: &ConjuntoMissao, aluno: &str) -> Conjunto {
+        cj.gerar_com(&self.base.id, aluno, &self.modelo)
+    }
+
     /// A free id for a new data set: `d1`, `d2`, ...
     pub fn id_conjunto_livre(&self) -> String {
         (1..)
@@ -529,8 +623,8 @@ impl Edicao {
         self.base.dados.push(ConjuntoMissao {
             id: id.clone(),
             nome: tipo.nome().into(),
-            gerador: tipo.padrao(),
-            sortear_afetado: tipo == TipoGerador::MediaDeslocada,
+            gerador: self.gerador_padrao(tipo),
+            sortear_afetado: sorteia(tipo),
             ferramenta: tipo.ferramenta().map(str::to_string),
             lie: None,
             lse: None,
@@ -541,14 +635,18 @@ impl Edicao {
     /// Changes the kind of the set `i`: new first values, the tool of the kind, and the
     /// questions about it that no longer fit go to the first question of the new kind.
     pub fn mudar_tipo(&mut self, i: usize, tipo: TipoGerador) {
-        let Some(cj) = self.base.dados.get_mut(i) else {
+        let Some(cj) = self.base.dados.get(i) else {
             return;
         };
         if TipoGerador::de(&cj.gerador) == tipo {
             return;
         }
-        cj.gerador = tipo.padrao();
-        cj.sortear_afetado = tipo == TipoGerador::MediaDeslocada;
+        let g = self.gerador_padrao(tipo);
+        let Some(cj) = self.base.dados.get_mut(i) else {
+            return;
+        };
+        cj.gerador = g;
+        cj.sortear_afetado = sorteia(tipo);
         cj.ferramenta = tipo.ferramenta().map(str::to_string);
         let id = cj.id.clone();
         let primeira = tipo.questoes().remove(0);
@@ -674,10 +772,10 @@ impl Edicao {
     /// The data the editor shows for the set `id` (the fixed seed, as with no student).
     pub fn amostra_de_dados(&self, id: &str) -> Option<Conjunto> {
         let cj = self.base.conjunto(id)?;
-        if !erros_do_gerador(&cj.gerador).is_empty() {
+        if !self.erros_do_conjunto(cj).is_empty() {
             return None;
         }
-        Some(cj.gerar(&self.base.id, ""))
+        Some(self.dados_de(cj, ""))
     }
 
     /// The answer of the prediction `i` (a data question) for the sample data, and how
@@ -691,20 +789,37 @@ impl Edicao {
             return None;
         };
         let cj = self.base.conjunto(conjunto)?;
-        if !erros_do_gerador(&cj.gerador).is_empty() || !erros_da_questao(questao, cj).is_empty() {
+        if !self.erros_do_conjunto(cj).is_empty() || !erros_da_questao(questao, cj).is_empty() {
             return None;
         }
-        let c = cj.gerar(&self.base.id, "");
+        let c = self.dados_de(cj, "");
         let resposta = questao.resposta(&c).map(|v| questao.texto(cj, v));
-        let sem_resposta = (1..=ALUNOS_DE_TESTE)
-            .filter(|k| {
-                let c = cj.gerar(&self.base.id, &format!("aluno-de-teste-{k}"));
-                questao.resposta(&c).is_err()
-            })
-            .count();
+        let pede_grupo = matches!(
+            questao,
+            QuestaoDados::GrupoDeslocado
+                | QuestaoDados::GrupoMaiorMedia
+                | QuestaoDados::GrupoMaisVariavel
+        );
+        let (mut sem_resposta, mut fora_do_plantado) = (0, 0);
+        for k in 1..=ALUNOS_DE_TESTE {
+            let aluno = format!("aluno-de-teste-{k}");
+            let receita = cj.receita(&self.base.id, &aluno);
+            match questao.resposta(&receita.gerar_com(Some(&self.modelo))) {
+                Err(_) => sem_resposta += 1,
+                Ok(v) => {
+                    if pede_grupo
+                        && let Some(g) = grupo_plantado(&receita.gerador)
+                        && v as usize != g
+                    {
+                        fora_do_plantado += 1;
+                    }
+                }
+            }
+        }
         Some(Amostra {
             resposta,
             sem_resposta,
+            fora_do_plantado,
         })
     }
 
@@ -728,7 +843,7 @@ impl Edicao {
                 e.push(format!("{nome}: dê um nome ao conjunto"));
             }
             e.extend(
-                erros_do_gerador(&cj.gerador)
+                self.erros_do_conjunto(cj)
                     .into_iter()
                     .map(|x| format!("{nome}: {x}")),
             );
@@ -792,7 +907,7 @@ impl Edicao {
                 e.extend(es.into_iter().map(|x| format!("previsão {n}: {x}")));
                 continue;
             }
-            if !erros_do_gerador(&cj.gerador).is_empty() {
+            if !self.erros_do_conjunto(cj).is_empty() {
                 continue;
             }
             if questao.e_escolha() && questao.opcoes(cj).len() < 2 {
@@ -800,7 +915,7 @@ impl Edicao {
                     "previsão {n}: a pergunta precisa de grupos no conjunto"
                 ));
             }
-            if let Err(x) = questao.resposta(&cj.gerar(&b.id, "")) {
+            if let Err(x) = questao.resposta(&self.dados_de(cj, "")) {
                 e.push(format!(
                     "previsão {n}: os dados de exemplo não têm resposta: {x}"
                 ));
@@ -828,13 +943,21 @@ impl Edicao {
             }
         }
         for i in 0..self.base.previsao.len() {
-            if let Some(a) = self.amostra_da_pergunta(i)
-                && a.sem_resposta > 0
-            {
+            let Some(a) = self.amostra_da_pergunta(i) else {
+                continue;
+            };
+            if a.sem_resposta > 0 {
                 v.push(format!(
                     "previsão {}: {} de {ALUNOS_DE_TESTE} alunos de teste recebem dados sem resposta (aumente o efeito ou o tamanho)",
                     i + 1,
                     a.sem_resposta
+                ));
+            }
+            if a.fora_do_plantado > 0 {
+                v.push(format!(
+                    "previsão {}: para {} de {ALUNOS_DE_TESTE} alunos de teste os dados apontam outro grupo que não o do efeito plantado (aumente o efeito ou a coleta)",
+                    i + 1,
+                    a.fora_do_plantado
                 ));
             }
         }
