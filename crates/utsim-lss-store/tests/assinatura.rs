@@ -268,3 +268,82 @@ fn approval_seals() {
     assinatura::sign_approval(&path, &signer(42), &c, clock.now_ms()).unwrap();
     assert_eq!(assinatura::seal_status(&path, &r, &c), SealStatus::Invalid);
 }
+
+#[test]
+fn the_role_list_signed_by_the_founder() {
+    use utsim_lss_core::perfis::{Grant, Profile};
+    let dir = tempfile::tempdir().unwrap();
+    let (path, ana, clock) = signed_project(dir.path(), 16);
+    // Bia signs too, with her own key registered in the folder.
+    let bia = who(17, "Bia");
+    assinatura::register(bia.person, signer(17));
+    let mut pf = ProjectFolder::open(&path, &bia, None).unwrap();
+    let e = note(&pf, "Bia esteve aqui");
+    pf.commit(vec![e], &clock).unwrap();
+    let program = pf.project_id();
+    let g = |n: u8, person: Id, profile: Profile| Grant {
+        id: Id::v7(1_793_000_001_000 + n as u64, [n; 10]),
+        person: Some(person),
+        profile,
+        unit: None,
+    };
+    let mut grants = vec![
+        g(1, ana.person, Profile::Mbb),
+        g(2, bia.person, Profile::Belt),
+    ];
+    let check = |grants: &[Grant]| {
+        let r = assinatura::check(&path);
+        let seals = assinatura::Seals::read(&path);
+        assinatura::roles_check(&seals, &r, program, ana.person, grants)
+    };
+    assert_eq!(check(&grants).signed, None);
+    // Bia is not the founder nor an MBB: her seal does not count.
+    let a = assinatura::roles_approval(program, &grants, bia.person);
+    assinatura::sign_approval(&path, &signer(17), &a, clock.now_ms()).unwrap();
+    let c = check(&grants);
+    assert_eq!(c.signed, None);
+    assert_eq!(c.not_entitled, vec![bia.person]);
+    // The founder signs: the list is current.
+    let a = assinatura::roles_approval(program, &grants, ana.person);
+    assinatura::sign_approval(&path, &signer(16), &a, clock.now_ms()).unwrap();
+    let c = check(&grants);
+    assert!(c.current(), "{c:?}");
+    assert_eq!(c.signed.map(|(p, _)| p), Some(ana.person));
+    // A grant added afterwards (Bia made an MBB by someone) is out of the signed list.
+    grants.push(g(3, bia.person, Profile::Mbb));
+    let c = check(&grants);
+    assert!(!c.current());
+    assert_eq!(c.unsigned.len(), 1);
+    assert_eq!(c.unsigned[0].profile, Profile::Mbb);
+}
+
+#[test]
+fn a_certificate_approval_covers_its_content() {
+    use utsim_lss_core::certificacao::Certification;
+    let program = Id::v7(1_793_000_002_000, [8; 10]);
+    let issuer = Id::v7(1_793_000_002_001, [8; 10]);
+    let mut c = Certification {
+        id: Id::v7(1_793_000_002_002, [8; 10]),
+        number: Some(7),
+        person: Some(Id::v7(1_793_000_002_003, [8; 10])),
+        level: Default::default(),
+        date: "2026-11-10".parse().ok(),
+        valid_until: "2029-11-10".parse().ok(),
+        met: Vec::new(),
+        issuer: Some(issuer),
+        manual: false,
+        note: String::new(),
+        renewal_of: None,
+        revoked: false,
+        opinion: String::new(),
+        opinion_by: None,
+        opinion_on: None,
+    };
+    let a = assinatura::certificate_approval(program, &c).unwrap();
+    assert_eq!(a.person, issuer);
+    c.valid_until = "2030-11-10".parse().ok();
+    let b = assinatura::certificate_approval(program, &c).unwrap();
+    assert_ne!(a.content, b.content, "the validity is covered");
+    c.number = None;
+    assert!(assinatura::certificate_approval(program, &c).is_none());
+}
