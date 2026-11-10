@@ -9,6 +9,7 @@ rust-version.workspace = true
 utsim-core.workspace = true
 utsim-model.workspace = true
 utsim-objects.workspace = true
+utsim-fluid.workspace = true
 utsim-edit.workspace = true
 utsim-diagram.workspace = true
 ron.workspace = true

@@ -68,3 +68,12 @@ Feitas sem janela pelos testes `tests/abertura.rs` de cada app
 ![Ensino, primeira vez](imagens/abertura/ensino_abertura_primeira_vez.png)
 ![Ensino](imagens/abertura/ensino_abertura.png)
 ![Ensino em inglês](imagens/abertura/ensino_abertura_en.png)
+
+## Mapa da campanha do Ensino
+
+Cada ato é uma faixa de cartões, um por missão: número, título, estrelas, melhor nota e
+cadeado quando bloqueada (o motivo aparece ao passar o mouse). A próxima missão a fazer
+fica na cor do app, com "Começar" ou "Tentar de novo". Uma missão resolvida tem o link
+"Caixa de areia" no canto.
+
+![Mapa da campanha](imagens/abertura/ensino_mapa.png)

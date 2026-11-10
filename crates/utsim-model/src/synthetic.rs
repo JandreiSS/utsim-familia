@@ -65,6 +65,7 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         sink_role: None,
         ppe: Vec::new(),
         safety: None,
+        operation: None,
     }
 }
 
@@ -88,6 +89,7 @@ fn processor(mean: f64) -> ObjectKind {
         operators: None,
         also: Vec::new(),
         changeover: None,
+        recipe: None,
     }
 }
 

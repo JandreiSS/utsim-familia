@@ -71,6 +71,20 @@ impl Geom {
         }
     }
 
+    /// Half extents in the block's own frame, before its rotation: a belt's length along
+    /// its local `x` and its width along `z` ([`Geom::half`] holds the box of the turned
+    /// belt); the same as `half` for the other shapes, which `half` keeps unrotated.
+    pub fn local_half(&self) -> [f32; 3] {
+        match self.belt_params() {
+            Some(p) if self.shape == Shape::Belt => [
+                p.length as f32 / 2.0,
+                BELT_THICKNESS / 2.0,
+                BELT_WIDTH / 2.0,
+            ],
+            _ => self.half,
+        }
+    }
+
     pub fn belt_params(&self) -> Option<BeltParams> {
         match self.handling {
             Some(Handling::Conveyor(p)) => Some(p),

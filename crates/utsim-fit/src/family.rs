@@ -10,14 +10,19 @@ pub trait FittedModel: Send + Sync {
     fn pdf(&self, x: f64) -> f64;
     fn sample(&self, rng: &mut SimRng) -> f64;
 
-    /// Inverse CDF, used by Q-Q plots. Default: bisection on [`FittedModel::cdf`].
+    /// Inverse CDF, used by Q-Q plots. Default: bisection on [`FittedModel::cdf`]. The
+    /// bracket stops doubling when it leaves the finite numbers (at most about 1024 steps on
+    /// each side), so a model whose CDF never reaches `p` gives an infinite end, not a loop.
     fn quantile(&self, p: f64) -> f64 {
-        let (mut lo, mut hi) = (-1.0, 1.0);
-        while self.cdf(lo) > p {
+        let (mut lo, mut hi): (f64, f64) = (-1.0, 1.0);
+        while lo.is_finite() && self.cdf(lo) > p {
             lo *= 2.0;
         }
-        while self.cdf(hi) < p {
+        while hi.is_finite() && self.cdf(hi) < p {
             hi *= 2.0;
+        }
+        if !lo.is_finite() || !hi.is_finite() {
+            return if hi.is_finite() { lo } else { hi };
         }
         for _ in 0..200 {
             let mid = 0.5 * (lo + hi);
