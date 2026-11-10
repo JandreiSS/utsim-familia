@@ -646,7 +646,7 @@ pub fn pintar_simbolo(p: &egui::Painter, r: Rect, s: Simbolo, cor: Color32) {
     }
 }
 
-fn iniciais(nome: &str) -> String {
+pub(crate) fn iniciais(nome: &str) -> String {
     nome.split_whitespace()
         .filter(|p| p.chars().next().is_some_and(char::is_uppercase))
         .filter_map(|p| p.chars().next())
@@ -655,7 +655,7 @@ fn iniciais(nome: &str) -> String {
 }
 
 /// O ícone do app como textura, carregada uma vez por contexto.
-fn textura(ui: &Ui, nome: &str, png: &[u8]) -> Option<TextureHandle> {
+pub(crate) fn textura(ui: &Ui, nome: &str, png: &[u8]) -> Option<TextureHandle> {
     let id = egui::Id::new(("abertura-icone", nome));
     if let Some(t) = ui.ctx().data(|d| d.get_temp::<TextureHandle>(id)) {
         return Some(t);

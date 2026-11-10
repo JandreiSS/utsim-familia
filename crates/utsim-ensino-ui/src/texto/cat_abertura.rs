@@ -166,4 +166,24 @@ textos! {
         "Todos os arquivos",
         "All files",
         "Todos los archivos";
+    mapa_comecar:
+        "Começar",
+        "Start",
+        "Empezar";
+    mapa_tentar_de_novo:
+        "Tentar de novo",
+        "Try again",
+        "Intentar de nuevo";
+    mapa_proxima:
+        "PRÓXIMA",
+        "NEXT",
+        "SIGUIENTE";
+    mapa_nota:
+        "nota {} · {} tentativa(s)",
+        "grade {} · {} attempt(s)",
+        "nota {} · {} intento(s)";
+    mapa_resolvidas:
+        "{} de {} resolvidas",
+        "{} of {} solved",
+        "{} de {} resueltas";
 }
