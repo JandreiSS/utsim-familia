@@ -378,13 +378,13 @@ impl FluidNet {
             let v = rate * dt;
             if v.is_finite() { v } else { 0.0 }
         };
-        for i in 0..self.def.nodes.len() {
+        for (i, end) in ends.into_iter().enumerate() {
             let through = self.through(i);
             self.vol[i] += moved(through);
             match &self.def.nodes[i].kind {
                 FluidKind::Tank { capacity, .. } => {
                     let net = self.net(i);
-                    self.level[i] = if reaches(ends[i]) {
+                    self.level[i] = if reaches(end) {
                         if net > 0.0 { *capacity } else { 0.0 }
                     } else {
                         (self.level[i] + moved(net)).clamp(0.0, *capacity)
@@ -392,7 +392,7 @@ impl FluidNet {
                     self.max_level[i] = self.max_level[i].max(self.level[i]);
                 }
                 FluidKind::ToItems { volume, .. } => {
-                    self.acc[i] = if reaches(ends[i]) {
+                    self.acc[i] = if reaches(end) {
                         self.acc[i].max(*volume)
                     } else {
                         self.acc[i] + moved(through)
