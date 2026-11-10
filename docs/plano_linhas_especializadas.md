@@ -934,3 +934,110 @@ As propostas seguem no código até o dono responder.
    ou por máquina, pela inspeção logo depois dela.
 6. **M-D6 Modelos prontos.** Os três da seção 10.7 (proposta) ou outros (montagem com
    kitting, linha balanceada, célula em U).
+
+## 11. Sexta linha: Processos contínuos e batelada
+
+Plano curto, no formato das seções 7 a 10, escrito em 2026-11-09. É a última linha da tabela
+da seção 3. Vale a direção do dono de 2026-11-08 (`docs/plano_integracao_familia.md`, seção 3):
+a quebra de cada reator fica no `downtime` do próprio nó, o EPI no `ppe`, e a inspeção e o lote
+fora de especificação no `quality`, no `inspection` e nas saídas com `sink_role`.
+
+### 11.1 O que se estuda num processo por lotes
+
+Lotes de produtos químicos, alimentos, bebidas ou tintas, cada um com a sua receita, feitos em
+reatores que precisam limpar entre um produto e outro (CIP), com tempo de limpeza que depende
+da sequência. Os lotes passam por tanques pulmão e pelo envase. A parte contínua (tanques de
+matéria-prima e de produto, bombas, envase que puxa sem parar) fica na rede de fluidos.
+
+Perguntas típicas:
+
+- quantos lotes e quantos litros saem por dia;
+- quanto tempo os reatores perdem em limpeza e o efeito de produzir em campanha (juntar
+  produtos iguais);
+- se o tanque pulmão segura a diferença entre a batelada, que entrega aos saltos, e o envase
+  contínuo;
+- qual o rendimento e quantos lotes saem fora de especificação.
+
+### 11.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Lote | item com rótulos (`produto`, `volume`, `rendimento`) | existe |
+| Receita por produto | **`recipe` no `Processor`**: o tempo de processamento depende do rótulo do item | **novo** |
+| Limpeza entre produtos (CIP) | `changeover` no `Processor`, da seção 10 | existe |
+| Campanha | `order: Some(Asc("produto"))` na fila de lotes | existe |
+| Tanque pulmão de lotes | `Queue` com `capacity` (o reator fica bloqueado quando enche) | existe |
+| Tanques, bombas, envase contínuo | rede de fluidos, com `FromItems` (lote → volume) e `ToItems` (volume → unidade) | existe |
+| Fora de especificação, reprocesso | `quality`, `inspection` e `rework` do nó, `sink_role: Scrap` | existe |
+
+### 11.3 Biblioteca
+
+Programação de lotes (mistura, volume e rendimento), fila de lotes (chegada ou campanha), reator
+de batelada (receita, limpeza, quebra e EPI), equipamento de processo, tanque pulmão de lotes,
+envase do lote, tanque de produto, equipe de operadores e operador.
+
+### 11.4 Vocabulário
+
+item → lote; `Source` → programação; `Processor` → reator; `Sink` → tanque de produto; `setup` →
+em limpeza; `time_in_system` → tempo de atravessamento do lote.
+
+### 11.5 Indicadores
+
+Com IC de 95 % entre replicações:
+
+- lotes por dia e volume produzido por dia (`volume × rendimento`);
+- rendimento médio, comparado com o alvo;
+- lotes fora de especificação;
+- atravessamento do lote, também por produto;
+- tempo de cada equipamento (produzindo, em limpeza, quebrado, bloqueado, sem lote), limpezas
+  por dia e ciclo do lote;
+- nível médio de cada tanque da rede de fluidos;
+- unidades do envase contínuo por dia;
+- ocupação dos operadores.
+
+### 11.6 Relatório
+
+`utsim linha processos relatorio`, com texto, HTML e JSON e com `--rendimento-alvo`. Traz
+cartões, a tabela dos equipamentos, a tabela por produto, os tanques e a ocupação dos
+operadores.
+
+### 11.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| Batelada com limpeza entre produtos | dois reatores, três receitas, matriz de limpeza, campanha, quebras, pulmão e envase |
+| Xarope: batelada e envase contínuo | lotes que descarregam num tanque de produto e um envase contínuo que faz fardos |
+| Tintas: lotes com ajuste de cor | receita e limpeza por cor, conferência de tom com ajuste e descarte, operadores com habilidades |
+
+### 11.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| C1 | `recipe` no `Processor` (tempo pela receita do item), com testes à mão; golden inalterados; painel 3D | 3–4 | Opus |
+| C2 | Pacote `linhas/processos/` (quebra, EPI e inspeção nos campos do nó) | 3–4 | Sonnet |
+| C3 | Indicadores e relatório da linha, `utsim linha processos relatorio` | 6–8 | Opus |
+| C4 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Estado em 2026-11-09: C1 a C4 feitos.** O `recipe` serve a qualquer processo. A parte
+contínua usa a rede de fluidos que já existia, sem mudança. As unidades do envase contínuo
+(`ToItems`) não contam como lotes. Fica de fora, para depois: receita com fases (carga, reação,
+descarga) ocupando recursos diferentes, e os sensores do gêmeo digital como entrada principal
+(a seção 3 os cita). Manual em `docs/manual/src/linhas/processos/index.md`.
+
+### 11.9 Decisões do dono
+
+As propostas seguem no código até o dono responder.
+
+1. **C-D1 Nome exibido.** "Processos contínuos e batelada" (proposta) ou "Processos por lotes".
+2. **C-D2 Rendimento.** Sorteado na programação, como rótulo do lote (proposta, simples). A
+   alternativa é sortear na saída do reator.
+3. **C-D3 Volume que vai para o tanque.** O `FromItems` entrega o volume fixo do nó (proposta,
+   já existe). A alternativa é entregar `volume × rendimento` de cada lote, o que pede uma
+   mudança pequena na rede de fluidos.
+4. **C-D4 Tanque que transborda.** O modelo para com erro (proposta, é como a rede já faz). A
+   alternativa é o lote esperar na saída até haver lugar (bloqueio).
+5. **C-D5 Ciclo do lote.** Tempo médio do lote dentro do reator, contando a espera para sair
+   (proposta). A alternativa é só limpeza mais receita.
+6. **C-D6 Modelos prontos.** Os três da seção 11.7 (proposta) ou outros: cervejaria com
+   fermentação longa, laticínio com pasteurização contínua, farmácia com liberação do lote pela
+   qualidade.

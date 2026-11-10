@@ -8164,6 +8164,7 @@ dependencies = [
  "utsim-core",
  "utsim-diagram",
  "utsim-edit",
+ "utsim-fluid",
  "utsim-model",
  "utsim-objects",
 ]
