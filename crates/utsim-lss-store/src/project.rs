@@ -75,6 +75,10 @@ pub struct ProjectFolder {
     /// Every operation kept in memory, no snapshot nor cache (program folders and coaching
     /// logs: their reconstruction checks each operation's author, `utsim_lss_core::perfis`).
     full: bool,
+    /// The key of `me` in this process ([`crate::assinatura::register`]): commits are signed.
+    signer: Option<crate::assinatura::Signer>,
+    /// The last link of the chain, read on the first signed commit.
+    last_link: Option<Option<utsim_diario::Elo>>,
 }
 
 /// The path with the `.lss` extension (added when missing).
@@ -193,13 +197,15 @@ impl ProjectFolder {
         Self {
             root,
             manifest,
-            me,
             journal: Journal::new(),
             seen: HashSet::new(),
             pending: BTreeMap::new(),
             cache_dir: cache_dir.map(Path::to_path_buf),
             load: LoadInfo::default(),
             full: false,
+            signer: crate::assinatura::signer_of(me.person),
+            last_link: None,
+            me,
         }
     }
 
@@ -507,21 +513,55 @@ impl ProjectFolder {
 
     /// Turns edits into operations of this person, writes one file per operation (never
     /// replacing any) and applies them. Returns the operations written.
-    pub fn commit(&mut self, edits: Vec<Edit>, clock: &dyn Clock) -> Result<Vec<Op>> {
+    ///
+    /// With a key ([`crate::assinatura`]), the first commit also registers the public key in
+    /// the person, and every commit writes one link of the person's chain with the hash of
+    /// each file written.
+    pub fn commit(&mut self, mut edits: Vec<Edit>, clock: &dyn Clock) -> Result<Vec<Op>> {
         if edits.is_empty() {
             return Ok(Vec::new());
+        }
+        if let Some(signer) = &self.signer {
+            if let Some(e) = crate::assinatura::key_edit(self.state(), self.me.person, signer) {
+                edits.insert(0, e);
+            }
         }
         let ops = self
             .state()
             .prepare(self.me.person, clock.now_ms(), edits, || clock.new_id());
+        let mut written = Vec::with_capacity(ops.len());
         for op in &ops {
             let path = self.op_path(op);
-            fsio::write_new(&path, format::write(op).as_bytes())?;
+            let text = format::write(op);
+            fsio::write_new(&path, text.as_bytes())?;
             self.seen.insert(path);
             // Our own operations always come after everything known.
             let _ = self.journal.insert(op.clone());
+            written.push((op.id, text));
+        }
+        if let Some(signer) = self.signer.clone() {
+            let last = match self.last_link.take() {
+                Some(l) => l,
+                None => crate::assinatura::last_link(&self.root, self.me.person, &signer),
+            };
+            let files: Vec<(Id, &[u8])> =
+                written.iter().map(|(id, t)| (*id, t.as_bytes())).collect();
+            let elo = crate::assinatura::write_link(
+                &self.root,
+                self.me.person,
+                &signer,
+                last.as_ref(),
+                &files,
+                clock.now_ms(),
+            )?;
+            self.last_link = Some(Some(elo));
         }
         Ok(ops)
+    }
+
+    /// Whether commits of this folder are signed.
+    pub fn signer(&self) -> Option<&crate::assinatura::Signer> {
+        self.signer.as_ref()
     }
 
     /// Registers this person in the project (name and e-mail), if not there yet.

@@ -308,9 +308,10 @@ pub fn check(
 }
 
 /// Fields a person may write about themselves (registering, consent).
-pub const SELF_FIELDS: [&str; 5] = [
+pub const SELF_FIELDS: [&str; 6] = [
     dfields::person::NAME,
     dfields::person::EMAIL,
+    dfields::person::SIGNING_KEY,
     pf::CONSENT,
     pf::PURPOSE,
     pf::CONSENT_ON,
