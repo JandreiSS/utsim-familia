@@ -55,29 +55,73 @@ fn pipeline(text: &str) -> Result<(), String> {
         }
         return check_error(&e, "validate");
     }
-    // Keep the run short: the point is construction and the first events.
+    // Keep the run short: the point is construction and the first events. The budget is
+    // a number of events, not seconds of the machine's clock, so a loaded machine gives the
+    // same verdict as an idle one.
     model.run.stop_time = model.run.stop_time.min(100.0);
     model.run.warmup = model.run.warmup.min(model.run.stop_time / 2.0);
     model.run.replications = 1;
     model.run.sample_interval = model.run.sample_interval.map(|v| v.max(1.0));
-    match model.run_replications() {
-        Ok(_) => {}
-        Err(e) => check_error(&e, "run")?,
+    let mut sim = model.build(0);
+    sim.limit_events(EVENT_LIMIT);
+    if let Err(e) = model.drive(&mut sim) {
+        check_error(&e, "run")?;
     }
-    match model.replay(0) {
-        Ok(_) => {}
-        Err(e) => check_error(&e, "replay")?,
+    // The replay: the same run with the trace on, then the static part of the replay.
+    let mut sim = model.build(0);
+    sim.enable_trace();
+    sim.limit_events(EVENT_LIMIT);
+    if let Err(e) = model.drive(&mut sim) {
+        check_error(&e, "replay")?;
     }
+    let _ = model.empty_replay(0);
     Ok(())
 }
 
-/// Runs `pipeline` in a thread: a panic or a hang (> 60 s) is reported, not propagated.
+/// Events each run of the pipeline may process before it stops with an error.
+const EVENT_LIMIT: u64 = 2_000_000;
+
+/// Wall-clock fallback for what the event budget cannot stop (a loop inside one event).
+const WALL_LIMIT: Duration = Duration::from_secs(300);
+
+/// File that holds the input of the running case of this test thread until it ends: when
+/// the process dies without a panic (out of memory, stack overflow), the file left in
+/// `target/robustez/` is the input that killed it.
+fn case_file() -> std::path::PathBuf {
+    let name: String = std::thread::current()
+        .name()
+        .unwrap_or("principal")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/robustez");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{name}.ron"))
+}
+
+/// Runs `pipeline` in a thread: a panic or a hang (> [`WALL_LIMIT`]) is reported, not
+/// propagated. The input stays in [`case_file`] while the case runs.
 fn guarded(text: &str) -> Result<(), String> {
     // Debugging aid: an abort (out of memory, stack overflow) kills the process and leaves
     // no message, so `UTSIM_FUZZ_TRACE=file` keeps the last input on disk.
     if let Ok(path) = std::env::var("UTSIM_FUZZ_TRACE") {
         let _ = std::fs::write(path, text);
     }
+    let file = case_file();
+    let _ = std::fs::write(&file, text);
+    let result = guarded_run(text);
+    // The case ended inside the process (passed or failed with a message): no file left.
+    let _ = std::fs::remove_file(&file);
+    result
+}
+
+fn guarded_run(text: &str) -> Result<(), String> {
     let (tx, rx) = mpsc::channel();
     let owned = text.to_string();
     std::thread::spawn(move || {
@@ -94,14 +138,17 @@ fn guarded(text: &str) -> Result<(), String> {
             }
         });
     });
-    match rx.recv_timeout(Duration::from_secs(60)) {
+    match rx.recv_timeout(WALL_LIMIT) {
         Ok(r) => r.map_err(|e| format!("{e}\n--- entrada ---\n{text}")),
         Err(_) => {
             // The stuck thread cannot be stopped: report and end the whole test process.
             // `eprintln!` is captured by the test harness and lost on `exit`, so the input
             // goes straight to the process stderr and to a file in `target/`.
             use std::io::Write;
-            let msg = format!("TRAVOU (> 60 s)\n--- entrada ---\n{text}\n");
+            let msg = format!(
+                "TRAVOU (> {} s)\n--- entrada ---\n{text}\n",
+                WALL_LIMIT.as_secs()
+            );
             let _ = std::io::stderr().lock().write_all(msg.as_bytes());
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
             let _ = std::fs::create_dir_all(&dir);
