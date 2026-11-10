@@ -108,3 +108,33 @@ pub fn empacotar(pasta: &Path, destino: &Path) -> Result<PathBuf> {
     gravar_utse(&arquivos, destino)?;
     Ok(destino.to_path_buf())
 }
+
+/// Writes the teacher's package (the mission editor) to `dir`: every file of `depois`,
+/// and removes the files of `antes` that are no longer in it (a mission removed), never
+/// any other file of the folder. Empty folders left behind go too.
+pub fn gravar_trocando(dir: &Path, antes: &Arquivos, depois: &Arquivos) -> Result<()> {
+    gravar_pasta(depois, dir)?;
+    for k in antes.keys().filter(|k| !depois.contains_key(*k)) {
+        let p = k
+            .split('/')
+            .fold(dir.to_path_buf(), |acc, parte| acc.join(parte));
+        if p.is_file() {
+            std::fs::remove_file(&p)?;
+        }
+        if let Some(d) = p.parent()
+            && d != dir
+            && std::fs::read_dir(d).is_ok_and(|mut r| r.next().is_none())
+        {
+            std::fs::remove_dir(d)?;
+        }
+    }
+    Ok(())
+}
+
+/// The teacher's package in `dir`, when the folder has a `pacote.ron`.
+pub fn ler_pacote_professor(dir: &Path) -> Result<Option<Arquivos>> {
+    if !dir.join("pacote.ron").is_file() {
+        return Ok(None);
+    }
+    ler_pacote(dir).map(Some)
+}

@@ -10,6 +10,7 @@
 //! - [`texto`]: the text catalogue.
 
 mod abertura;
+pub mod editor;
 mod mapa;
 pub mod missao;
 pub mod pecas;
@@ -66,6 +67,8 @@ pub enum Tela {
     Glossario,
     Turma,
     Professor,
+    /// The mission editor of the teacher.
+    Editor,
     Ajustes,
 }
 
@@ -80,6 +83,7 @@ pub struct App {
     pub areia: Option<missao::EstadoAreia>,
     pub turma: turma::EstadoTurma,
     pub professor: turma::EstadoProfessor,
+    pub editor: editor::EstadoEditor,
     pub executor: Arc<dyn Executor>,
     pub relogio: fn() -> i64,
     pub mensagem: Option<String>,
@@ -186,6 +190,7 @@ impl App {
             areia: None,
             turma: turma::EstadoTurma::default(),
             professor: turma::EstadoProfessor::default(),
+            editor: editor::EstadoEditor::default(),
             executor,
             relogio,
             mensagem: None,
@@ -393,6 +398,7 @@ impl App {
                     Tela::Glossario => self.tela_glossario(ui),
                     Tela::Turma => turma::tela_turma(self, ui),
                     Tela::Professor => turma::tela_professor(self, ui),
+                    Tela::Editor => editor::tela_editor(self, ui),
                     Tela::Ajustes => self.tela_ajustes(ui),
                     Tela::Identidade => {}
                 });
@@ -432,6 +438,13 @@ impl App {
                     .clicked()
             {
                 self.tela = Tela::Professor;
+            }
+            if self.config.professor
+                && ui
+                    .selectable_label(self.tela == Tela::Editor, texto::aba_editor())
+                    .clicked()
+            {
+                self.tela = Tela::Editor;
             }
             if ui
                 .selectable_label(self.tela == Tela::Ajustes, texto::aba_ajustes())

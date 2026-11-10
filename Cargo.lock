@@ -7812,6 +7812,7 @@ dependencies = [
  "gltf",
  "ron 0.8.1",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8011,7 +8012,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8031,6 +8032,7 @@ dependencies = [
  "utsim-pasta",
  "utsim-posto",
  "utsim-posto-ui",
+ "utsim-qualidade-core",
  "utsim-quality",
  "utsim-stats",
  "utsim-ui-tema",
