@@ -44,6 +44,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- Pessoas de verdade para o 3D: `pessoa_homem.glb` e `pessoa_mulher.glb` em `assets/modelos3d/`, gerados por script no Blender (`tools/blender/pessoas.py`), sem nada baixado e sem textura.
+  - Cada arquivo traz um corpo liso com rosto, cabelo, camisa, calça e calçado, e um nó por EPI (capacete, óculos, protetor auricular, luvas, botina, colete, máscara, avental), para mostrar conforme o EPI da pessoa no modelo.
+  - Os arquivos usam o esqueleto do boneco UAL1, então as animações dele e do UAL2 servem.
+  - Cerca de 300 KB e 5,6 mil triângulos cada.
+  - O catálogo traz os tons de pele e de cabelo e a faixa de altura para variar as pessoas.
 - Regra de operação do posto (`operation`, ou `operacao`, num `Processor`). Ela define:
   - as habilidades exigidas de todo operador;
   - se ele precisa vestir o EPI do posto e o das zonas de risco que contêm o posto (`require_ppe`; o EPI que a pessoa veste é o `ppe` do nó dela);
