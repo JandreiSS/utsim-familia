@@ -236,6 +236,8 @@ pub struct Core {
     doomed: Vec<ItemId>,
     errors: Vec<String>,
     events_processed: u64,
+    /// Most events the run may process ([`Simulation::limit_events`]).
+    event_limit: Option<u64>,
     /// Consecutive events at the same simulated instant (stall detection).
     same_instant: u64,
     /// Sequence numbers of cancelled events still sitting in the heap.
@@ -1059,6 +1061,7 @@ impl Simulation {
                 doomed: Vec::new(),
                 errors: Vec::new(),
                 events_processed: 0,
+                event_limit: None,
                 same_instant: 0,
                 cancelled: HashSet::new(),
                 keep_raw: config.histogram_bins.is_some_and(|b| b > 0),
@@ -1210,6 +1213,13 @@ impl Simulation {
             .iter()
             .position(|b| b.name == name)
             .map(BlockId)
+    }
+
+    /// Ends the run with an error once it has processed more than `n` events (samples do
+    /// not count). A budget that does not depend on the machine's clock, for callers that
+    /// must finish whatever the model (robustness tests, previews).
+    pub fn limit_events(&mut self, n: u64) {
+        self.core.event_limit = Some(n);
     }
 
     /// Records every [`TraceEvent`] of the run; read it with [`Simulation::take_trace`].
@@ -1442,6 +1452,18 @@ impl Simulation {
             self.core.now = ev.time;
             if !matches!(ev.kind, EventKind::Sample) {
                 self.core.events_processed += 1;
+                if let Some(n) = self
+                    .core
+                    .event_limit
+                    .filter(|n| self.core.events_processed > *n)
+                {
+                    return Err(SimError::Model {
+                        time: ev.time,
+                        messages: vec![format!(
+                            "mais de {n} eventos: a rodada passou do limite de eventos"
+                        )],
+                    });
+                }
             }
             self.dispatch(ev.kind);
             self.resolve();
