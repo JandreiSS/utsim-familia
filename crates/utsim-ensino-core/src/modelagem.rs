@@ -366,7 +366,7 @@ pub fn corrigir_modelagem(
     let total: f64 = criterios.iter().map(|c| c.peso).sum();
     let feito: f64 = criterios.iter().filter(|c| c.ok).map(|c| c.peso).sum();
     let desempenho = if total > 0.0 { feito / total } else { 0.0 };
-    let previsoes = corrigir_previsoes(missao, &base, t)?;
+    let previsoes = corrigir_previsoes(missao, &base, Some(&m.modelo), t)?;
     let certas = previsoes.iter().filter(|p| p.certa).count();
     let justificativas_certas = missao
         .justificativa

@@ -42,7 +42,7 @@ pub fn gravar_dados(dir: &Path, m: &MissaoCarregada, aluno: &str) -> Result<Vec<
     let mut out = Vec::new();
     for cj in &m.missao.dados {
         let p = pasta.join(format!("{}.csv", slug(&cj.id)));
-        std::fs::write(&p, cj.gerar(&m.missao.id, aluno).csv())?;
+        std::fs::write(&p, cj.gerar_com(&m.missao.id, aluno, &m.modelo).csv())?;
         out.push(p);
     }
     Ok(out)
