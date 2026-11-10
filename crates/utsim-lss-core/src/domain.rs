@@ -69,6 +69,8 @@ pub mod fields {
     pub mod person {
         pub const NAME: &str = "nome";
         pub const EMAIL: &str = "email";
+        /// Public signing key (hex), written by the person (stage P7).
+        pub const SIGNING_KEY: &str = "chave_assinatura";
     }
     pub mod role {
         pub const PROJECT: &str = "projeto";
