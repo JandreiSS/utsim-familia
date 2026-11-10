@@ -59,6 +59,35 @@ pub(crate) fn filtro_pacote() -> Filtro {
     }
 }
 
+/// The package field: the path, "Browse…" for a `.utse` file and "Folder…" for a package
+/// kept in a folder.
+pub(crate) fn campo_pacote(ui: &mut Ui, valor: &mut String, largura: f32) -> egui::Response {
+    let mut r = campo(
+        ui,
+        valor,
+        Tipo::Abrir,
+        texto::ab_pacote(),
+        &[filtro_pacote()],
+        largura,
+    );
+    if ui
+        .button(texto::ab_pacote_pasta())
+        .on_hover_text(texto::ab_pacote_pasta_ajuda())
+        .clicked()
+        && let Some(p) = arquivos::procurar_com(
+            Tipo::Pasta,
+            texto::ab_pacote(),
+            &[],
+            valor,
+            &textos_seletor(),
+        )
+    {
+        *valor = p.display().to_string();
+        r.mark_changed();
+    }
+    r
+}
+
 fn editando_id() -> egui::Id {
     egui::Id::new("ensino-abertura-editando-identidade")
 }
