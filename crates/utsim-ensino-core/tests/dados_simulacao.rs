@@ -80,7 +80,10 @@ fn a_maquina_plantada_e_recuperada() {
         };
         vistas.insert(afetado);
         let c = r.gerar_com(Some(&m));
-        for q in [QuestaoDados::GrupoMaiorMedia, QuestaoDados::GrupoMaisVariavel] {
+        for q in [
+            QuestaoDados::GrupoMaiorMedia,
+            QuestaoDados::GrupoMaisVariavel,
+        ] {
             assert_eq!(q.resposta(&c).unwrap() as usize, afetado, "{aluno} {q:?}");
         }
         assert!(c.resposta.contains(&cj.grupos()[afetado]), "{}", c.resposta);
@@ -159,7 +162,11 @@ fn editor_monta_o_conjunto_a_partir_do_modelo() {
     let a = ed.amostra_da_pergunta(0).unwrap();
     assert!(a.resposta.is_ok(), "{:?}", a.resposta);
     assert_eq!((a.sem_resposta, a.fora_do_plantado), (0, 0));
-    assert!(ed.avisos_dos_dados().is_empty(), "{:?}", ed.avisos_dos_dados());
+    assert!(
+        ed.avisos_dos_dados().is_empty(),
+        "{:?}",
+        ed.avisos_dos_dados()
+    );
 
     // A cause too small for the noise: the check warns.
     if let Gerador::Simulacao { processo, .. } = &mut ed.base.dados[0].gerador {

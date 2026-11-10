@@ -140,10 +140,7 @@ impl TipoGerador {
             TipoGerador::Simulacao => Gerador::Simulacao {
                 estacoes: Vec::new(),
                 afetado: 0,
-                processo: Dist::Normal {
-                    mean: 5.0,
-                    sd: 0.5,
-                },
+                processo: Dist::Normal { mean: 5.0, sd: 0.5 },
                 duracao: 960.0,
             },
         }

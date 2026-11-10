@@ -512,12 +512,9 @@ pub fn descrever_dist(d: &Dist) -> String {
         Dist::Const(v) => format!("constante {}", n4(*v)),
         Dist::Uniform { min, max } => format!("uniforme de {} a {}", n4(*min), n4(*max)),
         Dist::Exp { mean } => format!("exponencial de média {}", n4(*mean)),
-        Dist::Triangular { min, mode, max } => format!(
-            "triangular ({}, {}, {})",
-            n4(*min),
-            n4(*mode),
-            n4(*max)
-        ),
+        Dist::Triangular { min, mode, max } => {
+            format!("triangular ({}, {}, {})", n4(*min), n4(*mode), n4(*max))
+        }
         Dist::Normal { mean, sd } => {
             format!("normal de média {} e desvio {}", n4(*mean), n4(*sd))
         }

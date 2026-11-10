@@ -474,9 +474,7 @@ pub fn corrigir_previsoes(
                 let cj = missao.conjunto(conjunto).ok_or_else(|| {
                     ErroMotor::Modelo(format!("conjunto '{conjunto}' não existe"))
                 })?;
-                let dados = cj
-                    .receita(&missao.id, &tentativa.aluno)
-                    .gerar_com(modelo);
+                let dados = cj.receita(&missao.id, &tentativa.aluno).gerar_com(modelo);
                 let v = questao.resposta(&dados).map_err(ErroMotor::Modelo)?;
                 let certa = if questao.e_escolha() {
                     resposta == Some(&RespostaPrevisao::Escolha(v as usize))

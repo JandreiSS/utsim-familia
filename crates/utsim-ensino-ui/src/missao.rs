@@ -474,7 +474,10 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                 .collect();
             m.dados_gerados = Some((aluno.clone(), v));
         }
-        let gerados = m.dados_gerados.as_ref().map_or(&[][..], |(_, v)| v.as_slice());
+        let gerados = m
+            .dados_gerados
+            .as_ref()
+            .map_or(&[][..], |(_, v)| v.as_slice());
         for (cj, c) in missao.dados.iter().zip(gerados) {
             ui.collapsing(
                 texto::f(texto::missao_dados_linhas(), &[&cj.nome, &c.linhas.len()]),

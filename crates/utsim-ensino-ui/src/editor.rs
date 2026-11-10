@@ -1550,10 +1550,7 @@ fn campo_opcional(ui: &mut Ui, rotulo: &str, v: &mut Option<f64>, inicial: f64) 
 /// The mean and a spread of a generator, to start the specification limits around.
 fn centro_escala(g: &Gerador) -> (f64, f64) {
     match g {
-        Gerador::Tempos { dist, .. }
-        | Gerador::Simulacao {
-            processo: dist, ..
-        } => {
+        Gerador::Tempos { dist, .. } | Gerador::Simulacao { processo: dist, .. } => {
             let m = dist.mean();
             let m = if m.is_finite() { m } else { 0.0 };
             (m, (m.abs() * 0.1).max(1.0))
