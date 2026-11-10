@@ -1,0 +1,197 @@
+// Biblioteca da linha Processos contínuos e batelada (docs/plano_linhas_especializadas.md,
+// seção 11): as predefinições sobre os objetos comuns do UTSim. Lotes de batelada com receita
+// por produto, reatores com limpeza entre produtos (CIP), tanques pulmão, envase e operadores.
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "processos/<id>".
+//
+// A parte contínua (tanques de matéria-prima e de produto, bombas, envase contínuo) fica na
+// rede de fluidos do modelo (fluids), ligada aos lotes por FromItems e ToItems; os modelos
+// prontos mostram como. Quebra, EPI, inspeção e lote fora de especificação ficam nos campos do
+// próprio nó (downtime, ppe, quality, inspection, sink_role), os mesmos que as abas do painel
+// de propriedades e os apps da família editam (docs/plano_integracao_familia.md, seção 3).
+//
+// Unidade de tempo: minuto; de volume: litro. Rótulos dos lotes lidos pela linha:
+// - produto: a receita do lote (1, 2, 3...); o reator usa o tempo da receita e limpa (CIP) só
+//   quando ele muda;
+// - volume: litros carregados no lote;
+// - rendimento: fração do volume que vira produto (sem o rótulo, 1).
+Library(
+    line: "processos",
+    name: "Processos contínuos e batelada",
+    description: "Lotes de batelada com receita por produto, reatores com limpeza entre produtos (CIP), tanques pulmão, envase e a rede de fluidos: lotes e volume por dia, rendimento, tempo dos reatores e nível dos tanques.",
+    models: [
+        (
+            file: "examples/batelada_cip.ron",
+            name: "Batelada com limpeza entre produtos",
+            description: "Dois reatores, três receitas, limpeza (CIP) que depende da sequência e campanha que junta produtos iguais.",
+        ),
+        (
+            file: "examples/xarope_envase.ron",
+            name: "Xarope: batelada e envase contínuo",
+            description: "Lotes que descarregam num tanque de produto e um envase contínuo que vira garrafas: o tanque pulmão entre a batelada e a linha.",
+        ),
+        (
+            file: "examples/tintas_lotes.ron",
+            name: "Tintas: lotes com ajuste de cor",
+            description: "Dispersão, ajuste de cor com inspeção e reprocesso, lote fora de especificação e operadores com habilidades.",
+        ),
+    ],
+    presets: [
+        (
+            id: "lotes",
+            name: "Programação de lotes",
+            icon: "lista",
+            role: Entry,
+            description: "Lotes de batelada liberados para a produção: intervalo, mistura dos produtos, volume e rendimento de cada lote.",
+            name_base: "programacao",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre lotes (min)", default: "Exp(mean: 120.0)"),
+                (key: "produtos", label: "Mistura dos produtos", default: "Discrete([(1.0, 0.5), (2.0, 0.3), (3.0, 0.2)])",
+                 help: "produto (receita) 1, 2, 3... com a fração de cada"),
+                (key: "volume", label: "Volume do lote (L)", default: "Const(2000.0)"),
+                (key: "rendimento", label: "Rendimento", default: "Triangular(min: 0.92, mode: 0.96, max: 0.98)",
+                 help: "fração do volume que vira produto"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo},
+                    labels: {"produto": ${produtos}, "volume": ${volume}, "rendimento": ${rendimento}}), symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "fila_lotes",
+            name: "Fila de lotes",
+            icon: "fila",
+            role: Inbox,
+            description: "Os lotes esperam o reator: na ordem de chegada (None) ou em campanha, juntando produtos iguais para limpar menos (Some(Asc(\"produto\"))).",
+            name_base: "fila",
+            fields: [
+                (key: "regra", label: "Regra", default: "None",
+                 help: "None: ordem de chegada; Some(Asc(\"produto\")): campanha por produto"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(order: ${regra}), symbol: "espera", visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "reator",
+            name: "Reator de batelada",
+            icon: "engrenagem",
+            role: Work,
+            description: "Carrega, reage e descarrega um lote pelo tempo da receita do produto; limpa (CIP) só quando o produto muda, com o tempo da matriz (de, para) ou a limpeza padrão. O primeiro lote não limpa.",
+            name_base: "reator",
+            fields: [
+                (key: "receitas", label: "Tempo de cada receita", default: "[(value: 1.0, time: Triangular(min: 150.0, mode: 180.0, max: 220.0)), (value: 2.0, time: Triangular(min: 200.0, mode: 240.0, max: 300.0))]",
+                 help: "(value: produto, time: tempo do lote); os outros produtos usam o tempo padrão"),
+                (key: "tempo", label: "Tempo padrão do lote (min)", default: "Triangular(min: 150.0, mode: 180.0, max: 220.0)"),
+                (key: "limpeza", label: "Limpeza padrão (CIP, min)", default: "Const(60.0)"),
+                (key: "matriz", label: "Matriz de limpeza", default: "[]",
+                 help: "[(from: 1.0, to: 2.0, time: Const(30.0)), (from: 2.0, to: 1.0, time: Const(90.0))]: do claro para o escuro limpa menos"),
+                (key: "quebra", label: "Quebra", default: "None",
+                 help: "Some((mtbf: Exp(mean: 4800.0), mttr: Exp(mean: 120.0))): fica no nó do reator"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(setup: Some(${limpeza}), process: ${tempo},
+                    changeover: Some((label: "produto", matrix: ${matriz})),
+                    recipe: Some((label: "produto", times: ${receitas}))),
+                    downtime: ${quebra}, ppe: ["oculos", "luvas", "botina"], symbol: "operacao",
+                    visual: Some((asset: Some("tanque"))))"#,
+            ],
+        ),
+        (
+            id: "equipamento",
+            name: "Equipamento de processo",
+            icon: "chave",
+            role: Work,
+            description: "Uma etapa sem receita (filtração, mistura, resfriamento): tempo por lote e quebra.",
+            name_base: "equipamento",
+            fields: [
+                (key: "tempo", label: "Tempo por lote (min)", default: "Triangular(min: 30.0, mode: 40.0, max: 60.0)"),
+                (key: "quebra", label: "Quebra", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), downtime: ${quebra},
+                    ppe: ["oculos", "luvas"], symbol: "operacao", visual: Some((asset: Some("maquina"))))"#,
+            ],
+        ),
+        (
+            id: "pulmao",
+            name: "Tanque pulmão de lotes",
+            icon: "estante",
+            role: Inbox,
+            description: "Guarda lotes prontos entre duas etapas; quando enche, o reator anterior fica bloqueado com o lote dentro.",
+            name_base: "pulmao",
+            fields: [
+                (key: "capacidade", label: "Lotes que cabem", default: "Some(2)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${capacidade}), symbol: "armazenagem",
+                    visual: Some((asset: Some("tanque"))))"#,
+            ],
+        ),
+        (
+            id: "envase",
+            name: "Envase do lote",
+            icon: "caixa",
+            role: Work,
+            description: "Envasa o lote inteiro (tempo por lote). Para um envase contínuo que vira garrafas, use a rede de fluidos (ToItems), como no modelo do xarope.",
+            name_base: "envase",
+            fields: [
+                (key: "tempo", label: "Tempo por lote (min)", default: "Triangular(min: 60.0, mode: 80.0, max: 100.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(process: ${tempo}), ppe: ["luvas"], symbol: "operacao",
+                    visual: Some((asset: Some("esteira"))))"#,
+            ],
+        ),
+        (
+            id: "tanque_produto",
+            name: "Tanque de produto",
+            icon: "caminhao",
+            role: Done,
+            description: "Onde os lotes prontos terminam. Na rede de fluidos, um FromItems com este nome transforma cada lote em volume no tanque de produto. Para o lote fora de especificação, use o Refugo do pacote Qualidade.",
+            name_base: "produto",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+        (
+            id: "operadores",
+            name: "Equipe de operadores",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Operadores do turno (começa com dois), com as habilidades e o EPI de cada um.",
+            name_base: "operadores",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"reator\"]"),
+                (key: "turno", label: "Turno", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: FirstAvailable))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 60.0), position: (0.0, 1.5, 0.0), shifts: ${turno},
+                    ppe: ["oculos", "luvas", "botina"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "processos/operador")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 60.0), position: (0.0, -1.5, 0.0), shifts: ${turno},
+                    ppe: ["oculos", "luvas", "botina"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "processos/operador")"#,
+            ],
+        ),
+        (
+            id: "operador",
+            name: "Operador",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Um operador: habilidades, turno e EPI.",
+            name_base: "operador",
+            fields: [
+                (key: "habilidades", label: "Habilidades", default: "[\"reator\"]"),
+                (key: "turno", label: "Turno", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 60.0), shifts: ${turno}, ppe: ["oculos", "luvas", "botina"],
+                    visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})))"#,
+            ],
+        ),
+    ],
+)

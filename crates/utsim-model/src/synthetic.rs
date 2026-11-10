@@ -89,6 +89,7 @@ fn processor(mean: f64) -> ObjectKind {
         operators: None,
         also: Vec::new(),
         changeover: None,
+        recipe: None,
     }
 }
 
