@@ -17,7 +17,14 @@ passo() {
 }
 
 passo "1/7 Formatação (cargo fmt --check)"
-cargo fmt --all -- --check || falha "formatação fora do padrão. Rode: cargo fmt --all"
+# Pacote por pacote: com o workspace grande, `cargo fmt --all` passa da linha de comando
+# máxima do Windows (os error 206).
+for toml in crates/*/Cargo.toml; do
+    # Crates fora do workspace (o `exclude` do Cargo.toml da raiz) ficam de fora.
+    grep -q "\"$(dirname "$toml")\"" <(grep '^exclude' Cargo.toml) && continue
+    pacote=$(awk -F'"' '/^name = /{print $2; exit}' "$toml")
+    cargo fmt -p "$pacote" -- --check || falha "formatação fora do padrão em $pacote. Rode: cargo fmt -p $pacote"
+done
 
 passo "2/7 Lints (cargo clippy -D warnings)"
 cargo clippy --workspace --exclude utsim-viewer --exclude utsim-godot --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
@@ -40,6 +47,15 @@ for modelo in examples/*.ron; do
     esac
     "$BIN" check "$modelo" || falha "modelo inválido: $modelo"
 done
+
+# Elementos 3D do Blender: os testes do passo 3 conferem os arquivos versionados; com
+# UTSIM_BLENDER=1, gera tudo de novo e exige que nada mude (precisa do Blender 5.2).
+if [ "${UTSIM_BLENDER:-}" = "1" ]; then
+    echo
+    echo "==> Elementos 3D do Blender (UTSIM_BLENDER=1)"
+    bash scripts/blender.sh >/dev/null || falha "scripts/blender.sh falhou"
+    git diff --quiet -- assets/modelos3d || falha "assets/modelos3d mudou ao gerar de novo: versione o resultado"
+fi
 
 passo "6/7 Visualizador 3D (opcional: UTSIM_VIEWER=1)"
 if [ "${UTSIM_VIEWER:-}" = "1" ]; then

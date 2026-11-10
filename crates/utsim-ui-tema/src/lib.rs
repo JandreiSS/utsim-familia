@@ -117,6 +117,21 @@ pub fn style() -> Style {
     style
 }
 
+/// Maximiza a janela de verdade nos primeiros quadros. No Windows, o pedido do construtor
+/// (`with_maximized`) às vezes marca a janela como maximizada sem mudar o tamanho; tirar e
+/// pôr de novo resolve. Chame em todo quadro: só age uma vez.
+pub fn maximizar_no_inicio(ctx: &Context) {
+    let id = egui::Id::new("utsim-maximizar-no-inicio");
+    let passo = ctx.data(|d| d.get_temp::<u8>(id)).unwrap_or(0);
+    match passo {
+        0 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false)),
+        1 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true)),
+        _ => return,
+    }
+    ctx.data_mut(|d| d.insert_temp(id, passo + 1));
+    ctx.request_repaint();
+}
+
 /// The colours of every widget state.
 pub fn visuals() -> Visuals {
     use colors::*;
@@ -246,6 +261,11 @@ pub mod familia;
 
 #[cfg(feature = "captura")]
 pub mod captura;
+
+#[cfg(feature = "abertura")]
+pub mod abertura;
+
+pub mod arquivos;
 
 /// Widgets with the UTSim look that egui does not have.
 pub mod widgets {

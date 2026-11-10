@@ -430,6 +430,8 @@ Fica no app (modo professor) e num comando `utsim ensino caso` para o autor.
 6. **Gerar o texto inicial** do enunciado a partir de um modelo de texto próprio, que o professor reescreve.
 7. **Exportar** a missão para um pacote.
 
+**Editor de missões** (pedido do coordenador em 2026-11-09, entregue por etapas). A etapa A (**feita**) traz os passos 1, 2, 4, 5 e 7 na tela, na aba "Editor de missões" (`utsim_ensino_core::editor`, `utsim-ensino-ui/src/editor.rs`), com o pacote próprio do professor (vários atos, reabrir, reordenar, remover, conferir, `.utse`). A etapa B trará o enunciado com prévia igual à do aluno, as perguntas de previsão e de justificativa, as dicas e os conceitos do glossário. A etapa C trará as missões de dados, com os geradores da seção 6.3 num formulário.
+
 ### 6.3 Dados com efeitos plantados
 
 Geradores com semente, em `utsim-ensino-core`, sobre `utsim-stats` e `utsim-model`, que retomam o antigo L8.
@@ -470,7 +472,7 @@ O formato de pacote é o ponto de encaixe. Um pacote declara o que precisa (`req
 
 - **Projeto de treino.** O ato 8 exporta um projeto `.lss` (ou `.lssz`) marcado como treino, com o modelo ligado por hash, os conjuntos de dados com origem `Simulado` e o termo pré-preenchido. O Seis Sigma já separa o espaço de treino do programa real (LSS-RNF-15).
 - **Volta das respostas.** As respostas-chave do aluno (causa raiz, R&R, Cpk, ganho) são digitadas no jogo ou lidas do `estudo.json` do Seis Sigma. O jogo corrige sem depender da tela do outro app.
-- **Competências.** Em programa de empresa, as missões concluídas gravam entradas `competencia` de origem `exercicio` no diário do programa (`mentoria::record_level`), o ponto de ligação deixado pela decisão N2. Os conceitos das missões são ligados às ferramentas do currículo do Seis Sigma por uma tabela no pacote.
+- **Competências.** Em programa de empresa, as missões concluídas viram "praticou" no mapa de competências, nas ferramentas que a tabela `competencias` do pacote liga aos conceitos da missão. São dois caminhos (**feitos**). No primeiro, o próprio aluno registra, com origem `ensino` (`utsim_lss_store::program::record_teaching`). No segundo, o instrutor ou o MBB registra a turma corrigida de uma vez, com origem `exercicio` (`record_exercises`, formato combinado com a sessão Seis Sigma em 2026-11-09). Nesse caso o aluno é ligado à pessoa do programa pelo e-mail da lista de alunos (`members`, que só o instrutor e o MBB leem). Nomes e registros da turma não vão para o programa, e quem tem aviso na entrega fica de fora.
 - **Sem o Seis Sigma**, o caso final roda na versão reduzida dentro do jogo (seção 3.7).
 
 ### 7.2 Linhas especializadas

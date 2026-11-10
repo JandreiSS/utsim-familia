@@ -2,12 +2,15 @@
 //! language chosen in the profile comes back. A test binary of its own, because the
 //! language is global to the program.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use egui::{Context, RawInput};
 use utsim_ensino_store::perfil::Perfil;
 use utsim_ensino_ui::texto::{self, Idioma};
 use utsim_ensino_ui::{App, NaHora, Tela};
+
+/// The language is global: the tests that change it take turns.
+static LINGUA: Mutex<()> = Mutex::new(());
 
 fn frames(app: &mut App, ctx: &Context, n: usize) {
     for _ in 0..n {
@@ -18,6 +21,7 @@ fn frames(app: &mut App, ctx: &Context, n: usize) {
 
 #[test]
 fn todas_as_telas_nas_tres_linguas() {
+    let _vez = LINGUA.lock().unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().unwrap();
     let ctx = Context::default();
     for i in Idioma::TODOS {
@@ -57,6 +61,7 @@ fn todas_as_telas_nas_tres_linguas() {
 
 #[test]
 fn a_lingua_do_perfil_volta_ao_abrir() {
+    let _vez = LINGUA.lock().unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().unwrap();
     let perfil = Perfil::em(dir.path());
     let mut c = perfil.config();

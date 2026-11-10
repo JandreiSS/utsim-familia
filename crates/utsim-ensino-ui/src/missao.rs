@@ -20,6 +20,7 @@ use utsim_model::replay::Replay;
 
 use crate::vista2d::Animacao;
 use crate::{App, Tela, numero_missao, texto};
+use utsim_ui_tema::arquivos as seletor;
 
 const VERDE: Color32 = Color32::from_rgb(110, 214, 120);
 const AMARELO: Color32 = Color32::from_rgb(236, 196, 76);
@@ -498,7 +499,14 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         }
         ui.horizontal(|ui| {
             ui.label(texto::missao_pasta());
-            ui.text_edit_singleline(&mut m.pasta_dados);
+            crate::abertura::campo(
+                ui,
+                &mut m.pasta_dados,
+                seletor::Tipo::Pasta,
+                texto::sel_pasta(),
+                &[],
+                360.0,
+            );
             if ui.button(texto::missao_gravar_csv()).clicked() {
                 let pasta = std::path::PathBuf::from(m.pasta_dados.trim());
                 let r = std::fs::create_dir_all(&pasta)
@@ -700,7 +708,14 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(texto::missao_modelo_texto()).weak());
         ui.horizontal(|ui| {
             ui.label(texto::missao_arquivo_ron());
-            ui.text_edit_singleline(&mut m.caminho_modelo);
+            crate::abertura::campo(
+                ui,
+                &mut m.caminho_modelo,
+                seletor::Tipo::Salvar,
+                texto::sel_gravar_modelo(),
+                &[seletor::RON],
+                360.0,
+            );
             if ui.button(texto::missao_gravar_modelo_inicial()).clicked() {
                 let r = ron::ser::to_string_pretty(
                     &mc.modelo,
@@ -1206,7 +1221,14 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
     ui.separator();
     ui.label(texto::missao_levar_cenario());
     ui.horizontal(|ui| {
-        ui.text_edit_singleline(&mut s.caminho_ron);
+        crate::abertura::campo(
+            ui,
+            &mut s.caminho_ron,
+            seletor::Tipo::Salvar,
+            texto::sel_gravar_modelo(),
+            &[seletor::RON],
+            360.0,
+        );
         if ui.button(texto::missao_gravar_ron()).clicked() {
             let r = modelo_da_tentativa(&mc, &aluno, &s.a)
                 .map_err(|e| e.to_string())

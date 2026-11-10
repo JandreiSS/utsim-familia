@@ -17,7 +17,8 @@
 //! - [`attribute`]: agreement, Cohen's and Fleiss' kappa;
 //! - [`data`]: CSV layouts of the `utsim qualidade` command;
 //! - [`gemeo`]: recordings and panel of the digital twin as series for phase II;
-//! - [`report`]: text and self-contained HTML reports.
+//! - [`report`]: text and self-contained HTML reports;
+//! - [`tolerancias`]: tolerance stack-up by worst case, RSS and Monte Carlo.
 
 // `!(x > 0.0)` is deliberate throughout: NaN must fail the checks too.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
@@ -35,6 +36,7 @@ pub mod normality;
 pub mod prob;
 pub mod report;
 pub mod rules;
+pub mod tolerancias;
 
 pub use capability::{Capability, Spec};
 pub use charts::{Chart, ChartData, ChartKind, Limits};

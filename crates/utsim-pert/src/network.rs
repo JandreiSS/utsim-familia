@@ -867,6 +867,7 @@ fn object_activity(obj: &ObjectDef, successors: usize) -> Activity {
             process,
             operators,
             also,
+            ..
         } => {
             let mut notes = Vec::new();
             if *capacity > 1 {

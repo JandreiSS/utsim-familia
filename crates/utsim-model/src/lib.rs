@@ -63,8 +63,8 @@ pub use arrivals::{AreaDef, ItemTypeDef};
 pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
-    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, PeriodArrivals, Release, TableMode,
-    TableRepeat,
+    ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, Changeover, ChangeoverTime,
+    PeriodArrivals, Release, TableMode, TableRepeat,
 };
 
 /// Reads only the `format` field; every other field is ignored.
@@ -188,8 +188,8 @@ pub struct Model {
     /// and reports in the interface. Never read by the simulation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub packs: Vec<String>,
-    /// Risk zones on the floor ([`ZoneDef`]): exposure analysis and 3D. Never read by the
-    /// simulation.
+    /// Risk zones on the floor ([`ZoneDef`]): exposure analysis and 3D. The simulation reads
+    /// only their `ppe`, for operation rules with `require_ppe` ([`OperationDef`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zones: Vec<ZoneDef>,
 }
@@ -303,14 +303,38 @@ pub struct ObjectDef {
     /// simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sink_role: Option<SinkRole>,
-    /// Protective equipment required at this work station (names of
-    /// [`quality::PPE_NAMES`] or others). Never read by the simulation.
+    /// Protective equipment required at this work station, or worn by this mobile resource
+    /// (names of [`quality::PPE_NAMES`] or others). The simulation reads it only for an
+    /// operation rule with `require_ppe` ([`OperationDef`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ppe: Vec<String>,
     /// Hazards and ergonomics marks of this work station (the Segurança tab of the node).
     /// Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safety: Option<Box<safety::SafetyDef>>,
+    /// Who may operate this work station and how the operators get in and out
+    /// ([`OperationDef`], `Processor` only).
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "operacao")]
+    pub operation: Option<Box<OperationDef>>,
+}
+
+/// Operation rule of a work station: who may operate it and the time the operators take
+/// to get in (door, guard, cell) and out. Absent: anyone of the team, no time.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct OperationDef {
+    /// Skills every operator must have (on top of each team's `requires`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "habilidades")]
+    pub skills: Vec<String>,
+    /// Operators must wear the protective equipment of the station (`ppe`) and of the
+    /// risk zones it stands in (the `ppe` of their own node).
+    #[serde(default, skip_serializing_if = "is_false", alias = "exigir_epi")]
+    pub require_ppe: bool,
+    /// Time the crew takes to get in before the work (station in `entering`).
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "entrar")]
+    pub enter: Option<Dist>,
+    /// Time the crew takes to get out after the work (station in `leaving`).
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "sair")]
+    pub leave: Option<Dist>,
 }
 
 impl ObjectDef {
@@ -424,6 +448,10 @@ pub enum ObjectKind {
         /// stage starts when the operators of every team needing it have arrived.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         also: Vec<OperatorUse>,
+        /// Product changeover: `setup` only when the item's product label changes, with
+        /// the time of each change from the matrix (sequence-dependent setup).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        changeover: Option<Changeover>,
     },
     /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
     Combiner {
@@ -864,6 +892,7 @@ impl Model {
                     process,
                     operators,
                     also,
+                    changeover,
                 } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
@@ -871,7 +900,47 @@ impl Model {
                     if let Some(s) = setup {
                         dists.push(("setup".into(), s));
                     }
+                    if let Some(c) = changeover {
+                        if setup.is_none() {
+                            errors.push(format!(
+                                "{}: changeover precisa de setup (o tempo de troca sem linha na matriz)",
+                                obj.name
+                            ));
+                        }
+                        if c.label.trim().is_empty() {
+                            errors.push(format!(
+                                "{}: changeover precisa do nome do rótulo do produto",
+                                obj.name
+                            ));
+                        }
+                        for (k, m) in c.matrix.iter().enumerate() {
+                            if !m.from.is_finite() || !m.to.is_finite() || m.from == m.to {
+                                errors.push(format!(
+                                    "{}: changeover.matrix[{k}] precisa de from e to diferentes",
+                                    obj.name
+                                ));
+                            }
+                            if c.matrix[..k]
+                                .iter()
+                                .any(|p| p.from == m.from && p.to == m.to)
+                            {
+                                errors.push(format!(
+                                    "{}: changeover.matrix tem a troca {} -> {} repetida",
+                                    obj.name, m.from, m.to
+                                ));
+                            }
+                            dists.push((format!("changeover.matrix[{k}].time"), &m.time));
+                        }
+                    }
                     dists.push(("process".into(), process));
+                    if let Some(op) = obj.operation.as_deref() {
+                        if let Some(d) = &op.enter {
+                            dists.push(("operation.enter".into(), d));
+                        }
+                        if let Some(d) = &op.leave {
+                            dists.push(("operation.leave".into(), d));
+                        }
+                    }
                     if also
                         .iter()
                         .any(|a| operators.as_ref().is_none_or(|o| o.team == a.team))
@@ -1468,10 +1537,12 @@ impl Model {
                     process,
                     operators,
                     also,
+                    changeover,
                 } => Box::new(
                     Processor::new(process.clone())
                         .capacity(*capacity)
                         .setup(setup.clone())
+                        .changeover(changeover.clone())
                         .operators(
                             operators
                                 .as_ref()
@@ -1481,7 +1552,8 @@ impl Model {
                             also.iter()
                                 .map(|op| (ids[op.team.as_str()], op.clone()))
                                 .collect(),
-                        ),
+                        )
+                        .operation(self.operation_of(obj)),
                 ),
                 ObjectKind::Sink if !self.item_types.is_empty() => Box::new(TypedSink::new(
                     self.item_types.iter().map(|t| t.name.clone()).collect(),
@@ -1595,6 +1667,10 @@ impl Model {
             }
             if let Some(p) = &obj.person {
                 sim.set_person(id, (**p).clone());
+            }
+            if !obj.ppe.is_empty() {
+                // What a resource wears (checked against the stations' operation rules).
+                sim.set_ppe(id, obj.ppe.clone());
             }
             if let Some(table) = self.shift_table(obj) {
                 sim.set_shifts(id, table);

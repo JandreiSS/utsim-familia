@@ -134,10 +134,14 @@ macro_rules! textos {
     };
 }
 
+mod cat_abertura;
+mod cat_editor;
 mod cat_missao;
 mod cat_turma;
 mod cat_vista;
 mod geral;
+pub use cat_abertura::*;
+pub use cat_editor::*;
 pub use cat_missao::*;
 pub use cat_turma::*;
 pub use cat_vista::*;
