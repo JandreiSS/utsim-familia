@@ -150,6 +150,7 @@ fn bloco(obj: &ObjectDef, nome: &str) -> Value {
         "downtime" => serde_json::to_value(&obj.downtime),
         "sink_role" => serde_json::to_value(obj.sink_role),
         "ppe" => serde_json::to_value(&obj.ppe),
+        "operation" => serde_json::to_value(&obj.operation),
         _ => Ok(Value::Null),
     };
     v.unwrap_or(Value::Null)
@@ -902,6 +903,7 @@ fn novo_bloco(nome: &str) -> Result<Value, String> {
         "inspection" => serde_json::to_value(utsim_model::quality::InspectionDef::default()),
         "rework" => serde_json::to_value(utsim_model::quality::ReworkDef::default()),
         "safety" => serde_json::to_value(utsim_model::safety::SafetyDef::default()),
+        "operation" => serde_json::to_value(utsim_model::OperationDef::default()),
         "downtime" => {
             let d: utsim_model::DowntimeDef =
                 ron::from_str("(mtbf: Exp(mean: 3600.0), mttr: Exp(mean: 300.0))")
@@ -945,6 +947,10 @@ fn comando(objeto: &str, nome: &str, v: Value) -> Result<Command, String> {
         "ppe" => Command::SetPpe {
             name,
             ppe: serde_json::from_value(v).map_err(e)?,
+        },
+        "operation" => Command::SetOperation {
+            name,
+            operation: serde_json::from_value(v).map_err(e)?,
         },
         _ => return Err(format!("'{nome}' não é um bloco do nó")),
     })

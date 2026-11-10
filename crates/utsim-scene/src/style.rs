@@ -7,6 +7,8 @@ pub fn state_color(state: Option<State>) -> [f32; 3] {
     match state {
         Some(State::Processing) => [0.20, 0.72, 0.30],
         Some(State::Setup) => [0.95, 0.85, 0.20],
+        // Operators getting in or out: between setup (yellow) and processing (green).
+        Some(State::Entering | State::Leaving) => [0.62, 0.80, 0.25],
         Some(State::Blocked) => [0.98, 0.55, 0.10],
         Some(State::Down) => [0.85, 0.15, 0.15],
         Some(State::OffShift) => [0.25, 0.45, 0.90],
@@ -46,6 +48,8 @@ pub fn state_label(state: Option<State>) -> &'static str {
         Some(State::WaitingRepair) => "aguardando técnico",
         Some(State::Maintenance) => "em manutenção preventiva",
         Some(State::Resting) => "em pausa (fadiga)",
+        Some(State::Entering) => "operador entrando",
+        Some(State::Leaving) => "operador saindo",
     }
 }
 
@@ -207,6 +211,8 @@ mod tests {
             State::Loading,
             State::Unloading,
             State::Utilize,
+            State::Entering,
+            State::Leaving,
         ] {
             let c = state_color(Some(s));
             assert!(c.iter().all(|v| (0.0..=1.0).contains(v)));
