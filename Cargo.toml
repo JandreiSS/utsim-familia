@@ -13,6 +13,7 @@ default-members = [
     "crates/utsim-cli",
     "crates/utsim-core",
     "crates/utsim-dash",
+    "crates/utsim-doe",
     "crates/utsim-diagram",
     "crates/utsim-diario",
     "crates/utsim-edit",
@@ -81,6 +82,7 @@ utsim-scene = { path = "crates/utsim-scene" }
 utsim-assets = { path = "crates/utsim-assets" }
 utsim-look = { path = "crates/utsim-look" }
 utsim-cad = { path = "crates/utsim-cad" }
+utsim-doe = { path = "crates/utsim-doe" }
 utsim-diagram = { path = "crates/utsim-diagram" }
 utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }

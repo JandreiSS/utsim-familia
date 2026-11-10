@@ -1,0 +1,11 @@
+[package]
+name = "utsim-doe"
+description = "Planejamento de experimentos além dos dois níveis (etapa E3 de docs/plano_estatistica.md): Plackett-Burman, composto central em blocos, Box-Behnken, modelo quadrático com ponto estacionário e desejabilidade, sem interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Regressão (coeficientes, erros, R²) e o fatorial completo em ordem padrão.
+utsim-stats.workspace = true
+serde.workspace = true
