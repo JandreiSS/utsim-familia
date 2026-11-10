@@ -377,6 +377,25 @@ fn known_findings_are_errors() {
         "o ajuste com 1.8e308 nos dados levou {:?}",
         started.elapsed()
     );
+
+    // A pump near the largest f64 (examples/tanques.ron mutated): every truck that dropped
+    // its volume asked for a step shorter than the clock, which fired at the same instant
+    // until the limit of 2 million events per instant (about 10 s per run in debug, and
+    // near the wall-clock limit of this test on a loaded machine). Now the step is taken
+    // at once and the run needs few events.
+    let tanques = examples()
+        .into_iter()
+        .find(|t| t.contains("name: \"Tanques\""))
+        .expect("examples/tanques.ron")
+        .replace("Pipe(max_rate: 3.0)", "Pipe(max_rate: 1e308)");
+    assert!(tanques.contains("1e308"));
+    let mut m = Model::parse(&tanques).unwrap();
+    m.run.stop_time = 100.0;
+    m.run.warmup = 0.0;
+    m.run.replications = 1;
+    let mut sim = m.build(0);
+    sim.limit_events(100_000);
+    m.drive(&mut sim).unwrap();
 }
 
 #[test]
