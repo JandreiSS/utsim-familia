@@ -42,11 +42,6 @@ fn check_error(e: &dyn std::fmt::Display, stage: &str) -> Result<(), String> {
     }
 }
 
-/// The whole pipeline on one text. Returns Err with a description on a contract breach.
-fn pipeline(text: &str) -> Result<(), String> {
-    pipeline_in(text, &AtomicUsize::new(0))
-}
-
 /// Phases of the pipeline, in order: a hang names the one it was in.
 const PHASES: [&str; 4] = [
     "leitura e ajuste dos dados (Model::parse)",
@@ -55,7 +50,8 @@ const PHASES: [&str; 4] = [
     "replay",
 ];
 
-/// [`pipeline`], writing the index of the phase it is in to `phase` (for the hang report).
+/// The whole pipeline on one text. Returns Err with a description on a contract breach;
+/// writes the index of the phase it is in to `phase` (for the hang report).
 fn pipeline_in(text: &str, phase: &AtomicUsize) -> Result<(), String> {
     phase.store(0, Ordering::SeqCst);
     let mut model = match Model::parse(text) {
@@ -125,7 +121,7 @@ fn case_file() -> std::path::PathBuf {
     dir.join(format!("{name}.ron"))
 }
 
-/// Runs `pipeline` in a thread: a panic or a hang (> [`WALL_LIMIT`]) is reported, not
+/// Runs [`pipeline_in`] in a thread: a panic or a hang (> [`WALL_LIMIT`]) is reported, not
 /// propagated. The input stays in [`case_file`] while the case runs.
 fn guarded(text: &str) -> Result<(), String> {
     // Debugging aid: an abort (out of memory, stack overflow) kills the process and leaves
