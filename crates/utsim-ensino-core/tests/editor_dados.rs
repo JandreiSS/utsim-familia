@@ -202,3 +202,40 @@ fn missao_de_dados_vai_ao_pacote_e_volta() {
     assert_eq!(de_novo.base.previsao, ed.base.previsao);
     assert_eq!(de_novo.base.analisar_em, ed.base.analisar_em);
 }
+
+#[test]
+fn remover_um_fator_leva_as_perguntas_junto() {
+    let mut ed = edicao();
+    let id = ed.novo_conjunto(TipoGerador::Fatorial);
+    if let Gerador::Fatorial {
+        fatores, efeitos, ..
+    } = &mut ed.base.dados[0].gerador
+    {
+        fatores.push("Tempo".into());
+        efeitos.push(3.0);
+    }
+    let a = perguntar(&mut ed, &id, "Efeito da temperatura?");
+    let b = perguntar(&mut ed, &id, "Efeito do tempo?");
+    *questao(&mut ed, a) = QuestaoDados::Efeito { fator: 0 };
+    *questao(&mut ed, b) = QuestaoDados::Efeito { fator: 2 };
+    assert_eq!(ed.remover_fator(0, 0), 1);
+    assert_eq!(ed.base.previsao.len(), 1);
+    assert_eq!(*questao(&mut ed, 0), QuestaoDados::Efeito { fator: 1 });
+    match &ed.base.dados[0].gerador {
+        Gerador::Fatorial {
+            fatores,
+            efeitos,
+            interacao_ab,
+            ..
+        } => {
+            assert_eq!(fatores, &vec!["Pressão".to_string(), "Tempo".to_string()]);
+            assert_eq!(efeitos, &vec![1.0, 3.0]);
+            assert_eq!(*interacao_ab, 0.0);
+        }
+        _ => unreachable!(),
+    }
+    assert!(ed.erros().is_empty(), "{:?}", ed.erros());
+    // The last factor stays.
+    ed.remover_fator(0, 0);
+    assert_eq!(ed.remover_fator(0, 0), 0);
+}

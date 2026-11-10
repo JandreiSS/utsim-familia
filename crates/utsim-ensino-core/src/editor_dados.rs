@@ -601,6 +601,59 @@ impl Edicao {
         antes - self.base.previsao.len()
     }
 
+    /// Removes the factor `j` of the factorial set `i`. The questions about the effect of
+    /// that factor go (returns how many), those about later factors follow their factor,
+    /// and the interaction of the first two factors is zeroed when one of them goes.
+    pub fn remover_fator(&mut self, i: usize, j: usize) -> usize {
+        let Some(cj) = self.base.dados.get_mut(i) else {
+            return 0;
+        };
+        let Gerador::Fatorial {
+            fatores,
+            efeitos,
+            interacao_ab,
+            ..
+        } = &mut cj.gerador
+        else {
+            return 0;
+        };
+        if j >= fatores.len() || fatores.len() < 2 {
+            return 0;
+        }
+        fatores.remove(j);
+        if j < efeitos.len() {
+            efeitos.remove(j);
+        }
+        if j < 2 {
+            *interacao_ab = 0.0;
+        }
+        let id = cj.id.clone();
+        let sobre = |p: &Previsao| -> Option<usize> {
+            match p {
+                Previsao::Dados {
+                    conjunto,
+                    questao: QuestaoDados::Efeito { fator },
+                    ..
+                } if *conjunto == id => Some(*fator),
+                _ => None,
+            }
+        };
+        let antes = self.base.previsao.len();
+        self.base.previsao.retain(|p| sobre(p) != Some(j));
+        for p in &mut self.base.previsao {
+            if let Some(f) = sobre(p)
+                && f > j
+                && let Previsao::Dados {
+                    questao: QuestaoDados::Efeito { fator },
+                    ..
+                } = p
+            {
+                *fator = f - 1;
+            }
+        }
+        antes - self.base.previsao.len()
+    }
+
     /// Adds a question about the set `conjunto` (the first that fits its kind).
     pub fn nova_pergunta_de_dados(&mut self, conjunto: &str) {
         let Some(cj) = self.base.conjunto(conjunto) else {

@@ -633,7 +633,7 @@ fn secao_missao(
     if let Some(g) = &s.glossario {
         secao_conceitos(ui, ed, g);
     }
-    secao_dados(ui, ed, &mut s.caches);
+    secao_dados(ui, ed, &mut s.caches, &mut s.tempos);
     secao_medicoes(ui, ed, &chaves);
     secao_previsoes(ui, ed, &chaves, &mut s.tempos, &mut s.caches);
     secao_justificativa(ui, ed);
@@ -1491,7 +1491,12 @@ fn descricao_questao(q: &QuestaoDados) -> &'static str {
 /// An integer field with its label.
 fn inteiro(ui: &mut Ui, rotulo: &str, v: &mut usize, min: usize, max: usize) {
     ui.label(rotulo);
-    ui.add(egui::DragValue::new(v).range(min..=max));
+    // A value read from a file stays as it is until edited (the core checks it).
+    ui.add(
+        egui::DragValue::new(v)
+            .range(min..=max)
+            .clamp_existing_to_range(false),
+    );
 }
 
 /// How fast a value drags: a small share of itself.
@@ -1556,7 +1561,12 @@ fn centro_escala(g: &Gerador) -> (f64, f64) {
 
 /// The sets of data, the form of each one, the sample it makes and the apps where the
 /// student analyses them.
-fn secao_dados(ui: &mut Ui, ed: &mut Edicao, c: &mut CachesDados) {
+fn secao_dados(
+    ui: &mut Ui,
+    ed: &mut Edicao,
+    c: &mut CachesDados,
+    tempos: &mut BTreeMap<usize, String>,
+) {
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_dados()).strong());
     ui.label(RichText::new(texto::ed_dados_dica()).weak());
@@ -1578,6 +1588,7 @@ fn secao_dados(ui: &mut Ui, ed: &mut Edicao, c: &mut CachesDados) {
     let mut mudar: Option<(usize, TipoGerador)> = None;
     let mut pergunta: Option<String> = None;
     let mut tirar: Option<usize> = None;
+    let mut tirar_fator: Option<(usize, usize)> = None;
     for i in 0..ed.base.dados.len() {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1617,7 +1628,11 @@ fn secao_dados(ui: &mut Ui, ed: &mut Edicao, c: &mut CachesDados) {
                     tirar = Some(i);
                 }
             });
-            form_gerador(ui, i, &mut cj.gerador, &mut cj.sortear_afetado);
+            let mut fator = None;
+            form_gerador(ui, i, &mut cj.gerador, &mut cj.sortear_afetado, &mut fator);
+            if let Some(j) = fator {
+                tirar_fator = Some((i, j));
+            }
             let (centro, escala) = centro_escala(&cj.gerador);
             ui.horizontal_wrapped(|ui| {
                 ui.label(texto::ed_ferramenta());
@@ -1651,11 +1666,20 @@ fn secao_dados(ui: &mut Ui, ed: &mut Edicao, c: &mut CachesDados) {
     if let Some(id) = pergunta {
         ed.nova_pergunta_de_dados(&id);
     }
+    if let Some((i, j)) = tirar_fator {
+        // Questions move when one about the removed factor goes.
+        if ed.remover_fator(i, j) > 0 {
+            tempos.clear();
+            c.conferencias.clear();
+        }
+    }
     if let Some(i) = tirar {
+        // The questions after the removed ones move up: every cache by index goes.
         ed.remover_conjunto(i);
         c.amostras.clear();
         c.ids.clear();
         c.conferencias.clear();
+        tempos.clear();
     }
     if !ed.base.dados.is_empty() {
         ui.horizontal(|ui| {
@@ -1720,7 +1744,13 @@ fn amostra(ui: &mut Ui, ed: &Edicao, c: &mut CachesDados, i: usize) {
 }
 
 /// The form of a generator.
-fn form_gerador(ui: &mut Ui, i: usize, g: &mut Gerador, sortear: &mut bool) {
+fn form_gerador(
+    ui: &mut Ui,
+    i: usize,
+    g: &mut Gerador,
+    sortear: &mut bool,
+    tirar_fator: &mut Option<usize>,
+) {
     match g {
         Gerador::Tempos { dist, n } => {
             ui.horizontal_wrapped(|ui| inteiro(ui, texto::ed_g_valores(), n, 2, MAX_LINHAS));
@@ -1841,10 +1871,8 @@ fn form_gerador(ui: &mut Ui, i: usize, g: &mut Gerador, sortear: &mut bool) {
                     }
                 });
             }
-            if let Some(j) = tirar {
-                fatores.remove(j);
-                efeitos.remove(j);
-            }
+            // Removed by the core, so the questions about the factors follow.
+            *tirar_fator = tirar;
             if ui
                 .add_enabled(
                     fatores.len() < MAX_FATORES,
