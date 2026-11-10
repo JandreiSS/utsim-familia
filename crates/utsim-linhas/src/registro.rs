@@ -16,13 +16,15 @@ pub const SAUDE: &str = "saude";
 pub const MANUFATURA: &str = "manufatura";
 /// Identifier of the line Processos contínuos e batelada.
 pub const PROCESSOS: &str = "processos";
+/// Identifier of the line Alimentação e food service.
+pub const ALIMENTACAO: &str = "alimentacao";
 /// Identifier of the cross-cutting Quality pack.
 pub const QUALIDADE: &str = "qualidade";
 /// Identifier of the cross-cutting Safety pack.
 pub const SEGURANCA: &str = "seguranca";
 
 /// `(library, vocabulary)` text of every built-in pack.
-const BUILTIN: [(&str, &str); 8] = [
+const BUILTIN: [(&str, &str); 9] = [
     (
         include_str!("../../../linhas/lean_office/biblioteca.ron"),
         include_str!("../../../linhas/lean_office/vocabulario.ron"),
@@ -46,6 +48,10 @@ const BUILTIN: [(&str, &str); 8] = [
     (
         include_str!("../../../linhas/processos/biblioteca.ron"),
         include_str!("../../../linhas/processos/vocabulario.ron"),
+    ),
+    (
+        include_str!("../../../linhas/alimentacao/biblioteca.ron"),
+        include_str!("../../../linhas/alimentacao/vocabulario.ron"),
     ),
     (
         include_str!("../../../linhas/qualidade/biblioteca.ron"),

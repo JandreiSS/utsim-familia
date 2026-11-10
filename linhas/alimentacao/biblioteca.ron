@@ -1,0 +1,239 @@
+// Biblioteca da linha Alimentação e food service (docs/plano_linhas_especializadas.md,
+// seção 12): as predefinições sobre os objetos comuns do UTSim. Pedidos por canal, fila com
+// desistência, caixa, comanda que divide o pedido entre as estações da cozinha, montagem que
+// junta o pedido de novo, balcão de retirada onde a comida esfria, mesas e entrega.
+//
+// Cada predefinição é o texto RON de um ou mais objetos com marcadores ${chave}: ${name} é o
+// nome escolhido; as outras chaves são os campos mostrados, com o valor padrão em RON.
+// Colocar uma predefinição cria objetos comuns, marcados com preset: "alimentacao/<id>".
+// Quebra, EPI e higiene ficam nos campos do próprio nó (downtime, ppe), os mesmos que as abas
+// do painel de propriedades e os apps da família editam.
+//
+// Unidade de tempo: minuto. Rótulos dos pedidos lidos pela linha:
+// - canal: 1 balcão, 2 drive-thru, 3 delivery (sem o rótulo, 1);
+// - itens: quantas partes o pedido tem (1 só o lanche, 2 com acompanhamento, 3 com bebida);
+//   a comanda divide o pedido nessas partes e manda a parte k para a sua saída k (linha k).
+Library(
+    line: "alimentacao",
+    name: "Alimentação e food service",
+    description: "Lanchonete, restaurante e cozinha de delivery: pedidos por canal, fila com desistência, comanda que divide o pedido entre as estações, mesas e entrega. Tempo do pedido, pedidos no prazo, pedidos por hora, desistências, comida descartada, giro de mesas e ocupação das estações.",
+    models: [
+        (
+            file: "examples/lanchonete_balcao.ron",
+            name: "Lanchonete: balcão no almoço",
+            description: "Pico do almoço, dois caixas, comanda que divide o pedido entre chapa, fritadeira e bebidas, e a montagem que junta o pedido antes da entrega.",
+        ),
+        (
+            file: "examples/restaurante_mesas.ron",
+            name: "Restaurante: mesas no jantar",
+            description: "Grupos que esperam mesa e desistem, salão com mesas e o caixa com os garçons: giro de mesas e espera na porta.",
+        ),
+        (
+            file: "examples/cozinha_delivery.ron",
+            name: "Cozinha de delivery",
+            description: "Pedidos de aplicativo com dois picos, cozinheiros, embalagem, balcão de retirada onde a comida esfria e é descartada, e entregadores.",
+        ),
+    ],
+    presets: [
+        (
+            id: "pedidos",
+            name: "Chegada de pedidos",
+            icon: "lista",
+            role: Entry,
+            description: "Onde os pedidos (ou os clientes) chegam: intervalo, canal, partes do pedido e horário de funcionamento.",
+            name_base: "pedidos",
+            fields: [
+                (key: "intervalo", label: "Intervalo entre pedidos (min)", default: "Exp(mean: 2.0)"),
+                (key: "canal", label: "Canal", default: "Const(1.0)",
+                 help: "1 balcão, 2 drive-thru, 3 delivery; Discrete([(1.0, 0.7), (2.0, 0.3)]) mistura canais"),
+                (key: "itens", label: "Partes do pedido", default: "Discrete([(1.0, 0.2), (2.0, 0.3), (3.0, 0.5)])",
+                 help: "1 só o lanche, 2 com acompanhamento, 3 com bebida"),
+                (key: "horario", label: "Horário de funcionamento", default: "None",
+                 help: "Calendar(\"loja\") para receber pedidos só com a loja aberta"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Source(interarrival: ${intervalo},
+                    labels: {"canal": ${canal}, "itens": ${itens}}), shifts: ${horario}, symbol: "inicio")"#,
+            ],
+        ),
+        (
+            id: "fila",
+            name: "Fila de clientes",
+            icon: "fila",
+            role: Inbox,
+            description: "Os clientes esperam a vez; quem espera mais que a paciência desiste e vai embora.",
+            name_base: "fila",
+            fields: [
+                (key: "paciencia", label: "Paciência do cliente (min)", default: "Some(Exp(mean: 15.0))",
+                 help: "None: ninguém desiste"),
+                (key: "limite", label: "Lugares na fila", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${limite}, patience: ${paciencia}),
+                    symbol: "espera", visual: Some((asset: Some("area"))))"#,
+            ],
+        ),
+        (
+            id: "caixa",
+            name: "Caixa",
+            icon: "balcao",
+            role: Work,
+            description: "Onde o pedido é feito e pago, por uma pessoa da equipe; caixas é quantos atendem ao mesmo tempo.",
+            name_base: "caixa",
+            fields: [
+                (key: "tempo", label: "Tempo no caixa (min)", default: "Triangular(min: 0.5, mode: 1.0, max: 2.5)"),
+                (key: "equipe", label: "Equipe", default: "\"atendentes\""),
+                (key: "caixas", label: "Caixas", default: "2"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${caixas}, process: ${tempo},
+                    operators: Some(OperatorUse(team: ${equipe}))), symbol: "operacao",
+                    visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "comanda",
+            name: "Comanda",
+            icon: "papel",
+            role: Work,
+            description: "Divide o pedido nas suas partes (rótulo itens) e manda a parte k para a saída k: ligue a chapa na saída 1, o acompanhamento na 2 e a bebida na 3.",
+            name_base: "comanda",
+            objects: [
+                r#"(name: "${name}", kind: Separator(mode: SplitBy(count: "itens", group: "comanda"), process: Const(0.0)),
+                    output: ByLabel("linha"), symbol: "operacao")"#,
+            ],
+        ),
+        (
+            id: "estacao",
+            name: "Estação da cozinha",
+            icon: "engrenagem",
+            role: Work,
+            description: "Chapa, fritadeira, forno, bebidas ou preparo: tempo de cada parte, quantas ao mesmo tempo e a equipe que trabalha nela (None: a estação trabalha sozinha, como uma fritadeira com cesto).",
+            name_base: "estacao",
+            fields: [
+                (key: "tempo", label: "Tempo de preparo (min)", default: "Triangular(min: 2.0, mode: 3.0, max: 5.0)"),
+                (key: "vagas", label: "Partes ao mesmo tempo", default: "2"),
+                (key: "equipe", label: "Equipe", default: "None",
+                 help: "Some(OperatorUse(team: \"cozinha\")) para precisar de um cozinheiro"),
+                (key: "quebra", label: "Quebra", default: "None",
+                 help: "Some((mtbf: Exp(mean: 2400.0), mttr: Exp(mean: 30.0))): fica no nó da estação"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${vagas}, process: ${tempo}, operators: ${equipe}),
+                    downtime: ${quebra}, ppe: ["touca", "avental"], symbol: "operacao",
+                    visual: Some((asset: Some("bancada"))))"#,
+            ],
+        ),
+        (
+            id: "montagem",
+            name: "Montagem do pedido",
+            icon: "bandeja_pilha",
+            role: Inbox,
+            description: "Segura as partes de cada pedido até todas chegarem e solta o pedido inteiro.",
+            name_base: "montagem",
+            objects: [
+                r#"(name: "${name}", kind: Queue(gather: Some((group: "comanda", count: "itens"))),
+                    symbol: "espera", visual: Some((asset: Some("bandeja"))))"#,
+            ],
+        ),
+        (
+            id: "retirada",
+            name: "Balcão de retirada",
+            icon: "estante",
+            role: Inbox,
+            description: "Pedidos prontos esperando o cliente ou o entregador. Depois do tempo de espera a comida esfria e é descartada (conta como descarte, não como desistência).",
+            name_base: "retirada",
+            fields: [
+                (key: "validade", label: "Tempo até esfriar (min)", default: "Some(Const(20.0))",
+                 help: "None: nada é descartado"),
+                (key: "lugares", label: "Pedidos que cabem", default: "None"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Queue(capacity: ${lugares}, patience: ${validade}),
+                    symbol: "armazenagem", visual: Some((asset: Some("armario"))))"#,
+            ],
+        ),
+        (
+            id: "mesas",
+            name: "Salão com mesas",
+            icon: "mesa_redonda",
+            role: Work,
+            description: "Cada grupo ocupa uma mesa pelo tempo da refeição; mesas é quantos grupos cabem ao mesmo tempo.",
+            name_base: "salao",
+            fields: [
+                (key: "mesas", label: "Mesas", default: "20"),
+                (key: "refeicao", label: "Tempo da refeição (min)", default: "Triangular(min: 40.0, mode: 60.0, max: 90.0)"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${mesas}, process: ${refeicao}), symbol: "operacao",
+                    visual: Some((asset: Some("mesa"))))"#,
+            ],
+        ),
+        (
+            id: "entrega",
+            name: "Entrega",
+            icon: "carrinho",
+            role: Work,
+            description: "Entregadores que levam o pedido ao cliente: tempo da viagem e quantos ficam em rota ao mesmo tempo. O pedido termina na entrega.",
+            name_base: "entrega",
+            fields: [
+                (key: "viagem", label: "Viagem até o cliente (min)", default: "Triangular(min: 10.0, mode: 18.0, max: 35.0)"),
+                (key: "entregadores", label: "Entregadores em rota", default: "4",
+                 help: "com entregadores próprios, que voltam à loja, some a volta ao tempo da viagem"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Processor(capacity: ${entregadores}, process: ${viagem}), ppe: ["capacete"],
+                    symbol: "transporte", visual: Some((asset: Some("caixa"))))"#,
+            ],
+        ),
+        (
+            id: "equipe",
+            name: "Equipe",
+            icon: "grupo_pessoas",
+            role: Team,
+            description: "Atendentes ou cozinheiros do turno (começa com dois; acrescente outros com a predefinição Funcionário).",
+            name_base: "equipe",
+            fields: [
+                (key: "turno", label: "Turno", default: "None",
+                 help: "Calendar(\"loja\", Finish) para trabalhar no horário da loja"),
+                (key: "habilidades", label: "Habilidades", default: "[]"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Dispatcher(team: ["${name}_1", "${name}_2"], rule: FirstAvailable))"#,
+                r#"(name: "${name}_1", kind: Transporter(speed: 60.0), position: (0.0, 1.5, 0.0), shifts: ${turno},
+                    ppe: ["touca", "avental"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "alimentacao/funcionario")"#,
+                r#"(name: "${name}_2", kind: Transporter(speed: 60.0), position: (0.0, -1.5, 0.0), shifts: ${turno},
+                    ppe: ["touca", "avental"], visual: Some((asset: Some("pessoa"))),
+                    person: Some((skills: ${habilidades})), preset: "alimentacao/funcionario")"#,
+            ],
+        ),
+        (
+            id: "funcionario",
+            name: "Funcionário",
+            icon: "pessoa_sentada",
+            role: Person,
+            description: "Uma pessoa da equipe: turno, habilidades e EPI de higiene.",
+            name_base: "funcionario",
+            fields: [
+                (key: "turno", label: "Turno", default: "None"),
+                (key: "habilidades", label: "Habilidades", default: "[]"),
+            ],
+            objects: [
+                r#"(name: "${name}", kind: Transporter(speed: 60.0), shifts: ${turno}, ppe: ["touca", "avental"],
+                    visual: Some((asset: Some("pessoa"))), person: Some((skills: ${habilidades})))"#,
+            ],
+        ),
+        (
+            id: "saida",
+            name: "Saída",
+            icon: "porta",
+            role: Done,
+            description: "Onde os pedidos entregues (ou os clientes atendidos) saem.",
+            name_base: "saida",
+            objects: [
+                r#"(name: "${name}", kind: Sink, symbol: "fim")"#,
+            ],
+        ),
+    ],
+)
