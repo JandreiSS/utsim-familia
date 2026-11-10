@@ -422,6 +422,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "operators",
                 "also",
                 "changeover",
+                "recipe",
             ],
         ),
         ObjectKind::Transporter { .. } => (
@@ -492,6 +493,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         (ObjectKind::Processor { operators, .. }, "operators") => set!(*operators),
         (ObjectKind::Processor { also, .. }, "also") => set!(*also),
         (ObjectKind::Processor { changeover, .. }, "changeover") => set!(*changeover),
+        (ObjectKind::Processor { recipe, .. }, "recipe") => set!(*recipe),
         (ObjectKind::Transporter { speed, .. }, "speed") => set!(*speed),
         (ObjectKind::Transporter { acceleration, .. }, "acceleration") => set!(*acceleration),
         (ObjectKind::Transporter { deceleration, .. }, "deceleration") => set!(*deceleration),
@@ -840,7 +842,9 @@ mod tests {
         let e = set(&[("m.velocidade", "1")]).unwrap_err().to_string();
         assert!(
             e.contains("Processor")
-                && e.contains("capacity, setup, process, operators, also, changeover, output"),
+                && e.contains(
+                    "capacity, setup, process, operators, also, changeover, recipe, output"
+                ),
             "{e}"
         );
         let e = set(&[("out.process", "Const(1.0)")])

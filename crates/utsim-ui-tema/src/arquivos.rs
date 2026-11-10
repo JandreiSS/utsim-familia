@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "arquivos")]
 use egui::{Response, Ui};
 
 /// O que o seletor escolhe.
@@ -71,6 +72,7 @@ pub fn pasta_inicial(atual: &str) -> Option<PathBuf> {
 }
 
 /// O nome do arquivo já escrito, para o seletor de gravar sugerir.
+#[cfg(feature = "arquivos")]
 fn nome_inicial(atual: &str) -> Option<String> {
     let p = Path::new(atual.trim().trim_matches('"'));
     if p.is_dir() {
