@@ -430,6 +430,8 @@ Fica no app (modo professor) e num comando `utsim ensino caso` para o autor.
 6. **Gerar o texto inicial** do enunciado a partir de um modelo de texto próprio, que o professor reescreve.
 7. **Exportar** a missão para um pacote.
 
+**Editor de missões** (pedido do coordenador em 2026-11-09, entregue por etapas). A etapa A (**feita**) traz os passos 1, 2, 4, 5 e 7 na tela, na aba "Editor de missões" (`utsim_ensino_core::editor`, `utsim-ensino-ui/src/editor.rs`), com o pacote próprio do professor (vários atos, reabrir, reordenar, remover, conferir, `.utse`). A etapa B trará o enunciado com prévia igual à do aluno, as perguntas de previsão e de justificativa, as dicas e os conceitos do glossário. A etapa C trará as missões de dados, com os geradores da seção 6.3 num formulário.
+
 ### 6.3 Dados com efeitos plantados
 
 Geradores com semente, em `utsim-ensino-core`, sobre `utsim-stats` e `utsim-model`, que retomam o antigo L8.

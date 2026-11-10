@@ -36,6 +36,21 @@ pub enum TaskKind {
     Operate { station: BlockId, tag: u32 },
 }
 
+/// What a person must have to take an operator request: every skill of `skills` (in
+/// the person profile) and every protective equipment of `ppe` (worn by the resource,
+/// [`crate::Simulation::set_ppe`]). Empty: anyone.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Requirement {
+    pub skills: Vec<String>,
+    pub ppe: Vec<String>,
+}
+
+impl Requirement {
+    pub fn is_empty(&self) -> bool {
+        self.skills.is_empty() && self.ppe.is_empty()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TaskRequest {
     pub id: RequestId,

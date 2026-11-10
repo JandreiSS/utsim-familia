@@ -61,7 +61,7 @@ pub fn categoria(s: State) -> Cat {
         | State::Loading
         | State::Unloading
         | State::Generating => Cat::Trabalhando,
-        State::Setup => Cat::Preparando,
+        State::Setup | State::Entering | State::Leaving => Cat::Preparando,
         State::TravelEmpty | State::TravelLoaded => Cat::Andando,
         State::Blocked
         | State::WaitingOperator
