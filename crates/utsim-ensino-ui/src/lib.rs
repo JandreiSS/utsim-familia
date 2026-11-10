@@ -9,6 +9,7 @@
 //! - [`turma`]: the student's class tab and the teacher's panel;
 //! - [`texto`]: the text catalogue.
 
+mod abertura;
 pub mod missao;
 pub mod pecas;
 pub mod texto;
@@ -56,6 +57,7 @@ impl Executor for NaHora {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tela {
+    /// The opening screen: who is playing and what to do (the first screen of every start).
     Identidade,
     Mapa,
     Missao,
@@ -88,6 +90,9 @@ pub struct App {
     pub pasta_instalada: Option<PathBuf>,
     /// The UTSim client is installed by the launcher ("Ver em 3D").
     pub cliente_3d: bool,
+    /// Apps of the family installed for the analysis of mission data (`estatistica`,
+    /// `qualidade`).
+    pub apps_analise: Vec<String>,
     nome: String,
     registro: String,
     apelido: String,
@@ -107,6 +112,7 @@ impl App {
             texto::definir(texto::Idioma::de_codigo(i));
         }
         app.cliente_3d = utsim_ensino_store::tres_d::cliente().is_some();
+        app.apps_analise = utsim_ensino_store::analise::instalados();
         match pasta_de_pacotes() {
             Some(dir) => app.procurar_pacotes(&dir),
             None => app.atualizar_pacotes(),
@@ -156,15 +162,13 @@ impl App {
             .as_ref()
             .map(|p| perfil.progresso(&p.pacote.id))
             .unwrap_or_default();
-        let tela = if config.identidade.is_some() {
-            Tela::Mapa
-        } else {
-            Tela::Identidade
-        };
+        // Every start is on the opening screen (who is playing, and what to do).
+        let tela = Tela::Identidade;
         let ident = config.identidade.clone().unwrap_or(Aluno {
             nome: String::new(),
             registro: String::new(),
             apelido: String::new(),
+            email: String::new(),
         });
         let caminho_pacote = config
             .pacote_aberto
@@ -188,6 +192,7 @@ impl App {
             pacotes_instalados: Vec::new(),
             pasta_instalada: None,
             cliente_3d: false,
+            apps_analise: Vec::new(),
             nome: ident.nome,
             registro: ident.registro,
             apelido: ident.apelido,
@@ -274,6 +279,7 @@ impl App {
             } else {
                 apelido.trim().into()
             },
+            email: String::new(),
         });
         self.salvar_config();
         self.mensagem = None;
@@ -361,7 +367,7 @@ impl App {
         self.aplicar_estilo(ui.ctx());
         self.receber();
         if self.tela == Tela::Identidade {
-            egui::CentralPanel::default().show(ui, |ui| self.tela_identidade(ui));
+            egui::CentralPanel::default().show(ui, |ui| self.tela_abertura(ui));
             return;
         }
         egui::Panel::top("topo").show(ui, |ui| self.barra(ui));
@@ -409,6 +415,7 @@ impl App {
             ui.label(RichText::new(texto::NOME_APP).strong().size(18.0));
             ui.separator();
             for (t, nome) in [
+                (Tela::Identidade, texto::aba_inicio()),
                 (Tela::Mapa, texto::aba_campanha()),
                 (Tela::Glossario, texto::aba_glossario()),
                 (Tela::Turma, texto::aba_turma()),
@@ -443,40 +450,6 @@ impl App {
                 ui.label(format!("★ {}", self.progresso.estrelas()));
             }
         });
-    }
-
-    fn tela_identidade(&mut self, ui: &mut Ui) {
-        ui.add_space(30.0);
-        ui.vertical_centered(|ui| {
-            ui.label(RichText::new(texto::NOME_APP).size(28.0).strong());
-            ui.label(texto::subtitulo());
-            ui.add_space(20.0);
-            ui.label(RichText::new(texto::identidade_titulo()).size(18.0));
-            ui.label(texto::identidade_texto());
-        });
-        ui.add_space(10.0);
-        egui::Grid::new("identidade").num_columns(2).show(ui, |ui| {
-            ui.label(texto::nome());
-            ui.text_edit_singleline(&mut self.nome);
-            ui.end_row();
-            ui.label(texto::registro_academico());
-            ui.text_edit_singleline(&mut self.registro);
-            ui.end_row();
-            ui.label(texto::apelido_opcional());
-            ui.text_edit_singleline(&mut self.apelido);
-            ui.end_row();
-        });
-        if let Some(m) = &self.mensagem {
-            ui.colored_label(Color32::from_rgb(255, 112, 104), m);
-        }
-        if ui.button(texto::comecar()).clicked() {
-            let (n, r, a) = (
-                self.nome.clone(),
-                self.registro.clone(),
-                self.apelido.clone(),
-            );
-            self.salvar_identidade(&n, &r, &a);
-        }
     }
 
     fn tela_mapa(&mut self, ui: &mut Ui) {
@@ -643,7 +616,14 @@ impl App {
         }
         ui.label(texto::outros_pacotes_texto());
         ui.horizontal(|ui| {
-            ui.text_edit_singleline(&mut self.caminho_pacote);
+            abertura::campo(
+                ui,
+                &mut self.caminho_pacote,
+                utsim_ui_tema::arquivos::Tipo::Abrir,
+                texto::ab_pacote(),
+                &[abertura::filtro_pacote()],
+                360.0,
+            );
             if ui.button(texto::abrir_pacote()).clicked() {
                 let c = PathBuf::from(self.caminho_pacote.trim().trim_matches('"'));
                 match self.abrir_pacote(&c) {

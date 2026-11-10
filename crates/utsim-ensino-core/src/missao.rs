@@ -85,7 +85,14 @@ pub struct Missao {
     /// data.
     #[serde(default)]
     pub dados: Vec<crate::questoes::ConjuntoMissao>,
+    /// Apps of the family where the data can be analysed ([`APPS_DE_ANALISE`]): a button
+    /// writes the data as CSV and opens the installed app.
+    #[serde(default)]
+    pub analisar_em: Vec<String>,
 }
+
+/// The apps a mission can send its data to (launcher product ids).
+pub const APPS_DE_ANALISE: &[&str] = &["estatistica", "qualidade"];
 
 /// The decisions of an attempt: lever id to number (a quantity, the index of a choice or
 /// a value).

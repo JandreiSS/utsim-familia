@@ -17,9 +17,22 @@ pub struct Config {
     pub autor: String,
     #[serde(default)]
     pub ultima_unidade: String,
+    /// As unidades abertas por último, a mais nova primeiro.
+    #[serde(default)]
+    pub recentes: Vec<String>,
 }
 
 impl Config {
+    /// As unidades recentes (com a última unidade das versões antigas, se faltar).
+    pub fn recentes(&self) -> Vec<PathBuf> {
+        let mut l: Vec<PathBuf> = self.recentes.iter().map(PathBuf::from).collect();
+        let u = self.ultima_unidade.trim();
+        if !u.is_empty() && !self.recentes.iter().any(|r| r == u) {
+            l.push(PathBuf::from(u));
+        }
+        l
+    }
+
     pub fn ler(arquivo: &Path) -> Config {
         std::fs::read_to_string(arquivo)
             .ok()
@@ -85,11 +98,44 @@ impl Sessao {
     fn lembrar(&mut self, autor: &str, caminho: &Path) {
         self.config.autor = autor.to_string();
         self.config.ultima_unidade = caminho.display().to_string();
+        utsim_ui_tema::abertura::lembrar(&mut self.config.recentes, caminho);
+        self.gravar_config();
+    }
+
+    fn gravar_config(&mut self) {
         if let Some(a) = self.arquivo.clone()
             && let Err(e) = self.config.gravar(&a)
         {
             self.falhar(format!("não consegui lembrar a configuração: {e}"));
         }
+    }
+
+    /// Guarda o nome do autor para a próxima vez.
+    pub fn lembrar_autor(&mut self, autor: &str) {
+        if self.erro {
+            self.avisar("");
+        }
+        if self.config.autor != autor {
+            self.config.autor = autor.to_string();
+            self.gravar_config();
+        }
+    }
+
+    /// Tira da lista de recentes a unidade de índice `i` (de [`Config::recentes`]).
+    pub fn esquecer_recente(&mut self, i: usize) {
+        let Some(p) = self
+            .config
+            .recentes()
+            .get(i)
+            .map(|p| p.display().to_string())
+        else {
+            return;
+        };
+        self.config.recentes.retain(|r| r != &p);
+        if self.config.ultima_unidade == p {
+            self.config.ultima_unidade.clear();
+        }
+        self.gravar_config();
     }
 
     pub fn abrir(&mut self, caminho: &Path, autor: &str) -> bool {
@@ -98,10 +144,9 @@ impl Sessao {
                 let msg = format!("Unidade '{}' aberta.", u.manifesto.nome);
                 self.unidade = Some(u);
                 self.versao += 1;
+                // Um erro antigo (outra pasta, nome faltando) não vale mais.
+                self.avisar(msg);
                 self.lembrar(autor.trim(), caminho);
-                if !self.erro {
-                    self.avisar(msg);
-                }
                 true
             }
             Err(e) => {
@@ -117,10 +162,9 @@ impl Sessao {
                 let msg = format!("Unidade '{}' criada.", u.manifesto.nome);
                 self.unidade = Some(u);
                 self.versao += 1;
+                // Um erro antigo (outra pasta, nome faltando) não vale mais.
+                self.avisar(msg);
                 self.lembrar(autor.trim(), caminho);
-                if !self.erro {
-                    self.avisar(msg);
-                }
                 true
             }
             Err(e) => {

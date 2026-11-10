@@ -61,10 +61,14 @@ pub struct Aluno {
     /// Shown on the leaderboard, never the name.
     #[serde(default)]
     pub apelido: String,
+    /// E-mail, optional: ties the student to a person of a Lean Six Sigma program of
+    /// UTSim Seis Sigma, so the teacher can record the class's practice there.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub email: String,
 }
 
-/// Reads the student list: a header with `nome`, `registro` and optionally `apelido`,
-/// separated by `;` or `,`.
+/// Reads the student list: a header with `nome`, `registro` and optionally `apelido` and
+/// `email`, separated by `;` or `,`.
 pub fn importar_alunos(csv: &str) -> Result<Vec<Aluno>, Vec<String>> {
     let mut linhas = csv.lines().filter(|l| !l.trim().is_empty());
     let Some(cab) = linhas.next() else {
@@ -83,6 +87,7 @@ pub fn importar_alunos(csv: &str) -> Result<Vec<Aluno>, Vec<String>> {
         ]);
     };
     let ca = col("apelido");
+    let ce = col("email").or_else(|| col("e-mail"));
     let mut out: Vec<Aluno> = Vec::new();
     let mut erros = Vec::new();
     for (i, l) in linhas.enumerate() {
@@ -92,6 +97,7 @@ pub fn importar_alunos(csv: &str) -> Result<Vec<Aluno>, Vec<String>> {
             nome: pega(cn),
             registro: pega(cr),
             apelido: ca.map(pega).unwrap_or_default(),
+            email: ce.map(pega).unwrap_or_default(),
         };
         if a.nome.is_empty() || a.registro.is_empty() {
             erros.push(format!("linha {}: nome ou registro vazio", i + 2));
@@ -101,6 +107,8 @@ pub fn importar_alunos(csv: &str) -> Result<Vec<Aluno>, Vec<String>> {
                 i + 2,
                 a.registro
             ));
+        } else if !a.email.is_empty() && !email_valido(&a.email) {
+            erros.push(format!("linha {}: e-mail '{}' inválido", i + 2, a.email));
         } else if out.iter().any(|x| x.registro == a.registro) {
             erros.push(format!(
                 "linha {}: registro '{}' repetido",
@@ -126,11 +134,35 @@ pub fn registro_valido(r: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// A plain check of an e-mail: one `@` with text on both sides and a dot in the domain.
+pub fn email_valido(e: &str) -> bool {
+    let e = e.trim();
+    match e.split_once('@') {
+        Some((u, d)) => {
+            !u.is_empty()
+                && !d.contains('@')
+                && d.contains('.')
+                && !d.starts_with('.')
+                && !d.ends_with('.')
+                && !e.contains(char::is_whitespace)
+        }
+        None => false,
+    }
+}
+
+/// The form of an e-mail used to compare two of them: trimmed and in lower case.
+pub fn email_chave(e: &str) -> String {
+    e.trim().to_lowercase()
+}
+
 /// The student list as CSV (`;`), the format [`importar_alunos`] reads.
 pub fn alunos_csv(alunos: &[Aluno]) -> String {
-    let mut s = String::from("nome;registro;apelido\n");
+    let mut s = String::from("nome;registro;apelido;email\n");
     for a in alunos {
-        s.push_str(&format!("{};{};{}\n", a.nome, a.registro, a.apelido));
+        s.push_str(&format!(
+            "{};{};{};{}\n",
+            a.nome, a.registro, a.apelido, a.email
+        ));
     }
     s
 }
@@ -308,4 +340,23 @@ pub fn erros_comuns(missao: &Missao, por_aluno: &[Vec<(Tentativa, Resultado)>]) 
     }
     out.sort_by(|a, b| b.fracao.total_cmp(&a.fracao));
     out
+}
+
+#[cfg(test)]
+mod testes_email {
+    use super::*;
+
+    #[test]
+    fn lista_com_email_opcional() {
+        let a =
+            importar_alunos("nome;registro;email\nAna;ra1; Ana@Fabrica.com \nBia;ra2;\n").unwrap();
+        assert_eq!(a[0].email, "Ana@Fabrica.com");
+        assert_eq!(email_chave(&a[0].email), "ana@fabrica.com");
+        assert!(a[1].email.is_empty());
+        assert_eq!(importar_alunos(&alunos_csv(&a)).unwrap(), a);
+        let e = importar_alunos("nome,registro,e-mail\nAna,ra1,ana-sem-arroba\n").unwrap_err();
+        assert!(e[0].contains("e-mail"), "{e:?}");
+        let antiga = importar_alunos("nome;registro;apelido\nAna;ra1;A\n").unwrap();
+        assert!(antiga[0].email.is_empty());
+    }
 }

@@ -15,8 +15,16 @@ egui = { version = "=0.36.2", default-features = false, features = ["default_fon
 # headless pictures; neither is used by the Godot bridge.
 png = { version = "=0.18.1", optional = true }
 
+# The native file and folder picker of the system (the Windows file explorer), for the
+# "Procurar…" button of every path field. Not used by the Godot bridge.
+rfd = { version = "=0.16.0", optional = true }
+
 [features]
 # The flat look of the launcher and the admin app (`familia`).
 familia = ["dep:png"]
 # Headless pictures of a UI (`captura`), for tests and reviews.
 captura = ["dep:png"]
+# The common opening screen of the family apps (`abertura`).
+abertura = ["familia"]
+# The native picker behind the "Procurar…" button (`arquivos::procurar`, `arquivos::campo`).
+arquivos = ["dep:rfd"]

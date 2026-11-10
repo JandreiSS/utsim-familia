@@ -470,7 +470,7 @@ O formato de pacote é o ponto de encaixe. Um pacote declara o que precisa (`req
 
 - **Projeto de treino.** O ato 8 exporta um projeto `.lss` (ou `.lssz`) marcado como treino, com o modelo ligado por hash, os conjuntos de dados com origem `Simulado` e o termo pré-preenchido. O Seis Sigma já separa o espaço de treino do programa real (LSS-RNF-15).
 - **Volta das respostas.** As respostas-chave do aluno (causa raiz, R&R, Cpk, ganho) são digitadas no jogo ou lidas do `estudo.json` do Seis Sigma. O jogo corrige sem depender da tela do outro app.
-- **Competências.** Em programa de empresa, as missões concluídas gravam entradas `competencia` de origem `exercicio` no diário do programa (`mentoria::record_level`), o ponto de ligação deixado pela decisão N2. Os conceitos das missões são ligados às ferramentas do currículo do Seis Sigma por uma tabela no pacote.
+- **Competências.** Em programa de empresa, as missões concluídas viram "praticou" no mapa de competências, nas ferramentas que a tabela `competencias` do pacote liga aos conceitos da missão. São dois caminhos (**feitos**). No primeiro, o próprio aluno registra, com origem `ensino` (`utsim_lss_store::program::record_teaching`). No segundo, o instrutor ou o MBB registra a turma corrigida de uma vez, com origem `exercicio` (`record_exercises`, formato combinado com a sessão Seis Sigma em 2026-11-09). Nesse caso o aluno é ligado à pessoa do programa pelo e-mail da lista de alunos (`members`, que só o instrutor e o MBB leem). Nomes e registros da turma não vão para o programa, e quem tem aviso na entrega fica de fora.
 - **Sem o Seis Sigma**, o caso final roda na versão reduzida dentro do jogo (seção 3.7).
 
 ### 7.2 Linhas especializadas
@@ -484,6 +484,18 @@ Essa frente está em planejamento paralelo. Este plano só fixa o contrato. A fr
 ### 7.4 Simulador e cliente 3D
 
 "Levar para o UTSim" grava o `.ron` da tentativa e abre o editor. "Ver em 3D" abre o `Replay` no cliente Godot. Os dois só aparecem quando o produto está instalado pelo launcher, como no Seis Sigma.
+
+### 7.6 UTSim Estatística e UTSim Qualidade
+
+O pacote "Estatística e qualidade na fábrica" (`ensino/pacotes/estatistica_qualidade`, feito em 2026-11-09) liga o jogo aos dois apps. Ele traz seis missões de análise:
+- replicações e intervalo de confiança;
+- comparação pareada com números aleatórios comuns;
+- carta X̄-R com deriva plantada;
+- Cpk antes e depois;
+- R&R com a fonte dominante;
+- estratificação.
+
+Os geradores `Pareado` e `Subgrupos` e as questões `MeiaLargura`, `Replicacoes`, `DiferencaMedia`, `DiferencaSignificativa`, `PrimeiroSubgrupoFora`, `Cpk` e `FonteDominante` entram no núcleo. A missão diz em `analisar_em` para qual app os dados vão. O botão grava os `.csv` no perfil e abre o app com `--utsim-abrir=<arquivo.csv>`, um por conjunto, na convenção da família. Para o UTSim Qualidade, o conjunto diz também a ferramenta e os limites (`ferramenta`, `lie`, `lse`), que vão como `--utsim-ferramenta`, `--utsim-lie` e `--utsim-lse`. O contrato foi combinado com a sessão Qualidade e Segurança e registrado por ela na seção 2.2 de `docs/plano_integracao_familia.md`: vários arquivos num só estudo, subgrupos em formato largo, colunas do R&R achadas pelo cabeçalho e, na capacidade, a última coluna numérica. A leitura do `.csv` como conjunto de dados fica com os dois apps. Até lá, o app só abre, e os arquivos ficam no perfil para a importação manual.
 
 ### 7.5 Placas com microcontrolador
 

@@ -230,6 +230,7 @@ fn nota_editada_e_cadeia_quebrada() {
         nome: "A".into(),
         registro: "ra001".into(),
         apelido: String::new(),
+        email: String::new(),
     }];
     let e = |ts: Vec<TentativaAssinada>| Entrega {
         formato: FORMATO_ENTREGA,
@@ -277,6 +278,7 @@ fn perfil_registra_e_entrega() {
         nome: "Bia".into(),
         registro: "2027001".into(),
         apelido: "bia".into(),
+        email: String::new(),
     };
     let t = Turma {
         id: "t1".into(),
@@ -335,6 +337,7 @@ fn turma_de_60_com_todas_as_missoes() {
             nome: format!("Aluno {i:02}"),
             registro: format!("ra{i:03}"),
             apelido: String::new(),
+            email: String::new(),
         })
         .collect();
     let entregas: Vec<Entrega> = alunos
@@ -448,4 +451,41 @@ fn levar_para_o_utsim_grava_so_o_modelo() {
     assert!(a[1].starts_with("--utsim-abrir=") && a[1].ends_with(".ron"));
     let v = argumentos_modelo(std::path::Path::new("bin/utsim-view.exe"), &[], &pm);
     assert_eq!(v, [pm.display().to_string()]);
+}
+
+#[test]
+fn dados_da_missao_para_o_app_de_analise() {
+    use utsim_ensino_store::analise::{argumentos, gravar_dados};
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../ensino/pacotes/estatistica_qualidade");
+    let p = utsim_ensino_core::pacote::carregar(
+        &utsim_ensino_store::arquivos::ler_pacote(&raiz).unwrap(),
+    )
+    .unwrap();
+    let m = p.missao("eq/capacidade").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let arqs = gravar_dados(dir.path(), m, "ra042").unwrap();
+    assert_eq!(arqs.len(), 2);
+    for (a, cj) in arqs.iter().zip(&m.missao.dados) {
+        // The student's own data, the same the game grades from.
+        assert_eq!(
+            std::fs::read_to_string(a).unwrap(),
+            cj.gerar(&m.missao.id, "ra042").csv()
+        );
+    }
+    let args = argumentos(&["--x".into()], &arqs);
+    assert_eq!(args[0], "--x");
+    assert_eq!(args.len(), 3);
+    assert!(args[1].starts_with("--utsim-abrir=") && args[1].ends_with("antes.csv"));
+    assert!(args[2].ends_with("depois.csv"));
+    // UTSim Qualidade gets the tool and the limits, each as its own item.
+    assert_eq!(
+        utsim_ensino_store::analise::opcoes("qualidade", m),
+        [
+            "--utsim-ferramenta=capacidade",
+            "--utsim-lie=24.985",
+            "--utsim-lse=25.015"
+        ]
+    );
+    assert!(utsim_ensino_store::analise::opcoes("estatistica", m).is_empty());
 }
