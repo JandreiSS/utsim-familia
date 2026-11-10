@@ -43,10 +43,13 @@ pub enum Ferramenta {
     CincoPorques,
     Fmea,
     A3,
+    Qfd,
+    Tolerancias,
+    PokaYoke,
 }
 
 impl Ferramenta {
-    pub const TODAS: [Ferramenta; 12] = [
+    pub const TODAS: [Ferramenta; 15] = [
         Ferramenta::FolhaVerificacao,
         Ferramenta::Estratificacao,
         Ferramenta::Pareto,
@@ -59,10 +62,14 @@ impl Ferramenta {
         Ferramenta::CincoPorques,
         Ferramenta::Fmea,
         Ferramenta::A3,
+        Ferramenta::Qfd,
+        Ferramenta::Tolerancias,
+        Ferramenta::PokaYoke,
     ];
 
     /// As ferramentas que o app oferece: o Qualidade tem todas, o Segurança do Trabalho as
-    /// de análise de causa e de dados que fazem sentido para acidentes e exposições.
+    /// de análise de causa e de dados que fazem sentido para acidentes e exposições, e o
+    /// poka-yoke (os dispositivos à prova de erro também protegem as pessoas).
     pub fn do_app(app: App) -> &'static [Ferramenta] {
         match app {
             App::Qualidade => &Ferramenta::TODAS,
@@ -76,6 +83,7 @@ impl Ferramenta {
                 Ferramenta::CincoPorques,
                 Ferramenta::Fmea,
                 Ferramenta::A3,
+                Ferramenta::PokaYoke,
             ],
         }
     }
@@ -94,6 +102,9 @@ impl Ferramenta {
             Ferramenta::CincoPorques => "5 porquês",
             Ferramenta::Fmea => "FMEA",
             Ferramenta::A3 => "A3",
+            Ferramenta::Qfd => "QFD (casa da qualidade)",
+            Ferramenta::Tolerancias => "Empilhamento de tolerâncias",
+            Ferramenta::PokaYoke => "Poka-yoke (à prova de erro)",
         }
     }
 
@@ -122,6 +133,15 @@ impl Ferramenta {
             Ferramenta::CincoPorques => "Desce do problema até a causa raiz pergunta a pergunta.",
             Ferramenta::Fmea => "Modos de falha, efeitos e causas, com NPR e prioridade de ação.",
             Ferramenta::A3 => "O problema e a solução em uma folha, do contexto ao acompanhamento.",
+            Ferramenta::Qfd => {
+                "Liga as necessidades do cliente aos requisitos técnicos e diz quais pesam mais."
+            }
+            Ferramenta::Tolerancias => {
+                "Soma as cotas pelo pior caso, pela raiz da soma dos quadrados e por simulação."
+            }
+            Ferramenta::PokaYoke => {
+                "Dispositivos à prova de erro ligados ao FMEA, com o efeito e as verificações."
+            }
         }
     }
 
@@ -158,9 +178,26 @@ impl Ferramenta {
             Ferramenta::CartaControle => &["Subgrupo", "Valor"],
             Ferramenta::Msa => &["Peça", "Operador", "Valor"],
             Ferramenta::Fmea => &calculo::COLUNAS_FMEA,
+            Ferramenta::Qfd => &calculo::COLUNAS_QFD,
+            Ferramenta::Tolerancias => &calculo::COLUNAS_TOLERANCIAS,
+            Ferramenta::PokaYoke => &calculo::COLUNAS_POKA_YOKE,
             Ferramenta::Ishikawa | Ferramenta::CincoPorques | Ferramenta::A3 => &[],
         };
         Tabela::nova(cols)
+    }
+
+    /// As tabelas auxiliares da ferramenta (título e colunas), guardadas em
+    /// [`Aplicacao::auxiliares`] na mesma ordem: os detalhes dos requisitos e o telhado do
+    /// QFD, as verificações do poka-yoke.
+    pub fn auxiliares(self) -> &'static [(&'static str, &'static [&'static str])] {
+        match self {
+            Ferramenta::Qfd => &[
+                ("Requisitos técnicos", &calculo::COLUNAS_QFD_REQUISITOS),
+                ("Telhado (correlações)", &calculo::COLUNAS_QFD_TELHADO),
+            ],
+            Ferramenta::PokaYoke => &[("Verificações", &calculo::COLUNAS_VERIFICACOES)],
+            _ => &[],
+        }
     }
 }
 
@@ -449,6 +486,9 @@ pub struct Aplicacao {
     pub cadeias: Vec<Cadeia>,
     #[serde(default)]
     pub secoes: Vec<Secao>,
+    /// As tabelas auxiliares, na ordem de [`Ferramenta::auxiliares`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auxiliares: Vec<Tabela>,
     /// A leitura da equipe: o que o resultado mostra e o que fazer.
     #[serde(default)]
     pub conclusao: String,
@@ -468,8 +508,10 @@ impl Aplicacao {
             categorias: Vec::new(),
             cadeias: Vec::new(),
             secoes: Vec::new(),
+            auxiliares: Vec::new(),
             conclusao: String::new(),
         };
+        a.completar_auxiliares();
         match ferramenta {
             Ferramenta::Ishikawa => {
                 a.categorias = SEIS_M
@@ -493,6 +535,20 @@ impl Aplicacao {
             _ => {}
         }
         a
+    }
+
+    /// Acrescenta as tabelas auxiliares que faltam (um estudo gravado antes delas).
+    pub fn completar_auxiliares(&mut self) {
+        for (i, (_, cols)) in self.ferramenta.auxiliares().iter().enumerate() {
+            if self.auxiliares.len() <= i {
+                self.auxiliares.push(Tabela::nova(cols));
+            }
+        }
+    }
+
+    /// A tabela auxiliar `i` (vazia quando falta).
+    pub fn auxiliar(&self, i: usize) -> Tabela {
+        self.auxiliares.get(i).cloned().unwrap_or_default()
     }
 }
 
