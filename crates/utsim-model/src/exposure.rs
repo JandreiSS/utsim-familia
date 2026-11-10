@@ -368,10 +368,7 @@ pub fn tracks(model: &Model, records: &[utsim_core::TraceRecord], stop: f64) -> 
                 p1: pos,
             });
         }
-        let mut ppe: BTreeSet<String> = obj.ppe.iter().cloned().collect();
-        for served in model.served_by(&obj.name) {
-            ppe.extend(served.ppe.iter().cloned());
-        }
+        let ppe = model.worn_ppe(obj);
         out.push(Track {
             object: i,
             name: obj.name.clone(),
@@ -381,6 +378,18 @@ pub fn tracks(model: &Model, records: &[utsim_core::TraceRecord], stop: f64) -> 
         });
     }
     out
+}
+
+impl Model {
+    /// Protective equipment a mobile resource wears: its own `ppe` and that of the objects
+    /// it serves (the exposure analysis and the people of the 3D view read the same set).
+    pub fn worn_ppe(&self, obj: &crate::ObjectDef) -> BTreeSet<String> {
+        let mut ppe: BTreeSet<String> = obj.ppe.iter().cloned().collect();
+        for served in self.served_by(&obj.name) {
+            ppe.extend(served.ppe.iter().cloned());
+        }
+        ppe
+    }
 }
 
 /// Runs replication `replication` with its trace and measures the exposure.
