@@ -8357,6 +8357,7 @@ dependencies = [
  "utsim-model",
  "utsim-pasta",
  "utsim-posto",
+ "utsim-troca",
  "utsim-ui-tema",
 ]
 
