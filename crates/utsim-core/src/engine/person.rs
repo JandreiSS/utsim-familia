@@ -346,36 +346,45 @@ impl Ctx<'_> {
         self.core.blocks[self.me.0].person.is_some()
     }
 
-    /// Like [`Ctx::request_task`], for work only people with `skill` may do: dispatchers
-    /// give it only to qualified members ([`Ctx::qualified`]). `None` = anyone.
+    /// Like [`Ctx::request_task`], for work only some people may do (`need`): dispatchers
+    /// give it only to qualified members ([`Ctx::qualified`]). An empty `need` = anyone.
     pub fn request_task_requiring(
         &mut self,
         to: BlockId,
         kind: TaskKind,
         priority: i32,
-        skill: Option<&str>,
+        need: &crate::task::Requirement,
     ) -> RequestId {
         let id = self.request_task(to, kind, priority);
-        if let Some(s) = skill {
-            self.core.required.insert(id.0, s.to_string());
+        if !need.is_empty() {
+            self.core.required.insert(id.0, need.clone());
         }
         id
     }
 
-    /// Whether `member` may take `request`: the request needs no skill, or the member's
-    /// person profile lists it.
+    /// Whether `member` may take `request`: the request needs nothing, or the member's
+    /// person profile lists every skill and the member wears every protective equipment
+    /// asked.
     pub fn qualified(&self, member: BlockId, request: &TaskRequest) -> bool {
-        match self.core.required.get(&request.id.0) {
-            None => true,
-            Some(skill) => self.core.blocks[member.0]
+        let Some(need) = self.core.required.get(&request.id.0) else {
+            return true;
+        };
+        let block = &self.core.blocks[member.0];
+        let skills = need.skills.is_empty()
+            || block
                 .person
                 .as_deref()
-                .is_some_and(|p| p.cfg.has_skill(skill)),
-        }
+                .is_some_and(|p| need.skills.iter().all(|s| p.cfg.has_skill(s)));
+        skills && need.ppe.iter().all(|e| block.ppe.contains(e))
     }
 }
 
 impl Simulation {
+    /// Protective equipment the resource `block` wears (checked by [`Ctx::qualified`]).
+    pub fn set_ppe(&mut self, block: BlockId, ppe: Vec<String>) {
+        self.core.blocks[block.0].ppe = ppe;
+    }
+
     /// Gives block `block` (a mobile resource used as a person) a [`Person`] profile.
     pub fn set_person(&mut self, block: BlockId, person: Person) {
         let rng = crate::rng::stream(

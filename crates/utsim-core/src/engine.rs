@@ -189,6 +189,8 @@ struct BlockRuntime {
     draining: bool,
     /// Person profile (fatigue, learning, skills...); `None` = not a person.
     person: Option<Box<person::PersonState>>,
+    /// Protective equipment the resource wears ([`Simulation::set_ppe`]).
+    ppe: Vec<String>,
 }
 
 /// Work that involves another block's hooks, run by the kernel after the current
@@ -267,8 +269,9 @@ pub struct Core {
     calendar: Time,
     /// Blocks finishing their work before a preventive maintenance.
     draining: Vec<BlockId>,
-    /// Skill each open request needs ([`Ctx::request_task_requiring`]), by request id.
-    required: BTreeMap<u64, String>,
+    /// What each open request needs from its operator ([`Ctx::request_task_requiring`]),
+    /// by request id.
+    required: BTreeMap<u64, crate::task::Requirement>,
     /// Per-item metrics, when enabled with [`Simulation::enable_item_log`].
     item_log: Option<Box<ItemLog>>,
 }
@@ -1140,6 +1143,7 @@ impl Simulation {
             maint: None,
             draining: false,
             person: None,
+            ppe: Vec::new(),
         });
         self.behaviors.push(behavior);
         id

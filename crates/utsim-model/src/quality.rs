@@ -282,8 +282,8 @@ pub enum ZoneKind {
     Other,
 }
 
-/// Risk zone: a polygon on the floor. Never read by the simulation; the exposure analysis
-/// measures the time people spend inside it.
+/// Risk zone: a polygon on the floor. The exposure analysis measures the time people spend
+/// inside it; the simulation reads only its `ppe`, for operation rules with `require_ppe`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ZoneDef {
     pub name: String,
