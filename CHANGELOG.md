@@ -45,6 +45,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ### Adicionado
 - UTSim 3D, girar objetos fixos para organizar a fábrica: `R` gira a seleção 90° (anti-horário visto de cima), `Shift+R` −90°, `Ctrl+R` e `Ctrl+Shift+R` 15° e −15°, cada objeto em volta do próprio centro e tudo num passo de desfazer. Com um objeto fixo selecionado, uma alça de giro (roxa, atrás dele) arrasta em passos de 15° (90° com `Shift`), também num passo só. O painel ganhou **Rotação** (°) logo abaixo de X, Y e Z, para o valor exato; nos recursos móveis o antigo "Giro" virou "Giro do desenho" na aparência. O giro fica em `visual.yaw` no `.ron` (0 apaga o campo, menos numa esteira, em que o campo vazio quer dizer "seguir a ligação"; o painel mostra a direção desenhada da esteira, e R e Ctrl+R partem dela). "Restaurar padrão" da aparência não mexe mais na rotação de um objeto fixo. O desenho inteiro gira junto (modelo 3D, forma simples, caixa de seleção), e também os nós de entrada e saída, as setas das ligações, os itens parados sobre o objeto, as células do porta-paletes (a empilhadeira chega pela frente girada), o lugar do operador na frente da máquina e a borda onde os veículos param. Uma esteira com `visual.yaw` aponta para esse giro, como a navegação já via, e não para a soma com a direção da ligação. Roteiro `g4_rotacao.json`.
+- Pessoas de verdade para o 3D: `pessoa_homem.glb` e `pessoa_mulher.glb` em `assets/modelos3d/`, gerados por script no Blender (`tools/blender/pessoas.py`), sem nada baixado e sem textura.
+  - Cada arquivo traz um corpo liso com rosto, cabelo, camisa, calça e calçado, e um nó por EPI (capacete, óculos, protetor auricular, luvas, botina, colete, máscara, avental), para mostrar conforme o EPI da pessoa no modelo.
+  - Os arquivos usam o esqueleto do boneco UAL1, então as animações dele e do UAL2 servem.
+  - Cerca de 300 KB e 5,6 mil triângulos cada.
+  - O catálogo traz os tons de pele e de cabelo e a faixa de altura para variar as pessoas.
 - Regra de operação do posto (`operation`, ou `operacao`, num `Processor`). Ela define:
   - as habilidades exigidas de todo operador;
   - se ele precisa vestir o EPI do posto e o das zonas de risco que contêm o posto (`require_ppe`; o EPI que a pessoa veste é o `ppe` do nó dela);
