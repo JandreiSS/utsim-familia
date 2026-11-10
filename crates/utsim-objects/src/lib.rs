@@ -18,7 +18,7 @@ mod transporter;
 pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
 pub use dispatcher::{DispatchRule, Dispatcher, Preempt, TaskPick};
-pub use processor::{OperatorUse, Processor};
+pub use processor::{Changeover, ChangeoverTime, OperatorUse, Processor};
 pub use queue::{ABANDONED_LABEL, Batch, Discipline, Gather, LabelOrder, Queue, Waves};
 pub use rack::{Access, CLASS_LABEL, Rack, RackPlacement};
 pub use separator::{LINE_LABEL, MAX_SPLIT, SeparateMode, Separator};

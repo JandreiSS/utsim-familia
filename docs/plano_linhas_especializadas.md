@@ -833,3 +833,104 @@ As propostas seguem no código até o dono responder.
 5. **H-D5 Ocupação-alvo dos leitos.** 85 % (proposta).
 6. **H-D6 Modelos prontos.** Os três da seção 9.7 (proposta) ou outros (centro cirúrgico,
    UTI, laboratório de análises).
+
+---
+
+## 10. Quinta linha: Manufatura discreta
+
+Plano curto, no formato das seções 7 a 9, escrito em 2026-11-09 (a seção 3 não ordena as
+linhas que restam depois de saúde; esta vem primeiro porque o núcleo já cobre quase tudo).
+Vale a direção do dono de 2026-11-08 (`docs/plano_integracao_familia.md`, seção 3): a quebra
+de cada máquina fica no `downtime` do próprio nó, o EPI no `ppe` e nas `zones`, a inspeção e o
+refugo no `quality` do nó e nas saídas com `sink_role`. A linha não cria dados paralelos.
+
+### 10.1 O que se estuda numa fábrica de peças
+
+Ordens de produção que passam por máquinas (corte, usinagem, montagem, inspeção), com mistura
+de produtos, troca de produto (setup) que depende da sequência, quebras e manutenção,
+operadores, refugo e retrabalho. Perguntas típicas: qual o OEE de cada máquina e o que mais o
+derruba (parada, troca ou ritmo); quantas ordens saem no prazo; o efeito de juntar ordens do
+mesmo produto (menos trocas) contra atender pela data de entrega; quanto material em processo
+um limite de cartões (kanban, CONWIP) segura e quanto custa em vazão; onde está o gargalo.
+
+### 10.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Ordem de produção | item com rótulos (`produto`, `prazo` em minutos desde a liberação) | existe |
+| Mistura de produtos | `labels` com `Discrete` na liberação | existe |
+| Regra de despacho | `order` da `Queue`: chegada (FIFO), `Asc("vence")` (data de entrega), `Asc("produto")` (juntar produtos), `Desc("prioridade")` | existe |
+| Data de entrega absoluta | `on_entry` na liberação: `item.vence = now + item.prazo` | existe |
+| Troca de produto dependente da sequência | **`changeover` no `Processor`**: o `setup` só acontece quando o rótulo do produto muda; a matriz dá o tempo de cada troca (de, para) | **novo** |
+| Quebra e manutenção | `downtime` do nó | existe |
+| Kanban e CONWIP | cartões que circulam: o `Combiner` junta cartão e ordem, o `Separator` devolve o cartão ao fim | existe |
+| Roteiro por produto | `ByLabel("produto")` ou `Script` com o passo do roteiro | existe |
+| Inspeção, refugo e retrabalho | `quality` do nó e `sink_role: Scrap` | existe |
+
+### 10.3 Biblioteca
+
+Liberação de ordens (mistura de produtos e prazo), fila de ordens pela regra de despacho,
+máquina com troca de produto, máquina simples, montagem, inspeção, buffer (supermercado),
+quadro de cartões (kanban e CONWIP), refugo, expedição; equipe de operadores e operador (com
+EPI).
+
+### 10.4 Vocabulário
+
+item → ordem; `Source` → liberação; `Queue` → buffer; `Processor` → máquina; `Transporter` →
+operador; `Dispatcher` → equipe; `Sink` → expedição; `setup` → troca; `time_in_system` →
+tempo de atravessamento.
+
+### 10.5 Indicadores
+
+Com IC de 95 % entre replicações: ordens por dia (no total e por produto); **tempo de
+atravessamento** médio e por produto; **material em processo** médio; **ordens no prazo** e
+**atraso médio** das atrasadas (com o rótulo `prazo`); **OEE por máquina** com disponibilidade
+(tempo sem quebra e sem troca ÷ tempo de turno), desempenho (tempo-padrão × peças ÷ tempo
+rodando, tempo-padrão = média do `process` ÷ capacidade) e qualidade (boas ÷ todas, pelas
+saídas `Scrap`); **trocas por dia** e fração do tempo em troca por máquina; ocupação dos
+operadores.
+
+### 10.6 Relatório
+
+`utsim linha manufatura relatorio` com texto, HTML e JSON: cartões, tabela de OEE por máquina
+com as três perdas, tabela por produto (ordens, atravessamento, no prazo) e ocupação dos
+operadores.
+
+### 10.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| Usinagem com troca de produto | três produtos, matriz de troca, regra "juntar produtos" contra "data de entrega", quebras e OEE |
+| Linha com CONWIP | cartões que limitam o material em processo, gargalo, efeito do número de cartões na vazão e no atravessamento |
+| Oficina por ordens | roteiro diferente por produto, operadores com habilidades, inspeção com refugo e retrabalho |
+
+### 10.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| M1 | `changeover` no `Processor` (troca só quando o produto muda, matriz de tempos), com testes à mão; golden inalterados; painel 3D | 6–8 | Opus |
+| M2 | Pacote `linhas/manufatura/` (quebra, EPI e inspeção nos campos do nó) | 3–4 | Sonnet |
+| M3 | Indicadores e relatório da linha, `utsim linha manufatura relatorio` | 8–10 | Opus |
+| M4 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Estado em 2026-11-09: M1 a M4 feitos.** O `changeover` serve a qualquer processo; o laço de
+cartões usa só peças que já existiam (a ordem leva o cartão dentro dela, então as máquinas
+leem os rótulos da ordem). O modelo com CONWIP parte de uma carteira sempre cheia, para
+mostrar a vazão parando no ritmo do gargalo enquanto o atravessamento cresce com os cartões.
+Manual em `docs/manual/src/linhas/manufatura/index.md`.
+
+### 10.9 Decisões do dono
+
+As propostas seguem no código até o dono responder.
+
+1. **M-D1 Nome exibido.** "Manufatura discreta" (proposta) ou "Fábrica e usinagem".
+2. **M-D2 Primeira peça.** A máquina começa pronta para o primeiro produto que chega, sem
+   troca (proposta) ou começa sem produto e troca já na primeira peça.
+3. **M-D3 Troca com capacidade maior que 1.** Vale o último produto que começou na máquina
+   (proposta, simples) ou cada posto guarda o seu.
+4. **M-D4 Desempenho do OEE.** Tempo-padrão = média do `process` (proposta) ou um campo
+   próprio de tempo de ciclo ideal.
+5. **M-D5 Qualidade do OEE.** Boas ÷ todas do modelo inteiro, pelas saídas `Scrap` (proposta)
+   ou por máquina, pela inspeção logo depois dela.
+6. **M-D6 Modelos prontos.** Os três da seção 10.7 (proposta) ou outros (montagem com
+   kitting, linha balanceada, célula em U).
