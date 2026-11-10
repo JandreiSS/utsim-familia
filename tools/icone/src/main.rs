@@ -65,7 +65,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     fontes.sort();
     for svg in fontes {
-        let nome = svg.file_stem().and_then(|s| s.to_str()).ok_or("nome inválido")?;
+        let nome = svg
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("nome inválido")?;
         let arvore = ler(&svg)?;
         for lado in TAMANHOS_FAMILIA {
             desenhar(&arvore, lado).save_png(familia.join(format!("{nome}_{lado}.png")))?;

@@ -230,6 +230,7 @@ fn nota_editada_e_cadeia_quebrada() {
         nome: "A".into(),
         registro: "ra001".into(),
         apelido: String::new(),
+        email: String::new(),
     }];
     let e = |ts: Vec<TentativaAssinada>| Entrega {
         formato: FORMATO_ENTREGA,
@@ -277,6 +278,7 @@ fn perfil_registra_e_entrega() {
         nome: "Bia".into(),
         registro: "2027001".into(),
         apelido: "bia".into(),
+        email: String::new(),
     };
     let t = Turma {
         id: "t1".into(),
@@ -335,6 +337,7 @@ fn turma_de_60_com_todas_as_missoes() {
             nome: format!("Aluno {i:02}"),
             registro: format!("ra{i:03}"),
             apelido: String::new(),
+            email: String::new(),
         })
         .collect();
     let entregas: Vec<Entrega> = alunos

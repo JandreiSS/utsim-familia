@@ -145,6 +145,94 @@ pub fn registrar_competencias(
     Ok(r)
 }
 
+/// What [`registrar_turma`] did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegistroTurma {
+    /// Entries sent (one already in the program is not repeated).
+    pub enviadas: usize,
+    /// Students with at least one entry sent.
+    pub alunos: usize,
+    /// `nome (registro)` of the students with solved missions but no person of the
+    /// program with their e-mail (or no e-mail in the class list).
+    pub sem_pessoa: Vec<String>,
+    /// Records of the students left out for a warning in the delivery.
+    pub com_avisos: Vec<String>,
+}
+
+/// Records in the company program, as the teacher (`me`, an instructor or the MBB of the
+/// program), the practice of the class graded in `matriz`: each solved mission becomes
+/// `praticou`, origin `exercicio`, in the tools the package ties to its concepts, for the
+/// person of the program with the student's e-mail. Names and records of the class never
+/// go to the program. The exams do not record anything (they are graded apart).
+pub fn registrar_turma(
+    programa: &Path,
+    me: &Identity,
+    clock: &dyn Clock,
+    p: &utsim_ensino_core::pacote::PacoteCarregado,
+    matriz: &utsim_ensino_core::turma::Matriz,
+) -> std::result::Result<RegistroTurma, String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    use utsim_ensino_core::turma::email_chave;
+    use utsim_lss_store::program::{ExerciseItem, members, record_exercises};
+    let pessoas: BTreeMap<String, utsim_lss_core::Id> = members(programa, me)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, email)| (email, id))
+        .collect();
+    let (resolvidas, com_avisos) = utsim_ensino_core::competencias::resolvidas_da_turma(matriz);
+    let mut r = RegistroTurma {
+        com_avisos,
+        ..Default::default()
+    };
+    let mut pessoa_de = BTreeMap::new();
+    let mut por = BTreeMap::new();
+    for l in matriz
+        .linhas
+        .iter()
+        .filter(|l| resolvidas.contains_key(&l.aluno.registro))
+    {
+        match pessoas.get(&email_chave(&l.aluno.email)) {
+            Some(id) if !l.aluno.email.trim().is_empty() => {
+                pessoa_de.insert(l.aluno.registro.clone(), *id);
+                por.insert(
+                    l.aluno.registro.clone(),
+                    resolvidas[&l.aluno.registro].clone(),
+                );
+            }
+            _ => r
+                .sem_pessoa
+                .push(format!("{} ({})", l.aluno.nome, l.aluno.registro)),
+        }
+    }
+    let nota = |registro: &str, missao: &str| {
+        let i = matriz.missoes.iter().position(|m| m == missao)?;
+        let l = matriz
+            .linhas
+            .iter()
+            .find(|l| l.aluno.registro == registro)?;
+        l.celulas.get(i)?.as_ref().map(|c| c.nota)
+    };
+    let mut itens = Vec::new();
+    let mut com_item = BTreeSet::new();
+    for c in utsim_ensino_core::competencias::competencias(p, &por) {
+        let n = nota(&c.registro, &c.missao).unwrap_or(0.0);
+        itens.push(ExerciseItem {
+            person: pessoa_de[&c.registro],
+            tool: c.ferramenta,
+            evidence: format!(
+                "{}, nota {}",
+                c.evidencia,
+                utsim_ensino_core::nota::fmt_num(n, 1)
+            ),
+        });
+        com_item.insert(c.registro);
+    }
+    record_exercises(programa, me, clock, &itens).map_err(|e| e.to_string())?;
+    r.enviadas = itens.len();
+    r.alunos = com_item.len();
+    Ok(r)
+}
+
 /// The identity of UTSim Seis Sigma on this computer, or why there is none.
 pub fn identidade_local() -> std::result::Result<Identity, String> {
     Identity::local().ok_or_else(|| {

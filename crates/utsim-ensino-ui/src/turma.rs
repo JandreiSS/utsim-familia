@@ -223,6 +223,8 @@ pub struct EstadoProfessor {
     pub pacote_corrigido: Option<Arc<PacoteCarregado>>,
     pub prova: EstadoProva,
     pub desafio: EstadoDesafio,
+    /// Folder of the company program of UTSim Seis Sigma where the class's practice goes.
+    pub programa: String,
 }
 
 /// Challenges and teams in the teacher's panel.
@@ -844,6 +846,47 @@ pub fn tela_professor(app: &mut App, ui: &mut Ui) {
                     &[&p.parent().unwrap_or(&dir).display()],
                 ),
                 Err(e) => texto::f(texto::turma_nao_exportou(), &[&e]),
+            });
+        }
+    });
+    ui.separator();
+    ui.label(RichText::new(texto::turma_programa_titulo()).strong());
+    ui.label(texto::turma_programa_turma_texto());
+    ui.horizontal(|ui| {
+        ui.label(texto::turma_pasta_programa());
+        ui.text_edit_singleline(&mut s.programa);
+        if ui.button(texto::turma_registrar_turma()).clicked() {
+            let prog = PathBuf::from(s.programa.trim().trim_matches('"'));
+            let r = utsim_ensino_store::seis_sigma::identidade_local().and_then(|me| {
+                utsim_ensino_store::seis_sigma::registrar_turma(
+                    &prog,
+                    &me,
+                    &utsim_lss_store::SystemClock,
+                    &pacote,
+                    &c.matriz,
+                )
+            });
+            app.mensagem = Some(match r {
+                Ok(x) => {
+                    let mut m =
+                        texto::f(texto::turma_turma_registrada(), &[&x.enviadas, &x.alunos]);
+                    if !x.sem_pessoa.is_empty() {
+                        m.push(' ');
+                        m.push_str(&texto::f(
+                            texto::turma_sem_pessoa(),
+                            &[&x.sem_pessoa.join(", ")],
+                        ));
+                    }
+                    if !x.com_avisos.is_empty() {
+                        m.push(' ');
+                        m.push_str(&texto::f(
+                            texto::turma_fora_por_aviso(),
+                            &[&x.com_avisos.join(", ")],
+                        ));
+                    }
+                    m
+                }
+                Err(e) => texto::f(texto::turma_nao_registrou(), &[&e]),
             });
         }
     });
