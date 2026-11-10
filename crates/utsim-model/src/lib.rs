@@ -64,7 +64,7 @@ pub use shifts::ShiftSpec;
 pub use utsim_core::ShiftEnd;
 pub use utsim_objects::{
     ArrivalPeriod, ArrivalRow, ArrivalSchedule, ArrivalTable, Changeover, ChangeoverTime,
-    PeriodArrivals, Release, TableMode, TableRepeat,
+    PeriodArrivals, Recipe, RecipeTime, Release, TableMode, TableRepeat,
 };
 
 /// Reads only the `format` field; every other field is ignored.
@@ -428,6 +428,10 @@ pub enum ObjectKind {
         /// the time of each change from the matrix (sequence-dependent setup).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         changeover: Option<Changeover>,
+        /// Process time by recipe: items whose label has a value of the table take that
+        /// time; the others take `process` (one recipe per product of a batch reactor).
+        #[serde(default, skip_serializing_if = "Option::is_none", alias = "receita")]
+        recipe: Option<Recipe>,
     },
     /// Input 0 takes the container; inputs 1.. take `components[k-1]` items each.
     Combiner {
@@ -869,6 +873,7 @@ impl Model {
                     operators,
                     also,
                     changeover,
+                    recipe,
                 } => {
                     if *capacity == 0 {
                         errors.push(format!("{}: capacity deve ser >= 1", obj.name));
@@ -906,6 +911,35 @@ impl Model {
                                 ));
                             }
                             dists.push((format!("changeover.matrix[{k}].time"), &m.time));
+                        }
+                    }
+                    if let Some(r) = recipe {
+                        if r.label.trim().is_empty() {
+                            errors.push(format!(
+                                "{}: recipe precisa do nome do rótulo da receita",
+                                obj.name
+                            ));
+                        }
+                        if r.times.is_empty() {
+                            errors.push(format!(
+                                "{}: recipe precisa de pelo menos uma receita em times",
+                                obj.name
+                            ));
+                        }
+                        for (k, t) in r.times.iter().enumerate() {
+                            if !t.value.is_finite() {
+                                errors.push(format!(
+                                    "{}: recipe.times[{k}] precisa de um valor finito",
+                                    obj.name
+                                ));
+                            }
+                            if r.times[..k].iter().any(|p| p.value == t.value) {
+                                errors.push(format!(
+                                    "{}: recipe.times tem a receita {} repetida",
+                                    obj.name, t.value
+                                ));
+                            }
+                            dists.push((format!("recipe.times[{k}].time"), &t.time));
                         }
                     }
                     dists.push(("process".into(), process));
@@ -1506,11 +1540,13 @@ impl Model {
                     operators,
                     also,
                     changeover,
+                    recipe,
                 } => Box::new(
                     Processor::new(process.clone())
                         .capacity(*capacity)
                         .setup(setup.clone())
                         .changeover(changeover.clone())
+                        .recipe(recipe.clone())
                         .operators(
                             operators
                                 .as_ref()

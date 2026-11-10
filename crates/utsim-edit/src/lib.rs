@@ -1013,6 +1013,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             operators: None,
             also: Vec::new(),
             changeover: None,
+            recipe: None,
         },
         "Combiner" => ObjectKind::Combiner {
             components: vec![1],

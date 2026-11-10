@@ -72,6 +72,33 @@ impl Changeover {
     }
 }
 
+/// Process time by recipe: an item whose `label` has one of the values of `times` takes
+/// that time to process; any other item takes the processor's `process`. A batch reactor
+/// with one recipe per product, a machine whose cycle depends on the part.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Recipe {
+    /// Item label naming the recipe (`produto`).
+    pub label: String,
+    /// Process time of each value of the label.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub times: Vec<RecipeTime>,
+}
+
+/// One recipe: items whose label is `value` take `time` to process.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RecipeTime {
+    pub value: f64,
+    pub time: Dist,
+}
+
+impl Recipe {
+    /// Process time of a label value (`None`: use the processor's `process`).
+    pub fn time(&self, value: Option<&Value>) -> Option<&Dist> {
+        let v = value?.as_num()?;
+        self.times.iter().find(|r| r.value == v).map(|r| &r.time)
+    }
+}
+
 fn yes() -> bool {
     true
 }
@@ -157,6 +184,8 @@ pub struct Processor {
     change_time: Vec<(ItemId, Dist)>,
     /// Changeovers done (changeover only).
     changes: u64,
+    /// Process time by recipe (see [`Recipe`]).
+    recipe: Option<Recipe>,
     pending: Vec<Pending>,
     held: Vec<(ItemId, Crew)>,
     /// Servers in setup or processing over time (zero while the block is stopped).
@@ -185,6 +214,7 @@ impl Processor {
             last_product: None,
             change_time: Vec::new(),
             changes: 0,
+            recipe: None,
             pending: Vec::new(),
             held: Vec::new(),
             busy: TimeWeighted::default(),
@@ -216,6 +246,12 @@ impl Processor {
     /// Setup only when the product changes (see [`Changeover`]).
     pub fn changeover(mut self, changeover: Option<Changeover>) -> Self {
         self.changeover = changeover;
+        self
+    }
+
+    /// Process time by the item's recipe (see [`Recipe`]).
+    pub fn recipe(mut self, recipe: Option<Recipe>) -> Self {
+        self.recipe = recipe;
         self
     }
 
@@ -473,7 +509,11 @@ impl Processor {
             };
             (setup, SETUP_DONE)
         } else {
-            (&self.process, PROCESS_DONE)
+            let by_recipe = self
+                .recipe
+                .as_ref()
+                .and_then(|r| r.time(cx.item(item).label(&r.label)));
+            (by_recipe.unwrap_or(&self.process), PROCESS_DONE)
         };
         let mut t = match elapsed {
             Some(e) => cx.sample_residual(dist, e),
