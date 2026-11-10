@@ -8,15 +8,22 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use egui::{Color32, RichText, Ui};
+use utsim_core::Dist;
+use utsim_ensino_core::dados::{Conjunto, Gerador, Padrao};
 use utsim_ensino_core::editor::{
     Calibragem, Edicao, PacoteProfessor, calibrar, chaves_do_modelo, glossario_da_campanha, slug,
 };
+use utsim_ensino_core::editor_dados::{
+    ALUNOS_DE_TESTE, Amostra, FERRAMENTAS, MAX_FATORES, MAX_LINHAS, TipoGerador, tolerancia_padrao,
+    unidade_padrao,
+};
 use utsim_ensino_core::missao::{
-    Alavanca, Calculo, Medicao, Objetivo, OpcaoPrevisao, Pergunta, Previsao, Resposta, Termo,
-    Tolerancia,
+    APPS_DE_ANALISE, Alavanca, Calculo, Medicao, Objetivo, OpcaoPrevisao, Pergunta, Previsao,
+    Resposta, Termo, Tolerancia,
 };
 use utsim_ensino_core::nota::fmt_num;
 use utsim_ensino_core::pacote::Glossario;
+use utsim_ensino_core::questoes::{ConjuntoMissao, QuestaoDados};
 use utsim_ui_tema::arquivos::Tipo;
 
 use crate::missao::Trabalho;
@@ -55,6 +62,25 @@ pub struct EstadoEditor {
     pub previa: bool,
     /// The times of the calculations as typed, by question.
     pub tempos: BTreeMap<usize, String>,
+    /// What the data sets and their questions keep between frames.
+    pub caches: CachesDados,
+}
+
+/// The caches of stage C: nothing here is computed on every frame.
+#[derive(Default)]
+pub struct CachesDados {
+    /// The kind chosen for the next new set (index in `TipoGerador::TODOS`).
+    pub tipo_novo: usize,
+    /// Draw the sample headers open the first time (for the tests).
+    pub abrir_amostras: bool,
+    /// The sample of each set open in the screen, by set, with the key it was made for.
+    pub amostras: BTreeMap<usize, (String, Option<Conjunto>)>,
+    /// The id of each set as typed: (the id applied, the text).
+    pub ids: BTreeMap<usize, (String, String)>,
+    /// The check of each data question, by question, with the key it was made for.
+    pub conferencias: BTreeMap<usize, (String, Option<Amostra>)>,
+    /// The warnings of the data, with the key of the edition they were made for.
+    pub avisos: Option<(String, Vec<String>)>,
 }
 
 impl EstadoEditor {
@@ -132,6 +158,7 @@ impl EstadoEditor {
         self.glossario = None;
         self.previa = false;
         self.tempos.clear();
+        self.caches = CachesDados::default();
         if let Some(ed) = &ed {
             match chaves_do_modelo(&ed.modelo) {
                 Ok(c) => self.chaves = c,
@@ -606,8 +633,9 @@ fn secao_missao(
     if let Some(g) = &s.glossario {
         secao_conceitos(ui, ed, g);
     }
+    secao_dados(ui, ed, &mut s.caches);
     secao_medicoes(ui, ed, &chaves);
-    secao_previsoes(ui, ed, &chaves, &mut s.tempos);
+    secao_previsoes(ui, ed, &chaves, &mut s.tempos, &mut s.caches);
     secao_justificativa(ui, ed);
     secao_dicas(ui, ed);
 
@@ -615,18 +643,42 @@ fn secao_missao(
     for e in &erros {
         ui.colored_label(AMARELO, e);
     }
+    if !ed.base.dados.is_empty() {
+        let chave = format!("{:?}{:?}", ed.base.dados, ed.base.previsao);
+        if ui
+            .button(texto::ed_conferir_dados())
+            .on_hover_text(texto::ed_conferir_dados_dica())
+            .clicked()
+        {
+            s.caches.avisos = Some((chave.clone(), ed.avisos_dos_dados()));
+        }
+        if let Some((k, v)) = &s.caches.avisos
+            && *k == chave
+        {
+            if v.is_empty() {
+                ui.label(RichText::new(texto::ed_dados_sem_avisos()).weak());
+            }
+            for a in v {
+                ui.colored_label(AMARELO, a);
+            }
+        }
+    }
+    let sem_alavanca = ed.alavancas.iter().all(|a| !a.usar);
     let mut fechar = false;
     let mut calibrar_agora = false;
     let mut aplicar = false;
     let mut gravar = false;
     ui.horizontal(|ui| {
-        calibrar_agora = ui
-            .add_enabled(
-                !ocupado && erros.is_empty(),
-                egui::Button::new(texto::ed_calibrar()),
-            )
-            .on_hover_text(texto::ed_calibrar_dica())
-            .clicked();
+        let b = ui.add_enabled(
+            !ocupado && erros.is_empty() && !sem_alavanca,
+            egui::Button::new(texto::ed_calibrar()),
+        );
+        calibrar_agora = b.clicked();
+        if sem_alavanca {
+            b.on_disabled_hover_text(texto::ed_calibrar_sem_alavanca());
+        } else {
+            b.on_hover_text(texto::ed_calibrar_dica());
+        }
         if let Some(t) = &s.trabalho {
             ui.spinner();
             ui.label(texto::ed_calibrando());
@@ -1074,11 +1126,13 @@ fn secao_previsoes(
     ed: &mut Edicao,
     chaves: &[String],
     tempos: &mut BTreeMap<usize, String>,
+    caches: &mut CachesDados,
 ) {
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_previsoes()).strong());
     let n = ed.base.previsao.len();
     let mut passo: Option<Passo> = None;
+    let mut conferir: Option<usize> = None;
     for (i, p) in ed.base.previsao.iter_mut().enumerate() {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1087,7 +1141,7 @@ fn secao_previsoes(
                     Previsao::Escolha { .. } => texto::ed_pv_escolha(),
                     Previsao::Valor { .. } => texto::ed_pv_valor(),
                     Previsao::Calculo { .. } => texto::ed_pv_calculo(),
-                    Previsao::Dados { .. } => "",
+                    Previsao::Dados { .. } => texto::ed_pv_dados(),
                 };
                 cabecalho(ui, tipo);
                 let (Previsao::Escolha { id, .. }
@@ -1113,9 +1167,16 @@ fn secao_previsoes(
                 }
             });
             match p {
-                Previsao::Dados { pergunta, .. } => {
-                    ui.label(RichText::new(texto::ed_pv_dados()).weak());
-                    ui.label(&*pergunta);
+                Previsao::Dados { .. } => {
+                    campo_dados(
+                        ui,
+                        i,
+                        p,
+                        &ed.base.id,
+                        &ed.base.dados,
+                        &caches.conferencias,
+                        &mut conferir,
+                    );
                 }
                 Previsao::Escolha {
                     pergunta,
@@ -1174,6 +1235,13 @@ fn secao_previsoes(
     }
     if passo.is_some() {
         tempos.clear();
+        caches.conferencias.clear();
+    }
+    if let Some(i) = conferir {
+        let chave = chave_pergunta(ed, i);
+        caches
+            .conferencias
+            .insert(i, (chave, ed.amostra_da_pergunta(i)));
     }
     ui.horizontal(|ui| {
         if ui.button(texto::ed_add_escolha()).clicked() {
@@ -1204,6 +1272,17 @@ fn secao_previsoes(
                 unidade: String::new(),
                 tolerancia: Tolerancia::Relativa(0.02),
             });
+        }
+        let primeiro = ed.base.dados.first().map(|d| d.id.clone());
+        if ui
+            .add_enabled(
+                primeiro.is_some(),
+                egui::Button::new(texto::ed_add_pergunta_sobre_dados()),
+            )
+            .clicked()
+            && let Some(id) = primeiro
+        {
+            ed.nova_pergunta_de_dados(&id);
         }
     });
 }
@@ -1354,5 +1433,798 @@ fn secao_dicas(ui: &mut Ui, ed: &mut Edicao) {
     }
     if ed.base.dicas.len() < 3 && ui.button(texto::ed_add_dica()).clicked() {
         ed.base.dicas.push(String::new());
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Stage C: the data sets and the questions about them.
+// ---------------------------------------------------------------------------------------
+
+fn nome_tipo(t: TipoGerador) -> &'static str {
+    match t {
+        TipoGerador::Tempos => texto::ed_tg_tempos(),
+        TipoGerador::Msa => texto::ed_tg_msa(),
+        TipoGerador::MediaDeslocada => texto::ed_tg_media(),
+        TipoGerador::Serie => texto::ed_tg_serie(),
+        TipoGerador::Fatorial => texto::ed_tg_fatorial(),
+        TipoGerador::Pareado => texto::ed_tg_pareado(),
+        TipoGerador::Subgrupos => texto::ed_tg_subgrupos(),
+    }
+}
+
+fn nome_questao(q: &QuestaoDados) -> &'static str {
+    match q {
+        QuestaoDados::RrPercentual => texto::ed_q_rr_pct(),
+        QuestaoDados::RrVeredito => texto::ed_q_rr_veredito(),
+        QuestaoDados::Ppk { .. } => texto::ed_q_ppk(),
+        QuestaoDados::GrupoDeslocado => texto::ed_q_grupo(),
+        QuestaoDados::PrimeiroSinal { .. } => texto::ed_q_primeiro_sinal(),
+        QuestaoDados::Efeito { .. } => texto::ed_q_efeito(),
+        QuestaoDados::MeiaLargura { .. } => texto::ed_q_meia_largura(),
+        QuestaoDados::Replicacoes { .. } => texto::ed_q_replicacoes(),
+        QuestaoDados::DiferencaMedia => texto::ed_q_dif_media(),
+        QuestaoDados::DiferencaSignificativa => texto::ed_q_dif_signif(),
+        QuestaoDados::PrimeiroSubgrupoFora { .. } => texto::ed_q_primeiro_sub(),
+        QuestaoDados::Cpk { .. } => texto::ed_q_cpk(),
+        QuestaoDados::FonteDominante => texto::ed_q_fonte(),
+    }
+}
+
+fn descricao_questao(q: &QuestaoDados) -> &'static str {
+    match q {
+        QuestaoDados::RrPercentual => texto::ed_qd_rr_pct(),
+        QuestaoDados::RrVeredito => texto::ed_qd_rr_veredito(),
+        QuestaoDados::Ppk { .. } => texto::ed_qd_ppk(),
+        QuestaoDados::GrupoDeslocado => texto::ed_qd_grupo(),
+        QuestaoDados::PrimeiroSinal { .. } => texto::ed_qd_primeiro_sinal(),
+        QuestaoDados::Efeito { .. } => texto::ed_qd_efeito(),
+        QuestaoDados::MeiaLargura { .. } => texto::ed_qd_meia_largura(),
+        QuestaoDados::Replicacoes { .. } => texto::ed_qd_replicacoes(),
+        QuestaoDados::DiferencaMedia => texto::ed_qd_dif_media(),
+        QuestaoDados::DiferencaSignificativa => texto::ed_qd_dif_signif(),
+        QuestaoDados::PrimeiroSubgrupoFora { .. } => texto::ed_qd_primeiro_sub(),
+        QuestaoDados::Cpk { .. } => texto::ed_qd_cpk(),
+        QuestaoDados::FonteDominante => texto::ed_qd_fonte(),
+    }
+}
+
+/// An integer field with its label.
+fn inteiro(ui: &mut Ui, rotulo: &str, v: &mut usize, min: usize, max: usize) {
+    ui.label(rotulo);
+    ui.add(egui::DragValue::new(v).range(min..=max));
+}
+
+/// How fast a value drags: a small share of itself.
+fn velocidade(v: f64) -> f64 {
+    if v.is_finite() {
+        (v.abs() * 0.01).max(0.01)
+    } else {
+        0.01
+    }
+}
+
+/// A free number with its label (a mean, an effect).
+fn campo_media(ui: &mut Ui, rotulo: &str, v: &mut f64) {
+    let vel = velocidade(*v);
+    campo_numero(ui, rotulo, v, vel);
+}
+
+/// A standard deviation: never negative, and the drag follows its size.
+fn campo_sd(ui: &mut Ui, rotulo: &str, v: &mut f64) {
+    ui.label(rotulo);
+    let vel = if v.is_finite() {
+        (v.abs() * 0.05).max(0.0001)
+    } else {
+        0.01
+    };
+    ui.add(
+        egui::DragValue::new(v)
+            .speed(vel)
+            .range(0.0..=f64::MAX)
+            .max_decimals(6),
+    );
+}
+
+/// An optional number: a check box and, when ticked, the value.
+fn campo_opcional(ui: &mut Ui, rotulo: &str, v: &mut Option<f64>, inicial: f64) {
+    let mut tem = v.is_some();
+    if ui.checkbox(&mut tem, rotulo).changed() {
+        *v = tem.then_some(v.unwrap_or(inicial));
+    }
+    if let Some(x) = v {
+        let vel = velocidade(*x);
+        ui.add(egui::DragValue::new(x).speed(vel));
+    }
+}
+
+/// The mean and a spread of a generator, to start the specification limits around.
+fn centro_escala(g: &Gerador) -> (f64, f64) {
+    match g {
+        Gerador::Tempos { dist, .. } => {
+            let m = dist.mean();
+            let m = if m.is_finite() { m } else { 0.0 };
+            (m, (m.abs() * 0.1).max(1.0))
+        }
+        Gerador::Msa { media, sd_peca, .. } => (*media, sd_peca.max(0.001)),
+        Gerador::MediaDeslocada { media, sd, .. }
+        | Gerador::Serie { media, sd, .. }
+        | Gerador::Fatorial { media, sd, .. }
+        | Gerador::Pareado { media, sd, .. }
+        | Gerador::Subgrupos { media, sd, .. } => (*media, sd.max(0.001)),
+    }
+}
+
+/// The sets of data, the form of each one, the sample it makes and the apps where the
+/// student analyses them.
+fn secao_dados(ui: &mut Ui, ed: &mut Edicao, c: &mut CachesDados) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_dados()).strong());
+    ui.label(RichText::new(texto::ed_dados_dica()).weak());
+    c.tipo_novo = c.tipo_novo.min(TipoGerador::TODOS.len() - 1);
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt("ed_dados_tipo_novo")
+            .selected_text(nome_tipo(TipoGerador::TODOS[c.tipo_novo]))
+            .show_ui(ui, |ui| {
+                for (k, t) in TipoGerador::TODOS.iter().enumerate() {
+                    ui.selectable_value(&mut c.tipo_novo, k, nome_tipo(*t));
+                }
+            });
+        if ui.button(texto::ed_novo_conjunto()).clicked() {
+            ed.novo_conjunto(TipoGerador::TODOS[c.tipo_novo]);
+        }
+    });
+    let ids: Vec<String> = ed.base.dados.iter().map(|d| d.id.clone()).collect();
+    let mut renomear: Option<(usize, String)> = None;
+    let mut mudar: Option<(usize, TipoGerador)> = None;
+    let mut pergunta: Option<String> = None;
+    let mut tirar: Option<usize> = None;
+    for i in 0..ed.base.dados.len() {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let cj = &mut ed.base.dados[i];
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_id());
+                let buf = c.ids.entry(i).or_default();
+                if buf.0 != cj.id {
+                    *buf = (cj.id.clone(), cj.id.clone());
+                }
+                let r = ui.add(egui::TextEdit::singleline(&mut buf.1).desired_width(80.0));
+                let livre = !buf.1.is_empty()
+                    && !ids.iter().enumerate().any(|(j, x)| j != i && *x == buf.1);
+                if r.changed() && livre {
+                    renomear = Some((i, buf.1.clone()));
+                }
+                if !livre {
+                    ui.colored_label(VERMELHO, "!");
+                }
+                ui.label(texto::ed_nome_conjunto());
+                ui.add(egui::TextEdit::singleline(&mut cj.nome).desired_width(180.0));
+                let atual = TipoGerador::de(&cj.gerador);
+                egui::ComboBox::from_id_salt(("ed_dados_tipo", i))
+                    .selected_text(nome_tipo(atual))
+                    .show_ui(ui, |ui| {
+                        for t in TipoGerador::TODOS {
+                            if ui.selectable_label(t == atual, nome_tipo(t)).clicked() && t != atual
+                            {
+                                mudar = Some((i, t));
+                            }
+                        }
+                    });
+                if ui.small_button(texto::ed_add_pergunta_dados()).clicked() {
+                    pergunta = Some(cj.id.clone());
+                }
+                if ui.small_button(texto::ed_remover()).clicked() {
+                    tirar = Some(i);
+                }
+            });
+            form_gerador(ui, i, &mut cj.gerador, &mut cj.sortear_afetado);
+            let (centro, escala) = centro_escala(&cj.gerador);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(texto::ed_ferramenta());
+                egui::ComboBox::from_id_salt(("ed_dados_ferr", i))
+                    .selected_text(
+                        cj.ferramenta
+                            .clone()
+                            .unwrap_or_else(|| texto::ed_sem_ferramenta().to_string()),
+                    )
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut cj.ferramenta, None, texto::ed_sem_ferramenta());
+                        for f in FERRAMENTAS {
+                            ui.selectable_value(&mut cj.ferramenta, Some(f.to_string()), *f);
+                        }
+                    });
+                campo_opcional(ui, texto::ed_lie(), &mut cj.lie, centro - 4.0 * escala);
+                campo_opcional(ui, texto::ed_lse(), &mut cj.lse, centro + 4.0 * escala);
+            });
+            egui::CollapsingHeader::new(texto::ed_amostra())
+                .id_salt(("ed_dados_amostra", i))
+                .default_open(c.abrir_amostras)
+                .show(ui, |ui| amostra(ui, ed, c, i));
+        });
+    }
+    if let Some((i, novo)) = renomear {
+        ed.renomear_conjunto(i, &novo);
+    }
+    if let Some((i, t)) = mudar {
+        ed.mudar_tipo(i, t);
+    }
+    if let Some(id) = pergunta {
+        ed.nova_pergunta_de_dados(&id);
+    }
+    if let Some(i) = tirar {
+        ed.remover_conjunto(i);
+        c.amostras.clear();
+        c.ids.clear();
+        c.conferencias.clear();
+    }
+    if !ed.base.dados.is_empty() {
+        ui.horizontal(|ui| {
+            ui.label(texto::ed_analisar_em());
+            for app in APPS_DE_ANALISE {
+                let nome = if *app == "estatistica" {
+                    texto::ed_app_estatistica()
+                } else {
+                    texto::ed_app_qualidade()
+                };
+                let pos = ed.base.analisar_em.iter().position(|x| x == *app);
+                let mut marcado = pos.is_some();
+                if ui.checkbox(&mut marcado, nome).changed() {
+                    match pos {
+                        Some(k) => {
+                            ed.base.analisar_em.remove(k);
+                        }
+                        None => ed.base.analisar_em.push(app.to_string()),
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// The first rows of the set `i` and the effect planted in them (made again only when
+/// the set changes).
+fn amostra(ui: &mut Ui, ed: &Edicao, c: &mut CachesDados, i: usize) {
+    let cj = &ed.base.dados[i];
+    let chave = format!("{}{:?}", ed.base.id, cj);
+    if c.amostras.get(&i).is_none_or(|(k, _)| *k != chave) {
+        c.amostras.insert(i, (chave, ed.amostra_de_dados(&cj.id)));
+    }
+    let Some((_, Some(conj))) = c.amostras.get(&i) else {
+        ui.label(RichText::new(texto::ed_amostra_invalida()).weak());
+        return;
+    };
+    ui.label(texto::f(texto::ed_amostra_efeito(), &[&conj.resposta]));
+    egui::Grid::new(("ed_dados_grade", i))
+        .striped(true)
+        .show(ui, |ui| {
+            for h in &conj.cabecalho {
+                cabecalho(ui, h);
+            }
+            ui.end_row();
+            for l in conj.linhas.iter().take(10) {
+                for x in l {
+                    ui.label(x);
+                }
+                ui.end_row();
+            }
+        });
+    if conj.linhas.len() > 10 {
+        ui.label(
+            RichText::new(texto::f(
+                texto::ed_amostra_mais(),
+                &[&(conj.linhas.len() - 10)],
+            ))
+            .weak(),
+        );
+    }
+}
+
+/// The form of a generator.
+fn form_gerador(ui: &mut Ui, i: usize, g: &mut Gerador, sortear: &mut bool) {
+    match g {
+        Gerador::Tempos { dist, n } => {
+            ui.horizontal_wrapped(|ui| inteiro(ui, texto::ed_g_valores(), n, 2, MAX_LINHAS));
+            campo_dist(ui, i, dist);
+        }
+        Gerador::Msa {
+            pecas,
+            operadores,
+            repeticoes,
+            media,
+            sd_peca,
+            sd_operador,
+            sd_repetibilidade,
+        } => {
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_pecas(), pecas, 2, 200);
+                inteiro(ui, texto::ed_g_operadores(), operadores, 2, 50);
+                inteiro(ui, texto::ed_g_repeticoes(), repeticoes, 2, 50);
+                campo_media(ui, texto::ed_g_media(), media);
+            });
+            ui.horizontal_wrapped(|ui| {
+                campo_sd(ui, texto::ed_g_sd_peca(), sd_peca);
+                campo_sd(ui, texto::ed_g_sd_operador(), sd_operador);
+                campo_sd(ui, texto::ed_g_sd_repet(), sd_repetibilidade);
+            });
+        }
+        Gerador::MediaDeslocada {
+            grupos,
+            n_por_grupo,
+            media,
+            sd,
+            afetado,
+            deslocamento,
+        } => {
+            ui.label(texto::ed_g_grupos());
+            let mut tirar = None;
+            let n = grupos.len();
+            for (j, nome) in grupos.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(nome).desired_width(160.0));
+                    if ui
+                        .add_enabled(n > 2, egui::Button::new(texto::ed_remover()).small())
+                        .clicked()
+                    {
+                        tirar = Some(j);
+                    }
+                });
+            }
+            if let Some(j) = tirar {
+                grupos.remove(j);
+                if j < *afetado {
+                    *afetado -= 1;
+                }
+                *afetado = (*afetado).min(grupos.len().saturating_sub(1));
+            }
+            if ui.small_button(texto::ed_g_add_grupo()).clicked() {
+                grupos.push(texto::f(texto::ed_g_grupo_novo(), &[&(grupos.len() + 1)]));
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.label(texto::ed_g_afetado());
+                let atual = grupos.get(*afetado).cloned().unwrap_or_default();
+                egui::ComboBox::from_id_salt(("ed_dados_afetado", i))
+                    .selected_text(atual)
+                    .show_ui(ui, |ui| {
+                        for (j, nome) in grupos.iter().enumerate() {
+                            let rot = if nome.is_empty() {
+                                (j + 1).to_string()
+                            } else {
+                                nome.clone()
+                            };
+                            ui.selectable_value(afetado, j, rot);
+                        }
+                    });
+                ui.checkbox(sortear, texto::ed_g_sortear());
+            });
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_por_grupo(), n_por_grupo, 2, MAX_LINHAS);
+                campo_media(ui, texto::ed_g_media(), media);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+                campo_numero(ui, texto::ed_g_deslocamento(), deslocamento, 0.05);
+            });
+        }
+        Gerador::Serie {
+            n,
+            media,
+            sd,
+            padrao,
+        } => {
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_valores(), n, 2, MAX_LINHAS);
+                campo_media(ui, texto::ed_g_media(), media);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+            });
+            campo_padrao(ui, i, padrao, true);
+        }
+        Gerador::Fatorial {
+            fatores,
+            replicas,
+            media,
+            sd,
+            efeitos,
+            interacao_ab,
+        } => {
+            efeitos.resize(fatores.len(), 0.0);
+            ui.label(texto::ed_g_fatores());
+            let mut tirar = None;
+            let n = fatores.len();
+            for (j, nome) in fatores.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(nome).desired_width(160.0));
+                    let vel = velocidade(efeitos[j]);
+                    campo_numero(ui, texto::ed_g_efeito(), &mut efeitos[j], vel);
+                    if ui
+                        .add_enabled(n > 1, egui::Button::new(texto::ed_remover()).small())
+                        .clicked()
+                    {
+                        tirar = Some(j);
+                    }
+                });
+            }
+            if let Some(j) = tirar {
+                fatores.remove(j);
+                efeitos.remove(j);
+            }
+            if ui
+                .add_enabled(
+                    fatores.len() < MAX_FATORES,
+                    egui::Button::new(texto::ed_g_add_fator()).small(),
+                )
+                .clicked()
+            {
+                fatores.push(texto::f(texto::ed_g_fator_novo(), &[&(fatores.len() + 1)]));
+                efeitos.push(0.0);
+            }
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_replicas(), replicas, 1, 200);
+                campo_media(ui, texto::ed_g_media(), media);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+                campo_media(ui, texto::ed_g_interacao(), interacao_ab);
+            });
+        }
+        Gerador::Pareado {
+            n,
+            media,
+            sd,
+            diferenca,
+            sd_diferenca,
+        } => {
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_valores(), n, 2, MAX_LINHAS);
+                campo_media(ui, texto::ed_g_media(), media);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+                campo_media(ui, texto::ed_g_diferenca(), diferenca);
+                campo_sd(ui, texto::ed_g_sd_diferenca(), sd_diferenca);
+            });
+        }
+        Gerador::Subgrupos {
+            k,
+            tamanho,
+            media,
+            sd,
+            padrao,
+        } => {
+            ui.horizontal_wrapped(|ui| {
+                inteiro(ui, texto::ed_g_subgrupos(), k, 2, MAX_LINHAS);
+                inteiro(ui, texto::ed_g_tamanho(), tamanho, 2, 25);
+                campo_media(ui, texto::ed_g_media(), media);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+            });
+            let mut tem = padrao.is_some();
+            if ui.checkbox(&mut tem, texto::ed_g_com_padrao()).changed() {
+                *padrao = tem.then_some(Padrao::Deslocamento {
+                    inicio: *k / 2,
+                    tamanho: 2.0,
+                });
+            }
+            if let Some(p) = padrao {
+                campo_padrao(ui, i, p, false);
+            }
+        }
+    }
+}
+
+/// The pattern planted in a series: a shift or a trend, from a point on.
+fn campo_padrao(ui: &mut Ui, i: usize, p: &mut Padrao, ponto: bool) {
+    let (mut inicio, mut x, mut tendencia) = match *p {
+        Padrao::Deslocamento { inicio, tamanho } => (inicio, tamanho, false),
+        Padrao::Tendencia { inicio, inclinacao } => (inicio, inclinacao, true),
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.label(texto::ed_pad());
+        egui::ComboBox::from_id_salt(("ed_dados_padrao", i))
+            .selected_text(if tendencia {
+                texto::ed_pad_tendencia()
+            } else {
+                texto::ed_pad_deslocamento()
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut tendencia, false, texto::ed_pad_deslocamento());
+                ui.selectable_value(&mut tendencia, true, texto::ed_pad_tendencia());
+            });
+        let mut inicio_1 = inicio + 1;
+        inteiro(
+            ui,
+            if ponto {
+                texto::ed_pad_inicio_ponto()
+            } else {
+                texto::ed_pad_inicio_subgrupo()
+            },
+            &mut inicio_1,
+            1,
+            MAX_LINHAS,
+        );
+        inicio = inicio_1 - 1;
+        campo_numero(
+            ui,
+            if tendencia {
+                texto::ed_pad_inclinacao()
+            } else {
+                texto::ed_pad_tamanho()
+            },
+            &mut x,
+            0.05,
+        );
+    });
+    *p = if tendencia {
+        Padrao::Tendencia {
+            inicio,
+            inclinacao: x,
+        }
+    } else {
+        Padrao::Deslocamento { inicio, tamanho: x }
+    };
+}
+
+fn dist_indice(d: &Dist) -> Option<usize> {
+    match d {
+        Dist::Normal { .. } => Some(0),
+        Dist::Exp { .. } => Some(1),
+        Dist::Uniform { .. } => Some(2),
+        Dist::Triangular { .. } => Some(3),
+        Dist::LogNormal { .. } => Some(4),
+        _ => None,
+    }
+}
+
+fn dist_nome(k: usize) -> &'static str {
+    match k {
+        0 => texto::ed_dist_normal(),
+        1 => texto::ed_dist_exp(),
+        2 => texto::ed_dist_uniforme(),
+        3 => texto::ed_dist_triangular(),
+        _ => texto::ed_dist_lognormal(),
+    }
+}
+
+/// A distribution of kind `k` with the mean of `base` and a spread of a tenth of it.
+fn dist_nova(k: usize, base: &Dist) -> Dist {
+    let m = base.mean();
+    let m = if m.is_finite() && m > 0.0 { m } else { 60.0 };
+    let sd = (m * 0.1).max(0.1);
+    match k {
+        0 => Dist::Normal { mean: m, sd },
+        1 => Dist::Exp { mean: m },
+        2 => Dist::Uniform {
+            min: m - 1.7 * sd,
+            max: m + 1.7 * sd,
+        },
+        3 => Dist::Triangular {
+            min: m - 2.0 * sd,
+            mode: m,
+            max: m + 2.0 * sd,
+        },
+        _ => Dist::LogNormal { mean: m, sd },
+    }
+}
+
+/// The distribution of a time set: the kind and its parameters. A kind the editor does
+/// not offer (read from a file) is shown as text until another one is picked.
+fn campo_dist(ui: &mut Ui, i: usize, dist: &mut Dist) {
+    let atual = dist_indice(dist);
+    let texto_atual = match atual {
+        Some(k) => dist_nome(k).to_string(),
+        None => format!("{dist:?}"),
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.label(texto::ed_dist());
+        let mut novo = None;
+        egui::ComboBox::from_id_salt(("ed_dados_dist", i))
+            .selected_text(texto_atual)
+            .show_ui(ui, |ui| {
+                for k in 0..5 {
+                    if ui
+                        .selectable_label(atual == Some(k), dist_nome(k))
+                        .clicked()
+                        && atual != Some(k)
+                    {
+                        novo = Some(k);
+                    }
+                }
+            });
+        if let Some(k) = novo {
+            *dist = dist_nova(k, dist);
+        }
+        match dist {
+            Dist::Normal { mean, sd } | Dist::LogNormal { mean, sd } => {
+                campo_media(ui, texto::ed_g_media(), mean);
+                campo_sd(ui, texto::ed_g_sd(), sd);
+            }
+            Dist::Exp { mean } => campo_media(ui, texto::ed_g_media(), mean),
+            Dist::Uniform { min, max } => {
+                campo_media(ui, texto::ed_g_min(), min);
+                campo_media(ui, texto::ed_g_max(), max);
+            }
+            Dist::Triangular { min, mode, max } => {
+                campo_media(ui, texto::ed_g_min(), min);
+                campo_media(ui, texto::ed_g_moda(), mode);
+                campo_media(ui, texto::ed_g_max(), max);
+            }
+            _ => {}
+        }
+    });
+}
+
+/// The key that tells whether the check of question `i` still holds.
+fn chave_pergunta(ed: &Edicao, i: usize) -> String {
+    let Some(p) = ed.base.previsao.get(i) else {
+        return String::new();
+    };
+    let cj = match p {
+        Previsao::Dados { conjunto, .. } => ed.base.conjunto(conjunto),
+        _ => None,
+    };
+    format!("{}{:?}{:?}", ed.base.id, p, cj)
+}
+
+/// A question about a data set: the set, the question and its values, the tolerance, and
+/// the answer for the sample data.
+fn campo_dados(
+    ui: &mut Ui,
+    i: usize,
+    p: &mut Previsao,
+    id_missao: &str,
+    dados: &[ConjuntoMissao],
+    conferencias: &BTreeMap<usize, (String, Option<Amostra>)>,
+    conferir: &mut Option<usize>,
+) {
+    {
+        let Previsao::Dados {
+            pergunta,
+            conjunto,
+            questao,
+            unidade,
+            tolerancia,
+            ..
+        } = &mut *p
+        else {
+            return;
+        };
+        pergunta_campo(ui, pergunta);
+        ui.horizontal(|ui| {
+            ui.label(texto::ed_conjunto());
+            let atual = dados
+                .iter()
+                .find(|d| d.id == *conjunto)
+                .map_or("-".to_string(), |d| d.nome.clone());
+            egui::ComboBox::from_id_salt(("ed_pvd_conjunto", i))
+                .selected_text(atual)
+                .show_ui(ui, |ui| {
+                    for d in dados {
+                        if ui.selectable_label(d.id == *conjunto, &d.nome).clicked()
+                            && d.id != *conjunto
+                        {
+                            *conjunto = d.id.clone();
+                            let tipo = TipoGerador::de(&d.gerador);
+                            if !tipo.aceita(questao) {
+                                *questao = tipo.questoes().remove(0);
+                                *unidade = unidade_padrao(questao).into();
+                                *tolerancia = tolerancia_padrao(questao);
+                            }
+                        }
+                    }
+                });
+        });
+        if let Some(cj) = dados.iter().find(|d| d.id == *conjunto) {
+            let opcoes = TipoGerador::de(&cj.gerador).questoes();
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_questao());
+                egui::ComboBox::from_id_salt(("ed_pvd_questao", i))
+                    .selected_text(nome_questao(questao))
+                    .show_ui(ui, |ui| {
+                        for o in &opcoes {
+                            let igual =
+                                std::mem::discriminant(o) == std::mem::discriminant(questao);
+                            if ui.selectable_label(igual, nome_questao(o)).clicked() && !igual {
+                                *questao = o.clone();
+                                *unidade = unidade_padrao(questao).into();
+                                *tolerancia = tolerancia_padrao(questao);
+                            }
+                        }
+                    });
+            });
+            ui.label(RichText::new(descricao_questao(questao)).weak());
+            params_questao(ui, i, questao, cj);
+        }
+        if questao.e_escolha() {
+            *tolerancia = Tolerancia::Absoluta(0.0);
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_unidade());
+                ui.add(egui::TextEdit::singleline(unidade).desired_width(70.0));
+                ui.label(texto::ed_tolerancia());
+                campo_tolerancia(ui, &format!("ed_pvd_tol_{i}"), tolerancia);
+            });
+        }
+    }
+    let cj = match &*p {
+        Previsao::Dados { conjunto, .. } => dados.iter().find(|d| d.id == *conjunto),
+        _ => None,
+    };
+    let chave = format!("{id_missao}{p:?}{cj:?}");
+    if ui.small_button(texto::ed_conferir_questao()).clicked() {
+        *conferir = Some(i);
+    }
+    if let Some((k, a)) = conferencias.get(&i)
+        && *k == chave
+    {
+        match a {
+            None => {
+                ui.label(RichText::new(texto::ed_questao_invalida()).weak());
+            }
+            Some(a) => {
+                match &a.resposta {
+                    Ok(t) => {
+                        ui.label(texto::f(texto::ed_resposta_exemplo(), &[t]));
+                    }
+                    Err(e) => {
+                        ui.colored_label(AMARELO, texto::f(texto::ed_sem_resposta_exemplo(), &[e]));
+                    }
+                }
+                if a.sem_resposta > 0 {
+                    ui.colored_label(
+                        AMARELO,
+                        texto::f(
+                            texto::ed_sem_resposta_n(),
+                            &[&a.sem_resposta, &ALUNOS_DE_TESTE],
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The values of a data question.
+fn params_questao(ui: &mut Ui, i: usize, q: &mut QuestaoDados, cj: &ConjuntoMissao) {
+    match q {
+        QuestaoDados::Ppk { lie, lse } | QuestaoDados::Cpk { lie, lse } => {
+            let (centro, escala) = centro_escala(&cj.gerador);
+            ui.horizontal_wrapped(|ui| {
+                campo_opcional(ui, texto::ed_lie(), lie, centro - 4.0 * escala);
+                campo_opcional(ui, texto::ed_lse(), lse, centro + 4.0 * escala);
+            });
+        }
+        QuestaoDados::PrimeiroSinal { base } => {
+            ui.horizontal(|ui| inteiro(ui, texto::ed_qp_base_pontos(), base, 2, MAX_LINHAS));
+        }
+        QuestaoDados::PrimeiroSubgrupoFora { base } => {
+            ui.horizontal(|ui| inteiro(ui, texto::ed_qp_base_subgrupos(), base, 2, MAX_LINHAS));
+        }
+        QuestaoDados::Efeito { fator } => {
+            if let Gerador::Fatorial { fatores, .. } = &cj.gerador {
+                ui.horizontal(|ui| {
+                    ui.label(texto::ed_qp_fator());
+                    let atual = fatores.get(*fator).cloned().unwrap_or_default();
+                    egui::ComboBox::from_id_salt(("ed_pvd_fator", i))
+                        .selected_text(atual)
+                        .show_ui(ui, |ui| {
+                            for (j, nome) in fatores.iter().enumerate() {
+                                ui.selectable_value(fator, j, nome);
+                            }
+                        });
+                });
+            }
+        }
+        QuestaoDados::MeiaLargura { confianca } => {
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_qp_confianca());
+                let mut pct = *confianca * 100.0;
+                ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(1.0..=99.9));
+                *confianca = pct / 100.0;
+            });
+        }
+        QuestaoDados::Replicacoes { meia_largura } => {
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_qp_meia_largura());
+                let vel = velocidade(*meia_largura);
+                ui.add(
+                    egui::DragValue::new(meia_largura)
+                        .speed(vel)
+                        .range(0.0001..=f64::MAX),
+                );
+            });
+        }
+        _ => {}
     }
 }

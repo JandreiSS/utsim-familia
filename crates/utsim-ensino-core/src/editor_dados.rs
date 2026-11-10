@@ -127,7 +127,10 @@ impl TipoGerador {
                 tamanho: 5,
                 media: 10.0,
                 sd: 0.1,
-                padrao: None,
+                padrao: Some(Padrao::Deslocamento {
+                    inicio: 20,
+                    tamanho: 2.0,
+                }),
             },
         }
     }
@@ -339,7 +342,12 @@ pub fn erros_do_gerador(g: &Gerador) -> Vec<String> {
                 e.push("o desvio padrão precisa ser maior que zero".into());
             }
         }
-        Gerador::Serie { n, media, sd, padrao } => {
+        Gerador::Serie {
+            n,
+            media,
+            sd,
+            padrao,
+        } => {
             if *n < 2 {
                 e.push("são precisos ao menos 2 pontos".into());
             }
@@ -375,10 +383,7 @@ pub fn erros_do_gerador(g: &Gerador) -> Vec<String> {
             if *replicas < 1 {
                 e.push("ao menos 1 réplica".into());
             }
-            if !finito(*media)
-                || !finito(*interacao_ab)
-                || efeitos.iter().any(|x| !x.is_finite())
-            {
+            if !finito(*media) || !finito(*interacao_ab) || efeitos.iter().any(|x| !x.is_finite()) {
                 e.push("média, efeito ou interação inválido".into());
             }
             if !sd_ok(*sd) {
@@ -438,10 +443,7 @@ pub fn erros_do_gerador(g: &Gerador) -> Vec<String> {
 fn erros_do_padrao(p: &Padrao, n: usize) -> Vec<String> {
     let (inicio, x) = match p {
         Padrao::Deslocamento { inicio, tamanho } => (*inicio, *tamanho),
-        Padrao::Tendencia {
-            inicio,
-            inclinacao,
-        } => (*inicio, *inclinacao),
+        Padrao::Tendencia { inicio, inclinacao } => (*inicio, *inclinacao),
     };
     let mut e = Vec::new();
     if inicio >= n {
@@ -489,15 +491,13 @@ fn erros_da_questao(q: &QuestaoDados, cj: &ConjuntoMissao) -> Vec<String> {
                 e.push("escolha o fator".into());
             }
         }
-        QuestaoDados::MeiaLargura { confianca } => {
-            if !(*confianca > 0.0 && *confianca < 1.0) {
-                e.push("a confiança fica entre 0 e 1 (0,95 para 95 %)".into());
-            }
+        QuestaoDados::MeiaLargura { confianca } if !(*confianca > 0.0 && *confianca < 1.0) => {
+            e.push("a confiança fica entre 0 e 1 (0,95 para 95 %)".into());
         }
-        QuestaoDados::Replicacoes { meia_largura } => {
-            if !(meia_largura.is_finite() && *meia_largura > 0.0) {
-                e.push("a meia largura precisa ser maior que zero".into());
-            }
+        QuestaoDados::Replicacoes { meia_largura }
+            if !(meia_largura.is_finite() && *meia_largura > 0.0) =>
+        {
+            e.push("a meia largura precisa ser maior que zero".into());
         }
         _ => {}
     }
@@ -638,8 +638,7 @@ impl Edicao {
             return None;
         };
         let cj = self.base.conjunto(conjunto)?;
-        if !erros_do_gerador(&cj.gerador).is_empty() || !erros_da_questao(questao, cj).is_empty()
-        {
+        if !erros_do_gerador(&cj.gerador).is_empty() || !erros_da_questao(questao, cj).is_empty() {
             return None;
         }
         let c = cj.gerar(&self.base.id, "");
@@ -744,10 +743,14 @@ impl Edicao {
                 continue;
             }
             if questao.e_escolha() && questao.opcoes(cj).len() < 2 {
-                e.push(format!("previsão {n}: a pergunta precisa de grupos no conjunto"));
+                e.push(format!(
+                    "previsão {n}: a pergunta precisa de grupos no conjunto"
+                ));
             }
             if let Err(x) = questao.resposta(&cj.gerar(&b.id, "")) {
-                e.push(format!("previsão {n}: os dados de exemplo não têm resposta: {x}"));
+                e.push(format!(
+                    "previsão {n}: os dados de exemplo não têm resposta: {x}"
+                ));
             }
         }
         e
@@ -759,9 +762,11 @@ impl Edicao {
     pub fn avisos_dos_dados(&self) -> Vec<String> {
         let mut v = Vec::new();
         for cj in &self.base.dados {
-            let usado = self.base.previsao.iter().any(
-                |p| matches!(p, Previsao::Dados { conjunto, .. } if *conjunto == cj.id),
-            );
+            let usado = self
+                .base
+                .previsao
+                .iter()
+                .any(|p| matches!(p, Previsao::Dados { conjunto, .. } if *conjunto == cj.id));
             if !usado {
                 v.push(format!(
                     "o conjunto '{}' não tem pergunta: o aluno só o analisa",

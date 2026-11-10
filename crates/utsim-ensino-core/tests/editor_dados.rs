@@ -94,7 +94,9 @@ fn campos_dos_dados_conferidos() {
     assert_eq!(a.sem_resposta, 0);
 
     if let Gerador::MediaDeslocada {
-        grupos, n_por_grupo, ..
+        grupos,
+        n_por_grupo,
+        ..
     } = &mut ed.base.dados[0].gerador
     {
         grupos.push("Turno A".into());
@@ -145,9 +147,12 @@ fn tipo_nome_e_remocao_levam_as_perguntas_junto() {
     assert!(ed.erros().is_empty(), "{:?}", ed.erros());
     // A new id: the questions follow.
     ed.renomear_conjunto(0, "pares");
-    assert!(ed.base.previsao.iter().all(
-        |p| matches!(p, Previsao::Dados { conjunto, .. } if conjunto == "pares")
-    ));
+    assert!(
+        ed.base
+            .previsao
+            .iter()
+            .all(|p| matches!(p, Previsao::Dados { conjunto, .. } if conjunto == "pares"))
+    );
     // Removed: its questions and the analysis apps go too.
     ed.base.analisar_em = vec!["estatistica".into()];
     let outra = ed.novo_conjunto(TipoGerador::Tempos);

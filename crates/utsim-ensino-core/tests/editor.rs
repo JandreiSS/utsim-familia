@@ -221,7 +221,9 @@ fn pacote_do_professor_ida_e_volta() {
 }
 
 fn arquivos_de(pasta: &str) -> utsim_ensino_core::pacote::Arquivos {
-    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(pasta);
+    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(pasta);
     let mut a = utsim_ensino_core::pacote::Arquivos::new();
     for e in walk(&raiz) {
         let k = e
@@ -248,8 +250,8 @@ fn missoes_de_pecas_nao_abrem() {
 
 #[test]
 fn missoes_de_dados_abrem_e_voltam_iguais() {
-    let mut p = PacoteProfessor::de_arquivos(arquivos_de("ensino/pacotes/estatistica_qualidade"))
-        .unwrap();
+    let mut p =
+        PacoteProfessor::de_arquivos(arquivos_de("ensino/pacotes/estatistica_qualidade")).unwrap();
     let antes = p.conferir().unwrap();
     let lista = p.missoes();
     assert!(lista.len() >= 6);
