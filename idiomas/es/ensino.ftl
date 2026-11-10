@@ -639,3 +639,33 @@ vista_col_para = Hacia
 vista_col_viagens = Viajes
 vista_col_distancia = Distancia (m)
 vista_col_momento = Momento
+
+## cat_editor: missões de modelagem (etapa D)
+
+ed_modelagem_marcar = Misión de modelado (el alumno construye el modelo)
+ed_modelagem_marcar_dica = El modelo abierto pasa a ser la plantilla. El alumno parte del modelo inicial y entrega su .ron, corregido por los criterios.
+ed_modelagem = Modelado
+ed_modelo_inicial = Modelo inicial del alumno
+ed_gabarito = Plantilla (modelo completo)
+ed_carregar = Cargar
+ed_modelo_carregado = Modelo inicial cargado.
+ed_gabarito_carregado = Plantilla cargada.
+ed_replicacoes_conf = Replicaciones en la corrección
+ed_criterios = Criterios de corrección
+ed_sugerir_criterios = Sugerir de nuevo por la plantilla
+ed_criterio_novo = Nuevo criterio
+ed_tipo_objeto = tipo
+ed_minimo = mínimo
+ed_tc_medida = Medida cerca de la de la plantilla
+ed_tc_objetos = Cantidad de objetos de un tipo
+ed_tc_quebras = Tiene averías
+ed_tc_retrabalho = Tiene retrabajo (camino de vuelta)
+ed_tc_capacidade = Puestos en paralelo
+ed_tc_operadores = Usa operadores
+ed_conferir_modelagem = Comprobar el modelado
+ed_conferir_modelagem_dica = Corrige la plantilla y el modelo inicial por los criterios. La plantilla debe pasar todos, y el modelo inicial no.
+ed_conferindo = Comprobando…
+ed_col_criterio = Criterio
+ed_col_gabarito = Plantilla
+ed_col_inicial = Modelo inicial
+ed_modelagem_confere = El modelado es correcto.

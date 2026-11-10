@@ -32,8 +32,12 @@ fn entradas() -> Vec<(&'static str, &'static [&'static str])> {
 
 fn arquivo(i: Idioma) -> String {
     let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(raiz.join("../../idiomas").join(i.codigo()).join("ensino.ftl"))
-        .unwrap()
+    std::fs::read_to_string(
+        raiz.join("../../idiomas")
+            .join(i.codigo())
+            .join("ensino.ftl"),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -51,7 +55,9 @@ fn catalogo_igual_aos_arquivos() {
                 let declarados: std::collections::BTreeSet<String> =
                     valores.iter().map(|s| s.to_string()).collect();
                 if *args != declarados {
-                    erros.push(format!("{nome}: valores {declarados:?} no código, {args:?} no arquivo"));
+                    erros.push(format!(
+                        "{nome}: valores {declarados:?} no código, {args:?} no arquivo"
+                    ));
                 }
             }
         }
@@ -81,7 +87,6 @@ fn preenche_pelos_nomes() {
     assert!(TEXTOS.faltas().is_empty());
     utsim_idiomas::definir_nesta_thread(None);
 }
-
 
 /// The string literals of a Rust source, with their line, outside comments, char literals
 /// and `#[cfg(test)]` modules.

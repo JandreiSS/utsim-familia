@@ -1,6 +1,33 @@
 //! Catalogue of the mission editor (editor.rs). Entries start with `ed_`.
 
 textos! {
+    ed_modelagem_marcar;
+    ed_modelagem_marcar_dica;
+    ed_modelagem;
+    ed_modelo_inicial;
+    ed_gabarito;
+    ed_carregar;
+    ed_modelo_carregado;
+    ed_gabarito_carregado;
+    ed_replicacoes_conf;
+    ed_criterios;
+    ed_sugerir_criterios;
+    ed_criterio_novo;
+    ed_tipo_objeto;
+    ed_minimo;
+    ed_tc_medida;
+    ed_tc_objetos;
+    ed_tc_quebras;
+    ed_tc_retrabalho;
+    ed_tc_capacidade;
+    ed_tc_operadores;
+    ed_conferir_modelagem;
+    ed_conferir_modelagem_dica;
+    ed_conferindo;
+    ed_col_criterio;
+    ed_col_gabarito;
+    ed_col_inicial;
+    ed_modelagem_confere;
     aba_editor;
     ed_titulo;
     ed_texto;

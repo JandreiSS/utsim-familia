@@ -153,7 +153,9 @@ pub fn conferir(raiz: &Path) -> Vec<Relatorio> {
                 ..Relatorio::default()
             };
             match std::fs::read_to_string(&caminho) {
-                Err(_) => r.erros.push(format!("falta o arquivo {}", caminho.display())),
+                Err(_) => r
+                    .erros
+                    .push(format!("falta o arquivo {}", caminho.display())),
                 Ok(texto) => match chaves(&texto) {
                     Err(erros) => r.erros = erros,
                     Ok(outro) => comparar(&base, &outro, &mut r),

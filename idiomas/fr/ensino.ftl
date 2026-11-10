@@ -645,3 +645,33 @@ ed_q_mais_variavel = Machine la moins stable
 ed_qd_maior_media = L'élève stratifie les enregistrements par machine et désigne celle dont le temps moyen est le plus élevé.
 ed_qd_mais_variavel = L'élève stratifie les enregistrements par machine et désigne celle dont l'écart type est le plus élevé.
 ed_tg_simulacao = Enregistrements de la simulation
+
+## cat_editor: missões de modelagem (etapa D)
+
+ed_modelagem_marcar = Mission de modélisation (l'élève construit le modèle)
+ed_modelagem_marcar_dica = Le modèle ouvert devient le corrigé. L'élève part du modèle initial et rend son .ron, noté selon les critères.
+ed_modelagem = Modélisation
+ed_modelo_inicial = Modèle initial de l'élève
+ed_gabarito = Corrigé (modèle complet)
+ed_carregar = Charger
+ed_modelo_carregado = Modèle initial chargé.
+ed_gabarito_carregado = Corrigé chargé.
+ed_replicacoes_conf = Réplications pour la notation
+ed_criterios = Critères de notation
+ed_sugerir_criterios = Proposer à nouveau d'après le corrigé
+ed_criterio_novo = Nouveau critère
+ed_tipo_objeto = type
+ed_minimo = minimum
+ed_tc_medida = Mesure proche de celle du corrigé
+ed_tc_objetos = Nombre d'objets d'un type
+ed_tc_quebras = A des pannes
+ed_tc_retrabalho = A des reprises (un chemin de retour)
+ed_tc_capacidade = Postes en parallèle
+ed_tc_operadores = Utilise des opérateurs
+ed_conferir_modelagem = Vérifier la modélisation
+ed_conferir_modelagem_dica = Note le corrigé et le modèle initial selon les critères. Le corrigé doit tous les réussir, et le modèle initial non.
+ed_conferindo = Vérification…
+ed_col_criterio = Critère
+ed_col_gabarito = Corrigé
+ed_col_inicial = Modèle initial
+ed_modelagem_confere = La modélisation est correcte.

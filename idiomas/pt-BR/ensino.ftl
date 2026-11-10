@@ -639,3 +639,33 @@ vista_col_para = Para
 vista_col_viagens = Viagens
 vista_col_distancia = Distância (m)
 vista_col_momento = Momento
+
+## cat_editor: missões de modelagem (etapa D)
+
+ed_modelagem_marcar = Missão de modelagem (o aluno constrói o modelo)
+ed_modelagem_marcar_dica = O modelo aberto vira o gabarito. O aluno parte do modelo inicial e entrega o seu .ron, corrigido pelos critérios.
+ed_modelagem = Modelagem
+ed_modelo_inicial = Modelo inicial do aluno
+ed_gabarito = Gabarito (modelo completo)
+ed_carregar = Carregar
+ed_modelo_carregado = Modelo inicial carregado.
+ed_gabarito_carregado = Gabarito carregado.
+ed_replicacoes_conf = Replicações na correção
+ed_criterios = Critérios de correção
+ed_sugerir_criterios = Sugerir de novo pelo gabarito
+ed_criterio_novo = Novo critério
+ed_tipo_objeto = tipo
+ed_minimo = mínimo
+ed_tc_medida = Medida perto da do gabarito
+ed_tc_objetos = Quantidade de objetos de um tipo
+ed_tc_quebras = Tem quebras
+ed_tc_retrabalho = Tem retrabalho (caminho de volta)
+ed_tc_capacidade = Postos em paralelo
+ed_tc_operadores = Usa operadores
+ed_conferir_modelagem = Conferir a modelagem
+ed_conferir_modelagem_dica = Corrige o gabarito e o modelo inicial pelos critérios. O gabarito precisa passar em todos, e o modelo inicial não.
+ed_conferindo = Conferindo…
+ed_col_criterio = Critério
+ed_col_gabarito = Gabarito
+ed_col_inicial = Modelo inicial
+ed_modelagem_confere = A modelagem confere.

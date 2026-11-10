@@ -916,7 +916,11 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
     // The 3D error is told by the start of its text, in the language now.
     let prefixo_3d = texto::f(texto::missao_erro_3d(), &[&""]);
-    if let Some(e) = m.erro.as_ref().filter(|e| e.starts_with(prefixo_3d.as_str())) {
+    if let Some(e) = m
+        .erro
+        .as_ref()
+        .filter(|e| e.starts_with(prefixo_3d.as_str()))
+    {
         ui.colored_label(VERMELHO, e);
     }
     let Some(m) = app.missao.as_mut() else { return };

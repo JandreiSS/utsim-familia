@@ -58,7 +58,11 @@ fn todas_as_telas_nas_cinco_linguas() {
     texto::definir(Idioma::Fr);
     assert_ne!(texto::aba_campanha(), "Campanha");
     // Every key a screen asked for exists in the files.
-    assert!(texto::TEXTOS.faltas().is_empty(), "{:?}", texto::TEXTOS.faltas());
+    assert!(
+        texto::TEXTOS.faltas().is_empty(),
+        "{:?}",
+        texto::TEXTOS.faltas()
+    );
     texto::definir(Idioma::PtBr);
     assert_eq!(texto::aba_campanha(), "Campanha");
 }

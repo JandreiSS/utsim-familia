@@ -639,3 +639,33 @@ vista_col_para = To
 vista_col_viagens = Trips
 vista_col_distancia = Distance (m)
 vista_col_momento = Moment
+
+## cat_editor: missões de modelagem (etapa D)
+
+ed_modelagem_marcar = Modelling mission (the student builds the model)
+ed_modelagem_marcar_dica = The model opened becomes the answer key. The student starts from the starting model and delivers a .ron, graded by the criteria.
+ed_modelagem = Modelling
+ed_modelo_inicial = Student's starting model
+ed_gabarito = Answer key (complete model)
+ed_carregar = Load
+ed_modelo_carregado = Starting model loaded.
+ed_gabarito_carregado = Answer key loaded.
+ed_replicacoes_conf = Replications in the grading
+ed_criterios = Grading criteria
+ed_sugerir_criterios = Suggest again from the answer key
+ed_criterio_novo = New criterion
+ed_tipo_objeto = type
+ed_minimo = minimum
+ed_tc_medida = Measure close to the answer key's
+ed_tc_objetos = Number of objects of a type
+ed_tc_quebras = Has breakdowns
+ed_tc_retrabalho = Has rework (a way back)
+ed_tc_capacidade = Parallel servers
+ed_tc_operadores = Uses operators
+ed_conferir_modelagem = Check the modelling
+ed_conferir_modelagem_dica = Grades the answer key and the starting model by the criteria. The answer key must pass all of them, and the starting model must not.
+ed_conferindo = Checking…
+ed_col_criterio = Criterion
+ed_col_gabarito = Answer key
+ed_col_inicial = Starting model
+ed_modelagem_confere = The modelling checks out.

@@ -43,13 +43,7 @@ pub enum Idioma {
 }
 
 impl Idioma {
-    pub const TODOS: [Idioma; 5] = [
-        Idioma::PtBr,
-        Idioma::En,
-        Idioma::Es,
-        Idioma::Fr,
-        Idioma::It,
-    ];
+    pub const TODOS: [Idioma; 5] = [Idioma::PtBr, Idioma::En, Idioma::Es, Idioma::Fr, Idioma::It];
 
     /// The code of the language: the name of its folder in `idiomas/` and the value saved in
     /// the configuration of each app.

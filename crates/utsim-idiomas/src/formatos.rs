@@ -19,7 +19,7 @@ pub fn agrupar_milhares(digitos: &str) -> String {
     let n = digitos.chars().count();
     let mut s = String::with_capacity(digitos.len() + n / 3 * 2);
     for (i, c) in digitos.chars().enumerate() {
-        if i > 0 && (n - i) % 3 == 0 {
+        if i > 0 && (n - i).is_multiple_of(3) {
             s.push(marca);
         }
         s.push(c);

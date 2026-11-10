@@ -645,3 +645,33 @@ ed_q_mais_variavel = Macchina meno stabile
 ed_qd_maior_media = Lo studente stratifica le registrazioni per macchina e indica quella con il tempo medio più alto.
 ed_qd_mais_variavel = Lo studente stratifica le registrazioni per macchina e indica quella con la deviazione standard più alta.
 ed_tg_simulacao = Registrazioni della simulazione
+
+## cat_editor: missões de modelagem (etapa D)
+
+ed_modelagem_marcar = Missione di modellazione (lo studente costruisce il modello)
+ed_modelagem_marcar_dica = Il modello aperto diventa la soluzione. Lo studente parte dal modello iniziale e consegna il suo .ron, corretto secondo i criteri.
+ed_modelagem = Modellazione
+ed_modelo_inicial = Modello iniziale dello studente
+ed_gabarito = Soluzione (modello completo)
+ed_carregar = Carica
+ed_modelo_carregado = Modello iniziale caricato.
+ed_gabarito_carregado = Soluzione caricata.
+ed_replicacoes_conf = Repliche nella correzione
+ed_criterios = Criteri di correzione
+ed_sugerir_criterios = Suggerisci di nuovo dalla soluzione
+ed_criterio_novo = Nuovo criterio
+ed_tipo_objeto = tipo
+ed_minimo = minimo
+ed_tc_medida = Misura vicina a quella della soluzione
+ed_tc_objetos = Numero di oggetti di un tipo
+ed_tc_quebras = Ha guasti
+ed_tc_retrabalho = Ha rilavorazioni (un percorso di ritorno)
+ed_tc_capacidade = Postazioni in parallelo
+ed_tc_operadores = Usa operatori
+ed_conferir_modelagem = Verifica la modellazione
+ed_conferir_modelagem_dica = Corregge la soluzione e il modello iniziale secondo i criteri. La soluzione deve superarli tutti, il modello iniziale no.
+ed_conferindo = Verifica in corso…
+ed_col_criterio = Criterio
+ed_col_gabarito = Soluzione
+ed_col_inicial = Modello iniziale
+ed_modelagem_confere = La modellazione è corretta.

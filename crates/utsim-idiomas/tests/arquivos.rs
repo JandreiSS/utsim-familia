@@ -21,17 +21,26 @@ fn todos_os_idiomas_tem_as_mesmas_chaves_e_argumentos() {
 #[test]
 fn cada_idioma_tem_sua_pasta() {
     for i in Idioma::TODOS {
-        assert!(raiz().join(i.codigo()).is_dir(), "idiomas/{} missing", i.codigo());
+        assert!(
+            raiz().join(i.codigo()).is_dir(),
+            "idiomas/{} missing",
+            i.codigo()
+        );
     }
 }
 
 #[test]
 fn as_traducoes_de_maquina_avisam_no_cabecalho() {
     for i in [Idioma::Fr, Idioma::It] {
-        for e in std::fs::read_dir(raiz().join(i.codigo())).unwrap().flatten() {
+        for e in std::fs::read_dir(raiz().join(i.codigo()))
+            .unwrap()
+            .flatten()
+        {
             let t = std::fs::read_to_string(e.path()).unwrap();
             assert!(
-                t.lines().take(5).any(|l| l.starts_with('#')),
+                t.lines()
+                    .take(3)
+                    .any(|l| l.starts_with("# ") && l.contains("revisão humana")),
                 "{} needs the header comment",
                 e.path().display()
             );
