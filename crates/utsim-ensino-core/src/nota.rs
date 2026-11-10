@@ -318,7 +318,7 @@ pub fn corrigir(
             peso: m.peso,
         });
     }
-    let previsoes = corrigir_previsoes(missao, &sim.base, tentativa)?;
+    let previsoes = corrigir_previsoes(missao, &sim.base, Some(&sim.modelo), tentativa)?;
     let certas_prev = previsoes.iter().filter(|p| p.certa).count();
     // A mission of questions only (no measure): the performance is the share of right
     // answers, and it is solved when every answer is right.
@@ -418,10 +418,11 @@ pub fn corrigir(
 }
 
 /// The right answer of each prediction, from the initial state, and whether the student
-/// got it.
+/// got it. `modelo` is the mission's model, which the simulation data sets run on.
 pub fn corrigir_previsoes(
     missao: &Missao,
     base: &Cenario,
+    modelo: Option<&utsim_model::Model>,
     tentativa: &Tentativa,
 ) -> Result<Vec<ResultadoPrevisao>, ErroMotor> {
     let mut out = Vec::new();
@@ -473,7 +474,7 @@ pub fn corrigir_previsoes(
                 let cj = missao.conjunto(conjunto).ok_or_else(|| {
                     ErroMotor::Modelo(format!("conjunto '{conjunto}' não existe"))
                 })?;
-                let dados = cj.gerar(&missao.id, &tentativa.aluno);
+                let dados = cj.receita(&missao.id, &tentativa.aluno).gerar_com(modelo);
                 let v = questao.resposta(&dados).map_err(ErroMotor::Modelo)?;
                 let certa = if questao.e_escolha() {
                     resposta == Some(&RespostaPrevisao::Escolha(v as usize))

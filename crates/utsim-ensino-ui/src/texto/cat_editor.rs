@@ -118,6 +118,13 @@ textos! {
     ed_tg_fatorial;
     ed_tg_pareado;
     ed_tg_subgrupos;
+    ed_tg_simulacao;
+    ed_g_estacoes;
+    ed_g_sem_maquinas;
+    ed_g_estacao_afetada;
+    ed_g_sortear_estacao;
+    ed_g_processo_plantado;
+    ed_g_duracao;
     ed_dist;
     ed_dist_normal;
     ed_dist_exp;
@@ -174,6 +181,8 @@ textos! {
     ed_q_primeiro_sub;
     ed_q_cpk;
     ed_q_fonte;
+    ed_q_maior_media;
+    ed_q_mais_variavel;
     ed_qd_rr_pct;
     ed_qd_rr_veredito;
     ed_qd_ppk;
@@ -187,6 +196,8 @@ textos! {
     ed_qd_primeiro_sub;
     ed_qd_cpk;
     ed_qd_fonte;
+    ed_qd_maior_media;
+    ed_qd_mais_variavel;
     ed_qp_base_pontos;
     ed_qp_base_subgrupos;
     ed_qp_fator;
@@ -221,6 +232,7 @@ modelos! {
     ed_resposta_exemplo(t);
     ed_sem_resposta_exemplo(e);
     ed_sem_resposta_n(sem_resposta, total);
+    ed_fora_do_plantado_n(fora_do_plantado, total);
     ed_g_grupo_novo(grupos);
     ed_g_fator_novo(fatores);
 }

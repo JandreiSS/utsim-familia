@@ -630,3 +630,18 @@ vista_col_para = Vers
 vista_col_viagens = Trajets
 vista_col_distancia = Distance (m)
 vista_col_momento = Moment
+
+## cat_editor (ajouts)
+
+ed_fora_do_plantado_n = Pour { $fora_do_plantado } élèves de test sur { $total }, les données désignent un autre groupe que celui de l'effet introduit
+ed_g_duracao = Durée de la collecte
+ed_g_estacao_afetada = Machine avec la cause introduite
+ed_g_estacoes = Machines enregistrées (le temps de chaque pièce sur chacune)
+ed_g_processo_plantado = Temps de processus introduit
+ed_g_sem_maquinas = Le modèle n'a aucune machine à enregistrer.
+ed_g_sortear_estacao = Tirer la machine au sort pour chaque élève
+ed_q_maior_media = Machine la plus lente
+ed_q_mais_variavel = Machine la moins stable
+ed_qd_maior_media = L'élève stratifie les enregistrements par machine et désigne celle dont le temps moyen est le plus élevé.
+ed_qd_mais_variavel = L'élève stratifie les enregistrements par machine et désigne celle dont l'écart type est le plus élevé.
+ed_tg_simulacao = Enregistrements de la simulation

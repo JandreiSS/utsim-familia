@@ -630,3 +630,18 @@ vista_col_para = A
 vista_col_viagens = Viaggi
 vista_col_distancia = Distanza (m)
 vista_col_momento = Momento
+
+## cat_editor (aggiunte)
+
+ed_fora_do_plantado_n = Per { $fora_do_plantado } studenti di prova su { $total } i dati indicano un gruppo diverso da quello dell'effetto inserito
+ed_g_duracao = Durata della raccolta
+ed_g_estacao_afetada = Macchina con la causa inserita
+ed_g_estacoes = Macchine registrate (il tempo di ogni pezzo su ciascuna)
+ed_g_processo_plantado = Tempo di processo inserito
+ed_g_sem_maquinas = Il modello non ha macchine da registrare.
+ed_g_sortear_estacao = Sorteggia la macchina per ogni studente
+ed_q_maior_media = Macchina più lenta
+ed_q_mais_variavel = Macchina meno stabile
+ed_qd_maior_media = Lo studente stratifica le registrazioni per macchina e indica quella con il tempo medio più alto.
+ed_qd_mais_variavel = Lo studente stratifica le registrazioni per macchina e indica quella con la deviazione standard più alta.
+ed_tg_simulacao = Registrazioni della simulazione
