@@ -17,7 +17,10 @@ fn metrics(m: &Model, r: u32) -> BTreeMap<String, f64> {
 }
 
 fn close(got: f64, want: f64, what: &str) {
-    assert!((got - want).abs() <= 1e-9, "{what}: obtido {got}, esperado {want}");
+    assert!(
+        (got - want).abs() <= 1e-9,
+        "{what}: obtido {got}, esperado {want}"
+    );
 }
 
 /// Um operador no próprio posto (sem caminhada); 5 peças, uma a cada 100 s; processo de 10 s.
@@ -57,7 +60,11 @@ fn entering_and_leaving_by_hand() {
     let x = metrics(&m, 0);
     close(x["maq.state.entering"], 5.0 * 2.0 / 1000.0, "entrando");
     close(x["maq.state.leaving"], 5.0 * 3.0 / 1000.0, "saindo");
-    close(x["maq.state.processing"], 5.0 * 10.0 / 1000.0, "processando");
+    close(
+        x["maq.state.processing"],
+        5.0 * 10.0 / 1000.0,
+        "processando",
+    );
     // O operador fica no posto do começo da entrada ao fim da saída.
     close(x["op.state.utilize"], 5.0 * 15.0 / 1000.0, "operador");
     assert_eq!(x["saida.input"], 5.0);
@@ -66,8 +73,10 @@ fn entering_and_leaving_by_hand() {
 #[test]
 fn entering_with_a_setup_and_the_same_crew_happens_once() {
     let m = model(
-        &station(", operation: Some((enter: Const(2.0), leave: Const(3.0)))")
-            .replace("Processor(process", "Processor(setup: Some(Const(4.0)), process"),
+        &station(", operation: Some((enter: Const(2.0), leave: Const(3.0)))").replace(
+            "Processor(process",
+            "Processor(setup: Some(Const(4.0)), process",
+        ),
     );
     let x = metrics(&m, 0);
     close(x["maq.state.entering"], 5.0 * 2.0 / 1000.0, "entrando");
@@ -111,7 +120,11 @@ fn ppe_of_the_station_and_its_zone_restricts_who_operates() {
         m.required_ppe(m.objects.iter().find(|o| o.name == "maq").unwrap()),
         vec!["capacete".to_string(), "oculos".to_string()]
     );
-    assert!(m.warnings().iter().all(|w| !w.contains("regra de operação")));
+    assert!(
+        m.warnings()
+            .iter()
+            .all(|w| !w.contains("regra de operação"))
+    );
     let x = metrics(&m, 0);
     assert_eq!(x.get("a.state.utilize"), None, "a está sem óculos");
     assert!(x["b.state.utilize"] > 0.0);

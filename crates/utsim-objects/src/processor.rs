@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
-    MSG_ARRIVED, Requirement, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_TRANSPORT_RESERVED, MSG_WITHDRAW,
-    request_priority,
+    MSG_ARRIVED, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_TRANSPORT_RESERVED, MSG_WITHDRAW,
+    Requirement, request_priority,
 };
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, State, TaskKind,
@@ -178,7 +178,7 @@ pub struct Processor {
     changes: u64,
     pending: Vec<Pending>,
     held: Vec<(ItemId, Crew)>,
-    /// Servers in setup or processing over time (zero while the block is stopped).
+    /// Servers in setup or processing (or with the crew getting in or out) over time (zero while the block is stopped).
     busy: TimeWeighted,
     /// Servers holding a finished item that cannot leave yet.
     blocked: TimeWeighted,
@@ -429,6 +429,12 @@ impl Processor {
             return;
         }
         self.suspended.remove(at);
+        self.restart_timers(cx, item);
+    }
+
+    /// Starts again the timers of `item` that an absent operator held off (unless the
+    /// station is down: the repair restarts them).
+    fn restart_timers(&mut self, cx: &mut Ctx, item: ItemId) {
         let now = cx.now();
         let down = cx.is_down();
         for timer in self.timers.iter_mut().filter(|t| t.item == item) {
@@ -464,12 +470,19 @@ impl Processor {
             Some(Phase::Setup) => Phase::Setup,
             Some(Phase::Processing) => Phase::Processing,
             Some(Phase::Entering) => Phase::Entering,
-            // Leaving, between stages, or done: nothing runs; the crew is simply given back.
-            _ => {
+            // Leaving, between stages, or done: no work runs; the crew is simply given
+            // back (a crew leaving just goes: its leaving time goes on without it).
+            phase => {
                 for (request, operator) in crew {
                     if request != id {
                         cx.send(operator, MSG_RELEASE, request.0);
                     }
+                }
+                if phase == Some(Phase::Leaving) {
+                    // Nobody can come back for this item: an operator that had turned to
+                    // another case no longer holds the leaving time.
+                    self.suspended.retain(|(i, _)| *i != item);
+                    self.restart_timers(cx, item);
                 }
                 return;
             }
@@ -606,10 +619,12 @@ impl Processor {
                 .any(|(i, q)| *q == p && !self.is_suspended(*i))
         };
         // An item whose operator turned to another case waits for it like an operator.
-        let away = self
-            .phases
-            .iter()
-            .any(|(i, q)| matches!(q, Phase::Setup | Phase::Processing) && self.is_suspended(*i));
+        let away = self.phases.iter().any(|(i, q)| {
+            matches!(
+                q,
+                Phase::Setup | Phase::Processing | Phase::Entering | Phase::Leaving
+            ) && self.is_suspended(*i)
+        });
         let state = if has(Phase::Processing) {
             State::Processing
         } else if has(Phase::Setup) {
@@ -651,8 +666,12 @@ impl Processor {
             let working = self
                 .phases
                 .iter()
+                // The crew getting in or out holds the server like the work does.
                 .filter(|(i, p)| {
-                    matches!(p, Phase::Setup | Phase::Processing) && !self.is_suspended(*i)
+                    matches!(
+                        p,
+                        Phase::Setup | Phase::Processing | Phase::Entering | Phase::Leaving
+                    ) && !self.is_suspended(*i)
                 })
                 .count();
             let done = self

@@ -314,11 +314,7 @@ pub struct ObjectDef {
     pub safety: Option<Box<safety::SafetyDef>>,
     /// Who may operate this work station and how the operators get in and out
     /// ([`OperationDef`], `Processor` only).
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "operacao"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "operacao")]
     pub operation: Option<Box<OperationDef>>,
 }
 

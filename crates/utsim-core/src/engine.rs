@@ -2065,7 +2065,9 @@ impl Simulation {
                 tag,
                 payload,
             } => {
-                if tag == crate::task::MSG_ARRIVED && !self.core.required.is_empty() {
+                // The requirement lasts until the job ends: a preempted job goes back to the
+                // dispatcher with the same id and must still find a qualified operator.
+                if tag == crate::task::MSG_RELEASE && !self.core.required.is_empty() {
                     self.core.required.remove(&payload);
                 }
                 let for_maintenance = tag == crate::task::MSG_ARRIVED
