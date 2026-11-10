@@ -220,10 +220,8 @@ fn pacote_do_professor_ida_e_volta() {
     assert!(carregar(&p3.todos()).is_ok());
 }
 
-#[test]
-fn provas_e_missoes_especiais_nao_abrem() {
-    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../ensino/pacotes/estatistica_qualidade");
+fn arquivos_de(pasta: &str) -> utsim_ensino_core::pacote::Arquivos {
+    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(pasta);
     let mut a = utsim_ensino_core::pacote::Arquivos::new();
     for e in walk(&raiz) {
         let k = e
@@ -233,12 +231,46 @@ fn provas_e_missoes_especiais_nao_abrem() {
             .replace('\\', "/");
         a.insert(k, std::fs::read(&e).unwrap());
     }
-    let p = PacoteProfessor::de_arquivos(a).unwrap();
-    let it = &p.missoes()[0];
-    let e = p.abrir(&it.caminho).unwrap_err();
-    assert!(e.contains("dados"), "{e}");
+    a
 }
 
+#[test]
+fn missoes_de_pecas_nao_abrem() {
+    let p = PacoteProfessor::de_arquivos(arquivos_de("ensino/campanha")).unwrap();
+    let it = p
+        .missoes()
+        .into_iter()
+        .find(|it| it.caminho == "ato4/ventilador.ron")
+        .unwrap();
+    let e = p.abrir(&it.caminho).unwrap_err();
+    assert!(e.contains("peças"), "{e}");
+}
+
+#[test]
+fn missoes_de_dados_abrem_e_voltam_iguais() {
+    let mut p = PacoteProfessor::de_arquivos(arquivos_de("ensino/pacotes/estatistica_qualidade"))
+        .unwrap();
+    let antes = p.conferir().unwrap();
+    let lista = p.missoes();
+    assert!(lista.len() >= 6);
+    for it in &lista {
+        let mut ed = p.abrir(&it.caminho).unwrap();
+        assert!(!ed.base.dados.is_empty(), "{}", it.id);
+        assert!(ed.erros().is_empty(), "{}: {:?}", it.id, ed.erros());
+        // The sample of every data question has an answer.
+        for (i, q) in ed.base.previsao.iter().enumerate() {
+            if matches!(q, utsim_ensino_core::missao::Previsao::Dados { .. }) {
+                let a = ed.amostra_da_pergunta(i).unwrap();
+                assert!(a.resposta.is_ok(), "{}: {:?}", it.id, a.resposta);
+            }
+        }
+        p.gravar(&mut ed, 0).unwrap();
+    }
+    let depois = p.conferir().unwrap();
+    for (a, b) in antes.missoes.iter().zip(&depois.missoes) {
+        assert_eq!(a.missao, b.missao);
+    }
+}
 fn walk(d: &std::path::Path) -> Vec<PathBuf> {
     let mut v = Vec::new();
     for e in std::fs::read_dir(d).unwrap() {
