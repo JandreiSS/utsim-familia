@@ -59,8 +59,9 @@ Argumentos diretos continuam valendo para os casos simples: `utsim <modelo.ron>`
 | Chamada | Quem usa | O que faz |
 |---|---|---|
 | `utsim-qualidade --utsim-abrir=<dados.csv ou .xlsx> [--utsim-abrir=<outro>] --utsim-ferramenta=<chave> [--utsim-aba=<aba>] [--utsim-lie=<n>] [--utsim-lse=<n>] [--utsim-subgrupo=<n>]` | Ensino ("Analisar no UTSim Qualidade") | Cria o estudo "Análise de <arquivos>" com uma ferramenta por arquivo, de origem Importado (arquivo, aba e hash). As opções valem para todos os arquivos. O estudo fica na última unidade aberta. Sem unidade, fica na unidade "Análises avulsas", ao lado da configuração do app. Sem `--utsim-ferramenta`, a tela Ferramentas pede a escolha. Não há resposta. |
+| `utsim-qualidade --utsim-pedido=<id.utsim-pedido.json>` (e `utsim-seguranca`) | Estatística, e quem mais usar o `utsim-troca` | Atende `abrir_ferramenta` e `analisar` como a linha acima, depois de conferir o hash de cada arquivo de entrada. O `entrada.conteudo` vira `<id>.entrada.csv` ao lado do pedido. `abrir_modelo` e `editar_no` abrem o modelo no nó do contexto. Ao fechar o app, grava a resposta: `concluido` com o estudo no formato `estudo` (por aplicação, ferramenta, indicadores, achados, avisos e a leitura da equipe), ou `erro` com a mensagem (arquivo mudado, ação que o app não atende). |
 
-Chaves de `--utsim-ferramenta`: `folha`, `estratificacao`, `pareto`, `histograma`, `dispersao`, `carta`, `capacidade`, `msa` e `fmea` (as ferramentas com tabela). Os números aceitam vírgula ou ponto. Ajustes da tabela por ferramenta (`utsim_estudo::importar`):
+Chaves de `--utsim-ferramenta`: `folha`, `estratificacao`, `pareto`, `histograma`, `dispersao`, `carta`, `capacidade`, `msa`, `fmea`, `qfd`, `tolerancias` e `poka_yoke` (as ferramentas com tabela). Os números aceitam vírgula ou ponto. Ajustes da tabela por ferramenta (`utsim_estudo::importar`):
 
 - carta e capacidade: o formato largo `subgrupo;x1;...;xn` vira uma linha por valor, e n é o tamanho do subgrupo. Uma carta com uma coluna só ganha a coluna do subgrupo;
 - capacidade e histograma: a última coluna numérica;
@@ -161,7 +162,7 @@ Ordem:
 2. Abas Qualidade, Segurança e Manutenção no painel do nó do UTSim (sessão da interface).
 3. Tela "Modelo" como entrada dos dois apps: lista de nós com indicadores, resultados por nó primeiro, edição dos campos do nó com a trava.
 4. As telas atuais passam a abrir pelo nó: o Pareto, a carta e a capacidade da característica do nó selecionado, o inventário do posto lido de `safety.hazards`, a ergonomia gravada em `safety.ergonomics`, os incidentes com o nó. Os perigos e as marcações que estão na pasta de unidade migram para o nó, com um assistente que mostra o que vai mudar antes de gravar.
-5. Crate `utsim-troca` (pedido e resposta entre apps) e formato de troca das ferramentas.
+5. Crate `utsim-troca` (pedido e resposta entre apps) e formato de troca das ferramentas. Feito: o crate, com `Pedido`, `Resposta`, `Resultado` (`ferramenta`, `formato`, `dados`), hashes e `Pedido::argumentos_diretos`. O UTSim Qualidade e o UTSim Segurança do Trabalho já leem `--utsim-pedido` (`utsim_posto_ui::abrir`) e respondem ao fechar. Falta nos outros apps.
 6. Área "Ferramentas" no UTSim Qualidade e no UTSim Segurança do Trabalho, com relatórios bonitos (seção 5.1). Feito: crate `utsim-estudo`, tela comum em `utsim-posto-ui`, dados simulados em `utsim_qualidade_core::estudo`, leitura de xlsx em `utsim_quality::data::xlsx`. Estudos na pasta de unidade, como propõe a I8.
 7. Seis Sigma abre Pareto, Ishikawa e FMEA no Qualidade e recebe o resultado como entregável.
 8. Os demais pares da seção 4.

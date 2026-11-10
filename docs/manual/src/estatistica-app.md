@@ -100,6 +100,21 @@ O ajuste de distribuição e a precisão propõem uma mudança no modelo: a dist
 
 Histograma, boxplot, gráfico de probabilidade normal e dispersão (com a reta de mínimos quadrados). As análises também trazem os gráficos que cabem a elas: boxplot por grupo na ANOVA, resíduos na regressão, curva de poder no tamanho de amostra.
 
+## Experimentos planejados (menu DOE)
+
+**DOE > Criar plano** monta o experimento como uma planilha nova:
+
+- **Plackett-Burman:** para triagem de muitos fatores (até 23) com poucas corridas (8, 12, 16, 20 ou 24). Estima só os efeitos principais.
+- **Composto central:** o fatorial completo, os pontos axiais e os centros, para o modelo de segunda ordem. Os pontos axiais podem ser rotacionáveis, na face do cubo (três níveis por fator) ou em dois blocos ortogonais (o fatorial num dia e os axiais em outro, por exemplo).
+- **Box-Behnken:** de 3 a 5 fatores, três níveis, sem corridas nos cantos do cubo.
+
+A planilha traz a ordem padrão, a ordem de execução (sorteada pela semente, dentro de cada bloco), o bloco, o tipo do ponto e os fatores codificados: −1 e +1 nos níveis baixo e alto, 0 no centro. Rode as corridas nessa ordem, preencha a coluna Resposta (ou acrescente outras colunas de resposta) e grave.
+
+- **Analisar superfície de resposta:** ajusta o modelo de segunda ordem (ou de primeira, com ou sem interações) aos fatores codificados. Mostra os coeficientes com valor-p, o R² e os resíduos, e acha o ponto estacionário, dizendo se ele é um máximo, um mínimo ou uma sela. Avisa quando o ponto fica fora da região do experimento.
+- **Otimizar respostas (desejabilidade):** para uma ou duas respostas, escolha maximizar, minimizar ou chegar a um alvo, com os limites aceitáveis. O app procura dentro da região do experimento o ponto de maior desejabilidade geral e mostra as respostas previstas nele.
+
+Para voltar às unidades do processo, use: valor = centro + nível codificado × (alto − baixo)/2.
+
 ## Histórico
 
 A tela Histórico lista as análises da unidade, de todas as pessoas. "Rodar de novo" relê a planilha e recalcula. Se os dados mudaram desde a análise original, aparece um aviso. "Tirar" remove a análise do histórico.
@@ -113,8 +128,8 @@ Todo relatório mostra a origem dos dados (manual, importado com o hash, simulad
 
 ## Capacidade, cartas de controle, MSA e Pareto
 
-Essas ferramentas ficam no UTSim Qualidade, a tela única da família para elas. O menu Qualidade do Estatística grava as colunas escolhidas num CSV em `estatistica/para_qualidade/` e abre o UTSim Qualidade, se ele estiver instalado pelo launcher. Para o Pareto, escolha a coluna das categorias (defeito, posto) e, se quiser, uma coluna de números para somar no lugar de contar: o CSV sai já contado, `categoria;contagem`, da maior para a menor. Por enquanto o resultado não volta sozinho ao Estatística. Isso chega com o pedido entre apps, numa próxima versão.
+Essas ferramentas ficam no UTSim Qualidade, a tela única da família para elas. O menu Qualidade do Estatística grava as colunas escolhidas num CSV em `estatistica/para_qualidade/` e abre o UTSim Qualidade, se ele estiver instalado pelo launcher, já com um estudo da ferramenta sobre esse CSV. Na capacidade e na carta, escolha a coluna das medições na ordem da coleta (na carta, uma segunda coluna pode ser o subgrupo). No MSA, as colunas são achadas pelo nome: peça, operador e medida. Para o Pareto, escolha a coluna das categorias (defeito, posto) e, se quiser, uma coluna de números para somar no lugar de contar: o CSV sai já contado, `categoria;contagem`, da maior para a menor. Por enquanto o resultado não volta sozinho ao Estatística.
 
 ## O que vem depois
 
-O plano (`docs/plano_estatistica.md`) prevê, nas próximas etapas: o pedido entre apps (o Qualidade e o UTSim pedindo análises e ajustes, e os dados indo junto ao Qualidade), exportar xlsx, experimentos planejados rodando o simulador, GLM, regressão logística, confiabilidade com censura, assistente guiado e séries temporais.
+O plano (`docs/plano_estatistica.md`) prevê, nas próximas etapas: o pedido entre apps (o Qualidade e o UTSim pedindo análises e ajustes, e os dados indo junto ao Qualidade), exportar xlsx, os experimentos planejados rodando o simulador e gravando o melhor ponto no modelo, GLM, regressão logística, confiabilidade com censura, assistente guiado e séries temporais.

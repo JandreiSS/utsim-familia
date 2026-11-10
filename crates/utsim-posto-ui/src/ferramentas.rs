@@ -752,7 +752,7 @@ impl TelaFerramentas {
             });
             ui.horizontal(|ui| {
                 ui.label("Modelo");
-                ui.add(egui::TextEdit::singleline(&mut n.modelo).desired_width(130.0));
+                crate::util::campo_modelo(ui, &mut n.modelo, s.unidade.as_ref(), 130.0);
                 if !modelos.is_empty() {
                     egui::ComboBox::from_id_salt("novo_modelo")
                         .selected_text("dos postos")
@@ -926,9 +926,11 @@ impl TelaFerramentas {
                                 });
                             ui.end_row();
                             ui.label("Modelo");
-                            ui.add(
-                                egui::TextEdit::singleline(&mut e.assunto.modelo)
-                                    .desired_width(260.0),
+                            crate::util::campo_modelo(
+                                ui,
+                                &mut e.assunto.modelo,
+                                s.unidade.as_ref(),
+                                260.0,
                             );
                             ui.end_row();
                             ui.label("Nó");
@@ -1163,10 +1165,23 @@ impl TelaFerramentas {
             Ferramenta::A3 => a3_ui(ui, a),
             _ => {
                 parametros_ui(ui, a);
+                if let Some(dica) = dica_da_tabela(a.ferramenta) {
+                    ui.label(RichText::new(dica).small().weak());
+                }
                 ui.add_space(4.0);
-                let antes = a.tabela.clone();
+                a.completar_auxiliares();
+                let antes = (a.tabela.clone(), a.auxiliares.clone());
                 tabela_ui(ui, &mut a.tabela, &a.id);
-                if a.tabela != antes && a.origem != Origem::Manual {
+                for (i, (titulo, _)) in a.ferramenta.auxiliares().iter().enumerate() {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(*titulo).strong());
+                    if let Some(dica) = dica_da_auxiliar(a.ferramenta, i) {
+                        ui.label(RichText::new(dica).small().weak());
+                    }
+                    tabela_ui(ui, &mut a.auxiliares[i], &format!("{}-aux{i}", a.id));
+                }
+                if (&a.tabela, &a.auxiliares) != (&antes.0, &antes.1) && a.origem != Origem::Manual
+                {
                     a.origem = Origem::Manual;
                     self.nota = "Dados editados à mão: a origem passou a Manual.".into();
                 }
@@ -1187,10 +1202,17 @@ impl TelaFerramentas {
         egui::CollapsingHeader::new("Importar e exportar dados")
             .id_salt(("csv", a.id.clone()))
             .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.csv)
-                        .hint_text("caminho do arquivo .csv ou .xlsx")
-                        .desired_width(f32::INFINITY),
+                let largura = (ui.available_width() - 110.0).max(160.0);
+                utsim_ui_tema::arquivos::campo(
+                    ui,
+                    &mut self.csv,
+                    utsim_ui_tema::arquivos::Tipo::Abrir,
+                    "Importar dados",
+                    &[utsim_ui_tema::arquivos::Filtro {
+                        nome: "Planilha (.csv, .xlsx)",
+                        extensoes: &["csv", "xlsx"],
+                    }],
+                    largura,
                 );
                 let caminho = self.csv.trim().to_string();
                 let xlsx = caminho.to_lowercase().ends_with(".xlsx");
@@ -1429,6 +1451,37 @@ fn selo(ui: &mut egui::Ui, texto: &str, cor: Color32) {
 // ---- editores ------------------------------------------------------------------
 
 /// Os papéis das colunas lidas, na ordem de `parametros.colunas`.
+/// Como preencher a tabela principal das ferramentas que não se explicam pelas colunas.
+fn dica_da_tabela(f: Ferramenta) -> Option<&'static str> {
+    match f {
+        Ferramenta::Qfd => Some(
+            "Uma linha por necessidade do cliente, importância de 1 a 5. Cada coluna depois de \"Ponto de venda\" é um requisito técnico (+ coluna), com a relação 0, 1, 3 ou 9. Atual, concorrente e meta vão de 1 a 5, o ponto de venda é 1, 1,2 ou 1,5.",
+        ),
+        Ferramenta::Tolerancias => Some(
+            "Uma linha por cota. O coeficiente é 1 para a cota que soma e -1 para a que subtrai. Sem a tolerância superior, a cota é simétrica. Distribuição: normal (±3σ), normal 4 (±4σ), uniforme ou triangular. São 100 mil montagens simuladas, com a mesma semente.",
+        ),
+        Ferramenta::PokaYoke => Some(
+            "Uma linha por dispositivo. Tipo: contato, valor fixo ou sequência. Função: controle (baixa a ocorrência) ou alerta (baixa a detecção). Etapa e modo de falha como estão no FMEA, notas O e D de 1 a 10 antes e depois.",
+        ),
+        _ => None,
+    }
+}
+
+fn dica_da_auxiliar(f: Ferramenta, i: usize) -> Option<&'static str> {
+    match (f, i) {
+        (Ferramenta::Qfd, 0) => {
+            Some("Pelo nome da coluna: unidade, sentido (maior, menor ou alvo) e valor-alvo.")
+        }
+        (Ferramenta::Qfd, 1) => Some(
+            "Dois requisitos e a correlação: ++ e + quando um ajuda o outro, - e -- quando um atrapalha o outro.",
+        ),
+        (Ferramenta::PokaYoke, 0) => Some(
+            "Cada teste do dispositivo: data (DD/MM/AAAA), se funcionou (sim ou não), quem testou e uma nota.",
+        ),
+        _ => None,
+    }
+}
+
 fn papeis(a: &Aplicacao) -> &'static [&'static str] {
     match a.ferramenta {
         Ferramenta::FolhaVerificacao => &["Categoria"],
@@ -1523,6 +1576,14 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                     opcional(ui, "LIE", &mut p.lie);
                     opcional(ui, "LSE", &mut p.lse);
                     opcional(ui, "Alvo", &mut p.alvo);
+                });
+                ui.end_row();
+            }
+            if f == Ferramenta::Tolerancias {
+                ui.label("Limites do resultado");
+                ui.horizontal(|ui| {
+                    opcional(ui, "LIE", &mut p.lie);
+                    opcional(ui, "LSE", &mut p.lse);
                 });
                 ui.end_row();
             }

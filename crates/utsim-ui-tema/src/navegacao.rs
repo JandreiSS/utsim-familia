@@ -82,7 +82,7 @@ impl<T: Copy + PartialEq> Barra<'_, T> {
                     );
                 }
             }
-            ui.add(egui::Label::new(RichText::new(self.nome).strong().size(15.0)).truncate());
+            ui.add(egui::Label::new(RichText::new(self.nome).strong().size(15.0)).wrap());
         });
         if !self.linhas.is_empty() {
             ui.add_space(6.0);

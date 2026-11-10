@@ -272,3 +272,18 @@ impl Sessao {
         });
     }
 }
+
+/// As linhas curtas da barra lateral dos apps: a unidade aberta e o autor, ou o modelo
+/// aberto sem unidade (o pedido do 3D).
+pub fn linhas_da_barra(s: &Sessao, modelo: &crate::TelaModelo) -> Vec<String> {
+    if let Some(u) = &s.unidade {
+        return vec![u.manifesto.nome.clone(), format!("autor: {}", u.autor())];
+    }
+    match modelo.arquivo().and_then(|a| a.file_name()) {
+        Some(n) => vec![
+            "Sem unidade".to_string(),
+            format!("modelo: {}", n.to_string_lossy()),
+        ],
+        None => vec!["Nenhuma unidade aberta".to_string()],
+    }
+}

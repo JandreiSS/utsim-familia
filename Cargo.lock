@@ -7905,6 +7905,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-doe"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-stats",
+]
+
+[[package]]
 name = "utsim-edit"
 version = "0.1.0"
 dependencies = [
@@ -8012,7 +8020,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8023,6 +8031,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "utsim-core",
+ "utsim-doe",
  "utsim-edit",
  "utsim-ferramentas",
  "utsim-fit",
@@ -8035,9 +8044,9 @@ dependencies = [
  "utsim-qualidade-core",
  "utsim-quality",
  "utsim-stats",
+ "utsim-troca",
  "utsim-ui-tema",
  "winresource",
- "zip 2.6.1",
 ]
 
 [[package]]
@@ -8140,7 +8149,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-launcher"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "tempfile",
@@ -8350,11 +8359,14 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-edit",
+ "utsim-ensino-core",
+ "utsim-ensino-store",
  "utsim-estudo",
  "utsim-ferramentas",
  "utsim-model",
  "utsim-pasta",
  "utsim-posto",
+ "utsim-troca",
  "utsim-ui-tema",
 ]
 
@@ -8488,6 +8500,19 @@ dependencies = [
  "rand_pcg",
  "serde",
  "utsim-core",
+]
+
+[[package]]
+name = "utsim-troca"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "utsim-estudo",
+ "utsim-pasta",
 ]
 
 [[package]]

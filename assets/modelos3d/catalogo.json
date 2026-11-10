@@ -13,6 +13,26 @@
    "mesa": 0.35,
    "mesa_curso": 0.06
   },
+  "estados": {
+   "loading": {
+    "ate": 1.0,
+    "clipe": "mesa_subir",
+    "de": 0.0,
+    "laco": false
+   },
+   "travel_loaded": {
+    "ate": 1.0,
+    "clipe": "mesa_subir",
+    "de": 1.0,
+    "laco": false
+   },
+   "unloading": {
+    "ate": 0.0,
+    "clipe": "mesa_subir",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.57,
    -0.4,
@@ -26,6 +46,29 @@
    "roda_d",
    "roda_e"
   ],
+  "peca": {
+   "loading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "travel_loaded": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "unloading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_carga": {
     "giro": 0,
@@ -58,6 +101,26 @@
    "mesa": 0.35,
    "mesa_curso": 0.06
   },
+  "estados": {
+   "loading": {
+    "ate": 1.0,
+    "clipe": "mesa_subir",
+    "de": 0.0,
+    "laco": false
+   },
+   "travel_loaded": {
+    "ate": 1.0,
+    "clipe": "mesa_subir",
+    "de": 1.0,
+    "laco": false
+   },
+   "unloading": {
+    "ate": 0.0,
+    "clipe": "mesa_subir",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.57,
    -0.4,
@@ -71,6 +134,29 @@
    "roda_d",
    "roda_e"
   ],
+  "peca": {
+   "loading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "travel_loaded": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "unloading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_carga": {
     "giro": 0,
@@ -93,6 +179,7 @@
   "arquivo": "caixa.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.203,
    -0.15,
@@ -102,6 +189,7 @@
    "caixa",
    "corpo"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.406,
@@ -114,6 +202,7 @@
   "arquivo": "caixa_medio.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.203,
    -0.15,
@@ -123,6 +212,7 @@
    "caixa",
    "corpo"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.406,
@@ -142,6 +232,28 @@
    }
   },
   "dados": {},
+  "estados": {
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   }
+  },
   "minimo": [
    -1.53,
    -1.6,
@@ -153,6 +265,7 @@
    "luz",
    "portao"
   ],
+  "peca": {},
   "pontos": {
    "ponto_operador": {
     "giro": 90,
@@ -191,6 +304,28 @@
    }
   },
   "dados": {},
+  "estados": {
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   }
+  },
   "minimo": [
    -1.53,
    -1.6,
@@ -202,6 +337,7 @@
    "luz",
    "portao"
   ],
+  "peca": {},
   "pontos": {
    "ponto_operador": {
     "giro": 90,
@@ -239,6 +375,14 @@
      "torre"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "fuso",
+     "porta",
+     "torre"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -259,6 +403,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -1.0,
    -0.84,
@@ -273,6 +475,81 @@
    "tampa",
    "torre"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -306,7 +583,7 @@
     "pai": "cnc",
     "pos": [
      -0.15,
-     -0.85,
+     -1.8,
      0.0
     ]
    },
@@ -337,6 +614,14 @@
      "torre"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "fuso",
+     "porta",
+     "torre"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -357,6 +642,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -1.0,
    -0.84,
@@ -371,6 +714,81 @@
    "tampa",
    "torre"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -404,7 +822,7 @@
     "pai": "cnc",
     "pos": [
      -0.15,
-     -0.85,
+     -1.8,
      0.0
     ]
    },
@@ -438,7 +856,28 @@
   "dados": {
    "garfo_centro": 1.555,
    "garfo_curso": 2.0,
-   "garfo_repouso": 0.1
+   "garfo_repouso": 0.1,
+   "levante": 0.05
+  },
+  "estados": {
+   "loading": {
+    "ate": 0.05,
+    "clipe": "garfo_subir",
+    "de": 0.0,
+    "laco": false
+   },
+   "travel_loaded": {
+    "ate": 0.05,
+    "clipe": "garfo_subir",
+    "de": 0.05,
+    "laco": false
+   },
+   "unloading": {
+    "ate": 0.0,
+    "clipe": "garfo_subir",
+    "de": 0.05,
+    "laco": false
+   }
   },
   "minimo": [
    -1.3,
@@ -458,6 +897,29 @@
    "roda_te",
    "torre"
   ],
+  "peca": {
+   "loading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "travel_loaded": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "unloading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_carga": {
     "giro": 0,
@@ -498,7 +960,28 @@
   "dados": {
    "garfo_centro": 1.555,
    "garfo_curso": 2.0,
-   "garfo_repouso": 0.1
+   "garfo_repouso": 0.1,
+   "levante": 0.05
+  },
+  "estados": {
+   "loading": {
+    "ate": 0.05,
+    "clipe": "garfo_subir",
+    "de": 0.0,
+    "laco": false
+   },
+   "travel_loaded": {
+    "ate": 0.05,
+    "clipe": "garfo_subir",
+    "de": 0.05,
+    "laco": false
+   },
+   "unloading": {
+    "ate": 0.0,
+    "clipe": "garfo_subir",
+    "de": 0.05,
+    "laco": false
+   }
   },
   "minimo": [
    -1.3,
@@ -518,6 +1001,29 @@
    "roda_te",
    "torre"
   ],
+  "peca": {
+   "loading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "travel_loaded": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ],
+   "unloading": [
+    [
+     0.0,
+     1.0,
+     "ponto_carga"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_carga": {
     "giro": 0,
@@ -549,6 +1055,7 @@
   "arquivo": "estante.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.5,
    -0.25,
@@ -558,6 +1065,7 @@
    "estante",
    "estrutura"
   ],
+  "peca": {},
   "pontos": {
    "ponto_vao_0_0": {
     "giro": -90,
@@ -607,6 +1115,7 @@
   "arquivo": "estante_medio.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.5,
    -0.25,
@@ -616,6 +1125,7 @@
    "estante",
    "estrutura"
   ],
+  "peca": {},
   "pontos": {
    "ponto_vao_0_0": {
     "giro": -90,
@@ -694,6 +1204,7 @@
    "passo_rolo": 0.15,
    "raio_rolo": 0.03
   },
+  "estados": {},
   "minimo": [
    -1.5,
    -0.4,
@@ -723,6 +1234,7 @@
    "rolo_18",
    "rolo_19"
   ],
+  "peca": {},
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -783,6 +1295,7 @@
    "passo_rolo": 0.15,
    "raio_rolo": 0.03
   },
+  "estados": {},
   "minimo": [
    -1.5,
    -0.4,
@@ -812,6 +1325,7 @@
    "rolo_18",
    "rolo_19"
   ],
+  "peca": {},
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -848,6 +1362,13 @@
      "molde"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "molde",
+     "porta"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -868,6 +1389,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -2.0,
    -0.64,
@@ -882,6 +1461,81 @@
    "tampa",
    "unidade"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 180,
@@ -915,7 +1569,7 @@
     "pai": "injetora",
     "pos": [
      -0.8,
-     -0.75,
+     -1.65,
      0.0
     ]
    },
@@ -945,6 +1599,13 @@
      "molde"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "molde",
+     "porta"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -965,6 +1626,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -2.0,
    -0.64,
@@ -979,6 +1698,81 @@
    "tampa",
    "unidade"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 180,
@@ -1012,7 +1806,7 @@
     "pai": "injetora",
     "pos": [
      -0.8,
-     -0.75,
+     -1.65,
      0.0
     ]
    },
@@ -1037,6 +1831,7 @@
   "arquivo": "palete.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.6,
    -0.5,
@@ -1046,6 +1841,7 @@
    "corpo",
    "palete"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    1.2,
@@ -1058,6 +1854,7 @@
   "arquivo": "palete_medio.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.6,
    -0.5,
@@ -1067,6 +1864,7 @@
    "corpo",
    "palete"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    1.2,
@@ -1079,6 +1877,7 @@
   "arquivo": "peca.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.06,
    -0.06,
@@ -1088,6 +1887,7 @@
    "corpo",
    "peca"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.13,
@@ -1100,6 +1900,7 @@
   "arquivo": "peca_medio.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -0.06,
    -0.06,
@@ -1109,6 +1910,7 @@
    "corpo",
    "peca"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.13,
@@ -1160,6 +1962,7 @@
     "pele"
    ]
   },
+  "estados": {},
   "minimo": [
    -0.126,
    -0.897,
@@ -1176,6 +1979,7 @@
    "epi_oculos",
    "epi_protetor_auricular"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.33,
@@ -1227,6 +2031,7 @@
     "pele"
    ]
   },
+  "estados": {},
   "minimo": [
    -0.17,
    -0.881,
@@ -1243,6 +2048,7 @@
    "epi_oculos",
    "epi_protetor_auricular"
   ],
+  "peca": {},
   "pontos": {},
   "tamanho": [
    0.374,
@@ -1255,6 +2061,7 @@
   "arquivo": "porta_paletes.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -2.17,
    -0.57,
@@ -1264,6 +2071,7 @@
    "estrutura",
    "porta_paletes"
   ],
+  "peca": {},
   "pontos": {
    "ponto_vao_0_0": {
     "giro": -90,
@@ -1412,6 +2220,7 @@
   "arquivo": "porta_paletes_medio.glb",
   "clipes": {},
   "dados": {},
+  "estados": {},
   "minimo": [
    -2.17,
    -0.57,
@@ -1421,6 +2230,7 @@
    "estrutura",
    "porta_paletes"
   ],
+  "peca": {},
   "pontos": {
    "ponto_vao_0_0": {
     "giro": -90,
@@ -1573,9 +2383,29 @@
     "nos": [
      "grampo"
     ]
+   },
+   "setup": {
+    "laco": true,
+    "nos": [
+     "grampo"
+    ]
    }
   },
   "dados": {},
+  "estados": {
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   }
+  },
   "minimo": [
    -0.75,
    -0.375,
@@ -1587,6 +2417,64 @@
    "luz",
    "posto"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -1649,9 +2537,29 @@
     "nos": [
      "grampo"
     ]
+   },
+   "setup": {
+    "laco": true,
+    "nos": [
+     "grampo"
+    ]
    }
   },
   "dados": {},
+  "estados": {
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   }
+  },
   "minimo": [
    -0.75,
    -0.375,
@@ -1663,6 +2571,64 @@
    "luz",
    "posto"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -1727,6 +2693,14 @@
      "volante"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "martelo",
+     "porta",
+     "volante"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -1747,6 +2721,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.7,
    -0.6,
@@ -1762,6 +2794,81 @@
    "tampa",
    "volante"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -1795,7 +2902,7 @@
     "pai": "prensa",
     "pos": [
      0.0,
-     -0.75,
+     -1.6,
      0.0
     ]
    },
@@ -1826,6 +2933,14 @@
      "volante"
     ]
    },
+   "ciclo_auto": {
+    "laco": false,
+    "nos": [
+     "martelo",
+     "porta",
+     "volante"
+    ]
+   },
    "porta_abrir": {
     "laco": false,
     "nos": [
@@ -1846,6 +2961,64 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "entering": {
+    "ate": 1.0,
+    "clipe": "porta_abrir",
+    "de": 0.0,
+    "laco": false,
+    "operador": [
+     "ponto_porta",
+     "ponto_operador"
+    ]
+   },
+   "leaving": {
+    "ate": 0.0,
+    "clipe": "porta_abrir",
+    "de": 1.0,
+    "laco": false,
+    "operador": [
+     "ponto_operador",
+     "ponto_porta"
+    ]
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "processing_auto": {
+    "ate": 1.0,
+    "clipe": "ciclo_auto",
+    "de": 0.0,
+    "laco": false
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.7,
    -0.6,
@@ -1861,6 +3034,81 @@
    "tampa",
    "volante"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "down": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "entering": [
+    [
+     0.0,
+     1.0,
+     "ponto_entrada"
+    ]
+   ],
+   "leaving": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "maintenance": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "processing_auto": [
+    [
+     0.0,
+     0.083333,
+     "ponto_entrada"
+    ],
+    [
+     0.083333,
+     0.916667,
+     "ponto_peca"
+    ],
+    [
+     0.916667,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "setup": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ],
+   "waiting_repair": [
+    [
+     0.0,
+     1.0,
+     "ponto_peca"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 0,
@@ -1894,7 +3142,7 @@
     "pai": "prensa",
     "pos": [
      0.0,
-     -0.75,
+     -1.6,
      0.0
     ]
    },
@@ -1951,6 +3199,22 @@
      "garra"
     ]
    },
+   "quebra": {
+    "laco": false,
+    "nos": [
+     "antebraco",
+     "braco",
+     "garra"
+    ]
+   },
+   "setup": {
+    "laco": true,
+    "nos": [
+     "base",
+     "dedo_d",
+     "dedo_e"
+    ]
+   },
    "soltar": {
     "laco": false,
     "nos": [
@@ -1964,6 +3228,38 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.35,
    -0.35,
@@ -1979,6 +3275,32 @@
    "pedestal",
    "robo"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     0.333333,
+     "ponto_entrada"
+    ],
+    [
+     0.333333,
+     0.75,
+     "ponto_garra"
+    ],
+    [
+     0.75,
+     1.0,
+     "ponto_saida"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 90,
@@ -2069,6 +3391,22 @@
      "garra"
     ]
    },
+   "quebra": {
+    "laco": false,
+    "nos": [
+     "antebraco",
+     "braco",
+     "garra"
+    ]
+   },
+   "setup": {
+    "laco": true,
+    "nos": [
+     "base",
+     "dedo_d",
+     "dedo_e"
+    ]
+   },
    "soltar": {
     "laco": false,
     "nos": [
@@ -2082,6 +3420,38 @@
    }
   },
   "dados": {},
+  "estados": {
+   "down": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 0.0,
+    "laco": false
+   },
+   "maintenance": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   },
+   "processing": {
+    "ate": 1.0,
+    "clipe": "ciclo",
+    "de": 0.0,
+    "laco": true
+   },
+   "setup": {
+    "ate": 1.0,
+    "clipe": "setup",
+    "de": 0.0,
+    "laco": true
+   },
+   "waiting_repair": {
+    "ate": 1.0,
+    "clipe": "quebra",
+    "de": 1.0,
+    "laco": false
+   }
+  },
   "minimo": [
    -0.35,
    -0.35,
@@ -2097,6 +3467,32 @@
    "pedestal",
    "robo"
   ],
+  "peca": {
+   "blocked": [
+    [
+     0.0,
+     1.0,
+     "ponto_saida"
+    ]
+   ],
+   "processing": [
+    [
+     0.0,
+     0.333333,
+     "ponto_entrada"
+    ],
+    [
+     0.333333,
+     0.75,
+     "ponto_garra"
+    ],
+    [
+     0.75,
+     1.0,
+     "ponto_saida"
+    ]
+   ]
+  },
   "pontos": {
    "ponto_entrada": {
     "giro": 90,

@@ -5,8 +5,9 @@
 //! `utsim-ensino-ui`.
 //!
 //! A mission keeps every field it had when opened again: the editor changes the title,
-//! the levers, the measures, the goals, the statement, the questions, the hints and the
-//! concepts, and the rest of the [`Missao`] (rounds, data, pieces) goes back as it was.
+//! the levers, the measures, the goals, the statement, the questions, the hints, the
+//! concepts and the data sets ([`crate::editor_dados`]), and the rest of the [`Missao`]
+//! (rounds, pieces) goes back as it was.
 
 use std::collections::BTreeSet;
 
@@ -290,6 +291,7 @@ impl Edicao {
             ));
         }
         e.extend(self.erros_das_perguntas());
+        e.extend(self.erros_dos_dados());
         e
     }
 
@@ -713,10 +715,8 @@ impl PacoteProfessor {
         let missao = Missao::parse(&self.texto(caminho)?)?;
         let dir = pasta(caminho);
         let junta = |p: &str| junta(dir, p);
-        if missao.modelagem.is_some() || missao.tem_pecas() || !missao.dados.is_empty() {
-            return Err(
-                "o editor ainda não abre missões de modelagem, de peças ou de dados".into(),
-            );
+        if missao.modelagem.is_some() || missao.tem_pecas() {
+            return Err("o editor ainda não abre missões de modelagem ou de peças".into());
         }
         let modelo = self.texto(&junta(&missao.modelo))?;
         let texto = self.texto(&junta(&missao.texto))?;
