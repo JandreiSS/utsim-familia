@@ -20,7 +20,7 @@ fn serie(n: usize, m: f64, a: f64, fase: f64) -> Vec<f64> {
         .collect()
 }
 
-/// O estudo do furo fora de posição no torno, com as doze ferramentas.
+/// O estudo do furo fora de posição no torno, com todas as ferramentas.
 pub fn estudo_demonstracao() -> Estudo {
     let mut e = Estudo {
         id: "demo".into(),
@@ -258,6 +258,92 @@ pub fn estudo_demonstracao() -> Estudo {
         for (s, t) in a.secoes.iter_mut().zip(textos) {
             s.texto = t.into();
         }
+    });
+    add(Ferramenta::Qfd, &|a| {
+        a.titulo = "Casa da qualidade da tampa".into();
+        for r in ["Posição do furo", "Altura da rebarba", "Rugosidade"] {
+            a.tabela.adicionar_coluna(r);
+        }
+        linhas(
+            &mut a.tabela,
+            &[
+                &["Monta sem forçar", "5", "3", "4", "5", "1,5", "9", "3", "0"],
+                &["Não corta a mão", "4", "2", "4", "4", "1,2", "0", "9", "1"],
+                &["Bom acabamento", "2", "3", "3", "3", "", "0", "3", "9"],
+            ],
+        );
+        linhas(
+            &mut a.auxiliares[0],
+            &[
+                &["Posição do furo", "mm", "alvo", "0"],
+                &["Altura da rebarba", "mm", "menor", "0,05"],
+                &["Rugosidade", "µm Ra", "menor", "1,6"],
+            ],
+        );
+        linhas(
+            &mut a.auxiliares[1],
+            &[&["Altura da rebarba", "Rugosidade", "+"]],
+        );
+    });
+    add(Ferramenta::Tolerancias, &|a| {
+        a.titulo = "Folga entre a tampa e o corpo".into();
+        a.parametros.lie = Some(0.1);
+        a.parametros.lse = Some(0.5);
+        linhas(
+            &mut a.tabela,
+            &[
+                &["Corpo", "40", "0,05", "0,05", "1", "normal"],
+                &["Tampa", "38", "0,08", "0,08", "-1", "normal"],
+                &["Junta", "1,7", "0,03", "0,03", "-1", "uniforme"],
+            ],
+        );
+    });
+    add(Ferramenta::PokaYoke, &|a| {
+        a.titulo = "Dispositivos à prova de erro da furação".into();
+        linhas(
+            &mut a.tabela,
+            &[
+                &[
+                    "Gabarito com pino",
+                    "contato",
+                    "controle",
+                    "Furação",
+                    "Furo deslocado",
+                    "6",
+                    "6",
+                    "2",
+                    "6",
+                    "30",
+                    "Bruno",
+                ],
+                &[
+                    "Sensor de carga",
+                    "valor fixo",
+                    "alerta",
+                    "Furação",
+                    "Broca quebrada",
+                    "4",
+                    "6",
+                    "4",
+                    "3",
+                    "7",
+                    "Ana",
+                ],
+            ],
+        );
+        linhas(
+            &mut a.auxiliares[0],
+            &[
+                &["Gabarito com pino", "15/10/2026", "sim", "Bruno", ""],
+                &[
+                    "Sensor de carga",
+                    "03/11/2026",
+                    "sim",
+                    "Ana",
+                    "parou a máquina",
+                ],
+            ],
+        );
     });
     e
 }
