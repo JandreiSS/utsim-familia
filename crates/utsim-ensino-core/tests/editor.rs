@@ -325,3 +325,188 @@ fn metas_sugeridas_a_referencia_sempre_bate() {
         }
     }
 }
+
+/// Stage B: a prediction of each kind, a justification, hints and concepts, checked in the
+/// editor, written to the package with the glossary and opened again as they were.
+#[test]
+fn perguntas_dicas_e_conceitos_vao_e_voltam() {
+    use utsim_ensino_core::editor::chaves_do_modelo;
+    use utsim_ensino_core::missao::{
+        Calculo, Medicao, OpcaoPrevisao, Pergunta, Previsao, Resposta, Termo,
+    };
+    let mut ed = edicao();
+    let chaves = chaves_do_modelo(&ed.modelo).unwrap();
+    let lead = "saida.time_in_system.mean".to_string();
+    assert!(chaves.contains(&lead), "{chaves:?}");
+    assert!(ed.chaves_de_decisao().contains(&"custo".to_string()));
+    assert!(
+        ed.chaves_de_decisao()
+            .iter()
+            .all(|k| k != "decisao.corte_capacidade")
+    );
+
+    // Wrong fields are caught before writing.
+    ed.base.previsao.push(Previsao::Escolha {
+        id: "P 1".into(),
+        pergunta: " ".into(),
+        opcoes: vec![OpcaoPrevisao {
+            rotulo: "a".into(),
+            valor: vec![],
+        }],
+        resposta: Resposta::Maior,
+    });
+    ed.base.justificativa.push(Pergunta {
+        pergunta: "Por quê?".into(),
+        opcoes: vec!["só uma".into()],
+        certa: 3,
+    });
+    ed.base.dicas = vec!["".into(), "b".into(), "c".into(), "d".into()];
+    ed.base.conceitos = vec!["gargalo".into(), "gargalo".into()];
+    let e = ed.erros().join("\n");
+    for parte in [
+        "previsão 1: id 'P 1'",
+        "escreva a pergunta",
+        "duas opções",
+        "métrica que decide",
+        "justificativa 1: marque",
+        "três dicas",
+        "dica vazia",
+        "'gargalo' repetido",
+    ] {
+        assert!(e.contains(parte), "falta '{parte}' em:\n{e}");
+    }
+
+    // The right ones go to the package.
+    ed.base.medicoes = vec![Medicao {
+        rotulo: "Lead time hoje".into(),
+        valor: vec![Termo {
+            chave: lead.clone(),
+            fator: 1.0,
+        }],
+        unidade: "min".into(),
+        casas: 1,
+    }];
+    let p1 = ed.id_previsao_livre();
+    assert_eq!(p1, "p1");
+    ed.base.previsao = vec![Previsao::Escolha {
+        id: p1,
+        pergunta: "O que limita a linha?".into(),
+        opcoes: vec![
+            OpcaoPrevisao {
+                rotulo: "A furação".into(),
+                valor: vec![],
+            },
+            OpcaoPrevisao {
+                rotulo: "A chegada".into(),
+                valor: vec![],
+            },
+        ],
+        resposta: Resposta::Fixa(0),
+    }];
+    let p2 = ed.id_previsao_livre();
+    assert_eq!(p2, "p2");
+    ed.base.previsao.push(Previsao::Valor {
+        id: p2,
+        pergunta: "Qual o lead time de hoje?".into(),
+        valor: vec![Termo {
+            chave: lead,
+            fator: 1.0,
+        }],
+        unidade: "min".into(),
+        tolerancia: Tolerancia::Relativa(0.1),
+    });
+    ed.base.previsao.push(Previsao::Calculo {
+        id: "p3".into(),
+        pergunta: "Qual o tempo normal?".into(),
+        calculo: Calculo::TempoNormal {
+            tempos: vec![1.0, 1.2, 0.8],
+            ritmo: 1.1,
+        },
+        unidade: "min".into(),
+        tolerancia: Tolerancia::Absoluta(0.05),
+    });
+    ed.base.justificativa = vec![Pergunta {
+        pergunta: "Por que a vazão quase não mudou?".into(),
+        opcoes: vec!["O gargalo é outro".into(), "Faltou orçamento".into()],
+        certa: 0,
+    }];
+    ed.base.dicas = vec!["Onde a fila cresce?".into(), "Veja a utilização".into()];
+    ed.base.conceitos = vec!["gargalo".into(), "utilizacao".into()];
+    assert!(ed.erros().is_empty(), "{:?}", ed.erros());
+
+    let mut p = PacoteProfessor::novo("meu", "Meu pacote", "Prof");
+    assert!(p.glossario().termos.iter().any(|t| t.id == "gargalo"));
+    let caminho = p.gravar(&mut ed, 0).unwrap();
+    let carregado = p.conferir().unwrap_or_else(|e| panic!("{e:?}"));
+    let ids: Vec<&str> = carregado
+        .glossario
+        .termos
+        .iter()
+        .map(|t| t.id.as_str())
+        .collect();
+    assert_eq!(ids, ["gargalo", "utilizacao"]);
+    assert_eq!(p.pacote.glossario.as_deref(), Some("glossario.ron"));
+
+    let de_volta = p.abrir(&caminho).unwrap();
+    assert_eq!(de_volta.base.previsao, ed.base.previsao);
+    assert_eq!(de_volta.base.justificativa, ed.base.justificativa);
+    assert_eq!(de_volta.base.dicas, ed.base.dicas);
+    assert_eq!(de_volta.base.conceitos, ed.base.conceitos);
+    assert_eq!(de_volta.base.medicoes, ed.base.medicoes);
+
+    // A concept out of every glossary is refused when writing.
+    let mut ed2 = de_volta;
+    ed2.base.conceitos.push("nao_existe".into());
+    let e = p.gravar(&mut ed2, 0).unwrap_err().join("\n");
+    assert!(e.contains("conceito 'nao_existe'"), "{e}");
+}
+
+/// The teacher's own glossary: its terms can be named (the calibration does not refuse
+/// them), they survive a new campaign term, and a glossary that does not parse is never
+/// rewritten. A package without a glossary whose missions name unknown concepts is left
+/// without one, so it loads as before.
+#[test]
+fn glossario_proprio_do_professor() {
+    let mut p = PacoteProfessor::novo("meu", "Meu pacote", "Prof");
+    let mut ed = edicao();
+    p.gravar(&mut ed, 0).unwrap();
+    let proprio = r#"Glossario(termos: [(id: "meu_termo", nome: "Meu termo", texto: "Um termo do professor.")])"#;
+    p.arquivos
+        .insert("glossario.ron".into(), proprio.as_bytes().to_vec());
+    p.pacote.glossario = Some("glossario.ron".into());
+    assert!(p.glossario().termos.iter().any(|t| t.id == "meu_termo"));
+
+    ed.base.conceitos = vec!["meu_termo".into(), "gargalo".into()];
+    assert!(calibrar(&ed).is_ok());
+    p.gravar(&mut ed, 0).unwrap();
+    let c = p.conferir().unwrap_or_else(|e| panic!("{e:?}"));
+    let ids: Vec<&str> = c.glossario.termos.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["meu_termo", "gargalo"]);
+
+    // A broken glossary stays as it is and the check reports it.
+    p.arquivos
+        .insert("glossario.ron".into(), b"Glossario(termos: [".to_vec());
+    ed.base.conceitos = vec!["gargalo".into(), "utilizacao".into()];
+    p.gravar(&mut ed, 0).unwrap();
+    assert_eq!(p.arquivos["glossario.ron"], b"Glossario(termos: [".to_vec());
+    assert!(p.conferir().is_err());
+
+    // Without a glossary, a hand-written unknown concept keeps the package as it was.
+    let mut q = PacoteProfessor::novo("outro", "Outro", "");
+    let mut ed = edicao();
+    q.gravar(&mut ed, 0).unwrap();
+    let caminho = q.missoes()[0].caminho.clone();
+    let mut m = utsim_ensino_core::missao::Missao::parse(
+        std::str::from_utf8(&q.arquivos[&caminho]).unwrap(),
+    )
+    .unwrap();
+    m.conceitos = vec!["a_mao".into()];
+    let cfg = ron::ser::PrettyConfig::new().struct_names(true);
+    q.arquivos.insert(
+        caminho.clone(),
+        ron::ser::to_string_pretty(&m, cfg).unwrap().into_bytes(),
+    );
+    q.mover(&caminho, 1);
+    assert!(q.pacote.glossario.is_none());
+    q.conferir().unwrap_or_else(|e| panic!("{e:?}"));
+}

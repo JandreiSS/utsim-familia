@@ -156,7 +156,7 @@ fn texto(arquivos: &Arquivos, path: &str) -> Result<String, String> {
     String::from_utf8(bytes.clone()).map_err(|_| format!("'{path}' não é texto UTF-8"))
 }
 
-fn ron_options() -> ron::Options {
+pub(crate) fn ron_options() -> ron::Options {
     ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
 }
 

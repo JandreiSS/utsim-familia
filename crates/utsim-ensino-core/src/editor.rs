@@ -4,9 +4,9 @@
 //! again, moved and removed. Everything here is data and rules; the screen is in
 //! `utsim-ensino-ui`.
 //!
-//! A mission keeps every field it had when opened again: the editor changes only the
-//! title, the levers, the measures, the goals and the statement, and the rest of the
-//! [`Missao`] (questions, hints, rounds, data) goes back as it was.
+//! A mission keeps every field it had when opened again: the editor changes the title,
+//! the levers, the measures, the goals, the statement, the questions, the hints and the
+//! concepts, and the rest of the [`Missao`] (rounds, data, pieces) goes back as it was.
 
 use std::collections::BTreeSet;
 
@@ -14,9 +14,11 @@ use utsim_model::Model;
 
 use crate::conferir::{Conferencia, conferir};
 use crate::construtor::{rascunho, sugerir_alavancas, sugerir_metricas, texto_inicial};
-use crate::missao::{Alavanca, Decisoes, Metrica, Missao, Objetivo, Tolerancia};
+use crate::missao::{
+    Alavanca, Decisoes, Metrica, Missao, Objetivo, Previsao, Resposta, Termo, Tolerancia,
+};
 use crate::nota::Intervalo;
-use crate::pacote::{Arquivos, Ato, Pacote, PacoteCarregado, carregar};
+use crate::pacote::{Arquivos, Ato, Glossario, Pacote, PacoteCarregado, carregar};
 
 /// A lever of the model, used in the mission or not.
 #[derive(Clone, Debug, PartialEq)]
@@ -287,7 +289,152 @@ impl Edicao {
                 self.combinacoes()
             ));
         }
+        e.extend(self.erros_das_perguntas());
         e
+    }
+
+    /// The problems of the questions, the measures shown before predicting, the hints and
+    /// the concepts (stage B of the editor).
+    pub fn erros_das_perguntas(&self) -> Vec<String> {
+        let mut e = Vec::new();
+        let b = &self.base;
+        let tolerancia_ruim = |t: &Tolerancia| {
+            let x = match t {
+                Tolerancia::Relativa(x) | Tolerancia::Absoluta(x) => *x,
+            };
+            x.is_nan() || x < 0.0
+        };
+        let termos_ruins = |v: &[Termo]| {
+            v.iter()
+                .any(|t| t.chave.trim().is_empty() || !t.fator.is_finite())
+        };
+        for (i, m) in b.medicoes.iter().enumerate() {
+            let nome = if m.rotulo.trim().is_empty() {
+                format!("medição {}", i + 1)
+            } else {
+                m.rotulo.clone()
+            };
+            if m.rotulo.trim().is_empty() {
+                e.push(format!("{nome}: sem rótulo"));
+            }
+            if m.valor.is_empty() || termos_ruins(&m.valor) {
+                e.push(format!("{nome}: escolha a métrica do modelo"));
+            }
+        }
+        let mut ids = BTreeSet::new();
+        for (i, p) in b.previsao.iter().enumerate() {
+            let n = i + 1;
+            if !id_valido(p.id()) || p.id().contains('/') {
+                e.push(format!(
+                    "previsão {n}: id '{}' com letras minúsculas, números, _ e -",
+                    p.id()
+                ));
+            } else if !ids.insert(p.id().to_string()) {
+                e.push(format!("previsão {n}: id '{}' repetido", p.id()));
+            }
+            if p.pergunta().trim().is_empty() {
+                e.push(format!("previsão {n}: escreva a pergunta"));
+            }
+            match p {
+                Previsao::Escolha {
+                    opcoes, resposta, ..
+                } => {
+                    if opcoes.len() < 2 {
+                        e.push(format!("previsão {n}: são precisas duas opções"));
+                    }
+                    if opcoes.iter().any(|o| o.rotulo.trim().is_empty()) {
+                        e.push(format!("previsão {n}: opção sem texto"));
+                    }
+                    match resposta {
+                        Resposta::Fixa(k) if *k >= opcoes.len() => {
+                            e.push(format!("previsão {n}: marque a opção certa"));
+                        }
+                        Resposta::Maior | Resposta::Menor
+                            if opcoes
+                                .iter()
+                                .any(|o| o.valor.is_empty() || termos_ruins(&o.valor)) =>
+                        {
+                            e.push(format!(
+                                "previsão {n}: cada opção precisa da métrica que decide a resposta"
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+                Previsao::Valor {
+                    valor, tolerancia, ..
+                } => {
+                    if valor.is_empty() || termos_ruins(valor) {
+                        e.push(format!("previsão {n}: escolha a métrica do modelo"));
+                    }
+                    if tolerancia_ruim(tolerancia) {
+                        e.push(format!("previsão {n}: tolerância negativa"));
+                    }
+                }
+                Previsao::Calculo {
+                    calculo,
+                    tolerancia,
+                    ..
+                } => {
+                    if !calculo.valor().is_finite() {
+                        e.push(format!("previsão {n}: o cálculo não dá um número"));
+                    }
+                    if tolerancia_ruim(tolerancia) {
+                        e.push(format!("previsão {n}: tolerância negativa"));
+                    }
+                }
+                Previsao::Dados { .. } => {}
+            }
+        }
+        for (i, q) in b.justificativa.iter().enumerate() {
+            let n = i + 1;
+            if q.pergunta.trim().is_empty() {
+                e.push(format!("justificativa {n}: escreva a pergunta"));
+            }
+            if q.opcoes.len() < 2 {
+                e.push(format!("justificativa {n}: são precisas duas opções"));
+            }
+            if q.opcoes.iter().any(|o| o.trim().is_empty()) {
+                e.push(format!("justificativa {n}: opção sem texto"));
+            }
+            if q.certa >= q.opcoes.len() {
+                e.push(format!("justificativa {n}: marque a opção certa"));
+            }
+        }
+        if b.dicas.len() > 3 {
+            e.push("no máximo três dicas".into());
+        }
+        if b.dicas.iter().any(|d| d.trim().is_empty()) {
+            e.push("dica vazia: escreva ou remova".into());
+        }
+        let mut cs = BTreeSet::new();
+        for c in &b.conceitos {
+            if !cs.insert(c) {
+                e.push(format!("conceito '{c}' repetido"));
+            }
+        }
+        e
+    }
+
+    /// A free id for a new prediction: `p1`, `p2`, ...
+    pub fn id_previsao_livre(&self) -> String {
+        (1..)
+            .map(|n| format!("p{n}"))
+            .find(|id| !self.base.previsao.iter().any(|p| p.id() == id))
+            .expect("some id is free")
+    }
+
+    /// The keys a term can name, besides the metrics of the model: the cost of the
+    /// decisions and the number of each lever in use.
+    pub fn chaves_de_decisao(&self) -> Vec<String> {
+        let mut v = vec!["custo".to_string()];
+        v.extend(
+            self.alavancas
+                .iter()
+                .filter(|a| a.usar)
+                .map(|a| format!("decisao.{}", a.alavanca.id())),
+        );
+        v
     }
 
     /// The number of combinations of the levers in use (what the calibration simulates).
@@ -310,6 +457,8 @@ impl Edicao {
         e.origem = None;
         e.base.modelo = "modelo.ron".into();
         e.base.texto = "texto.md".into();
+        // The concepts are checked against the teacher's package when writing, not here.
+        e.base.conceitos.clear();
         p.gravar(&mut e, 0)?;
         p.conferir()
     }
@@ -452,6 +601,29 @@ fn pasta(caminho: &str) -> &str {
     caminho.rsplit_once('/').map_or("", |(d, _)| d)
 }
 
+/// The metric keys the model produces, sorted (one replication is run): what a measure
+/// or a prediction can name, besides [`Edicao::chaves_de_decisao`].
+pub fn chaves_do_modelo(modelo: &Model) -> Result<Vec<String>, String> {
+    let mut m = modelo.clone();
+    m.run.replications = 1;
+    let reports = m
+        .run_replications()
+        .map_err(|e| format!("o modelo não roda: {e}"))?;
+    let v: BTreeSet<String> = reports
+        .iter()
+        .flat_map(|r| r.metrics().into_keys())
+        .collect();
+    Ok(v.into_iter().collect())
+}
+
+/// The glossary of the built-in campaign: the concepts any mission can name.
+pub fn glossario_da_campanha() -> Glossario {
+    crate::campanha::arquivo("glossario.ron")
+        .and_then(|b| std::str::from_utf8(b).ok())
+        .and_then(|t| crate::pacote::ron_options().from_str::<Glossario>(t).ok())
+        .unwrap_or_default()
+}
+
 /// A mission of the teacher's package, as listed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemPacote {
@@ -589,7 +761,15 @@ impl PacoteProfessor {
     /// last one). An id already used by another mission is refused. Checks the fields
     /// first; the whole package is checked by [`Self::conferir`]. Sets `ed.origem`.
     pub fn gravar(&mut self, ed: &mut Edicao, ato: usize) -> Result<String, Vec<String>> {
-        let erros = ed.erros();
+        let mut erros = ed.erros();
+        let g = self.glossario();
+        for c in &ed.base.conceitos {
+            if !g.termos.iter().any(|t| &t.id == c) {
+                erros.push(format!(
+                    "conceito '{c}' não está no glossário do pacote nem no da campanha"
+                ));
+            }
+        }
         if !erros.is_empty() {
             return Err(erros);
         }
@@ -700,9 +880,92 @@ impl PacoteProfessor {
         for (i, a) in self.pacote.atos.iter_mut().enumerate() {
             a.numero = i as u32 + 1;
         }
+        self.sincronizar_glossario();
         let cfg = ron::ser::PrettyConfig::new().struct_names(true);
         let txt = ron::ser::to_string_pretty(&self.pacote, cfg).expect("package serializes");
         self.arquivos.insert("pacote.ron".into(), txt.into_bytes());
+    }
+
+    /// The glossary the package carries (empty when it has none). An error when the file
+    /// is missing or does not parse: then it is never rewritten.
+    fn glossario_proprio(&self) -> Result<Glossario, String> {
+        match &self.pacote.glossario {
+            None => Ok(Glossario::default()),
+            Some(g) => self.texto(g).and_then(|t| {
+                crate::pacote::ron_options()
+                    .from_str::<Glossario>(&t)
+                    .map_err(|e| format!("{g}: erro de sintaxe: {e}"))
+            }),
+        }
+    }
+
+    /// The concepts a mission of this package can name: the terms of its own glossary,
+    /// then those of the campaign it does not have.
+    pub fn glossario(&self) -> Glossario {
+        let mut g = self.glossario_proprio().unwrap_or_default();
+        for t in glossario_da_campanha().termos {
+            if !g.termos.iter().any(|x| x.id == t.id) {
+                g.termos.push(t);
+            }
+        }
+        g
+    }
+
+    /// Writes the glossary of the package when a mission names concepts: its own terms,
+    /// plus the terms of the campaign that the missions name and it does not have. A
+    /// glossary that does not parse is left as it is (the check of the package reports
+    /// it). A package without a glossary gets one only when every concept named is known,
+    /// so a package that loaded before still loads.
+    fn sincronizar_glossario(&mut self) {
+        let usados: BTreeSet<String> = self
+            .missoes()
+            .iter()
+            .filter_map(|it| self.texto(&it.caminho).ok())
+            .filter_map(|t| Missao::parse(&t).ok())
+            .flat_map(|m| m.conceitos)
+            .collect();
+        if usados.is_empty() && self.pacote.glossario.is_none() {
+            return;
+        }
+        let Ok(mut g) = self.glossario_proprio() else {
+            return;
+        };
+        let campanha = glossario_da_campanha();
+        if self.pacote.glossario.is_none()
+            && usados
+                .iter()
+                .any(|c| !campanha.termos.iter().any(|t| &t.id == c))
+        {
+            return;
+        }
+        let mut mudou = self.pacote.glossario.is_none();
+        for c in &usados {
+            if !g.termos.iter().any(|t| &t.id == c)
+                && let Some(t) = campanha.termos.iter().find(|t| &t.id == c)
+            {
+                g.termos.push(t.clone());
+                mudou = true;
+            }
+        }
+        if !mudou {
+            return;
+        }
+        let path = self.pacote.glossario.clone().unwrap_or_else(|| {
+            (1..)
+                .map(|n| {
+                    if n == 1 {
+                        "glossario.ron".to_string()
+                    } else {
+                        format!("glossario_{n}.ron")
+                    }
+                })
+                .find(|p| !self.arquivos.contains_key(p))
+                .expect("some name is free")
+        });
+        let cfg = ron::ser::PrettyConfig::new().struct_names(true);
+        let txt = ron::ser::to_string_pretty(&g, cfg).expect("glossary serializes");
+        self.arquivos.insert(path.clone(), txt.into_bytes());
+        self.pacote.glossario = Some(path);
     }
 
     /// The files with `pacote.ron` up to date.
