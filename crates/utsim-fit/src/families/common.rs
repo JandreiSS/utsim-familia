@@ -113,6 +113,13 @@ pub(super) fn summarize(data: &[f64]) -> Result<Summary, String> {
     let n = data.len();
     let mean = data.iter().sum::<f64>() / n as f64;
     let var = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+    // Values near the largest f64 make the sum or the squares overflow: the parameters would
+    // come out infinite and every later step (quantiles, bootstrap) would crawl on them.
+    if !mean.is_finite() || !var.is_finite() {
+        return Err(
+            "valores grandes demais: a média ou a variância passa do limite numérico".into(),
+        );
+    }
     let min = data.iter().cloned().fold(f64::INFINITY, f64::min);
     let max = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     if max <= min {
