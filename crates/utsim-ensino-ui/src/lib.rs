@@ -377,7 +377,10 @@ impl App {
             egui::CentralPanel::default().show(ui, |ui| self.tela_abertura(ui));
             return;
         }
-        egui::Panel::top("topo").show(ui, |ui| self.barra(ui));
+        egui::Panel::left("navegacao")
+            .default_size(utsim_ui_tema::navegacao::LARGURA)
+            .resizable(false)
+            .show(ui, |ui| self.barra(ui));
         if let Some(m) = self.mensagem.clone() {
             egui::Panel::bottom("mensagem").show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -418,53 +421,59 @@ impl App {
         self.professor.receber();
     }
 
+    /// The side bar: the app, who is playing, the stars and the screens in groups (the
+    /// teacher's screens only in teacher mode). A mission and the sandbox count as the
+    /// campaign.
     fn barra(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(texto::NOME_APP).strong().size(18.0));
-            ui.separator();
-            for (t, nome) in [
-                (Tela::Identidade, texto::aba_inicio()),
-                (Tela::Mapa, texto::aba_campanha()),
-                (Tela::Glossario, texto::aba_glossario()),
-                (Tela::Turma, texto::aba_turma()),
-            ] {
-                if ui.selectable_label(self.tela == t, nome).clicked() {
-                    self.tela = t;
-                }
-            }
-            if self.config.professor
-                && ui
-                    .selectable_label(self.tela == Tela::Professor, texto::aba_professor())
-                    .clicked()
-            {
-                self.tela = Tela::Professor;
-            }
-            if self.config.professor
-                && ui
-                    .selectable_label(self.tela == Tela::Editor, texto::aba_editor())
-                    .clicked()
-            {
-                self.tela = Tela::Editor;
-            }
-            if ui
-                .selectable_label(self.tela == Tela::Ajustes, texto::aba_ajustes())
-                .clicked()
-            {
-                self.tela = Tela::Ajustes;
-            }
-            if let Some(a) = &self.config.identidade {
-                ui.separator();
-                ui.label(format!("{} ({})", a.nome, a.registro));
-            }
-            ui.separator();
-            if self
-                .pacote
-                .as_ref()
-                .is_none_or(|p| p.pacote.prova.is_none())
-            {
-                ui.label(format!("★ {}", self.progresso.estrelas()));
-            }
-        });
+        use utsim_ui_tema::navegacao::{Barra, Grupo, Item};
+        let mut professor = vec![Item::novo(Tela::Turma, texto::aba_turma())];
+        if self.config.professor {
+            professor.push(Item::novo(Tela::Professor, texto::nav_painel_professor()));
+            professor.push(Item::novo(Tela::Editor, texto::aba_editor()));
+        }
+        let grupos = [
+            Grupo {
+                titulo: Some(texto::nav_aluno()),
+                itens: vec![
+                    Item::novo(Tela::Identidade, texto::aba_inicio()),
+                    Item::novo(Tela::Mapa, texto::aba_campanha()),
+                    Item::novo(Tela::Glossario, texto::aba_glossario()),
+                ],
+            },
+            Grupo {
+                titulo: Some(texto::nav_professor()),
+                itens: professor,
+            },
+            Grupo {
+                titulo: Some(""),
+                itens: vec![Item::novo(Tela::Ajustes, texto::aba_ajustes())],
+            },
+        ];
+        let mut linhas = Vec::new();
+        if let Some(a) = &self.config.identidade {
+            linhas.push(format!("{} ({})", a.nome, a.registro));
+        }
+        if self
+            .pacote
+            .as_ref()
+            .is_none_or(|p| p.pacote.prova.is_none())
+        {
+            linhas.push(format!("★ {}", self.progresso.estrelas()));
+        }
+        let mut atual = match self.tela {
+            Tela::Missao | Tela::Areia => Tela::Mapa,
+            t => t,
+        };
+        let barra = Barra {
+            nome: texto::NOME_APP,
+            cor: abertura::COR,
+            icone: Some(abertura::ICONE),
+            linhas: &linhas,
+            grupos: &grupos,
+        };
+        if barra.mostrar(ui, &mut atual) {
+            self.tela = atual;
+        }
     }
 
     fn tela_mapa(&mut self, ui: &mut Ui) {
