@@ -249,4 +249,192 @@ textos! {
         "melhor combinação: {}",
         "best combination: {}",
         "mejor combinación: {}";
+    ed_previa:
+        "Prévia",
+        "Preview",
+        "Vista previa";
+    ed_conceitos:
+        "Conceitos do glossário ({} marcados)",
+        "Glossary concepts ({} ticked)",
+        "Conceptos del glosario ({} marcados)";
+    ed_conceito_fora:
+        "{} (fora do glossário)",
+        "{} (not in the glossary)",
+        "{} (fuera del glosario)";
+    ed_medicoes:
+        "Medições antes da previsão",
+        "Measurements before the prediction",
+        "Mediciones antes de la predicción";
+    ed_add_medicao:
+        "Adicionar medição",
+        "Add measurement",
+        "Agregar medición";
+    ed_chave:
+        "Chave",
+        "Key",
+        "Clave";
+    ed_unidade:
+        "Unidade",
+        "Unit",
+        "Unidad";
+    ed_casas:
+        "Casas",
+        "Decimals",
+        "Decimales";
+    ed_formula_n:
+        "fórmula de {} termos (mantida)",
+        "formula of {} terms (kept)",
+        "fórmula de {} términos (mantenida)";
+    ed_chave_mais:
+        "mais {} chaves: digite para filtrar",
+        "{} more keys: type to filter",
+        "{} claves más: escriba para filtrar";
+    ed_previsoes:
+        "Perguntas de previsão",
+        "Prediction questions",
+        "Preguntas de predicción";
+    ed_add_escolha:
+        "Adicionar escolha",
+        "Add choice",
+        "Agregar elección";
+    ed_add_valor:
+        "Adicionar valor",
+        "Add value",
+        "Agregar valor";
+    ed_add_calculo:
+        "Adicionar cálculo",
+        "Add calculation",
+        "Agregar cálculo";
+    ed_pv_escolha:
+        "Escolha",
+        "Choice",
+        "Elección";
+    ed_pv_valor:
+        "Valor",
+        "Value",
+        "Valor";
+    ed_pv_calculo:
+        "Cálculo",
+        "Calculation",
+        "Cálculo";
+    ed_pergunta:
+        "Pergunta",
+        "Question",
+        "Pregunta";
+    ed_opcao:
+        "Opção",
+        "Option",
+        "Opción";
+    ed_add_opcao:
+        "Adicionar opção",
+        "Add option",
+        "Agregar opción";
+    ed_resposta:
+        "Resposta",
+        "Answer",
+        "Respuesta";
+    ed_resp_fixa:
+        "fixa: opção {}",
+        "fixed: option {}",
+        "fija: opción {}";
+    ed_resp_maior:
+        "a de maior valor no estado inicial",
+        "the one with the highest value in the initial state",
+        "la de mayor valor en el estado inicial";
+    ed_resp_menor:
+        "a de menor valor no estado inicial",
+        "the one with the lowest value in the initial state",
+        "la de menor valor en el estado inicial";
+    ed_tol_relativa:
+        "relativa (%)",
+        "relative (%)",
+        "relativa (%)";
+    ed_tol_absoluta:
+        "absoluta",
+        "absolute",
+        "absoluta";
+    ed_calc_abt:
+        "Máquinas por operador",
+        "Machines per operator",
+        "Máquinas por operario";
+    ed_calc_normal:
+        "Tempo normal",
+        "Normal time",
+        "Tiempo normal";
+    ed_calc_padrao:
+        "Tempo padrão",
+        "Standard time",
+        "Tiempo estándar";
+    ed_calc_ciclos:
+        "Número de ciclos",
+        "Number of cycles",
+        "Número de ciclos";
+    ed_tempos:
+        "Tempos (separados por espaço ou ponto e vírgula)",
+        "Times (separated by space or semicolon)",
+        "Tiempos (separados por espacio o punto y coma)";
+    ed_ritmo:
+        "Ritmo",
+        "Rating",
+        "Ritmo";
+    ed_calc_a:
+        "a (operador com a máquina parada)",
+        "a (operator with the machine stopped)",
+        "a (operario con la máquina parada)";
+    ed_calc_b:
+        "b (operador a caminho da máquina)",
+        "b (operator walking to the machine)",
+        "b (operario yendo a la máquina)";
+    ed_calc_t:
+        "t (tempo automático)",
+        "t (automatic time)",
+        "t (tiempo automático)";
+    ed_folgas:
+        "Folgas",
+        "Allowances",
+        "Holguras";
+    ed_erro_rel:
+        "Erro relativo",
+        "Relative error",
+        "Error relativo";
+    ed_calc_resposta:
+        "resposta: {}",
+        "answer: {}",
+        "respuesta: {}";
+    ed_pv_dados:
+        "pergunta sobre dados (editada na etapa C)",
+        "question about data (edited in stage C)",
+        "pregunta sobre datos (editada en la etapa C)";
+    ed_justificativa:
+        "Perguntas de justificativa",
+        "Justification questions",
+        "Preguntas de justificación";
+    ed_add_justificativa:
+        "Adicionar pergunta",
+        "Add question",
+        "Agregar pregunta";
+    ed_certa:
+        "Opção certa",
+        "Right option",
+        "Opción correcta";
+    ed_dicas:
+        "Dicas",
+        "Hints",
+        "Pistas";
+    ed_dica_1:
+        "1. Pergunta que guia",
+        "1. A guiding question",
+        "1. Una pregunta que guía";
+    ed_dica_2:
+        "2. A ferramenta",
+        "2. The tool",
+        "2. La herramienta";
+    ed_dica_3:
+        "3. O caminho",
+        "3. The path",
+        "3. El camino";
+    ed_add_dica:
+        "Adicionar dica",
+        "Add hint",
+        "Agregar pista";
 }

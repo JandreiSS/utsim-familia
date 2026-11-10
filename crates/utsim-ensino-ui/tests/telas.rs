@@ -735,6 +735,77 @@ fn editor_de_missoes_do_professor() {
     }
     ed.base.orcamento = Some(10000.0);
     frames(&mut prof, &ctx, 2);
+    // Stage B: measurements, one prediction of each editable kind, a justification, a
+    // hint and a concept are drawn (and taken out again before the calibration).
+    {
+        use utsim_ensino_core::missao::{
+            Calculo, Medicao, OpcaoPrevisao, Pergunta, Previsao, Resposta, Termo, Tolerancia,
+        };
+        let termo = |c: &str| Termo {
+            chave: c.into(),
+            fator: 1.0,
+        };
+        let ed = prof.editor.edicao.as_mut().unwrap();
+        ed.base.medicoes.push(Medicao {
+            rotulo: "Custo".into(),
+            valor: vec![termo("custo")],
+            unidade: "R$".into(),
+            casas: 0,
+        });
+        ed.base.previsao = vec![
+            Previsao::Escolha {
+                id: "p1".into(),
+                pergunta: "Qual?".into(),
+                opcoes: vec![
+                    OpcaoPrevisao {
+                        rotulo: "A".into(),
+                        valor: vec![termo("custo")],
+                    },
+                    OpcaoPrevisao {
+                        rotulo: "B".into(),
+                        valor: vec![termo("custo"), termo("custo")],
+                    },
+                ],
+                resposta: Resposta::Maior,
+            },
+            Previsao::Valor {
+                id: "p2".into(),
+                pergunta: "Quanto?".into(),
+                valor: vec![termo("custo")],
+                unidade: "R$".into(),
+                tolerancia: Tolerancia::Relativa(0.05),
+            },
+            Previsao::Calculo {
+                id: "p3".into(),
+                pergunta: "Quantas?".into(),
+                calculo: Calculo::TempoNormal {
+                    tempos: vec![1.0, 1.2],
+                    ritmo: 1.1,
+                },
+                unidade: "min".into(),
+                tolerancia: Tolerancia::Absoluta(0.1),
+            },
+        ];
+        ed.base.justificativa = vec![Pergunta {
+            pergunta: "Por quê?".into(),
+            opcoes: vec!["Porque sim".into(), "Porque não".into()],
+            certa: 1,
+        }];
+        ed.base.dicas = vec!["Pense no gargalo".into()];
+        ed.base.conceitos = vec!["gargalo".into(), "conceito_fora_do_glossario".into()];
+        prof.editor.previa = true;
+        frames(&mut prof, &ctx, 3);
+        assert!(prof.editor.glossario.is_some());
+        assert!(!prof.editor.chaves.is_empty());
+        let ed = prof.editor.edicao.as_mut().unwrap();
+        ed.base.medicoes.clear();
+        ed.base.previsao.clear();
+        ed.base.justificativa.clear();
+        ed.base.dicas.clear();
+        ed.base.conceitos.clear();
+        prof.editor.previa = false;
+        frames(&mut prof, &ctx, 2);
+    }
     prof.editor.calibrar(&NaHora, None);
     frames(&mut prof, &ctx, 2);
     let c = prof.editor.calibragem.clone().expect("calibragem");

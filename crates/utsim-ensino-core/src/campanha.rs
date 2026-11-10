@@ -14,6 +14,14 @@ pub fn arquivos() -> Arquivos {
         .collect()
 }
 
+/// One file of the built-in campaign, without copying the others.
+pub fn arquivo(path: &str) -> Option<&'static [u8]> {
+    gerado::ARQUIVOS
+        .iter()
+        .find(|(k, _)| *k == path)
+        .map(|(_, v)| &v[..])
+}
+
 /// The built-in campaign, read and validated.
 pub fn carregar_campanha() -> Result<PacoteCarregado, Vec<String>> {
     carregar(&arquivos())

@@ -4,12 +4,19 @@
 //! costs, the measures with goals, the statement), with the calibration in the background.
 //! The rules are in [`utsim_ensino_core::editor`].
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use egui::{Color32, RichText, Ui};
-use utsim_ensino_core::editor::{Calibragem, Edicao, PacoteProfessor, calibrar, slug};
-use utsim_ensino_core::missao::{Alavanca, Objetivo, Tolerancia};
+use utsim_ensino_core::editor::{
+    Calibragem, Edicao, PacoteProfessor, calibrar, chaves_do_modelo, glossario_da_campanha, slug,
+};
+use utsim_ensino_core::missao::{
+    Alavanca, Calculo, Medicao, Objetivo, OpcaoPrevisao, Pergunta, Previsao, Resposta, Termo,
+    Tolerancia,
+};
 use utsim_ensino_core::nota::fmt_num;
+use utsim_ensino_core::pacote::Glossario;
 use utsim_ui_tema::arquivos::Tipo;
 
 use crate::missao::Trabalho;
@@ -40,6 +47,14 @@ pub struct EstadoEditor {
     pub calibragem: Option<Calibragem>,
     pub mensagens: Vec<String>,
     pub erros: Vec<String>,
+    /// The metric keys of the model of the mission (one replication, run when it opens).
+    pub chaves: Vec<String>,
+    /// The glossary the concepts come from, read when first drawn.
+    pub glossario: Option<Glossario>,
+    /// Show the statement as the student sees it.
+    pub previa: bool,
+    /// The times of the calculations as typed, by question.
+    pub tempos: BTreeMap<usize, String>,
 }
 
 impl EstadoEditor {
@@ -74,6 +89,7 @@ impl EstadoEditor {
                         &[&p.pacote.titulo, &p.missoes().len()],
                     ));
                     self.pacote = Some((dir, p, a));
+                    self.glossario = None;
                 }
                 Err(e) => self.erros.push(e),
             },
@@ -89,6 +105,7 @@ impl EstadoEditor {
                 self.mensagens
                     .push(texto::f(texto::ed_pacote_novo(), &[&dir.display()]));
                 self.pacote = Some((dir, p, Default::default()));
+                self.glossario = None;
             }
             Err(e) => self.erros.push(e.to_string()),
         }
@@ -105,8 +122,23 @@ impl EstadoEditor {
 
     /// Closes the mission being edited.
     pub fn fechar(&mut self) {
+        self.definir_edicao(None);
+    }
+
+    /// Replaces the mission being edited and forgets what belonged to the old one.
+    fn definir_edicao(&mut self, ed: Option<Edicao>) {
         self.esquecer_calibragem();
-        self.edicao = None;
+        self.chaves.clear();
+        self.glossario = None;
+        self.previa = false;
+        self.tempos.clear();
+        if let Some(ed) = &ed {
+            match chaves_do_modelo(&ed.modelo) {
+                Ok(c) => self.chaves = c,
+                Err(e) => self.erros.push(e),
+            }
+        }
+        self.edicao = ed;
     }
 
     /// Starts the calibration of the mission in the background.
@@ -178,8 +210,7 @@ impl EstadoEditor {
                     self.erros.push(texto::ed_sem_alavancas().into());
                 }
                 self.ato = 0;
-                self.esquecer_calibragem();
-                self.edicao = Some(ed);
+                self.definir_edicao(Some(ed));
             }
             Err(e) => self.erros.push(e),
         }
@@ -300,9 +331,8 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
         match p.abrir(&c) {
             Ok(ed) => {
                 s.ato = lista.iter().find(|x| x.caminho == c).map_or(0, |x| x.ato);
-                s.esquecer_calibragem();
-                s.edicao = Some(ed);
                 s.erros.clear();
+                s.definir_edicao(Some(ed));
             }
             Err(e) => s.erros = vec![e],
         }
@@ -378,6 +408,13 @@ fn secao_missao(
     let n_atos = s.pacote.as_ref().map_or(1, |p| p.1.pacote.atos.len());
     s.ato = s.ato.min(n_atos);
     let ocupado = s.trabalho.is_some();
+    if s.glossario.is_none() {
+        s.glossario = Some(
+            s.pacote
+                .as_ref()
+                .map_or_else(glossario_da_campanha, |p| p.1.glossario()),
+        );
+    }
     let Some(ed) = &mut s.edicao else { return };
     let gravada = ed.origem.is_some();
     ui.label(RichText::new(texto::ed_missao()).strong());
@@ -563,14 +600,16 @@ fn secao_missao(
         }
     });
 
-    ui.add_space(4.0);
-    ui.label(RichText::new(texto::ed_enunciado()).strong());
-    ui.add(
-        egui::TextEdit::multiline(&mut ed.texto)
-            .desired_rows(8)
-            .desired_width(f32::INFINITY)
-            .code_editor(),
-    );
+    let mut chaves = s.chaves.clone();
+    chaves.extend(ed.chaves_de_decisao());
+    secao_enunciado(ui, ed, &mut s.previa);
+    if let Some(g) = &s.glossario {
+        secao_conceitos(ui, ed, g);
+    }
+    secao_medicoes(ui, ed, &chaves);
+    secao_previsoes(ui, ed, &chaves, &mut s.tempos);
+    secao_justificativa(ui, ed);
+    secao_dicas(ui, ed);
 
     let erros = ed.erros();
     for e in &erros {
@@ -672,5 +711,648 @@ fn mostrar_calibragem(ui: &mut Ui, c: &Calibragem, ed: Option<&Edicao>) {
     }
     for a in &cf.avisos {
         ui.colored_label(AMARELO, a);
+    }
+}
+
+/// The statement and, below the editor, the statement as the student sees it.
+fn secao_enunciado(ui: &mut Ui, ed: &mut Edicao, previa: &mut bool) {
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(texto::ed_enunciado()).strong());
+        ui.checkbox(previa, texto::ed_previa());
+    });
+    ui.add(
+        egui::TextEdit::multiline(&mut ed.texto)
+            .desired_rows(8)
+            .desired_width(f32::INFINITY)
+            .code_editor(),
+    );
+    if *previa {
+        let v = ui.visuals().clone();
+        egui::Frame::new()
+            .fill(v.extreme_bg_color)
+            .stroke(v.widgets.noninteractive.bg_stroke)
+            .corner_radius(6)
+            .inner_margin(10)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                texto::markdown(ui, &ed.texto);
+            });
+    }
+}
+
+/// The glossary concepts the mission names.
+fn secao_conceitos(ui: &mut Ui, ed: &mut Edicao, g: &Glossario) {
+    ui.add_space(4.0);
+    egui::CollapsingHeader::new(RichText::new(texto::f(
+        texto::ed_conceitos(),
+        &[&ed.base.conceitos.len()],
+    )))
+    .id_salt("ed_conceitos")
+    .show(ui, |ui| {
+        egui::ScrollArea::vertical()
+            .max_height(160.0)
+            .id_salt("ed_conceitos_rolagem")
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for t in &g.termos {
+                        let pos = ed.base.conceitos.iter().position(|c| c == &t.id);
+                        let mut marcado = pos.is_some();
+                        if ui
+                            .checkbox(&mut marcado, &t.nome)
+                            .on_hover_text(&t.texto)
+                            .changed()
+                        {
+                            match pos {
+                                Some(i) => {
+                                    ed.base.conceitos.remove(i);
+                                }
+                                None => ed.base.conceitos.push(t.id.clone()),
+                            }
+                        }
+                    }
+                });
+            });
+        let mut tirar = None;
+        for (i, c) in ed.base.conceitos.iter().enumerate() {
+            if !g.termos.iter().any(|t| &t.id == c) {
+                ui.horizontal(|ui| {
+                    ui.colored_label(AMARELO, texto::f(texto::ed_conceito_fora(), &[c]));
+                    if ui.small_button(texto::ed_remover()).clicked() {
+                        tirar = Some(i);
+                    }
+                });
+            }
+        }
+        if let Some(i) = tirar {
+            ed.base.conceitos.remove(i);
+        }
+    });
+}
+
+/// A text field for a key with a list of the known ones, filtered by what is typed.
+/// Returns true when the text changed.
+fn campo_chave(ui: &mut Ui, id_salt: &str, chave: &mut String, chaves: &[String]) -> bool {
+    ui.horizontal(|ui| {
+        let mut mudou = ui
+            .add(egui::TextEdit::singleline(chave).desired_width(220.0))
+            .changed();
+        let mut escolhida: Option<String> = None;
+        egui::ComboBox::from_id_salt(id_salt)
+            .selected_text("▾")
+            .width(20.0)
+            .show_ui(ui, |ui| {
+                let filtro = chave.to_lowercase();
+                let todas: Vec<&String> = chaves
+                    .iter()
+                    .filter(|k| filtro.is_empty() || k.to_lowercase().contains(&filtro))
+                    .collect();
+                for k in todas.iter().take(40) {
+                    if ui
+                        .selectable_label(k.as_str() == chave, k.as_str())
+                        .clicked()
+                    {
+                        escolhida = Some((*k).clone());
+                    }
+                }
+                if todas.len() > 40 {
+                    ui.label(
+                        RichText::new(texto::f(texto::ed_chave_mais(), &[&(todas.len() - 40)]))
+                            .weak(),
+                    );
+                }
+            });
+        if let Some(k) = escolhida {
+            *chave = k;
+            mudou = true;
+        }
+        mudou
+    })
+    .inner
+}
+
+/// The key (and the factor) of a value made of terms. A formula of several terms is kept
+/// as it is.
+fn campo_termos(
+    ui: &mut Ui,
+    id_salt: &str,
+    termos: &mut Vec<Termo>,
+    chaves: &[String],
+    com_fator: bool,
+) {
+    if termos.len() > 1 {
+        ui.label(RichText::new(texto::f(texto::ed_formula_n(), &[&termos.len()])).weak());
+        return;
+    }
+    let mut c = termos.first().map(|t| t.chave.clone()).unwrap_or_default();
+    if campo_chave(ui, id_salt, &mut c, chaves) {
+        if c.is_empty() {
+            termos.clear();
+        } else if let Some(t) = termos.first_mut() {
+            t.chave = c;
+        } else {
+            termos.push(Termo {
+                chave: c,
+                fator: 1.0,
+            });
+        }
+    }
+    if com_fator && let Some(t) = termos.first_mut() {
+        ui.label("×");
+        ui.add(egui::DragValue::new(&mut t.fator).speed(0.1));
+    }
+}
+
+/// A tolerance: relative (shown in %) or absolute.
+fn campo_tolerancia(ui: &mut Ui, id_salt: &str, tol: &mut Tolerancia) {
+    let (mut v, mut rel) = match *tol {
+        Tolerancia::Relativa(x) => (x * 100.0, true),
+        Tolerancia::Absoluta(x) => (x, false),
+    };
+    egui::ComboBox::from_id_salt(id_salt)
+        .selected_text(if rel {
+            texto::ed_tol_relativa()
+        } else {
+            texto::ed_tol_absoluta()
+        })
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut rel, true, texto::ed_tol_relativa());
+            ui.selectable_value(&mut rel, false, texto::ed_tol_absoluta());
+        });
+    ui.add(
+        egui::DragValue::new(&mut v)
+            .speed(0.1)
+            .range(0.0..=f64::MAX),
+    );
+    *tol = if rel {
+        Tolerancia::Relativa(v / 100.0)
+    } else {
+        Tolerancia::Absoluta(v)
+    };
+}
+
+/// The measurements shown to the student before the prediction.
+fn secao_medicoes(ui: &mut Ui, ed: &mut Edicao, chaves: &[String]) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_medicoes()).strong());
+    let mut tirar = None;
+    if !ed.base.medicoes.is_empty() {
+        egui::Grid::new("ed_medicoes")
+            .striped(true)
+            .spacing([12.0, 8.0])
+            .show(ui, |ui| {
+                for h in [
+                    texto::ed_rotulo(),
+                    texto::ed_chave(),
+                    texto::ed_unidade(),
+                    texto::ed_casas(),
+                    "",
+                ] {
+                    cabecalho(ui, h);
+                }
+                ui.end_row();
+                for (i, m) in ed.base.medicoes.iter_mut().enumerate() {
+                    ui.add(egui::TextEdit::singleline(&mut m.rotulo).desired_width(160.0));
+                    ui.horizontal(|ui| {
+                        campo_termos(ui, &format!("ed_med_chave_{i}"), &mut m.valor, chaves, true);
+                    });
+                    ui.add(egui::TextEdit::singleline(&mut m.unidade).desired_width(70.0));
+                    ui.add(egui::DragValue::new(&mut m.casas).range(0..=6));
+                    if ui.small_button(texto::ed_remover()).clicked() {
+                        tirar = Some(i);
+                    }
+                    ui.end_row();
+                }
+            });
+    }
+    if let Some(i) = tirar {
+        ed.base.medicoes.remove(i);
+    }
+    if ui.button(texto::ed_add_medicao()).clicked() {
+        ed.base.medicoes.push(Medicao {
+            rotulo: String::new(),
+            valor: Vec::new(),
+            unidade: String::new(),
+            casas: 2,
+        });
+    }
+}
+
+enum Passo {
+    Subir(usize),
+    Descer(usize),
+    Tirar(usize),
+}
+
+fn calculo_padrao(i: usize) -> Calculo {
+    match i {
+        0 => Calculo::MaquinasPorOperador {
+            a: 0.5,
+            b: 0.2,
+            t: 2.0,
+        },
+        1 => Calculo::TempoNormal {
+            tempos: vec![1.0, 1.1, 0.9],
+            ritmo: 1.0,
+        },
+        2 => Calculo::TempoPadrao {
+            tempos: vec![1.0, 1.1, 0.9],
+            ritmo: 1.0,
+            tolerancia: 0.1,
+        },
+        _ => Calculo::Ciclos {
+            tempos: vec![1.0, 1.2, 0.9, 1.1],
+            erro: 0.05,
+        },
+    }
+}
+
+fn calculo_indice(c: &Calculo) -> usize {
+    match c {
+        Calculo::MaquinasPorOperador { .. } => 0,
+        Calculo::TempoNormal { .. } => 1,
+        Calculo::TempoPadrao { .. } => 2,
+        Calculo::Ciclos { .. } => 3,
+    }
+}
+
+fn calculo_nome(i: usize) -> &'static str {
+    match i {
+        0 => texto::ed_calc_abt(),
+        1 => texto::ed_calc_normal(),
+        2 => texto::ed_calc_padrao(),
+        _ => texto::ed_calc_ciclos(),
+    }
+}
+
+/// Numbers typed separated by spaces or semicolons (a comma is a decimal mark).
+fn ler_tempos(txt: &str) -> Vec<f64> {
+    txt.split(|c: char| c.is_whitespace() || c == ';')
+        .filter_map(|x| x.replace(',', ".").parse::<f64>().ok())
+        .collect()
+}
+
+fn campo_numero(ui: &mut Ui, rotulo: &str, v: &mut f64, velocidade: f64) {
+    ui.label(rotulo);
+    ui.add(egui::DragValue::new(v).speed(velocidade));
+}
+
+/// The recipe of a calculation question and its answer.
+fn campo_calculo(
+    ui: &mut Ui,
+    i: usize,
+    calculo: &mut Calculo,
+    tempos: &mut BTreeMap<usize, String>,
+) {
+    let atual = calculo_indice(calculo);
+    let mut novo = atual;
+    egui::ComboBox::from_id_salt(("ed_calc_receita", i))
+        .selected_text(calculo_nome(atual))
+        .show_ui(ui, |ui| {
+            for k in 0..4 {
+                ui.selectable_value(&mut novo, k, calculo_nome(k));
+            }
+        });
+    if novo != atual {
+        *calculo = calculo_padrao(novo);
+        tempos.remove(&i);
+    }
+    match calculo {
+        Calculo::MaquinasPorOperador { a, b, t } => {
+            ui.horizontal(|ui| {
+                campo_numero(ui, texto::ed_calc_a(), a, 0.05);
+                campo_numero(ui, texto::ed_calc_b(), b, 0.05);
+                campo_numero(ui, texto::ed_calc_t(), t, 0.05);
+            });
+        }
+        Calculo::TempoNormal { tempos: ts, ritmo } => {
+            campo_tempos(ui, i, ts, tempos);
+            ui.horizontal(|ui| campo_numero(ui, texto::ed_ritmo(), ritmo, 0.01));
+        }
+        Calculo::TempoPadrao {
+            tempos: ts,
+            ritmo,
+            tolerancia,
+        } => {
+            campo_tempos(ui, i, ts, tempos);
+            ui.horizontal(|ui| {
+                campo_numero(ui, texto::ed_ritmo(), ritmo, 0.01);
+                campo_numero(ui, texto::ed_folgas(), tolerancia, 0.01);
+            });
+        }
+        Calculo::Ciclos { tempos: ts, erro } => {
+            campo_tempos(ui, i, ts, tempos);
+            ui.horizontal(|ui| campo_numero(ui, texto::ed_erro_rel(), erro, 0.005));
+        }
+    }
+    ui.label(texto::f(
+        texto::ed_calc_resposta(),
+        &[&fmt_num(calculo.valor(), 2)],
+    ));
+}
+
+/// The observed times as a text, parsed on every change (the text is kept in `buffer`).
+fn campo_tempos(ui: &mut Ui, i: usize, ts: &mut Vec<f64>, buffer: &mut BTreeMap<usize, String>) {
+    let txt = buffer.entry(i).or_insert_with(|| {
+        ts.iter()
+            .map(|x| fmt_num(*x, 3))
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
+    ui.label(texto::ed_tempos());
+    if ui
+        .add(egui::TextEdit::singleline(txt).desired_width(f32::INFINITY))
+        .changed()
+    {
+        *ts = ler_tempos(txt);
+    }
+}
+
+/// The prediction questions.
+fn secao_previsoes(
+    ui: &mut Ui,
+    ed: &mut Edicao,
+    chaves: &[String],
+    tempos: &mut BTreeMap<usize, String>,
+) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_previsoes()).strong());
+    let n = ed.base.previsao.len();
+    let mut passo: Option<Passo> = None;
+    for (i, p) in ed.base.previsao.iter_mut().enumerate() {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let tipo = match p {
+                    Previsao::Escolha { .. } => texto::ed_pv_escolha(),
+                    Previsao::Valor { .. } => texto::ed_pv_valor(),
+                    Previsao::Calculo { .. } => texto::ed_pv_calculo(),
+                    Previsao::Dados { .. } => "",
+                };
+                cabecalho(ui, tipo);
+                let (Previsao::Escolha { id, .. }
+                | Previsao::Valor { id, .. }
+                | Previsao::Calculo { id, .. }
+                | Previsao::Dados { id, .. }) = p;
+                ui.label(texto::ed_id());
+                ui.add(egui::TextEdit::singleline(id).desired_width(80.0));
+                if ui
+                    .add_enabled(i > 0, egui::Button::new("↑").small())
+                    .clicked()
+                {
+                    passo = Some(Passo::Subir(i));
+                }
+                if ui
+                    .add_enabled(i + 1 < n, egui::Button::new("↓").small())
+                    .clicked()
+                {
+                    passo = Some(Passo::Descer(i));
+                }
+                if ui.small_button(texto::ed_remover()).clicked() {
+                    passo = Some(Passo::Tirar(i));
+                }
+            });
+            match p {
+                Previsao::Dados { pergunta, .. } => {
+                    ui.label(RichText::new(texto::ed_pv_dados()).weak());
+                    ui.label(&*pergunta);
+                }
+                Previsao::Escolha {
+                    pergunta,
+                    opcoes,
+                    resposta,
+                    ..
+                } => {
+                    pergunta_campo(ui, pergunta);
+                    escolha(ui, i, opcoes, resposta, chaves);
+                }
+                Previsao::Valor {
+                    pergunta,
+                    valor,
+                    unidade,
+                    tolerancia,
+                    ..
+                } => {
+                    pergunta_campo(ui, pergunta);
+                    ui.horizontal(|ui| {
+                        ui.label(texto::ed_chave());
+                        campo_termos(ui, &format!("ed_pv_chave_{i}"), valor, chaves, true);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(texto::ed_unidade());
+                        ui.add(egui::TextEdit::singleline(unidade).desired_width(70.0));
+                        ui.label(texto::ed_tolerancia());
+                        campo_tolerancia(ui, &format!("ed_pv_tol_{i}"), tolerancia);
+                    });
+                }
+                Previsao::Calculo {
+                    pergunta,
+                    calculo,
+                    unidade,
+                    tolerancia,
+                    ..
+                } => {
+                    pergunta_campo(ui, pergunta);
+                    campo_calculo(ui, i, calculo, tempos);
+                    ui.horizontal(|ui| {
+                        ui.label(texto::ed_unidade());
+                        ui.add(egui::TextEdit::singleline(unidade).desired_width(70.0));
+                        ui.label(texto::ed_tolerancia());
+                        campo_tolerancia(ui, &format!("ed_pv_tol_{i}"), tolerancia);
+                    });
+                }
+            }
+        });
+    }
+    match passo {
+        Some(Passo::Subir(i)) => ed.base.previsao.swap(i, i - 1),
+        Some(Passo::Descer(i)) => ed.base.previsao.swap(i, i + 1),
+        Some(Passo::Tirar(i)) => {
+            ed.base.previsao.remove(i);
+        }
+        None => {}
+    }
+    if passo.is_some() {
+        tempos.clear();
+    }
+    ui.horizontal(|ui| {
+        if ui.button(texto::ed_add_escolha()).clicked() {
+            let id = ed.id_previsao_livre();
+            ed.base.previsao.push(Previsao::Escolha {
+                id,
+                pergunta: String::new(),
+                opcoes: vec![opcao_vazia(), opcao_vazia()],
+                resposta: Resposta::Fixa(0),
+            });
+        }
+        if ui.button(texto::ed_add_valor()).clicked() {
+            let id = ed.id_previsao_livre();
+            ed.base.previsao.push(Previsao::Valor {
+                id,
+                pergunta: String::new(),
+                valor: Vec::new(),
+                unidade: String::new(),
+                tolerancia: Tolerancia::Relativa(0.05),
+            });
+        }
+        if ui.button(texto::ed_add_calculo()).clicked() {
+            let id = ed.id_previsao_livre();
+            ed.base.previsao.push(Previsao::Calculo {
+                id,
+                pergunta: String::new(),
+                calculo: calculo_padrao(0),
+                unidade: String::new(),
+                tolerancia: Tolerancia::Relativa(0.02),
+            });
+        }
+    });
+}
+
+fn opcao_vazia() -> OpcaoPrevisao {
+    OpcaoPrevisao {
+        rotulo: String::new(),
+        valor: Vec::new(),
+    }
+}
+
+fn pergunta_campo(ui: &mut Ui, pergunta: &mut String) {
+    ui.label(texto::ed_pergunta());
+    ui.add(
+        egui::TextEdit::multiline(pergunta)
+            .desired_rows(2)
+            .desired_width(f32::INFINITY),
+    );
+}
+
+/// The options of a choice question and the way its answer is decided.
+fn escolha(
+    ui: &mut Ui,
+    i: usize,
+    opcoes: &mut Vec<OpcaoPrevisao>,
+    resposta: &mut Resposta,
+    chaves: &[String],
+) {
+    let mut tirar = None;
+    for (j, o) in opcoes.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(texto::f(texto::ed_opcao(), &[&(j + 1)]));
+            ui.add(egui::TextEdit::singleline(&mut o.rotulo).desired_width(200.0));
+            campo_termos(
+                ui,
+                &format!("ed_pv_{i}_op_{j}"),
+                &mut o.valor,
+                chaves,
+                false,
+            );
+            if ui.small_button(texto::ed_remover()).clicked() {
+                tirar = Some(j);
+            }
+        });
+    }
+    if let Some(j) = tirar {
+        opcoes.remove(j);
+        if let Resposta::Fixa(k) = resposta {
+            if j < *k {
+                *k -= 1;
+            }
+            *k = (*k).min(opcoes.len().saturating_sub(1));
+        }
+    }
+    ui.horizontal(|ui| {
+        if ui.button(texto::ed_add_opcao()).clicked() {
+            opcoes.push(opcao_vazia());
+        }
+        ui.label(texto::ed_resposta());
+        let atual = match *resposta {
+            Resposta::Maior => texto::ed_resp_maior().to_string(),
+            Resposta::Menor => texto::ed_resp_menor().to_string(),
+            Resposta::Fixa(k) => texto::f(texto::ed_resp_fixa(), &[&(k + 1)]),
+        };
+        egui::ComboBox::from_id_salt(("ed_pv_resposta", i))
+            .selected_text(atual)
+            .show_ui(ui, |ui| {
+                for k in 0..opcoes.len() {
+                    ui.selectable_value(
+                        resposta,
+                        Resposta::Fixa(k),
+                        texto::f(texto::ed_resp_fixa(), &[&(k + 1)]),
+                    );
+                }
+                ui.selectable_value(resposta, Resposta::Maior, texto::ed_resp_maior());
+                ui.selectable_value(resposta, Resposta::Menor, texto::ed_resp_menor());
+            });
+    });
+}
+
+/// The objective questions about the why.
+fn secao_justificativa(ui: &mut Ui, ed: &mut Edicao) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_justificativa()).strong());
+    let mut tirar = None;
+    for (i, q) in ed.base.justificativa.iter_mut().enumerate() {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(texto::ed_pergunta());
+                ui.add(egui::TextEdit::singleline(&mut q.pergunta).desired_width(400.0));
+                if ui.small_button(texto::ed_remover()).clicked() {
+                    tirar = Some(i);
+                }
+            });
+            let mut sai = None;
+            for (j, o) in q.opcoes.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut q.certa, j, "")
+                        .on_hover_text(texto::ed_certa());
+                    ui.add(egui::TextEdit::singleline(o).desired_width(400.0));
+                    if ui.small_button(texto::ed_remover()).clicked() {
+                        sai = Some(j);
+                    }
+                });
+            }
+            if let Some(j) = sai {
+                q.opcoes.remove(j);
+                if j < q.certa {
+                    q.certa -= 1;
+                }
+                q.certa = q.certa.min(q.opcoes.len().saturating_sub(1));
+            }
+            if ui.button(texto::ed_add_opcao()).clicked() {
+                q.opcoes.push(String::new());
+            }
+        });
+    }
+    if let Some(i) = tirar {
+        ed.base.justificativa.remove(i);
+    }
+    if ui.button(texto::ed_add_justificativa()).clicked() {
+        ed.base.justificativa.push(Pergunta {
+            pergunta: String::new(),
+            opcoes: vec![String::new(), String::new()],
+            certa: 0,
+        });
+    }
+}
+
+/// The three hint levels.
+fn secao_dicas(ui: &mut Ui, ed: &mut Edicao) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_dicas()).strong());
+    let rotulos = [texto::ed_dica_1(), texto::ed_dica_2(), texto::ed_dica_3()];
+    let mut tirar = None;
+    for (i, d) in ed.base.dicas.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(rotulos[i.min(2)]);
+            ui.add(egui::TextEdit::singleline(d).desired_width(400.0));
+            if ui.small_button(texto::ed_remover()).clicked() {
+                tirar = Some(i);
+            }
+        });
+    }
+    if let Some(i) = tirar {
+        ed.base.dicas.remove(i);
+    }
+    if ed.base.dicas.len() < 3 && ui.button(texto::ed_add_dica()).clicked() {
+        ed.base.dicas.push(String::new());
     }
 }
