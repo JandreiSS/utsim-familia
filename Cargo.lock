@@ -7905,6 +7905,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-doe"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utsim-stats",
+]
+
+[[package]]
 name = "utsim-edit"
 version = "0.1.0"
 dependencies = [
@@ -8350,6 +8358,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-edit",
+ "utsim-ensino-core",
+ "utsim-ensino-store",
  "utsim-estudo",
  "utsim-ferramentas",
  "utsim-model",

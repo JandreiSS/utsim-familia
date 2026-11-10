@@ -74,6 +74,18 @@ textos! {
         "Pacote de missões (.utse)",
         "Mission package (.utse)",
         "Paquete de misiones (.utse)";
+    nav_aluno:
+        "Aluno",
+        "Student",
+        "Alumno";
+    nav_professor:
+        "Professor",
+        "Teacher",
+        "Profesor";
+    nav_painel_professor:
+        "Painel do professor",
+        "Teacher panel",
+        "Panel del profesor";
     ab_pacote_pasta:
         "Pasta…",
         "Folder…",
