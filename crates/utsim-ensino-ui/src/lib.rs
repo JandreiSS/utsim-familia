@@ -114,7 +114,7 @@ impl App {
     pub fn new(perfil: Perfil) -> App {
         let mut app = App::com(perfil, Arc::new(Fios), agora_ms);
         if let Some(i) = &app.config.idioma {
-            texto::definir(texto::Idioma::de_codigo(i));
+            texto::definir(texto::idioma_de(i));
         }
         app.cliente_3d = utsim_ensino_store::tres_d::cliente().is_some();
         app.apps_analise = utsim_ensino_store::analise::instalados();
@@ -493,7 +493,7 @@ impl App {
         if !p.faltando.is_empty() {
             ui.colored_label(AVISO, texto::requisitos(&p.faltando));
         }
-        let lingua = texto::Idioma::de_codigo(&p.pacote.idioma);
+        let lingua = texto::idioma_de(&p.pacote.idioma);
         if lingua != texto::idioma_atual() {
             ui.label(
                 RichText::new(texto::f(texto::pacote_em_outra_lingua(), &[&lingua.nome()])).weak(),
@@ -651,18 +651,12 @@ impl App {
         });
         ui.horizontal(|ui| {
             ui.label(texto::idioma());
-            let atual = texto::idioma_atual();
-            egui::ComboBox::from_id_salt("idioma")
-                .selected_text(atual.nome())
-                .show_ui(ui, |ui| {
-                    for i in texto::Idioma::TODOS {
-                        if ui.selectable_label(i == atual, i.nome()).clicked() && i != atual {
-                            texto::definir(i);
-                            self.config.idioma = Some(i.codigo().to_string());
-                            self.salvar_config();
-                        }
-                    }
-                });
+            let mut i = texto::idioma_atual();
+            if utsim_idiomas::seletor(ui, "idioma", &mut i) {
+                texto::definir(i);
+                self.config.idioma = Some(i.codigo().to_string());
+                self.salvar_config();
+            }
         });
         ui.label(RichText::new(texto::idioma_texto()).weak());
         ui.add_space(8.0);

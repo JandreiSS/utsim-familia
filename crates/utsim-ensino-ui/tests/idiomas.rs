@@ -1,4 +1,4 @@
-//! The interface in English and Spanish (EN13): every screen draws in each language, and the
+//! The interface in the five languages (EN13): every screen draws in each language, and the
 //! language chosen in the profile comes back. A test binary of its own, because the
 //! language is global to the program.
 
@@ -20,7 +20,7 @@ fn frames(app: &mut App, ctx: &Context, n: usize) {
 }
 
 #[test]
-fn todas_as_telas_nas_tres_linguas() {
+fn todas_as_telas_nas_cinco_linguas() {
     let _vez = LINGUA.lock().unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().unwrap();
     let ctx = Context::default();
@@ -55,7 +55,11 @@ fn todas_as_telas_nas_tres_linguas() {
     );
     texto::definir(Idioma::Es);
     assert_eq!(texto::aba_campanha(), "Campaña");
-    texto::definir(Idioma::Pt);
+    texto::definir(Idioma::Fr);
+    assert_ne!(texto::aba_campanha(), "Campanha");
+    // Every key a screen asked for exists in the files.
+    assert!(texto::TEXTOS.faltas().is_empty(), "{:?}", texto::TEXTOS.faltas());
+    texto::definir(Idioma::PtBr);
     assert_eq!(texto::aba_campanha(), "Campanha");
 }
 
@@ -71,5 +75,5 @@ fn a_lingua_do_perfil_volta_ao_abrir() {
     let app = App::new(Perfil::em(dir.path()));
     assert_eq!(app.config.idioma.as_deref(), Some("es"));
     assert_eq!(texto::idioma_atual(), Idioma::Es);
-    texto::definir(Idioma::Pt);
+    texto::definir(Idioma::PtBr);
 }
