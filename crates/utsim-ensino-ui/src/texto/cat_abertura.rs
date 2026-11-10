@@ -74,6 +74,26 @@ textos! {
         "Pacote de missões (.utse)",
         "Mission package (.utse)",
         "Paquete de misiones (.utse)";
+    nav_aluno:
+        "Aluno",
+        "Student",
+        "Alumno";
+    nav_professor:
+        "Professor",
+        "Teacher",
+        "Profesor";
+    nav_painel_professor:
+        "Painel do professor",
+        "Teacher panel",
+        "Panel del profesor";
+    ab_pacote_pasta:
+        "Pasta…",
+        "Folder…",
+        "Carpeta…";
+    ab_pacote_pasta_ajuda:
+        "Escolher um pacote que está numa pasta (não compactado).",
+        "Choose a package kept in a folder (not packed).",
+        "Elegir un paquete guardado en una carpeta (sin comprimir).";
     ab_glossario_texto:
         "Os conceitos das missões, explicados em poucas linhas.",
         "The concepts of the missions, explained in a few lines.",

@@ -806,6 +806,64 @@ fn editor_de_missoes_do_professor() {
         prof.editor.previa = false;
         frames(&mut prof, &ctx, 2);
     }
+    // Stage C: one data set of each kind with a question about it, the samples open, a
+    // check of a question and of the data, then everything taken out again.
+    {
+        use utsim_ensino_core::editor_dados::TipoGerador;
+        use utsim_ensino_core::missao::Previsao;
+        use utsim_ensino_core::questoes::QuestaoDados;
+        let ed = prof.editor.edicao.as_mut().unwrap();
+        for t in TipoGerador::TODOS {
+            let id = ed.novo_conjunto(t);
+            ed.nova_pergunta_de_dados(&id);
+        }
+        // A capability question with limits, and a factor effect.
+        let id = ed.base.dados[0].id.clone();
+        ed.nova_pergunta_de_dados(&id);
+        if let Some(Previsao::Dados { questao, .. }) = ed.base.previsao.last_mut() {
+            *questao = QuestaoDados::Ppk {
+                lie: Some(40.0),
+                lse: Some(80.0),
+            };
+        }
+        // The subgroups need a pattern for the first question to have an answer.
+        for d in &mut ed.base.dados {
+            if let utsim_ensino_core::dados::Gerador::Subgrupos { padrao, .. } = &mut d.gerador {
+                *padrao = Some(utsim_ensino_core::dados::Padrao::Deslocamento {
+                    inicio: 22,
+                    tamanho: 3.0,
+                });
+            }
+        }
+        ed.base.analisar_em = vec!["estatistica".into(), "qualidade".into()];
+        assert!(
+            ed.erros_dos_dados().is_empty(),
+            "{:?}",
+            ed.erros_dos_dados()
+        );
+        let n = TipoGerador::TODOS.len();
+        prof.editor.caches.abrir_amostras = true;
+        frames(&mut prof, &ctx, 3);
+        assert_eq!(prof.editor.caches.amostras.len(), n);
+        assert!(prof.editor.caches.amostras.values().all(|a| a.1.is_some()));
+        let ed = prof.editor.edicao.as_ref().unwrap();
+        let chave = format!("{}{:?}", ed.base.id, ed.base.dados[0]);
+        assert_eq!(prof.editor.caches.amostras[&0].0, chave);
+        let conferida = ed.amostra_da_pergunta(0);
+        assert!(conferida.is_some());
+        prof.editor
+            .caches
+            .conferencias
+            .insert(0, ("x".into(), conferida));
+        prof.editor.caches.avisos = Some(("x".into(), vec!["aviso".into()]));
+        frames(&mut prof, &ctx, 2);
+        let ed = prof.editor.edicao.as_mut().unwrap();
+        ed.base.dados.clear();
+        ed.base.previsao.clear();
+        ed.base.analisar_em.clear();
+        prof.editor.caches = Default::default();
+        frames(&mut prof, &ctx, 2);
+    }
     prof.editor.calibrar(&NaHora, None);
     frames(&mut prof, &ctx, 2);
     let c = prof.editor.calibragem.clone().expect("calibragem");
