@@ -25,6 +25,22 @@ pub fn board(state: &State, project: Id) -> BTreeMap<Column, Vec<Action>> {
     b
 }
 
+/// The open cards of `person` in a project (not done), by due date (cards without one last),
+/// then by column and order: the "minhas ações" view of the portfolio (stage P7).
+pub fn assigned(state: &State, project: Id, person: Id) -> Vec<Action> {
+    let mut v: Vec<Action> = of_project(state, Kind::Action, project, Action::read)
+        .into_iter()
+        .filter(|a| a.who == Some(person) && a.column != Column::Done)
+        .collect();
+    v.sort_by(|x, y| {
+        (x.due.is_none(), x.due, x.column)
+            .cmp(&(y.due.is_none(), y.due, y.column))
+            .then(x.order.total_cmp(&y.order))
+            .then(x.id.cmp(&y.id))
+    });
+    v
+}
+
 /// Order value for a card placed at `index` among `cards` (which must not contain it).
 fn order_at(cards: &[&Action], index: usize) -> f64 {
     let index = index.min(cards.len());
@@ -128,6 +144,41 @@ mod tests {
 
     fn titles(s: &State, p: Id, c: Column) -> Vec<String> {
         board(s, p)[&c].iter().map(|a| a.title.clone()).collect()
+    }
+
+    #[test]
+    fn assigned_lists_open_cards_of_a_person_by_due_date() {
+        use crate::op::EntityRef;
+        let (mut s, me, p, mut ids) = setup();
+        let other = ids();
+        let card = |id: Id, title: &str, who: Id, due: Option<&str>, col: Column| {
+            let r = EntityRef::new(Kind::Action, id);
+            let mut e = vec![
+                Edit::new(r, fields::action::PROJECT, p.to_string()),
+                Edit::new(r, fields::action::TITLE, title),
+                Edit::new(r, fields::action::WHO, who.to_string()),
+                Edit::new(r, fields::action::COLUMN, enum_value(col)),
+            ];
+            if let Some(d) = due {
+                e.push(Edit::new(r, fields::action::DUE, d));
+            }
+            e
+        };
+        let mut e = Vec::new();
+        e.extend(card(ids(), "sem prazo", me, None, Column::Todo));
+        e.extend(card(ids(), "tarde", me, Some("2026-12-01"), Column::Doing));
+        e.extend(card(ids(), "cedo", me, Some("2026-11-10"), Column::Blocked));
+        e.extend(card(ids(), "feito", me, Some("2026-11-01"), Column::Done));
+        e.extend(card(
+            ids(),
+            "de outro",
+            other,
+            Some("2026-11-01"),
+            Column::Todo,
+        ));
+        commit(&mut s, me, e, &mut ids);
+        let t: Vec<String> = assigned(&s, p, me).into_iter().map(|a| a.title).collect();
+        assert_eq!(t, ["cedo", "tarde", "sem prazo"]);
     }
 
     #[test]

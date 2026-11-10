@@ -12,8 +12,12 @@
 //!   anexos/<sha256>.<ext>     attachments by content hash
 //!   modelos/                  copy of a linked UTSim model
 //!   presenca/<pessoa>.json    heartbeat: who has the project open, on which screen
+//!   cadeia/<pessoa>-<chave>/  signed links of each person's operations (P7)
+//!   assinaturas/              sealed approvals (P7)
 //! ```
 //!
+//! - [`assinatura`]: the key of each person, the signed chain of the journal, its check
+//!   on opening and the sealed approvals (stage P7);
 //! - [`fsio`]: write-once and atomic writes, names worth reading;
 //! - [`project`]: open, create, commit edits, pick up other people's operations, snapshots,
 //!   presence, attachments, the local cache;
@@ -27,6 +31,7 @@ use std::path::{Path, PathBuf};
 use utsim_lss_core::Id;
 use utsim_lss_core::format::FormatError;
 
+pub mod assinatura;
 pub mod fsio;
 pub mod intake;
 pub mod lssz;
