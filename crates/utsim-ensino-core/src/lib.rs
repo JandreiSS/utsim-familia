@@ -26,6 +26,7 @@ pub mod construtor;
 pub mod dados;
 pub mod desafio;
 pub mod dicas;
+pub mod editor;
 pub mod missao;
 pub mod modelagem;
 pub mod motor;
