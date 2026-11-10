@@ -13,6 +13,7 @@ default-members = [
     "crates/utsim-cli",
     "crates/utsim-core",
     "crates/utsim-dash",
+    "crates/utsim-doe",
     "crates/utsim-diagram",
     "crates/utsim-diario",
     "crates/utsim-edit",
@@ -42,6 +43,7 @@ default-members = [
     "crates/utsim-script",
     "crates/utsim-seguranca-core",
     "crates/utsim-stats",
+    "crates/utsim-troca",
     "crates/utsim-twin",
     "crates/utsim-ui-tema",
     "crates/utsim-web",
@@ -71,6 +73,7 @@ utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
 utsim-estudo = { path = "crates/utsim-estudo" }
 utsim-pasta = { path = "crates/utsim-pasta" }
+utsim-troca = { path = "crates/utsim-troca" }
 utsim-posto-ui = { path = "crates/utsim-posto-ui" }
 utsim-env = { path = "crates/utsim-env" }
 utsim-emu = { path = "crates/utsim-emu" }
@@ -79,6 +82,7 @@ utsim-scene = { path = "crates/utsim-scene" }
 utsim-assets = { path = "crates/utsim-assets" }
 utsim-look = { path = "crates/utsim-look" }
 utsim-cad = { path = "crates/utsim-cad" }
+utsim-doe = { path = "crates/utsim-doe" }
 utsim-diagram = { path = "crates/utsim-diagram" }
 utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }

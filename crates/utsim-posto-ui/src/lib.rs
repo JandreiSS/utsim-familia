@@ -24,5 +24,5 @@ pub use ferramentas::{FnLeituras, FnLimites, FnPuxar, FnSimular, TelaFerramentas
 pub use inicial::{Marca, Saida, TelaInicial};
 pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};
 pub use postos::TelaPostos;
-pub use sessao::{Config, Sessao};
+pub use sessao::{Config, Sessao, linhas_da_barra};
 pub use trabalho::Trabalho;

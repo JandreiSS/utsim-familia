@@ -14,6 +14,21 @@ pub fn hoje() -> String {
     data_de_dias(dias)
 }
 
+/// Data e hora de agora (UTC) em ISO 8601: `AAAA-MM-DDTHH:MM:SSZ`.
+pub fn agora_iso() -> String {
+    let s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let (dias, resto) = (s.div_euclid(86_400), s.rem_euclid(86_400));
+    format!(
+        "{}T{:02}:{:02}:{:02}Z",
+        data_de_dias(dias),
+        resto / 3600,
+        resto % 3600 / 60,
+        resto % 60
+    )
+}
+
 /// Dias desde 1970-01-01 para `AAAA-MM-DD` (calendário civil).
 pub fn data_de_dias(dias: i64) -> String {
     let z = dias + 719_468;
