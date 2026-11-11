@@ -38,6 +38,22 @@ pub struct LauncherState {
     /// Do not play the opening animation.
     #[serde(default)]
     pub skip_intro: bool,
+    /// Dark, light or the system's theme.
+    #[serde(default)]
+    pub theme: Theme,
+}
+
+/// The launcher's colours.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Theme {
+    #[default]
+    #[serde(rename = "escuro")]
+    Dark,
+    #[serde(rename = "claro")]
+    Light,
+    /// Follows the system's light or dark setting.
+    #[serde(rename = "sistema")]
+    System,
 }
 
 /// Products as cards or as a table.

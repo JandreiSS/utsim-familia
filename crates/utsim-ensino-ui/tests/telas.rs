@@ -864,6 +864,24 @@ fn editor_de_missoes_do_professor() {
         prof.editor.caches = Default::default();
         frames(&mut prof, &ctx, 2);
     }
+    // Stage E: the balancing and the layout drawn with a new task, a new flow and the
+    // warnings of the pieces, then back to the levers as they were.
+    {
+        use utsim_ensino_core::editor_pecas::TipoDecisao;
+        let antes = prof.editor.edicao.clone().unwrap();
+        for t in [TipoDecisao::Balanceamento, TipoDecisao::Arranjo] {
+            let ed = prof.editor.edicao.as_mut().unwrap();
+            ed.trocar_tipo_decisao(t);
+            assert_eq!(ed.tipo_decisao(), t);
+            ed.nova_tarefa();
+            ed.novo_fluxo();
+            prof.editor.pecas = Some(("x".into(), vec!["aviso".into()]));
+            frames(&mut prof, &ctx, 2);
+        }
+        prof.editor.edicao = Some(antes);
+        prof.editor.pecas = None;
+        frames(&mut prof, &ctx, 1);
+    }
     prof.editor.calibrar(&NaHora, None);
     frames(&mut prof, &ctx, 2);
     let c = prof.editor.calibragem.clone().expect("calibragem");

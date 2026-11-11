@@ -8093,7 +8093,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8233,7 +8233,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-launcher"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "eframe",
  "tempfile",
@@ -8296,6 +8296,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
+ "getrandom 0.2.17",
  "serde",
  "serde_json",
  "tempfile",
@@ -8479,6 +8480,7 @@ dependencies = [
  "utsim-edit",
  "utsim-estudo",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-lss-core",
  "utsim-lss-store",
  "utsim-model",
