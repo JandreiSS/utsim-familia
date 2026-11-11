@@ -59,9 +59,16 @@ impl Model {
             let user = self.aisle_user(t);
             out.push((t.name.clone(), [t.position[0], t.position[1]], user));
             let c = self.clearance_of(t);
+            let bodies = self.nav_bodies();
             for o in self.served_by(&t.name) {
-                if let Some(a) = self.access_point(&o.name, c) {
-                    out.push((o.name.clone(), a, user));
+                let Some(b) = bodies.iter().find(|b| b.name == o.name) else {
+                    continue;
+                };
+                out.push((o.name.clone(), b.access_point(c), user));
+                // A belt is also reached at its ends.
+                if let Some((i, e)) = b.end_stands(c) {
+                    out.push((o.name.clone(), i, user));
+                    out.push((o.name.clone(), e, user));
                 }
             }
         }
@@ -83,7 +90,6 @@ impl Model {
         let net = self.aisle_net();
         let mut nets: BTreeMap<User, utsim_objects::network::NetworkDef> = BTreeMap::new();
         let mut routers: BTreeMap<(User, u64), Arc<AislesRouter>> = BTreeMap::new();
-        let bodies = self.nav_bodies();
         for t in walkers {
             let user = self.aisle_user(t);
             let c = self.clearance_of(t);
@@ -93,14 +99,7 @@ impl Model {
                 .clone();
             let router = routers
                 .entry((user, c.to_bits()))
-                .or_insert_with(|| {
-                    let targets = bodies
-                        .iter()
-                        .zip(self.objects.iter().filter(|o| !crate::is_mobile(&o.kind)))
-                        .map(|(b, o)| (o.position, b.access_point(c)))
-                        .collect();
-                    Arc::new(AislesRouter::new(&def, targets))
-                })
+                .or_insert_with(|| Arc::new(AislesRouter::new(&def, self.stops(c))))
                 .clone();
             set.routers
                 .insert(t.name.clone(), router as Arc<dyn Router>);
