@@ -245,6 +245,7 @@ impl Model {
                     yaw,
                     scale: visual.and_then(|v| v.scale).unwrap_or(1.0),
                     access: o.access,
+                    size: o.size.map(|d| [d[0], d[1]]),
                 })
             })
             .collect()
@@ -267,6 +268,9 @@ impl Model {
             .map(|o| [o.position[0], o.position[1]])
             .collect();
         points.extend(bodies.iter().map(|b| b.access_point(clearance)));
+        for (i, o) in bodies.iter().filter_map(|b| b.end_stands(clearance)) {
+            points.extend([i, o]);
+        }
         if let Some(net) = &self.network {
             points.extend(net.nodes.iter().map(|n| [n.position[0], n.position[1]]));
         }
@@ -287,13 +291,72 @@ impl Model {
     }
 
     fn free_router(&self, clearance: f64) -> FreeRouter {
-        let targets = self
-            .nav_bodies()
+        FreeRouter::new(Arc::new(self.nav_grid(clearance)), self.stops(clearance))
+    }
+
+    /// Where a resource with this clearance stops for each point it may be sent to: the
+    /// position of a fixed object goes to its access point and the ends of a belt
+    /// ([`Model::belt_ends`]) to the places beside them.
+    pub(crate) fn stops(&self, clearance: f64) -> Vec<([f64; 3], Pt)> {
+        let bodies = self.nav_bodies();
+        let fixed = self.objects.iter().filter(|o| !is_mobile(&o.kind));
+        let mut out: Vec<([f64; 3], Pt)> = bodies
             .iter()
-            .zip(self.objects.iter().filter(|o| !is_mobile(&o.kind)))
+            .zip(fixed)
             .map(|(b, o)| (o.position, b.access_point(clearance)))
             .collect();
-        FreeRouter::new(Arc::new(self.nav_grid(clearance)), targets)
+        for (name, i, e) in self.belt_ends() {
+            let stands = bodies
+                .iter()
+                .find(|b| b.name == name)
+                .and_then(|b| b.end_stands(clearance));
+            if let Some((si, se)) = stands {
+                out.push((i, si));
+                out.push((e, se));
+            }
+        }
+        out
+    }
+
+    /// Input and output ends of each belt, by name, at its height: where the mobile
+    /// resources in `Free`, `Network` and `Aisles` movement drop and pick up its items.
+    ///
+    /// They are also the keys the routers look up (bit for bit), so each one differs from
+    /// every object's position and every other end: one that falls exactly on another
+    /// (two belts end to end, a belt ending at a machine's centre) moves by the smallest
+    /// step in `x` (one epsilon), far below anything a distance shows.
+    pub fn belt_ends(&self) -> Vec<(String, [f64; 3], [f64; 3])> {
+        let bits = |p: [f64; 3]| p.map(f64::to_bits);
+        let mut taken: Vec<[u64; 3]> = self
+            .objects
+            .iter()
+            .filter(|o| !is_mobile(&o.kind))
+            .map(|o| bits(o.position))
+            .collect();
+        let mut unique = |mut p: [f64; 3]| {
+            while taken.contains(&bits(p)) {
+                p[0] += p[0].abs().max(1.0) * f64::EPSILON;
+            }
+            taken.push(bits(p));
+            p
+        };
+        let fixed = self.objects.iter().filter(|o| !is_mobile(&o.kind));
+        self.nav_bodies()
+            .iter()
+            .zip(fixed)
+            .filter_map(|(b, o)| {
+                let (i, e) = b.belt_ends()?;
+                let z = o.position[2];
+                Some((o.name.clone(), [i[0], i[1], z], [e[0], e[1], z]))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|(n, i, e)| {
+                let i = unique(i);
+                let e = unique(e);
+                (n, i, e)
+            })
+            .collect()
     }
 
     /// Roteadores dos transportadores em `Free` e `Network`, um por folga (e modo).
@@ -458,6 +521,7 @@ impl Model {
     pub(crate) fn movement_warnings(&self, out: &mut Vec<String>) {
         let mut grids: BTreeMap<u64, NavGrid> = BTreeMap::new();
         let mut uses_network = false;
+        let bodies = self.nav_bodies();
         for t in &self.objects {
             let Some(mode) = self.routed_mode(t) else {
                 continue;
@@ -493,6 +557,26 @@ impl Model {
                 }
                 if !grid.connected(start, a) {
                     unreachable.push(o.name.as_str());
+                }
+                // A belt is served at its ends: those places must be free too.
+                let stands = bodies
+                    .iter()
+                    .find(|b| b.name == o.name)
+                    .and_then(|b| b.end_stands(c));
+                for (end, p) in stands
+                    .into_iter()
+                    .flat_map(|(i, e)| [("entrada", i), ("saída", e)])
+                {
+                    if !grid.is_free(p) {
+                        out.push(format!(
+                            "a ponta de {end} de '{}' ({:.2}, {:.2}) fica dentro de um obstáculo ou a menos da folga de {} m dele para '{}': afaste a esteira ou defina `access`",
+                            o.name,
+                            p[0],
+                            p[1],
+                            fmt_m(c),
+                            t.name
+                        ));
+                    }
                 }
             }
             if unreachable.len() == served.len() {

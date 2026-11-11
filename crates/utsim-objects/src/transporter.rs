@@ -229,6 +229,8 @@ pub struct Transporter {
     home_point: Option<[f64; 3]>,
     /// Where the member walks when its shift pauses (absent: it stays where it is).
     break_point: Option<[f64; 3]>,
+    /// Goes to the ends of a block (a belt's) instead of its centre.
+    use_ends: bool,
     /// On a break at `break_point`: where to walk back to when the shift resumes.
     back_from_break: Option<[f64; 3]>,
     dispatcher: Option<BlockId>,
@@ -279,6 +281,7 @@ impl Transporter {
             home: false,
             home_point: None,
             break_point: None,
+            use_ends: false,
             back_from_break: None,
             dispatcher: None,
             queue: VecDeque::new(),
@@ -442,6 +445,13 @@ impl Transporter {
     /// was) when the shift resumes; a task that arrives meanwhile interrupts that walk.
     pub fn break_point(mut self, point: Option<[f64; 3]>) -> Self {
         self.break_point = point;
+        self
+    }
+
+    /// Picks items up at the output end of a block and drops them at its input end (a
+    /// belt's ends, [`utsim_core::Sim::set_ends`]) instead of going to its centre.
+    pub fn use_ends(mut self, on: bool) -> Self {
+        self.use_ends = on;
         self
     }
 
@@ -778,7 +788,11 @@ impl Transporter {
                         i += 1;
                     }
                 }
-                let target = cx.position(from);
+                let target = if self.use_ends {
+                    cx.output_end(from)
+                } else {
+                    cx.position(from)
+                };
                 self.travel(cx, target, ARRIVED_PICKUP, State::TravelEmpty);
             }
             TaskKind::Operate { station, .. } => {
@@ -1067,7 +1081,11 @@ impl Transporter {
     /// Drives to the destination of the item at `self.k`.
     fn deliver_leg(&mut self, cx: &mut Ctx) {
         if let TaskKind::Transport { to, .. } = self.trip[self.k].kind {
-            let target = cx.position(to);
+            let target = if self.use_ends {
+                cx.input_end(to)
+            } else {
+                cx.position(to)
+            };
             self.travel(cx, target, ARRIVED_DROP, State::TravelLoaded);
         }
     }

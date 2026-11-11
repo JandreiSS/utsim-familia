@@ -7,8 +7,9 @@ texto que falta em outro idioma aparece em português.
 Idiomas de hoje: `pt-BR` (fonte), `en`, `es`, `fr` e `it`. Os arquivos `fr` e `it` foram
 traduzidos por máquina e aguardam revisão humana (o cabeçalho de cada um avisa).
 
-Apps já nos arquivos: UTSim Ensino (`ensino.ftl`) e UTSim Seis Sigma (`seis-sigma.ftl`). Os
-outros seguem o plano do fim desta página.
+Apps já nos arquivos: UTSim Ensino (`ensino.ftl`), UTSim Seis Sigma (`seis-sigma.ftl`) e as
+telas próprias do UTSim Qualidade (`qualidade.ftl`). Os outros seguem o plano do fim desta
+página.
 
 ## Onde ficam
 
@@ -92,6 +93,9 @@ idioma incompleto.
 - Ensino: declare a entrada em `crates/utsim-ensino-ui/src/texto/cat_*.rs` (`nome;` num
   bloco `textos!`, ou `nome(valor1, valor2);` num bloco `modelos!`) e escreva a chave em
   `idiomas/*/ensino.ftl`. As telas usam `texto::nome()` ou `texto::f(texto::nome(), &[&a, &b])`.
+- Qualidade: `tx("chave")` ou `fx("chave", &[("nome", vx(&valor))])` de
+  `crates/utsim-qualidade-app/src/texto.rs` (`dx` para um número com casas fixas, já com a
+  marca decimal da língua). As chaves começam pelo arquivo da tela (`cep-`, `custos-`...).
 - Seis Sigma: um campo novo na tabela de `crates/utsim-lss-app/src/text*.rs`, preenchido com
   `tx("chave")` ou `|a| fx("chave", &[("a", a.into())])`, e a chave em
   `idiomas/*/seis-sigma.ftl`.
@@ -107,10 +111,10 @@ salvo na configuração do app. Cada rodada combina antes com a sessão dona do 
 
 | Rodada | App | Arquivo | Observação |
 |---|---|---|---|
-| 2 | UTSim Qualidade | `qualidade.ftl` | Começar pelos textos das abas compartilhadas com os nós. |
+| 2 | UTSim Qualidade | `qualidade.ftl` | Feita: as telas próprias do app (Simulação, Custos, CEP, Planos, 8D, barra lateral). Início, Postos, Modelo e Ferramentas vêm de `utsim-posto-ui`, `utsim-edit` e `utsim-ferramentas`, e os nomes das disciplinas do 8D de `utsim-qualidade-core`: ficam para a rodada 6. A língua fica em `qualidade_seguranca.json`, comum ao Segurança. |
 | 3 | UTSim Segurança | `seguranca.ftl` | Mesmo molde do Qualidade. |
 | 4 | UTSim Estatística | `estatistica.ftl` | Nomes de testes e saídas numéricas com o formato do idioma. |
 | 5 | Lançador (`utsim-launcher`) | `lancador.ftl` | Poucos textos; o idioma escolhido aqui pode virar o padrão dos outros apps. |
-| 6 | `utsim-posto-ui` e `utsim-ui-tema` | `posto.ftl`, `tema.ftl` | O tema hoje recebe os rótulos prontos (`Rotulos`, `Textos`); passa a lê-los de `tema.ftl`. |
+| 6 | `utsim-posto-ui`, `utsim-edit` (abas dos nós), `utsim-ferramentas` e `utsim-ui-tema` | `posto.ftl`, `tema.ftl` | O tema hoje recebe os rótulos prontos (`Rotulos`, `Textos`); passa a lê-los de `tema.ftl`. |
 | 7 | Editor do simulador | `editor.ftl` | O maior volume; dividir por janela. |
 | 8 | Cliente 3D (Godot) | `godot.ftl` | Godot lê os textos pela ponte `utsim-godot` (mesma crate), sem um segundo sistema. |
