@@ -55,6 +55,8 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         on_entry: None,
         visual: None,
         access: None,
+        size: None,
+        area_per_item: None,
         person: None,
         preset: None,
         department: None,
