@@ -126,6 +126,17 @@ pub enum Command {
         name: String,
         access: Option<[f64; 2]>,
     },
+    /// Sets (`None`: removes) the dimensions of a fixed object: length, width and height
+    /// in metres ([`utsim_model::ObjectDef::size`]).
+    SetSize {
+        name: String,
+        size: Option<[f64; 3]>,
+    },
+    /// Floor area per item of a queue (`None`: removes it; the capacity alone counts).
+    SetAreaPerItem {
+        name: String,
+        area: Option<f64>,
+    },
     /// Own movement mode of a mobile resource (`None`: the model's).
     SetMovement {
         name: String,
@@ -657,6 +668,8 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::SetAisle { name, aisle } => aisles::set_aisle(model, name, aisle)?,
         Command::RemoveAisle { name } => aisles::remove_aisle(model, name)?,
         Command::SetAccess { name, access } => aisles::set_access(model, name, *access)?,
+        Command::SetSize { name, size } => aisles::set_size(model, name, *size)?,
+        Command::SetAreaPerItem { name, area } => aisles::set_area_per_item(model, name, *area)?,
         Command::SetMovement { name, movement } => aisles::set_movement(model, name, *movement)?,
         Command::SetClearance { name, clearance } => {
             aisles::set_clearance(model, name, *clearance)?;
@@ -1107,6 +1120,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         on_entry: None,
         visual: None,
         access: None,
+        size: None,
+        area_per_item: None,
         person: None,
         preset: None,
         department: None,
