@@ -170,6 +170,9 @@ struct BlockRuntime {
     dirty: bool,
     /// Layout position, used for travel distances.
     position: [f64; 3],
+    /// Where items are dropped into and picked up from this block, when they are not its
+    /// centre (the input and output ends of a belt).
+    ends: Option<([f64; 3], [f64; 3])>,
     /// Mobile resource (or dispatcher) that carries this block's items out.
     transport: Option<BlockId>,
     /// Priority of the transport requests for this block's items: fixed value and the
@@ -736,6 +739,18 @@ impl Ctx<'_> {
         self.core.blocks[block.0].position
     }
 
+    /// Where an item is dropped into `block`: its input end, else its position.
+    pub fn input_end(&self, block: BlockId) -> [f64; 3] {
+        let b = &self.core.blocks[block.0];
+        b.ends.map_or(b.position, |e| e.0)
+    }
+
+    /// Where an item is picked up from `block`: its output end, else its position.
+    pub fn output_end(&self, block: BlockId) -> [f64; 3] {
+        let b = &self.core.blocks[block.0];
+        b.ends.map_or(b.position, |e| e.1)
+    }
+
     pub fn block_name(&self, block: BlockId) -> &str {
         &self.core.blocks[block.0].name
     }
@@ -1133,6 +1148,7 @@ impl Simulation {
             rr_next: 0,
             dirty: false,
             position: [0.0; 3],
+            ends: None,
             transport: None,
             transport_priority: (0, None),
             incoming: 0,
@@ -1164,6 +1180,12 @@ impl Simulation {
 
     pub fn set_position(&mut self, block: BlockId, position: [f64; 3]) {
         self.core.blocks[block.0].position = position;
+    }
+
+    /// Input and output ends of `block` (a belt's), where mobile resources that use them
+    /// drop the items they bring and pick up the items they take away.
+    pub fn set_ends(&mut self, block: BlockId, input: [f64; 3], output: [f64; 3]) {
+        self.core.blocks[block.0].ends = Some((input, output));
     }
 
     /// Items leaving `block` are carried by `carrier` (a mobile resource or dispatcher).

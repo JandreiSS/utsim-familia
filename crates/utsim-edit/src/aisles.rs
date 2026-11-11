@@ -77,6 +77,54 @@ pub(crate) fn set_access(
     Ok(())
 }
 
+pub(crate) fn set_size(
+    model: &mut Model,
+    name: &str,
+    size: Option<[f64; 3]>,
+) -> Result<(), String> {
+    if size.is_some_and(|d| !d.iter().all(|v| v.is_finite() && *v > 0.0)) {
+        return Err("as dimensões precisam ser finitas e maiores que zero".into());
+    }
+    let obj = model
+        .objects
+        .iter_mut()
+        .find(|o| o.name == name)
+        .ok_or_else(|| format!("objeto \"{name}\" não existe"))?;
+    if size.is_some() && utsim_model::is_mobile(&obj.kind) {
+        return Err("recursos móveis não têm dimensões próprias".into());
+    }
+    if size.is_some()
+        && matches!(
+            obj.kind,
+            ObjectKind::Conveyor { .. } | ObjectKind::Rack { .. }
+        )
+    {
+        return Err("a esteira e o porta-paletes têm as dimensões nos seus campos".into());
+    }
+    obj.size = size;
+    Ok(())
+}
+
+pub(crate) fn set_area_per_item(
+    model: &mut Model,
+    name: &str,
+    area: Option<f64>,
+) -> Result<(), String> {
+    if area.is_some_and(|a| !(a.is_finite() && a > 0.0)) {
+        return Err("a área por item precisa ser finita e maior que zero".into());
+    }
+    let obj = model
+        .objects
+        .iter_mut()
+        .find(|o| o.name == name)
+        .ok_or_else(|| format!("objeto \"{name}\" não existe"))?;
+    if area.is_some() && !matches!(obj.kind, ObjectKind::Queue { .. }) {
+        return Err("só a espera tem área por item".into());
+    }
+    obj.area_per_item = area;
+    Ok(())
+}
+
 fn transporter<'a>(model: &'a mut Model, name: &str) -> Result<&'a mut ObjectKind, String> {
     let obj = model
         .objects
