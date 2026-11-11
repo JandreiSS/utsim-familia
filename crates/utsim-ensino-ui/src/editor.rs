@@ -1314,7 +1314,7 @@ fn escolha(
     let mut tirar = None;
     for (j, o) in opcoes.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            ui.label(texto::f(texto::ed_opcao(), &[&(j + 1)]));
+            ui.label(texto::ed_opcao());
             ui.add(egui::TextEdit::singleline(&mut o.rotulo).desired_width(200.0));
             campo_termos(
                 ui,

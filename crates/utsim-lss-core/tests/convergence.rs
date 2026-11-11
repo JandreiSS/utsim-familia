@@ -205,3 +205,71 @@ fn two_people_editing_the_same_field_offline_conflict_once() {
     let values = [c.kept.value.clone(), c.replaced.value.clone()];
     assert!(values.contains(&Value::from(2)) && values.contains(&Value::from(3)));
 }
+
+/// Two people edit different lines of the same minutes from the same version (P7, conflict by
+/// paragraph): both changes stay and there is no conflict, also over a snapshot (serialized)
+/// taken between the two edits. The same line edited by both is still a conflict.
+#[test]
+fn edits_of_different_lines_of_a_text_merge() {
+    let ana = Id::v7(1, [1; 10]);
+    let bia = Id::v7(1, [2; 10]);
+    let minutes = EntityRef::new(Kind::Action, Id::v7(2, [9; 10]));
+    let mut n = 0u64;
+    let mut next = || {
+        n += 1;
+        Id::v7(1_000 + n, [(n % 256) as u8; 10])
+    };
+    let text = |s: &str| Value::from(s);
+    let base = State::new().prepare(
+        ana,
+        1,
+        [Edit::new(
+            minutes,
+            "descricao",
+            text("Abertura.\nPauta: FMEA.\nFim."),
+        )],
+        &mut next,
+    );
+    let seen = State::replay(&base);
+    let run = |a: &str, b: &str, next: &mut dyn FnMut() -> Id| {
+        let oa = seen.prepare(
+            ana,
+            2,
+            [Edit::new(minutes, "descricao", text(a))],
+            &mut *next,
+        );
+        let ob = seen.prepare(
+            bia,
+            3,
+            [Edit::new(minutes, "descricao", text(b))],
+            &mut *next,
+        );
+        let mut ops = base.clone();
+        ops.extend(oa);
+        ops.extend(ob);
+        ops
+    };
+    let ops = run(
+        "Abertura às 9h.\nPauta: FMEA.\nFim.",
+        "Abertura.\nPauta: FMEA.\nFim às 10h.",
+        &mut next,
+    );
+    let state = State::replay(&ops);
+    assert!(state.conflicts.is_empty(), "{:?}", state.conflicts);
+    let merged = "Abertura às 9h.\nPauta: FMEA.\nFim às 10h.";
+    assert_eq!(state.entity(minutes.id).unwrap().text("descricao"), merged);
+    // Over a snapshot taken after the first edit, sent through its file form.
+    let mut sorted = ops.clone();
+    sorted.sort_by_key(|o| o.key());
+    let snap = Journal::from_ops(sorted[..2].to_vec()).snapshot();
+    let snap = serde_json::from_str(&serde_json::to_string(&snap).unwrap()).unwrap();
+    let j = Journal::from_snapshot(snap, sorted.clone()).unwrap();
+    assert_eq!(j.state(), &state);
+
+    let ops = run(
+        "Abertura às 9h.\nPauta: FMEA.\nFim.",
+        "Abertura às 8h.\nPauta: FMEA.\nFim.",
+        &mut next,
+    );
+    assert_eq!(State::replay(&ops).conflicts.len(), 1);
+}

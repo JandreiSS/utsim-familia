@@ -49,7 +49,7 @@ fn abertura_picture() {
         let img = cap.imagem(3, |ui| app.draw(ui));
         conferir(&img, nome);
     }
-    texto::definir(texto::Idioma::Pt);
+    texto::definir(texto::Idioma::PtBr);
 
     // The campaign map with two missions solved and one tried: stars, grades, sandbox,
     // the next mission highlighted and the locks.
