@@ -237,15 +237,22 @@ fn arquivos_de(pasta: &str) -> utsim_ensino_core::pacote::Arquivos {
 }
 
 #[test]
-fn missoes_de_pecas_nao_abrem() {
+fn missoes_de_pecas_abrem_e_voltam_iguais() {
+    use utsim_ensino_core::editor_pecas::TipoDecisao;
     let p = PacoteProfessor::de_arquivos(arquivos_de("ensino/campanha")).unwrap();
-    let it = p
-        .missoes()
-        .into_iter()
-        .find(|it| it.caminho == "ato4/ventilador.ron")
+    for (caminho, tipo) in [
+        ("ato4/ventilador.ron", TipoDecisao::Balanceamento),
+        ("ato5/oficina.ron", TipoDecisao::Arranjo),
+    ] {
+        let ed = p.abrir(caminho).unwrap();
+        assert_eq!(ed.tipo_decisao(), tipo, "{caminho}");
+        assert!(ed.erros().is_empty(), "{caminho}: {:?}", ed.erros());
+        let original = utsim_ensino_core::missao::Missao::parse(
+            std::str::from_utf8(&p.arquivos[caminho]).unwrap(),
+        )
         .unwrap();
-    let e = p.abrir(&it.caminho).unwrap_err();
-    assert!(e.contains("peças"), "{e}");
+        assert_eq!(ed.missao(), original, "{caminho}");
+    }
 }
 
 #[test]

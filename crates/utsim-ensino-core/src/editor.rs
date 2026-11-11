@@ -195,8 +195,15 @@ impl Edicao {
             m.alavancas.clear();
             m.metricas.clear();
         }
+        if self.e_pecas() {
+            m.alavancas.clear();
+        }
+        let pecas = m.decisoes_iniciais();
         let ids: BTreeSet<&str> = m.alavancas.iter().map(|a| a.id()).collect();
-        if m.referencia.keys().any(|k| !ids.contains(k.as_str())) {
+        if m.referencia
+            .keys()
+            .any(|k| !ids.contains(k.as_str()) && !pecas.contains_key(k))
+        {
             m.referencia = Decisoes::new();
         }
         m
@@ -219,13 +226,14 @@ impl Edicao {
             e.push("o enunciado está vazio".into());
         }
         let modelagem = self.e_modelagem();
-        let usadas: Vec<&ItemAlavanca> = if modelagem {
+        let pecas = self.e_pecas();
+        let usadas: Vec<&ItemAlavanca> = if modelagem || pecas {
             Vec::new()
         } else {
             self.alavancas.iter().filter(|a| a.usar).collect()
         };
         let so_perguntas = modelagem || (usadas.is_empty() && !self.base.previsao.is_empty());
-        if usadas.is_empty() && !so_perguntas {
+        if usadas.is_empty() && !so_perguntas && !pecas {
             e.push("marque ao menos uma alavanca".into());
         }
         for a in &usadas {
@@ -307,6 +315,7 @@ impl Edicao {
         e.extend(self.erros_das_perguntas());
         e.extend(self.erros_dos_dados());
         e.extend(self.erros_da_modelagem());
+        e.extend(self.erros_das_pecas());
         e
     }
 
@@ -445,6 +454,24 @@ impl Edicao {
     /// decisions and the number of each lever in use.
     pub fn chaves_de_decisao(&self) -> Vec<String> {
         let mut v = vec!["custo".to_string()];
+        if self.e_pecas() {
+            if self.base.balanceamento.is_some() {
+                v.extend(
+                    [
+                        "balanceamento.estacoes",
+                        "balanceamento.ciclo",
+                        "balanceamento.eficiencia",
+                        "balanceamento.atraso",
+                        "balanceamento.minimo",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if self.base.arranjo.is_some() {
+                v.push("arranjo.momento".into());
+            }
+            return v;
+        }
         v.extend(
             self.alavancas
                 .iter()
@@ -456,6 +483,9 @@ impl Edicao {
 
     /// The number of combinations of the levers in use (what the calibration simulates).
     pub fn combinacoes(&self) -> u64 {
+        if self.e_pecas() {
+            return 1;
+        }
         self.alavancas
             .iter()
             .filter(|a| a.usar)
@@ -738,9 +768,6 @@ impl PacoteProfessor {
         let missao = Missao::parse(&self.texto(caminho)?)?;
         let dir = pasta(caminho);
         let junta = |p: &str| junta(dir, p);
-        if missao.tem_pecas() {
-            return Err("o editor ainda não abre missões de peças".into());
-        }
         let modelo = self.texto(&junta(&missao.modelo))?;
         let texto = self.texto(&junta(&missao.texto))?;
         let gabarito = match &missao.modelagem {

@@ -18,6 +18,7 @@ use utsim_ensino_core::editor_dados::{
     unidade_padrao,
 };
 use utsim_ensino_core::editor_modelagem::{ConferenciaModelagem, TIPOS_DE_OBJETO, TipoCriterio};
+use utsim_ensino_core::editor_pecas::TipoDecisao;
 use utsim_ensino_core::missao::{
     APPS_DE_ANALISE, Alavanca, Calculo, Medicao, Objetivo, OpcaoPrevisao, Pergunta, Previsao,
     Resposta, Termo, Tolerancia,
@@ -68,6 +69,8 @@ pub struct EstadoEditor {
     pub caches: CachesDados,
     /// The modelling fields (stage D).
     pub modelagem: EstadoModelagem,
+    /// The warnings of the pieces (stage E), with the key of the pieces they were made for.
+    pub pecas: Option<(String, Vec<String>)>,
 }
 
 /// What a check of the modelling sends back.
@@ -208,6 +211,7 @@ impl EstadoEditor {
         self.previa = false;
         self.tempos.clear();
         self.caches = CachesDados::default();
+        self.pecas = None;
         if let Some((_, t)) = self.modelagem.trabalho.take() {
             t.cancelar.store(true, std::sync::atomic::Ordering::Relaxed);
         }
@@ -551,6 +555,7 @@ fn secao_missao(
         .changed()
     {
         if modelar {
+            ed.trocar_tipo_decisao(TipoDecisao::Alavancas);
             ed.virar_modelagem();
         } else {
             ed.deixar_modelagem();
@@ -565,7 +570,18 @@ fn secao_missao(
         recarregar_chaves |=
             secao_modelagem(ui, ed, &mut s.modelagem, &mut s.mensagens, &mut s.erros);
     } else {
-        secao_alavancas_e_metricas(ui, ed);
+        if secao_decisao(ui, ed) {
+            if let Some(t) = s.trabalho.take() {
+                t.cancelar.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            s.calibragem = None;
+        }
+        match ed.tipo_decisao() {
+            TipoDecisao::Alavancas => secao_alavancas(ui, ed),
+            TipoDecisao::Balanceamento => secao_balanceamento(ui, ed),
+            TipoDecisao::Arranjo => secao_arranjo(ui, ed),
+        }
+        secao_metricas(ui, ed);
     }
     if recarregar_chaves {
         match chaves_do_modelo(&ed.modelo) {
@@ -610,8 +626,31 @@ fn secao_missao(
             }
         }
     }
+    if ed.e_pecas() {
+        let chave = format!("{:?}{:?}", ed.base.balanceamento, ed.base.arranjo);
+        if ui
+            .add_enabled(
+                erros.is_empty(),
+                egui::Button::new(texto::ed_conferir_pecas()),
+            )
+            .on_hover_text(texto::ed_conferir_pecas_dica())
+            .clicked()
+        {
+            s.pecas = Some((chave.clone(), ed.avisos_das_pecas()));
+        }
+        if let Some((k, v)) = &s.pecas
+            && *k == chave
+        {
+            if v.is_empty() {
+                ui.label(RichText::new(texto::ed_pecas_sem_avisos()).weak());
+            }
+            for a in v {
+                ui.colored_label(AMARELO, a);
+            }
+        }
+    }
     let modelagem = ed.e_modelagem();
-    let sem_alavanca = ed.alavancas.iter().all(|a| !a.usar);
+    let sem_alavanca = ed.alavancas.iter().all(|a| !a.usar) && !ed.e_pecas();
     let mut fechar = false;
     let mut calibrar_agora = false;
     let mut conferir_modelagem = false;
@@ -693,8 +732,8 @@ fn secao_missao(
     }
 }
 
-/// The levers with ranges and costs, and the measures with goals (missions of levers).
-fn secao_alavancas_e_metricas(ui: &mut Ui, ed: &mut Edicao) {
+/// The levers with ranges and costs (missions of levers).
+fn secao_alavancas(ui: &mut Ui, ed: &mut Edicao) {
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_alavancas()).strong());
     egui::Grid::new("ed_alavancas")
@@ -765,7 +804,10 @@ fn secao_alavancas_e_metricas(ui: &mut Ui, ed: &mut Edicao) {
             }
         });
     ui.label(RichText::new(texto::f(texto::ed_combinacoes(), &[&ed.combinacoes()])).weak());
+}
 
+/// The measures with goals (missions of levers and of pieces).
+fn secao_metricas(ui: &mut Ui, ed: &mut Edicao) {
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_metricas()).strong());
     egui::Grid::new("ed_metricas").striped(true).show(ui, |ui| {
@@ -831,6 +873,349 @@ fn secao_alavancas_e_metricas(ui: &mut Ui, ed: &mut Edicao) {
             ui.end_row();
         }
     });
+}
+
+fn nome_decisao(t: TipoDecisao) -> &'static str {
+    match t {
+        TipoDecisao::Alavancas => texto::ed_decisao_alavancas(),
+        TipoDecisao::Balanceamento => texto::ed_decisao_balanceamento(),
+        TipoDecisao::Arranjo => texto::ed_decisao_arranjo(),
+    }
+}
+
+/// What the student decides: levers, tasks on stations or machines on a grid (stage E).
+/// True when it changed (the calibration no longer holds).
+fn secao_decisao(ui: &mut Ui, ed: &mut Edicao) -> bool {
+    let antes = ed.tipo_decisao();
+    let mut t = antes;
+    ui.horizontal(|ui| {
+        ui.label(texto::ed_decisao());
+        egui::ComboBox::from_id_salt("ed_decisao")
+            .selected_text(nome_decisao(t))
+            .show_ui(ui, |ui| {
+                for x in TipoDecisao::TODOS {
+                    ui.selectable_value(&mut t, x, nome_decisao(x));
+                }
+            })
+            .response
+            .on_hover_text(texto::ed_decisao_dica());
+    });
+    if t != antes {
+        ed.trocar_tipo_decisao(t);
+        true
+    } else {
+        false
+    }
+}
+
+/// The balancing: takt, stations, variation, the tasks with times, precedences and
+/// starting stations, and the summary of the starting state.
+fn secao_balanceamento(ui: &mut Ui, ed: &mut Edicao) {
+    let prefixo = ed
+        .base
+        .balanceamento
+        .as_ref()
+        .map_or_else(String::new, |b| b.prefixo.clone());
+    let no_modelo = utsim_ensino_core::editor_pecas::estacoes_do_modelo(&ed.modelo, &prefixo);
+    let mut remover = None;
+    let Some(b) = &mut ed.base.balanceamento else {
+        return;
+    };
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_balanceamento()).strong());
+    egui::Grid::new("ed_bal")
+        .num_columns(2)
+        .spacing([12.0, 6.0])
+        .show(ui, |ui| {
+            ui.label(texto::ed_takt());
+            ui.add(
+                egui::DragValue::new(&mut b.takt)
+                    .speed(0.5)
+                    .range(0.0..=f64::MAX),
+            );
+            ui.end_row();
+            ui.label(texto::ed_estacoes());
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut b.estacoes).range(1..=no_modelo.max(1)));
+                ui.label(
+                    RichText::new(texto::f(texto::ed_estacoes_modelo(), &[&no_modelo])).weak(),
+                );
+            });
+            ui.end_row();
+            ui.label(texto::ed_cv());
+            ui.add(egui::DragValue::new(&mut b.cv).speed(0.01).range(0.0..=2.0));
+            ui.end_row();
+            ui.label("");
+            ui.checkbox(&mut b.permite_passar_takt, texto::ed_passar_takt());
+            ui.end_row();
+        });
+    ui.label(RichText::new(texto::ed_tarefas()).strong());
+    let ids: Vec<(String, String)> = b
+        .tarefas
+        .iter()
+        .map(|t| (t.id.clone(), t.nome.clone()))
+        .collect();
+    let ultima = b.estacoes.max(1);
+    egui::Grid::new("ed_tarefas").striped(true).show(ui, |ui| {
+        for h in [
+            "",
+            texto::ed_col_nome(),
+            texto::ed_tempo(),
+            texto::ed_depois_de(),
+            texto::ed_estacao_inicial(),
+            "",
+        ] {
+            cabecalho(ui, h);
+        }
+        ui.end_row();
+        for t in &mut b.tarefas {
+            ui.label(RichText::new(&t.id).strong());
+            ui.add(egui::TextEdit::singleline(&mut t.nome).desired_width(220.0));
+            ui.add(
+                egui::DragValue::new(&mut t.tempo)
+                    .speed(0.5)
+                    .range(0.0..=f64::MAX),
+            );
+            let rotulo = if t.depois_de.is_empty() {
+                texto::ed_nenhuma().to_string()
+            } else {
+                t.depois_de.join(", ")
+            };
+            ui.menu_button(rotulo, |ui| {
+                for (id, nome) in &ids {
+                    if *id == t.id {
+                        continue;
+                    }
+                    let mut marcado = t.depois_de.contains(id);
+                    if ui.checkbox(&mut marcado, format!("{id}. {nome}")).changed() {
+                        if marcado {
+                            t.depois_de.push(id.clone());
+                        } else {
+                            t.depois_de.retain(|p| p != id);
+                        }
+                    }
+                }
+            });
+            let s = b.inicial.entry(t.id.clone()).or_insert(1);
+            ui.add(egui::DragValue::new(s).range(1..=ultima));
+            if ui
+                .small_button("✕")
+                .on_hover_text(texto::ed_remover())
+                .clicked()
+            {
+                remover = Some(t.id.clone());
+            }
+            ui.end_row();
+        }
+    });
+    let nova = ui.button(texto::ed_tarefa_nova()).clicked();
+    if b.takt > 0.0 && !b.tarefas.is_empty() {
+        let r = b.resumo(&b.inicial);
+        let minimo = (b.soma() / b.takt - 1e-9).ceil().max(1.0);
+        ui.label(
+            RichText::new(texto::f(
+                texto::ed_resumo_balanceamento(),
+                &[
+                    &fmt_num(b.soma(), 1),
+                    &fmt_num(minimo, 0),
+                    &fmt_num(r.ciclo, 1),
+                    &fmt_num(r.eficiencia, 3),
+                ],
+            ))
+            .weak(),
+        );
+        if let Some(v) = b.violacao(&b.inicial) {
+            ui.label(RichText::new(texto::f(texto::ed_inicial_viola(), &[&v])).weak());
+        }
+    }
+    if let Some(id) = remover {
+        ed.remover_tarefa(&id);
+    }
+    if nova {
+        ed.nova_tarefa();
+    }
+}
+
+/// The layout: the grid, the machines with their starting cells, the flows with volumes
+/// and routes, and the starting grid drawn with its moment of transport.
+fn secao_arranjo(ui: &mut Ui, ed: &mut Edicao) {
+    let livres = ed.maquinas_livres();
+    let mut remover = None;
+    let mut nova: Option<String> = None;
+    let Some(a) = &mut ed.base.arranjo else {
+        return;
+    };
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_arranjo()).strong());
+    egui::Grid::new("ed_arr")
+        .num_columns(2)
+        .spacing([12.0, 6.0])
+        .show(ui, |ui| {
+            ui.label(texto::ed_colunas());
+            ui.add(egui::DragValue::new(&mut a.colunas).range(1..=12));
+            ui.end_row();
+            ui.label(texto::ed_linhas());
+            ui.add(egui::DragValue::new(&mut a.linhas).range(1..=12));
+            ui.end_row();
+            ui.label(texto::ed_celula());
+            ui.add(
+                egui::DragValue::new(&mut a.celula)
+                    .speed(0.5)
+                    .range(0.1..=f64::MAX),
+            );
+            ui.end_row();
+        });
+    ui.label(RichText::new(texto::ed_maquinas()).strong());
+    let celulas = a.celulas().max(1);
+    let nomes: Vec<(String, String)> = a
+        .maquinas
+        .iter()
+        .map(|m| (m.id.clone(), m.nome.clone()))
+        .collect();
+    egui::Grid::new("ed_maquinas").striped(true).show(ui, |ui| {
+        for h in [
+            "",
+            texto::ed_col_nome(),
+            texto::ed_fixa(),
+            texto::ed_celula_inicial(),
+            "",
+        ] {
+            cabecalho(ui, h);
+        }
+        ui.end_row();
+        for m in &mut a.maquinas {
+            ui.label(RichText::new(&m.id).strong());
+            ui.add(egui::TextEdit::singleline(&mut m.nome).desired_width(160.0));
+            ui.checkbox(&mut m.fixa, "")
+                .on_hover_text(texto::ed_fixa_dica());
+            let c = a.inicial.entry(m.id.clone()).or_insert(0);
+            ui.add(egui::DragValue::new(c).range(0..=celulas - 1));
+            if ui
+                .small_button("✕")
+                .on_hover_text(texto::ed_remover())
+                .clicked()
+            {
+                remover = Some(m.id.clone());
+            }
+            ui.end_row();
+        }
+    });
+    if !livres.is_empty() {
+        ui.menu_button(texto::ed_maquina_nova(), |ui| {
+            for l in &livres {
+                if ui.button(l).clicked() {
+                    nova = Some(l.clone());
+                }
+            }
+        });
+    }
+    ui.label(RichText::new(texto::ed_fluxos()).strong());
+    let nome_de = |id: &str| {
+        nomes
+            .iter()
+            .find(|(x, _)| x == id)
+            .map_or(id.to_string(), |(_, n)| n.clone())
+    };
+    let mut tirar = None;
+    egui::Grid::new("ed_fluxos").striped(true).show(ui, |ui| {
+        for h in [
+            texto::ed_col_nome(),
+            texto::ed_volume(),
+            texto::ed_roteiro(),
+            "",
+        ] {
+            cabecalho(ui, h);
+        }
+        ui.end_row();
+        for (i, f) in a.fluxos.iter_mut().enumerate() {
+            ui.add(egui::TextEdit::singleline(&mut f.nome).desired_width(120.0));
+            ui.add(
+                egui::DragValue::new(&mut f.volume)
+                    .speed(0.5)
+                    .range(0.0..=f64::MAX),
+            );
+            ui.horizontal(|ui| {
+                let rota: Vec<String> = f.roteiro.iter().map(|id| nome_de(id)).collect();
+                ui.label(rota.join(" → "));
+                ui.menu_button("+", |ui| {
+                    for (id, nome) in &nomes {
+                        if ui.button(nome).clicked() {
+                            f.roteiro.push(id.clone());
+                        }
+                    }
+                });
+                if !f.roteiro.is_empty()
+                    && ui
+                        .small_button("⌫")
+                        .on_hover_text(texto::ed_tirar_ultima())
+                        .clicked()
+                {
+                    f.roteiro.pop();
+                }
+            });
+            if ui
+                .small_button("✕")
+                .on_hover_text(texto::ed_remover())
+                .clicked()
+            {
+                tirar = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = tirar {
+        a.fluxos.remove(i);
+    }
+    let novo_fluxo = ui.button(texto::ed_fluxo_novo()).clicked();
+
+    // The starting grid, cell by cell, with the names of the machines placed there.
+    ui.label(RichText::new(texto::ed_grade_inicial()).strong());
+    egui::Grid::new("ed_grade")
+        .striped(true)
+        .min_col_width(80.0)
+        .show(ui, |ui| {
+            for lin in 0..a.linhas {
+                for col in 0..a.colunas {
+                    let c = lin * a.colunas + col;
+                    let aqui: Vec<String> = a
+                        .maquinas
+                        .iter()
+                        .filter(|m| a.inicial.get(&m.id) == Some(&c))
+                        .map(|m| {
+                            if m.fixa {
+                                format!("{} 📌", m.nome)
+                            } else {
+                                m.nome.clone()
+                            }
+                        })
+                        .collect();
+                    if aqui.is_empty() {
+                        ui.label(RichText::new(c.to_string()).weak());
+                    } else {
+                        ui.label(aqui.join(" + "));
+                    }
+                }
+                ui.end_row();
+            }
+        });
+    if a.validar().is_empty() {
+        ui.label(
+            RichText::new(texto::f(
+                texto::ed_momento_inicial(),
+                &[&fmt_num(a.momento(&a.inicial), 0)],
+            ))
+            .weak(),
+        );
+    }
+    if let Some(id) = remover {
+        ed.remover_maquina(&id);
+    }
+    if let Some(id) = nova {
+        ed.nova_maquina(&id);
+    }
+    if novo_fluxo {
+        ed.novo_fluxo();
+    }
 }
 
 fn nome_criterio(t: TipoCriterio) -> &'static str {
