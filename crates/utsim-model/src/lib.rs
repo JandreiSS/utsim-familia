@@ -1067,6 +1067,12 @@ impl Model {
                                 obj.name
                             ));
                         }
+                        if op.team_speedup.is_some_and(|g| !(g.is_finite() && g > 0.0)) {
+                            errors.push(format!(
+                                "{}: operators.team_speedup deve ser finito e > 0",
+                                obj.name
+                            ));
+                        }
                     }
                 }
                 ObjectKind::Sink => {}

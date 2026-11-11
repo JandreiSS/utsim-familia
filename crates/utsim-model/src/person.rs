@@ -17,12 +17,12 @@
 //! Every part is optional and a model without `person` runs exactly as before. The
 //! operators of a processor may require a skill with `OperatorUse(requires: "torno")`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use utsim_core::person::{NIOSH_LOAD_CONSTANT, lifting_index, recommended_weight_limit};
 use utsim_core::{Dist, Fatigue};
 
-use crate::{Model, ObjectDef, ObjectKind};
+use crate::{DispatchRule, Model, ObjectDef, ObjectKind};
 
 /// Reference limit of the CLT, art. 198 (kg per employee) [conferir no texto vigente].
 pub const CLT_198_KG: f64 = 60.0;
@@ -56,6 +56,98 @@ impl Model {
                 team.iter().filter_map(|m| self.object(m)).collect()
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// Teams with more operators than the processes they operate can use at once
+    /// (capacity × operators per piece): the extra ones never work, however long the queue.
+    /// A team that also carries, repairs or maintains has other work and is left alone, and
+    /// so is one whose members keep different shifts or whose dispatcher spreads the work
+    /// (`RoundRobin`, `LeastBusy`, `LongestIdle`, `Random`): they take turns on purpose.
+    pub(crate) fn idle_operator_warnings(&self, out: &mut Vec<String>) {
+        let mut other: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            other.extend(o.transport.as_deref());
+            if let Some(d) = &o.downtime {
+                other.extend(d.repair_crew.as_deref());
+                other.extend(d.preventive.iter().filter_map(|p| p.crew.as_deref()));
+            }
+        }
+        // A member named directly is counted with its dispatcher's team.
+        let pool_of = |team: &'_ str| -> String {
+            self.objects
+                .iter()
+                .find_map(|o| match &o.kind {
+                    ObjectKind::Dispatcher { team: members, .. }
+                        if members.iter().any(|m| m == team) =>
+                    {
+                        Some(o.name.clone())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| team.to_string())
+        };
+        // Per team: servers × operators per piece over every process it operates.
+        // (node, capacity, operators per piece) of each process a team operates.
+        type Uses<'a> = Vec<(&'a str, usize, usize)>;
+        let mut demand: BTreeMap<String, (usize, Uses)> = BTreeMap::new();
+        for o in &self.objects {
+            let ObjectKind::Processor { capacity, .. } = &o.kind else {
+                continue;
+            };
+            for op in o.kind.operator_uses() {
+                let e = demand.entry(pool_of(&op.team)).or_default();
+                e.0 = e.0.saturating_add(capacity.saturating_mul(op.count));
+                e.1.push((o.name.as_str(), *capacity, op.count));
+            }
+        }
+        let rotates = |team: &str| {
+            self.objects.iter().any(|o| {
+                o.name == team
+                    && matches!(
+                        &o.kind,
+                        ObjectKind::Dispatcher { rule, .. }
+                            if !matches!(rule, DispatchRule::FirstAvailable | DispatchRule::Nearest)
+                    )
+            })
+        };
+        for (team, (usable, uses)) in demand {
+            let members = self.team_members(&team);
+            let size = members.len();
+            if size <= usable
+                || other.contains(team.as_str())
+                || rotates(&team)
+                || members.iter().any(|m| other.contains(m.name.as_str()))
+                || members.windows(2).any(|w| w[0].shifts != w[1].shifts)
+            {
+                continue;
+            }
+            let idle = size - usable;
+            let parados = if idle == 1 {
+                "1 fica parado".to_string()
+            } else {
+                format!("{idle} ficam parados")
+            };
+            out.push(match uses.as_slice() {
+                [(node, capacity, count)] => format!(
+                    "'{team}' tem {size} operadores, mas '{node}' usa no máximo {usable} ao mesmo \
+                     tempo (capacidade {capacity} × {count} por peça): {parados} enquanto a fila \
+                     cresce; aumente a capacidade de '{node}' para {} ou use {} operadores por \
+                     peça (`operators.count`, com `team_speedup` se a equipe faz mais rápido)",
+                    size.div_ceil(*count),
+                    size.div_ceil(*capacity),
+                ),
+                _ => format!(
+                    "'{team}' tem {size} operadores, mas {} usam no máximo {usable} ao mesmo \
+                     tempo (capacidade × operadores por peça): {parados} enquanto as filas \
+                     crescem; aumente a capacidade dos processos ou use mais operadores por \
+                     peça (`operators.count`)",
+                    uses.iter()
+                        .map(|(n, _, _)| format!("'{n}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
         }
     }
 

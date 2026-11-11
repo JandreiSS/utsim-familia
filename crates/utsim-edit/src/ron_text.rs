@@ -70,6 +70,9 @@ pub fn operator_use(o: &utsim_objects::OperatorUse) -> String {
     if let Some(label) = &o.priority_label {
         text.push_str(&format!(", priority_label: {}", string(label)));
     }
+    if let Some(gain) = o.team_speedup {
+        text.push_str(&format!(", team_speedup: Some({})", float(gain)));
+    }
     text.push(')');
     text
 }

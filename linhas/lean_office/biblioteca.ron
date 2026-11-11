@@ -144,9 +144,11 @@ Library(
                 (key: "aprovador", label: "Aprovador (equipe ou pessoa)", default: "\"aprovadores\""),
                 (key: "aprova", label: "Peso da aprovação", default: "0.9"),
                 (key: "devolve", label: "Peso da devolução", default: "0.1"),
+                (key: "mesas", label: "Casos em análise ao mesmo tempo (mesas)", default: "1",
+                 help: "um por aprovador que trabalha ao mesmo tempo: com uma equipe de dois, 2"),
             ],
             objects: [
-                r#"(name: "${name}", kind: Processor(process: ${tempo},
+                r#"(name: "${name}", kind: Processor(capacity: ${mesas}, process: ${tempo},
                     operators: Some(OperatorUse(team: ${aprovador}))),
                     output: Weighted([${aprova}, ${devolve}]), symbol: "inspecao", visual: Some((asset: Some("mesa"))))"#,
             ],
