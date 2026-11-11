@@ -48,6 +48,9 @@ pub struct Edicao {
     /// Path of `missao.ron` in the teacher's package when the mission was opened from it
     /// (or written to it): writing again replaces that mission, whatever its id now.
     pub origem: Option<String>,
+    /// The reference model of a modelling mission (stage D,
+    /// [`crate::editor_modelagem`]): `None` for the other missions.
+    pub gabarito_ron: Option<String>,
 }
 
 /// A mission id: words of letters, digits, `_` and `-`, separated by `/`.
@@ -118,6 +121,7 @@ impl Edicao {
                 })
                 .collect(),
             origem: None,
+            gabarito_ron: None,
         })
     }
 
@@ -167,6 +171,7 @@ impl Edicao {
             alavancas,
             metricas,
             origem: None,
+            gabarito_ron: None,
         })
     }
 
@@ -186,6 +191,10 @@ impl Edicao {
             .filter(|x| x.usar)
             .map(|x| x.metrica.clone())
             .collect();
+        if m.modelagem.is_some() {
+            m.alavancas.clear();
+            m.metricas.clear();
+        }
         let ids: BTreeSet<&str> = m.alavancas.iter().map(|a| a.id()).collect();
         if m.referencia.keys().any(|k| !ids.contains(k.as_str())) {
             m.referencia = Decisoes::new();
@@ -209,8 +218,13 @@ impl Edicao {
         if self.texto.trim().is_empty() {
             e.push("o enunciado está vazio".into());
         }
-        let usadas: Vec<&ItemAlavanca> = self.alavancas.iter().filter(|a| a.usar).collect();
-        let so_perguntas = usadas.is_empty() && !self.base.previsao.is_empty();
+        let modelagem = self.e_modelagem();
+        let usadas: Vec<&ItemAlavanca> = if modelagem {
+            Vec::new()
+        } else {
+            self.alavancas.iter().filter(|a| a.usar).collect()
+        };
+        let so_perguntas = modelagem || (usadas.is_empty() && !self.base.previsao.is_empty());
         if usadas.is_empty() && !so_perguntas {
             e.push("marque ao menos uma alavanca".into());
         }
@@ -259,7 +273,7 @@ impl Edicao {
         let metricas: Vec<&Metrica> = self
             .metricas
             .iter()
-            .filter(|m| m.usar)
+            .filter(|m| m.usar && !modelagem)
             .map(|m| &m.metrica)
             .collect();
         if metricas.is_empty() && !so_perguntas {
@@ -292,6 +306,7 @@ impl Edicao {
         }
         e.extend(self.erros_das_perguntas());
         e.extend(self.erros_dos_dados());
+        e.extend(self.erros_da_modelagem());
         e
     }
 
@@ -459,6 +474,9 @@ impl Edicao {
         e.origem = None;
         e.base.modelo = "modelo.ron".into();
         e.base.texto = "texto.md".into();
+        if let Some(md) = &mut e.base.modelagem {
+            md.gabarito = crate::editor_modelagem::ARQUIVO_GABARITO.into();
+        }
         // The concepts are checked against the teacher's package when writing, not here.
         e.base.conceitos.clear();
         p.gravar(&mut e, 0)?;
@@ -518,6 +536,11 @@ impl Calibragem {
 /// package), finds the reference and suggests the goals. It takes as long as the
 /// combinations times the replications.
 pub fn calibrar(ed: &Edicao) -> Result<Calibragem, Vec<String>> {
+    if ed.e_modelagem() {
+        return Err(vec![
+            "uma missão de modelagem não se calibra: use a conferência da modelagem".into(),
+        ]);
+    }
     let p = ed.carregar()?;
     let m = &p.missoes[0];
     let c = conferir(m).map_err(|e| vec![e.to_string()])?;
@@ -715,12 +738,17 @@ impl PacoteProfessor {
         let missao = Missao::parse(&self.texto(caminho)?)?;
         let dir = pasta(caminho);
         let junta = |p: &str| junta(dir, p);
-        if missao.modelagem.is_some() || missao.tem_pecas() {
-            return Err("o editor ainda não abre missões de modelagem ou de peças".into());
+        if missao.tem_pecas() {
+            return Err("o editor ainda não abre missões de peças".into());
         }
         let modelo = self.texto(&junta(&missao.modelo))?;
         let texto = self.texto(&junta(&missao.texto))?;
+        let gabarito = match &missao.modelagem {
+            Some(md) => Some(self.texto(&junta(&md.gabarito))?),
+            None => None,
+        };
         let mut ed = Edicao::abrir(missao, &modelo, &texto)?;
+        ed.gabarito_ron = gabarito;
         ed.origem = Some(caminho.to_string());
         Ok(ed)
     }
@@ -793,6 +821,9 @@ impl PacoteProfessor {
             None => {
                 m.modelo = "modelo.ron".into();
                 m.texto = "texto.md".into();
+                if let Some(md) = &mut m.modelagem {
+                    md.gabarito = crate::editor_modelagem::ARQUIVO_GABARITO.into();
+                }
                 format!("{}/missao.ron", self.pasta_nova(&m.id))
             }
         };
@@ -803,6 +834,10 @@ impl PacoteProfessor {
             .insert(junta(&dir, &m.modelo), ed.modelo_ron.as_bytes().to_vec());
         self.arquivos
             .insert(junta(&dir, &m.texto), ed.texto.as_bytes().to_vec());
+        if let (Some(md), Some(g)) = (&m.modelagem, &ed.gabarito_ron) {
+            self.arquivos
+                .insert(junta(&dir, &md.gabarito), g.as_bytes().to_vec());
+        }
         if origem.is_none() {
             if ato >= self.pacote.atos.len() {
                 let n = self.pacote.atos.len() as u32 + 1;
@@ -816,6 +851,7 @@ impl PacoteProfessor {
             self.pacote.atos[i].missoes.push(caminho.clone());
             ed.base.modelo = m.modelo;
             ed.base.texto = m.texto;
+            ed.base.modelagem = m.modelagem;
         }
         ed.origem = Some(caminho.clone());
         self.sincronizar();
