@@ -270,6 +270,22 @@ pub struct ObjectDef {
     /// clear of its area by the resource's clearance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<[f64; 2]>,
+    /// Dimensions of the object, in its own coordinates and metres: length (x), width (y)
+    /// and height (z). Absent: the default of its kind. Not for a belt (its `length`) nor
+    /// a rack (its bays and levels), whose fields already give them. The footprint moves
+    /// the access point (so the travel of mobile resources) and, in a queue with
+    /// `area_per_item`, sets its capacity; the 3D view scales the model to it.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "dimensoes")]
+    pub size: Option<[f64; 3]>,
+    /// Floor area each item takes in a `Queue` (m²): the capacity becomes the area of its
+    /// footprint (`size`, else the default 4 × 1.4 m) divided by this, whole items only,
+    /// and never more than `capacity` when that is given too. Absent: `capacity` alone.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "area_por_item"
+    )]
+    pub area_per_item: Option<f64>,
     /// Transporter used as a person: fatigue, learning curve, skills, walking speed with
     /// a load, individual pace and manual lifting check ([`utsim_core::person`]). Absent:
     /// none of these effects.
@@ -670,6 +686,29 @@ impl Model {
         }
     }
 
+    /// Footprint of a fixed object on the floor, `[length, width]` in metres: its `size`,
+    /// else the default of its kind at its `visual.scale` (as the navigation sees it).
+    pub fn footprint(&self, obj: &ObjectDef) -> Option<[f64; 2]> {
+        let b = self.nav_bodies().into_iter().find(|b| b.name == obj.name)?;
+        let h = b.half();
+        Some([2.0 * h[0], 2.0 * h[1]])
+    }
+
+    /// Capacity of a `Queue`: from its area when it has `area_per_item` (capped by
+    /// `capacity`), else `capacity`. `None` = unlimited, or not a queue.
+    pub fn queue_capacity(&self, obj: &ObjectDef) -> Option<usize> {
+        let ObjectKind::Queue { capacity, .. } = &obj.kind else {
+            return None;
+        };
+        let Some(a) = obj.area_per_item.filter(|a| a.is_finite() && *a > 0.0) else {
+            return *capacity;
+        };
+        let [l, w] = self.footprint(obj)?;
+        // A hair of tolerance so that 4 × 1.5 / 1.5 is 4 items, not 3.999.
+        let by_area = ((l * w) / a + 1e-9).floor() as usize;
+        Some(capacity.map_or(by_area, |c| c.min(by_area)))
+    }
+
     pub fn validate(&self) -> Result<(), ModelError> {
         let mut errors = Vec::new();
         let run = &self.run;
@@ -720,6 +759,39 @@ impl Model {
                 errors.push(format!("nome repetido: '{}'", obj.name));
             }
             let mut dists: Vec<(String, &Dist)> = Vec::new();
+            if let Some(size) = obj.size {
+                if is_mobile(&obj.kind) {
+                    errors.push(format!(
+                        "{}: size vale só para objetos fixos (não para recursos móveis)",
+                        obj.name
+                    ));
+                } else if matches!(
+                    obj.kind,
+                    ObjectKind::Conveyor { .. } | ObjectKind::Rack { .. }
+                ) {
+                    errors.push(format!(
+                        "{}: a esteira e o porta-paletes tiram as dimensões dos seus campos (length; bays, bay_width, levels, level_height), sem size",
+                        obj.name
+                    ));
+                } else if !size.iter().all(|v| v.is_finite() && *v > 0.0) {
+                    errors.push(format!(
+                        "{}: size (comprimento, largura, altura) deve ser finito e > 0",
+                        obj.name
+                    ));
+                }
+            }
+            if let Some(a) = obj.area_per_item {
+                if !matches!(obj.kind, ObjectKind::Queue { .. }) {
+                    errors.push(format!("{}: area_per_item vale só para Queue", obj.name));
+                } else if !(a.is_finite() && a > 0.0) {
+                    errors.push(format!("{}: area_per_item deve ser finita e > 0", obj.name));
+                } else if self.queue_capacity(obj) == Some(0) {
+                    errors.push(format!(
+                        "{}: nenhum item cabe na área da espera ({:.2} m² por item)",
+                        obj.name, a
+                    ));
+                }
+            }
             match &obj.kind {
                 ObjectKind::Source {
                     interarrival,
@@ -1499,6 +1571,16 @@ impl Model {
             })
             .flat_map(|(team, d)| team.iter().map(move |m| (m.as_str(), d)))
             .collect();
+        // Belt ends, for the resources whose movement goes around the objects.
+        let routed = self.objects.iter().any(|o| self.routed_mode(o).is_some());
+        let belt_ends: HashMap<String, ([f64; 3], [f64; 3])> = if routed {
+            self.belt_ends()
+                .into_iter()
+                .map(|(n, i, e)| (n, (i, e)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
         for obj in &self.objects {
             let behavior: Box<dyn Behavior> = match &obj.kind {
                 ObjectKind::Source {
@@ -1546,7 +1628,7 @@ impl Model {
                     gather,
                     waves,
                 } => Box::new(
-                    Queue::new(*capacity)
+                    Queue::new(self.queue_capacity(obj).or(*capacity))
                         .patience(patience.clone())
                         .gather(gather.clone())
                         .waves(waves.clone())
@@ -1617,6 +1699,7 @@ impl Model {
                         .break_point(self.place_of(*break_at, break_object.as_deref()))
                         .agv(if *agv { traffic.clone() } else { None })
                         .router(nav.router(&obj.name))
+                        .use_ends(self.routed_mode(obj).is_some())
                         .crossings(nav.crossings_for(&obj.name, &crossings))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
@@ -1660,6 +1743,9 @@ impl Model {
             };
             let id = sim.add_block(obj.name.clone(), obj.output.clone(), behavior);
             sim.set_position(id, obj.position);
+            if let Some(&(i, e)) = belt_ends.get(&obj.name) {
+                sim.set_ends(id, i, e);
+            }
             if let Some(t) = &obj.transport {
                 sim.set_transport(id, ids[t.as_str()]);
                 if obj.transport_priority.is_some() || obj.transport_priority_label.is_some() {

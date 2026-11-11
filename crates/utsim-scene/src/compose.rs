@@ -308,6 +308,16 @@ impl Scene {
             if hidden_kind(kind) {
                 geom.half = [0.0; 3];
             }
+            // Dimensions given in the model (`size`: length, width, height) are the box
+            // of the block (Y up), as the navigation sees its footprint. Belts and racks
+            // keep the sizes of their own fields.
+            let size = object(&replay.blocks[b].name).and_then(|o| o.size);
+            if let Some(d) = size.filter(|d| d.iter().all(|v| v.is_finite() && *v > 0.0))
+                && !hidden_kind(kind)
+                && !matches!(geom.shape, Shape::Belt | Shape::Rack)
+            {
+                geom.half = [d[0] as f32 / 2.0, d[2] as f32 / 2.0, d[1] as f32 / 2.0];
+            }
             // A belt turned by the user (`visual.yaw`) points that way, not to its
             // connection, as the navigation sees it (`Model::nav_bodies`).
             let yaw = object(&replay.blocks[b].name)
