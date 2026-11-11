@@ -20,6 +20,9 @@ pub struct Config {
     /// As unidades abertas por último, a mais nova primeiro.
     #[serde(default)]
     pub recentes: Vec<String>,
+    /// A língua da interface (`pt-BR`, `en`, `es`, `fr`, `it`); sem ela, a do sistema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idioma: Option<String>,
 }
 
 impl Config {
@@ -107,7 +110,8 @@ impl Sessao {
         self.gravar_config();
     }
 
-    fn gravar_config(&mut self) {
+    /// Grava a configuração (avisa na barra se não der).
+    pub fn gravar_config(&mut self) {
         if let Some(a) = self.arquivo.clone()
             && let Err(e) = self.config.gravar(&a)
         {

@@ -8093,7 +8093,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8480,6 +8480,7 @@ dependencies = [
  "utsim-edit",
  "utsim-estudo",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-lss-core",
  "utsim-lss-store",
  "utsim-model",
