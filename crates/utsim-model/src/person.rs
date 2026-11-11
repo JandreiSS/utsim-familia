@@ -26,6 +26,15 @@ use crate::{DispatchRule, Model, ObjectDef, ObjectKind};
 
 /// Reference limit of the CLT, art. 198 (kg per employee) [conferir no texto vigente].
 pub const CLT_198_KG: f64 = 60.0;
+/// CLT, art. 390: limit for women in continuous work (kg).
+pub const CLT_390_CONTINUOUS_KG: f64 = 20.0;
+/// CLT, art. 390: limit for women in occasional work (kg).
+pub const CLT_390_OCCASIONAL_KG: f64 = 25.0;
+
+/// Heights (m) outside this range get a warning: probably a typo (cm, feet).
+pub const HEIGHT_RANGE_M: (f64, f64) = (1.40, 2.10);
+/// Body masses (kg) outside this range get a warning: probably a typo (pounds).
+pub const MASS_RANGE_KG: (f64, f64) = (35.0, 200.0);
 
 /// Largest value of a distribution (its mean when unbounded above).
 fn support_max(d: &Dist) -> f64 {
@@ -238,8 +247,27 @@ impl Model {
     }
 
     /// Warnings about people: a skill nobody of the team has, manual loads above the
-    /// reference limits.
+    /// reference limits or the measured capacity, heights and masses out of range.
     pub(crate) fn people_warnings(&self, out: &mut Vec<String>) {
+        for o in &self.objects {
+            let Some(p) = o.person.as_deref() else {
+                continue;
+            };
+            let (lo, hi) = HEIGHT_RANGE_M;
+            if let Some(h) = p.height_m.filter(|h| *h < lo || *h > hi) {
+                out.push(format!(
+                    "{}: altura {h} m fora da faixa usual ({lo} a {hi} m); confira a unidade (metros)",
+                    o.name
+                ));
+            }
+            let (lo, hi) = MASS_RANGE_KG;
+            if let Some(m) = p.mass_kg.filter(|m| *m < lo || *m > hi) {
+                out.push(format!(
+                    "{}: massa {m} kg fora da faixa usual ({lo} a {hi} kg); confira a unidade (kg)",
+                    o.name
+                ));
+            }
+        }
         for (obj, op) in self
             .objects
             .iter()
@@ -348,6 +376,16 @@ impl Model {
                      índice de levantamento {li:.2} > 1 [conferir no texto vigente]"
                 ));
             }
+            if let Some(c) = p.capacity.and_then(|c| c.load_kg).filter(|c| w > *c) {
+                out.push(format!(
+                    "{name}: carrega até {w} kg, acima da capacidade medida dessa pessoa ({c} kg)"
+                ));
+            }
+            if p.sex == Some(utsim_core::Sex::Female) && w > CLT_390_CONTINUOUS_KG {
+                out.push(format!(
+                    "{name}: carrega até {w} kg, acima de {CLT_390_CONTINUOUS_KG} kg, limite da CLT                      (art. 390) para o trabalho contínuo da mulher ({CLT_390_OCCASIONAL_KG} kg no                      ocasional) [conferir no texto vigente]"
+                ));
+            }
             if w > CLT_198_KG {
                 out.push(format!(
                     "{name}: carrega até {w} kg, acima de {CLT_198_KG} kg, limite de referência da CLT \
@@ -364,6 +402,23 @@ impl Model {
             .filter_map(|o| {
                 let p = o.person.as_deref()?;
                 let mut parts = Vec::new();
+                let mut who = Vec::new();
+                match p.sex {
+                    Some(utsim_core::Sex::Female) => who.push("sexo feminino".to_string()),
+                    Some(utsim_core::Sex::Male) => who.push("sexo masculino".to_string()),
+                    None => {}
+                }
+                who.extend(p.height_m.map(|h| format!("{h} m")));
+                who.extend(p.mass_kg.map(|m| format!("{m} kg")));
+                who.extend(p.age.map(|a| format!("{a} anos")));
+                who.extend(p.experience_years.map(|e| format!("{e} anos de experiência")));
+                if let Some(c) = &p.capacity {
+                    who.extend(c.load_kg.map(|k| format!("capacidade medida {k} kg")));
+                    who.extend(c.force_n.map(|n| format!("força medida {n} N")));
+                }
+                if !who.is_empty() {
+                    parts.push(who.join(", "));
+                }
                 match &p.fatigue {
                     None => {}
                     Some(Fatigue::Allowance(a)) => {
