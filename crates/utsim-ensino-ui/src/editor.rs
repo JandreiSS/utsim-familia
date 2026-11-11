@@ -17,10 +17,12 @@ use utsim_ensino_core::editor_dados::{
     ALUNOS_DE_TESTE, Amostra, FERRAMENTAS, MAX_FATORES, MAX_LINHAS, TipoGerador, tolerancia_padrao,
     unidade_padrao,
 };
+use utsim_ensino_core::editor_modelagem::{ConferenciaModelagem, TIPOS_DE_OBJETO, TipoCriterio};
 use utsim_ensino_core::missao::{
     APPS_DE_ANALISE, Alavanca, Calculo, Medicao, Objetivo, OpcaoPrevisao, Pergunta, Previsao,
     Resposta, Termo, Tolerancia,
 };
+use utsim_ensino_core::modelagem::Criterio;
 use utsim_ensino_core::nota::fmt_num;
 use utsim_ensino_core::pacote::Glossario;
 use utsim_ensino_core::questoes::{ConjuntoMissao, QuestaoDados};
@@ -64,6 +66,38 @@ pub struct EstadoEditor {
     pub tempos: BTreeMap<usize, String>,
     /// What the data sets and their questions keep between frames.
     pub caches: CachesDados,
+    /// The modelling fields (stage D).
+    pub modelagem: EstadoModelagem,
+}
+
+/// What a check of the modelling sends back.
+type ResultadoConferencia = Result<ConferenciaModelagem, Vec<String>>;
+
+/// What stage D keeps between frames.
+#[derive(Default)]
+pub struct EstadoModelagem {
+    /// The paths typed for the starting model and the answer key.
+    pub modelo_inicial: String,
+    pub gabarito: String,
+    /// The kind chosen for the next new criterion (index in `TipoCriterio::TODOS`).
+    pub tipo_novo: usize,
+    /// The check running, with the key of the edition it was started for.
+    pub trabalho: Option<(String, Trabalho<ResultadoConferencia>)>,
+    /// The last check, with the key of the edition it was made for.
+    pub conferencia: Option<(String, ConferenciaModelagem)>,
+    /// The metric keys of the answer key, with the text they were read from.
+    pub chaves: Option<(String, Vec<String>)>,
+}
+
+/// What a check of the modelling depends on: the two models and the criteria.
+fn chave_modelagem(ed: &Edicao) -> String {
+    format!(
+        "{}|{:?}|{}|{}",
+        ed.modelo_ron.len(),
+        ed.base.modelagem,
+        ed.modelo_ron,
+        ed.gabarito_ron.as_deref().unwrap_or_default()
+    )
 }
 
 /// The caches of stage C: nothing here is computed on every frame.
@@ -86,6 +120,21 @@ pub struct CachesDados {
 impl EstadoEditor {
     /// Takes the result of the calibration when it arrives.
     pub fn receber(&mut self) {
+        if let Some(r) = self
+            .modelagem
+            .trabalho
+            .as_ref()
+            .and_then(|(_, t)| t.rx.try_recv().ok())
+        {
+            let (chave, _) = self.modelagem.trabalho.take().expect("job");
+            match r {
+                Ok(c) => {
+                    self.erros.clear();
+                    self.modelagem.conferencia = Some((chave, c));
+                }
+                Err(e) => self.erros = e,
+            }
+        }
         if let Some(r) = self.trabalho.as_ref().and_then(|t| t.rx.try_recv().ok()) {
             self.trabalho = None;
             match r {
@@ -159,6 +208,10 @@ impl EstadoEditor {
         self.previa = false;
         self.tempos.clear();
         self.caches = CachesDados::default();
+        if let Some((_, t)) = self.modelagem.trabalho.take() {
+            t.cancelar.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.modelagem = EstadoModelagem::default();
         if let Some(ed) = &ed {
             match chaves_do_modelo(&ed.modelo) {
                 Ok(c) => self.chaves = c,
@@ -490,6 +543,158 @@ fn secao_missao(
             ui.end_row();
         });
 
+    let mut modelar = ed.e_modelagem();
+    let mut recarregar_chaves = false;
+    if ui
+        .checkbox(&mut modelar, texto::ed_modelagem_marcar())
+        .on_hover_text(texto::ed_modelagem_marcar_dica())
+        .changed()
+    {
+        if modelar {
+            ed.virar_modelagem();
+        } else {
+            ed.deixar_modelagem();
+            recarregar_chaves = true;
+        }
+        if let Some(t) = s.trabalho.take() {
+            t.cancelar.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        s.calibragem = None;
+    }
+    if ed.e_modelagem() {
+        recarregar_chaves |=
+            secao_modelagem(ui, ed, &mut s.modelagem, &mut s.mensagens, &mut s.erros);
+    } else {
+        secao_alavancas_e_metricas(ui, ed);
+    }
+    if recarregar_chaves {
+        match chaves_do_modelo(&ed.modelo) {
+            Ok(c) => s.chaves = c,
+            Err(e) => s.erros.push(e),
+        }
+    }
+
+    let mut chaves = s.chaves.clone();
+    chaves.extend(ed.chaves_de_decisao());
+    secao_enunciado(ui, ed, &mut s.previa);
+    if let Some(g) = &s.glossario {
+        secao_conceitos(ui, ed, g);
+    }
+    secao_dados(ui, ed, &mut s.caches, &mut s.tempos);
+    secao_medicoes(ui, ed, &chaves);
+    secao_previsoes(ui, ed, &chaves, &mut s.tempos, &mut s.caches);
+    secao_justificativa(ui, ed);
+    secao_dicas(ui, ed);
+
+    let erros = ed.erros();
+    for e in &erros {
+        ui.colored_label(AMARELO, e);
+    }
+    if !ed.base.dados.is_empty() {
+        let chave = format!("{:?}{:?}", ed.base.dados, ed.base.previsao);
+        if ui
+            .button(texto::ed_conferir_dados())
+            .on_hover_text(texto::ed_conferir_dados_dica())
+            .clicked()
+        {
+            s.caches.avisos = Some((chave.clone(), ed.avisos_dos_dados()));
+        }
+        if let Some((k, v)) = &s.caches.avisos
+            && *k == chave
+        {
+            if v.is_empty() {
+                ui.label(RichText::new(texto::ed_dados_sem_avisos()).weak());
+            }
+            for a in v {
+                ui.colored_label(AMARELO, a);
+            }
+        }
+    }
+    let modelagem = ed.e_modelagem();
+    let sem_alavanca = ed.alavancas.iter().all(|a| !a.usar);
+    let mut fechar = false;
+    let mut calibrar_agora = false;
+    let mut conferir_modelagem = false;
+    let mut aplicar = false;
+    let mut gravar = false;
+    ui.horizontal(|ui| {
+        if modelagem {
+            let ocupada = s.modelagem.trabalho.is_some();
+            conferir_modelagem = ui
+                .add_enabled(
+                    !ocupada && erros.is_empty(),
+                    egui::Button::new(texto::ed_conferir_modelagem()),
+                )
+                .on_hover_text(texto::ed_conferir_modelagem_dica())
+                .clicked();
+            if ocupada {
+                ui.spinner();
+                ui.label(texto::ed_conferindo());
+            }
+        } else {
+            let b = ui.add_enabled(
+                !ocupado && erros.is_empty() && !sem_alavanca,
+                egui::Button::new(texto::ed_calibrar()),
+            );
+            calibrar_agora = b.clicked();
+            if sem_alavanca {
+                b.on_disabled_hover_text(texto::ed_calibrar_sem_alavanca());
+            } else {
+                b.on_hover_text(texto::ed_calibrar_dica());
+            }
+            if s.trabalho.is_some() {
+                ui.spinner();
+                ui.label(texto::ed_calibrando());
+            }
+        }
+        gravar = ui
+            .add_enabled(
+                erros.is_empty() && s.pacote.is_some(),
+                utsim_ui_tema::widgets::primary(texto::ed_gravar_no_pacote()),
+            )
+            .on_hover_text(texto::ed_gravar_dica())
+            .clicked();
+        if ui.button(texto::ed_fechar()).clicked() {
+            fechar = true;
+        }
+    });
+    if modelagem {
+        let chave = chave_modelagem(ed);
+        if let Some((k, c)) = &s.modelagem.conferencia
+            && *k == chave
+        {
+            mostrar_conferencia_modelagem(ui, c);
+        }
+        if conferir_modelagem {
+            let copia = ed.clone();
+            s.modelagem.trabalho = Some((
+                chave,
+                Trabalho::iniciar(executor, Some(ctx.clone()), move |_| {
+                    copia.conferir_modelagem()
+                }),
+            ));
+        }
+    } else if let Some(c) = &s.calibragem {
+        mostrar_calibragem(ui, c, s.edicao.as_ref());
+        aplicar = ui.button(texto::ed_aplicar()).clicked();
+    }
+    if fechar {
+        s.fechar();
+        return;
+    }
+    if calibrar_agora {
+        s.calibrar(executor, Some(ctx.clone()));
+    }
+    if aplicar {
+        s.aplicar();
+    }
+    if gravar {
+        s.gravar_missao();
+    }
+}
+
+/// The levers with ranges and costs, and the measures with goals (missions of levers).
+fn secao_alavancas_e_metricas(ui: &mut Ui, ed: &mut Edicao) {
     ui.add_space(4.0);
     ui.label(RichText::new(texto::ed_alavancas()).strong());
     egui::Grid::new("ed_alavancas")
@@ -626,91 +831,239 @@ fn secao_missao(
             ui.end_row();
         }
     });
+}
 
-    let mut chaves = s.chaves.clone();
-    chaves.extend(ed.chaves_de_decisao());
-    secao_enunciado(ui, ed, &mut s.previa);
-    if let Some(g) = &s.glossario {
-        secao_conceitos(ui, ed, g);
+fn nome_criterio(t: TipoCriterio) -> &'static str {
+    match t {
+        TipoCriterio::Medida => texto::ed_tc_medida(),
+        TipoCriterio::Objetos => texto::ed_tc_objetos(),
+        TipoCriterio::Quebras => texto::ed_tc_quebras(),
+        TipoCriterio::Retrabalho => texto::ed_tc_retrabalho(),
+        TipoCriterio::Capacidade => texto::ed_tc_capacidade(),
+        TipoCriterio::Operadores => texto::ed_tc_operadores(),
     }
-    secao_dados(ui, ed, &mut s.caches, &mut s.tempos);
-    secao_medicoes(ui, ed, &chaves);
-    secao_previsoes(ui, ed, &chaves, &mut s.tempos, &mut s.caches);
-    secao_justificativa(ui, ed);
-    secao_dicas(ui, ed);
+}
 
-    let erros = ed.erros();
-    for e in &erros {
-        ui.colored_label(AMARELO, e);
-    }
-    if !ed.base.dados.is_empty() {
-        let chave = format!("{:?}{:?}", ed.base.dados, ed.base.previsao);
-        if ui
-            .button(texto::ed_conferir_dados())
-            .on_hover_text(texto::ed_conferir_dados_dica())
-            .clicked()
-        {
-            s.caches.avisos = Some((chave.clone(), ed.avisos_dos_dados()));
-        }
-        if let Some((k, v)) = &s.caches.avisos
-            && *k == chave
-        {
-            if v.is_empty() {
-                ui.label(RichText::new(texto::ed_dados_sem_avisos()).weak());
+/// Stage D: the starting model, the answer key and the criteria of a modelling mission.
+/// Returns true when the starting model changed (its metric keys must be read again).
+fn secao_modelagem(
+    ui: &mut Ui,
+    ed: &mut Edicao,
+    st: &mut EstadoModelagem,
+    mensagens: &mut Vec<String>,
+    erros: &mut Vec<String>,
+) -> bool {
+    let mut mudou_modelo = false;
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_modelagem()).strong());
+    let ler = |c: &str| {
+        let caminho = PathBuf::from(c.trim().trim_matches('"'));
+        std::fs::read_to_string(&caminho).map_err(|e| format!("{}: {e}", caminho.display()))
+    };
+    egui::Grid::new("ed_modelagem")
+        .num_columns(3)
+        .spacing([12.0, 8.0])
+        .show(ui, |ui| {
+            ui.label(texto::ed_modelo_inicial());
+            crate::abertura::campo(
+                ui,
+                &mut st.modelo_inicial,
+                Tipo::Abrir,
+                texto::ed_modelo_inicial(),
+                &[utsim_ui_tema::arquivos::RON],
+                320.0,
+            );
+            if ui.button(texto::ed_carregar()).clicked() {
+                match ler(&st.modelo_inicial).and_then(|t| ed.trocar_modelo_inicial(&t)) {
+                    Ok(()) => {
+                        mudou_modelo = true;
+                        *mensagens = vec![texto::ed_modelo_carregado().into()];
+                    }
+                    Err(e) => erros.push(e),
+                }
             }
-            for a in v {
-                ui.colored_label(AMARELO, a);
+            ui.end_row();
+            ui.label(texto::ed_gabarito());
+            crate::abertura::campo(
+                ui,
+                &mut st.gabarito,
+                Tipo::Abrir,
+                texto::ed_gabarito(),
+                &[utsim_ui_tema::arquivos::RON],
+                320.0,
+            );
+            if ui.button(texto::ed_carregar()).clicked() {
+                match ler(&st.gabarito).and_then(|t| ed.trocar_gabarito(&t)) {
+                    Ok(()) => *mensagens = vec![texto::ed_gabarito_carregado().into()],
+                    Err(e) => erros.push(e),
+                }
             }
-        }
+            ui.end_row();
+        });
+    let gabarito = ed.gabarito();
+    let texto_gabarito = ed.gabarito_ron.clone().unwrap_or_default();
+    if st.chaves.as_ref().is_none_or(|(t, _)| *t != texto_gabarito) {
+        let ch = gabarito
+            .as_ref()
+            .and_then(|g| chaves_do_modelo(g).ok())
+            .unwrap_or_default();
+        st.chaves = Some((texto_gabarito, ch));
     }
-    let sem_alavanca = ed.alavancas.iter().all(|a| !a.usar);
-    let mut fechar = false;
-    let mut calibrar_agora = false;
-    let mut aplicar = false;
-    let mut gravar = false;
+    let chaves = st
+        .chaves
+        .as_ref()
+        .map(|(_, c)| c.clone())
+        .unwrap_or_default();
+    let mut sugerir = false;
+    let Some(md) = &mut ed.base.modelagem else {
+        return mudou_modelo;
+    };
     ui.horizontal(|ui| {
-        let b = ui.add_enabled(
-            !ocupado && erros.is_empty() && !sem_alavanca,
-            egui::Button::new(texto::ed_calibrar()),
-        );
-        calibrar_agora = b.clicked();
-        if sem_alavanca {
-            b.on_disabled_hover_text(texto::ed_calibrar_sem_alavanca());
+        let mut tem = md.replicacoes.is_some();
+        ui.label(texto::ed_replicacoes_conf());
+        if ui.checkbox(&mut tem, "").changed() {
+            md.replicacoes = tem.then_some(md.replicacoes.unwrap_or(5));
+        }
+        if let Some(r) = &mut md.replicacoes {
+            ui.add(egui::DragValue::new(r).range(2..=50));
         } else {
-            b.on_hover_text(texto::ed_calibrar_dica());
-        }
-        if let Some(t) = &s.trabalho {
-            ui.spinner();
-            ui.label(texto::ed_calibrando());
-            let _ = t;
-        }
-        gravar = ui
-            .add_enabled(
-                erros.is_empty() && s.pacote.is_some(),
-                utsim_ui_tema::widgets::primary(texto::ed_gravar_no_pacote()),
-            )
-            .on_hover_text(texto::ed_gravar_dica())
-            .clicked();
-        if ui.button(texto::ed_fechar()).clicked() {
-            fechar = true;
+            ui.label(RichText::new("5").weak());
         }
     });
-    if let Some(c) = &s.calibragem {
-        mostrar_calibragem(ui, c, s.edicao.as_ref());
-        aplicar = ui.button(texto::ed_aplicar()).clicked();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(texto::ed_criterios()).strong());
+        sugerir = ui.button(texto::ed_sugerir_criterios()).clicked();
+    });
+    let mut remover = None;
+    egui::Grid::new("ed_criterios")
+        .striped(true)
+        .num_columns(4)
+        .show(ui, |ui| {
+            for h in [
+                texto::ed_rotulo(),
+                texto::ed_peso(),
+                texto::ed_tipo_objeto(),
+                "",
+            ] {
+                cabecalho(ui, h);
+            }
+            ui.end_row();
+            for (i, c) in md.criterios.iter_mut().enumerate() {
+                let tipo = TipoCriterio::de(c);
+                campos_criterio(ui, i, tipo, c, &chaves);
+                if ui
+                    .small_button("✕")
+                    .on_hover_text(texto::ed_remover())
+                    .clicked()
+                {
+                    remover = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+    if let Some(i) = remover {
+        md.criterios.remove(i);
     }
-    if fechar {
-        s.fechar();
-        return;
+    ui.horizontal(|ui| {
+        st.tipo_novo = st.tipo_novo.min(TipoCriterio::TODOS.len() - 1);
+        egui::ComboBox::from_id_salt("ed_criterio_tipo")
+            .selected_text(nome_criterio(TipoCriterio::TODOS[st.tipo_novo]))
+            .show_ui(ui, |ui| {
+                for (k, t) in TipoCriterio::TODOS.iter().enumerate() {
+                    ui.selectable_value(&mut st.tipo_novo, k, nome_criterio(*t));
+                }
+            });
+        if ui.button(texto::ed_criterio_novo()).clicked() {
+            md.criterios
+                .push(TipoCriterio::TODOS[st.tipo_novo].padrao(gabarito.as_ref()));
+        }
+    });
+    if sugerir {
+        ed.sugerir_criterios();
     }
-    if calibrar_agora {
-        s.calibrar(executor, Some(ctx.clone()));
+    for a in ed.avisos_da_modelagem() {
+        ui.colored_label(AMARELO, a);
     }
-    if aplicar {
-        s.aplicar();
+    mudou_modelo
+}
+
+/// One row of the criteria grid: the label, the weight and the fields of its kind.
+fn campos_criterio(ui: &mut Ui, i: usize, tipo: TipoCriterio, c: &mut Criterio, chaves: &[String]) {
+    let (rotulo, peso) = match c {
+        Criterio::Medida { rotulo, peso, .. }
+        | Criterio::Objetos { rotulo, peso, .. }
+        | Criterio::Quebras { rotulo, peso, .. }
+        | Criterio::Retrabalho { rotulo, peso, .. }
+        | Criterio::Capacidade { rotulo, peso, .. }
+        | Criterio::Operadores { rotulo, peso, .. } => (rotulo, peso),
+    };
+    ui.add(egui::TextEdit::singleline(rotulo).desired_width(280.0))
+        .on_hover_text(nome_criterio(tipo));
+    ui.add(egui::DragValue::new(peso).speed(0.1).range(0.0..=100.0));
+    ui.horizontal(|ui| match c {
+        Criterio::Medida {
+            valor, tolerancia, ..
+        } => {
+            campo_termos(ui, &format!("ed_crit_chave{i}"), valor, chaves, true);
+            campo_tolerancia(ui, &format!("ed_crit_tol{i}"), tolerancia);
+        }
+        Criterio::Objetos {
+            tipo: t, minimo, ..
+        } => {
+            egui::ComboBox::from_id_salt(("ed_crit_tipo", i))
+                .selected_text(t.as_str())
+                .show_ui(ui, |ui| {
+                    for x in TIPOS_DE_OBJETO {
+                        ui.selectable_value(t, (*x).to_string(), *x);
+                    }
+                });
+            ui.label(texto::ed_minimo());
+            ui.add(egui::DragValue::new(minimo).range(1..=1000));
+        }
+        Criterio::Capacidade { minimo, .. } => {
+            ui.label(texto::ed_minimo());
+            ui.add(egui::DragValue::new(minimo).range(2..=1000));
+        }
+        _ => {
+            ui.label(RichText::new(nome_criterio(tipo)).weak());
+        }
+    });
+}
+
+/// The verdict of each criterion for the answer key and the starting model.
+fn mostrar_conferencia_modelagem(ui: &mut Ui, c: &ConferenciaModelagem) {
+    egui::Grid::new("ed_conf_modelagem")
+        .striped(true)
+        .num_columns(3)
+        .show(ui, |ui| {
+            for h in [
+                texto::ed_col_criterio(),
+                texto::ed_col_gabarito(),
+                texto::ed_col_inicial(),
+            ] {
+                cabecalho(ui, h);
+            }
+            ui.end_row();
+            for (g, i) in c.gabarito.iter().zip(&c.inicial) {
+                ui.label(&g.rotulo);
+                for k in [g, i] {
+                    let (s, cor) = if k.ok {
+                        ("✔", Color32::from_rgb(120, 200, 120))
+                    } else {
+                        ("✘", VERMELHO)
+                    };
+                    ui.label(RichText::new(s).color(cor))
+                        .on_hover_text(&k.detalhe);
+                }
+                ui.end_row();
+            }
+        });
+    let erros = c.erros();
+    if erros.is_empty() {
+        ui.label(RichText::new(texto::ed_modelagem_confere()).weak());
     }
-    if gravar {
-        s.gravar_missao();
+    for e in erros {
+        ui.colored_label(VERMELHO, e);
     }
 }
 
