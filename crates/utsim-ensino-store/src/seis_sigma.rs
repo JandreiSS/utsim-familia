@@ -59,7 +59,7 @@ pub fn exportar(
         true,
     )];
     for cj in &m.missao.dados {
-        let c = cj.gerar(&m.missao.id, aluno);
+        let c = cj.gerar_com(&m.missao.id, aluno, &m.modelo);
         let csv = c.csv();
         let (file, hash) = pf.add_data(csv.as_bytes(), "csv").map_err(e)?;
         let (columns, rows) = shape(&csv);

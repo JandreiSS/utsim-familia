@@ -204,7 +204,7 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
             } => match missao.conjunto(conjunto) {
                 None => erros.push(format!("previsão '{id}': conjunto '{conjunto}' não existe")),
                 Some(cj) => {
-                    if let Err(e) = questao.resposta(&cj.gerar(&missao.id, "")) {
+                    if let Err(e) = questao.resposta(&cj.gerar_com(&missao.id, "", modelo)) {
                         erros.push(format!("previsão '{id}': {e}"));
                     }
                     if questao.e_escolha() && questao.opcoes(cj).len() < 2 {
@@ -214,6 +214,11 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
                     }
                 }
             },
+        }
+    }
+    for cj in &missao.dados {
+        for e in crate::dados::erros_da_simulacao(&cj.gerador, modelo) {
+            erros.push(format!("conjunto '{}': {e}", cj.id));
         }
     }
     for a in &missao.analisar_em {

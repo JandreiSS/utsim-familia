@@ -1,0 +1,24 @@
+[package]
+name = "utsim-idiomas"
+description = "Languages of the UTSim family: Fluent text files per language (idiomas/<código>/<app>.ftl), embedded in each app, with fallback to pt-BR, number, money and date formats, and the shared language picker"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.95"
+
+[features]
+default = ["egui"]
+# The language picker widget; without it the crate has no egui.
+egui = ["dep:egui"]
+
+[dependencies]
+fluent-bundle = "=0.16.0"
+fluent-syntax = "=0.12.0"
+unic-langid = "0.9"
+# The language of the system (Windows, macOS, Linux) for the first run.
+sys-locale = "=0.3.2"
+egui = { version = "=0.36.2", default-features = false, optional = true }
+
+[[bin]]
+# Lists the keys missing or left over in each language, for translators.
+name = "utsim-idiomas"
+path = "src/bin/conferir.rs"

@@ -1,80 +1,91 @@
-//! The catalogue is complete in the three languages, and no screen writes a literal text.
+//! The catalogue matches the files of the five languages, and no screen writes a literal
+//! text. That every language has the keys and values of pt-BR is the test of
+//! `utsim-idiomas` (`idiomas/`).
 
 use super::*;
 
-/// An entry: name, Portuguese, English, Spanish.
-type Entrada = (&'static str, &'static str, &'static str, &'static str);
-
-/// Every catalogue of the crate.
-fn catalogos() -> Vec<(&'static str, &'static [Entrada])> {
-    vec![
-        ("abertura", cat_abertura::TODOS),
-        ("editor", cat_editor::TODOS),
-        ("geral", geral::TODOS),
-        ("missao", cat_missao::TODOS),
-        ("turma", cat_turma::TODOS),
-        ("vista", cat_vista::TODOS),
-    ]
+/// Every entry of the crate: plain ones (no values) and the ones with values.
+fn entradas() -> Vec<(&'static str, &'static [&'static str])> {
+    let mut v: Vec<(&str, &[&str])> = Vec::new();
+    for nomes in [
+        cat_abertura::NOMES,
+        cat_editor::NOMES,
+        geral::NOMES,
+        cat_missao::NOMES,
+        cat_turma::NOMES,
+        cat_vista::NOMES,
+    ] {
+        v.extend(nomes.iter().map(|n| (*n, &[][..])));
+    }
+    for modelos in [
+        cat_abertura::MODELOS,
+        cat_editor::MODELOS,
+        geral::MODELOS,
+        cat_missao::MODELOS,
+        cat_turma::MODELOS,
+        cat_vista::MODELOS,
+    ] {
+        v.extend_from_slice(modelos);
+    }
+    v
 }
 
-fn marcas(s: &str) -> (usize, Vec<String>) {
-    let mut seq = 0;
-    let mut pos = Vec::new();
-    let mut resto = s;
-    while let Some(i) = resto.find('{') {
-        let depois = &resto[i + 1..];
-        match depois.find('}') {
-            Some(j) if depois[..j].chars().all(|c| c.is_ascii_digit()) => {
-                if j == 0 {
-                    seq += 1;
-                } else {
-                    pos.push(depois[..j].to_string());
-                }
-                resto = &depois[j + 1..];
-            }
-            _ => resto = depois,
-        }
-    }
-    pos.sort();
-    (seq, pos)
+fn arquivo(i: Idioma) -> String {
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(
+        raiz.join("../../idiomas")
+            .join(i.codigo())
+            .join("ensino.ftl"),
+    )
+    .unwrap()
 }
 
 #[test]
-fn catalogo_completo_nas_tres_linguas() {
-    let mut nomes = std::collections::BTreeSet::new();
+fn catalogo_igual_aos_arquivos() {
+    let chaves = utsim_idiomas::conferencia::chaves(&arquivo(Idioma::PtBr)).unwrap();
     let mut erros = Vec::new();
-    for (cat, todos) in catalogos() {
-        for &(nome, pt, en, es) in todos {
-            if !nomes.insert(nome) {
-                erros.push(format!("{cat}::{nome}: nome repetido"));
-            }
-            for (l, t) in [("pt", pt), ("en", en), ("es", es)] {
-                if t.trim().is_empty() {
-                    erros.push(format!("{cat}::{nome}: {l} vazio"));
-                }
-                if t.contains('—') {
-                    erros.push(format!("{cat}::{nome}: {l} com travessão"));
-                }
-            }
-            let m = marcas(pt);
-            for (l, t) in [("en", en), ("es", es)] {
-                if marcas(t) != m {
-                    erros.push(format!("{cat}::{nome}: {l} com valores diferentes do pt"));
+    let mut nomes = std::collections::BTreeSet::new();
+    for (nome, valores) in entradas() {
+        if !nomes.insert(nome) {
+            erros.push(format!("{nome}: nome repetido"));
+        }
+        match chaves.get(nome) {
+            None => erros.push(format!("{nome}: falta em pt-BR/ensino.ftl")),
+            Some(args) => {
+                let declarados: std::collections::BTreeSet<String> =
+                    valores.iter().map(|s| s.to_string()).collect();
+                if *args != declarados {
+                    erros.push(format!(
+                        "{nome}: valores {declarados:?} no código, {args:?} no arquivo"
+                    ));
                 }
             }
+        }
+    }
+    for k in chaves.keys() {
+        if !nomes.contains(k.as_str()) {
+            erros.push(format!("{k}: no arquivo, sem uso no código"));
+        }
+    }
+    for i in Idioma::TODOS {
+        if arquivo(i).contains('—') {
+            erros.push(format!("{}/ensino.ftl com travessão", i.codigo()));
         }
     }
     assert!(erros.is_empty(), "{}", erros.join("\n"));
 }
 
 #[test]
-fn preenche_por_ordem_e_por_posicao() {
-    assert_eq!(f("a {} b {}", &[&1, &"x"]), "a 1 b x");
-    assert_eq!(f("{1} de {0}", &[&"ato", &3]), "3 de ato");
-    assert_eq!(f("{x} {}", &[&7]), "{x} 7");
-    assert_eq!(Idioma::de_codigo("en-US"), Idioma::En);
-    assert_eq!(Idioma::de_codigo("es"), Idioma::Es);
-    assert_eq!(Idioma::de_codigo("xx"), Idioma::Pt);
+fn preenche_pelos_nomes() {
+    utsim_idiomas::definir_nesta_thread(Some(Idioma::PtBr));
+    let m = ato_titulo();
+    assert_eq!(m.nomes.len(), 2);
+    assert!(f(m, &[&1, &"Gargalo"]).contains("Gargalo"));
+    assert_eq!(idioma_de("en-US"), Idioma::En);
+    assert_eq!(idioma_de("fr"), Idioma::Fr);
+    assert_eq!(idioma_de("xx"), Idioma::PtBr);
+    assert!(TEXTOS.faltas().is_empty());
+    utsim_idiomas::definir_nesta_thread(None);
 }
 
 /// The string literals of a Rust source, with their line, outside comments, char literals

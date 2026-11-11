@@ -91,13 +91,59 @@ pub struct Body {
     pub scale: f64,
     /// Ponto de acesso dado no modelo, em coordenadas do objeto.
     pub access: Option<Pt>,
+    /// Medidas do piso dadas no modelo (`size`: comprimento em x, largura em y, m). A
+    /// esteira e o porta-paletes ficam com as dos seus campos (`length`, vãos) e não as
+    /// leem. Com medidas, a escala não muda a área.
+    pub size: Option<Pt>,
 }
+
+/// Quanto o recurso fica para dentro da ponta da esteira, ao lado dela (m).
+pub const END_REACH: f64 = 0.5;
 
 impl Body {
     pub fn half(&self) -> Pt {
         let h = half_extents(self.shape);
+        let fields = matches!(self.shape, Shape::Conveyor { .. } | Shape::Rack { .. });
+        if let (Some(size), false) = (self.size, fields) {
+            return [
+                positive_or(size[0], 2.0 * h[0]) / 2.0,
+                positive_or(size[1], 2.0 * h[1]) / 2.0,
+            ];
+        }
         let s = positive_or(self.scale, 1.0);
         [h[0] * s, h[1] * s]
+    }
+
+    /// Pontas de entrada e de saída de uma esteira, no eixo dela (a entrada em `-x`, a
+    /// saída em `+x`). São as chaves dos roteadores para ir a cada ponta.
+    pub fn belt_ends(&self) -> Option<(Pt, Pt)> {
+        if !matches!(self.shape, Shape::Conveyor { .. }) {
+            return None;
+        }
+        let x = self.half()[0];
+        Some((
+            to_world(self.center, [-x, 0.0], self.yaw),
+            to_world(self.center, [x, 0.0], self.yaw),
+        ))
+    }
+
+    /// Onde o recurso para em cada ponta de uma esteira: ao lado dela (lado `-y`, como o
+    /// ponto de acesso), [`END_REACH`] para dentro da ponta, à folga mais [`ACCESS_GAP`]
+    /// da borda. Ele deixa a peça na entrada e a pega na saída. Com `access` no modelo,
+    /// as duas pontas são o ponto dado.
+    pub fn end_stands(&self, clearance: f64) -> Option<(Pt, Pt)> {
+        self.belt_ends()?;
+        if self.access.is_some() {
+            let p = self.access_point(clearance);
+            return Some((p, p));
+        }
+        let h = self.half();
+        let x = (h[0] - END_REACH).max(0.0);
+        let y = -(h[1] + clearance.max(0.0) + ACCESS_GAP);
+        Some((
+            to_world(self.center, [-x, y], self.yaw),
+            to_world(self.center, [x, y], self.yaw),
+        ))
     }
 
     /// Retângulo da área ocupada.
@@ -196,6 +242,7 @@ mod tests {
             yaw: 0.0,
             scale: 1.0,
             access: None,
+            size: None,
         }
     }
 
@@ -223,6 +270,44 @@ mod tests {
         b.access = Some([0.0, 3.0]);
         let a = b.access_point(0.5);
         assert!((a[0] - 7.0).abs() < 1e-9 && (a[1] - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_size_sets_the_footprint_and_the_access_point_moves_with_it() {
+        let mut b = rack();
+        b.shape = Shape::Processor;
+        b.scale = 3.0;
+        b.size = Some([4.0, 2.0]);
+        // The size wins over the scale.
+        assert_eq!(b.half(), [2.0, 1.0]);
+        let a = b.access_point(0.6);
+        assert!((a[1] - (5.0 - 1.0 - 0.6 - ACCESS_GAP)).abs() < 1e-12);
+        // A rack keeps the sizes of its fields.
+        let mut r = rack();
+        r.size = Some([99.0, 1.4]);
+        assert_eq!(r.half(), [3.0, 0.5]);
+    }
+
+    #[test]
+    fn a_belt_is_reached_at_its_ends() {
+        let mut b = rack();
+        b.shape = Shape::Conveyor { length: 10.0 };
+        assert!(rack().belt_ends().is_none());
+        let (i, o) = b.belt_ends().unwrap();
+        assert_eq!((i, o), ([5.0, 5.0], [15.0, 5.0]));
+        // Beside the belt, half a metre in from each end.
+        let (di, po) = b.end_stands(0.6).unwrap();
+        let y = 5.0 - BELT_WIDTH / 2.0 - 0.6 - ACCESS_GAP;
+        assert!((di[0] - 5.5).abs() < 1e-12 && (di[1] - y).abs() < 1e-12);
+        assert!((po[0] - 14.5).abs() < 1e-12 && (po[1] - y).abs() < 1e-12);
+        // Turned a quarter, the output end is ahead in +y.
+        b.yaw = std::f64::consts::FRAC_PI_2;
+        let (_, o) = b.belt_ends().unwrap();
+        assert!((o[0] - 10.0).abs() < 1e-9 && (o[1] - 10.0).abs() < 1e-9);
+        // A given access point serves both ends.
+        b.access = Some([0.0, 2.0]);
+        let (di, po) = b.end_stands(0.6).unwrap();
+        assert_eq!(di, po);
     }
 
     #[test]

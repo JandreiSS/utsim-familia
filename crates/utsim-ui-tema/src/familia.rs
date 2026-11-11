@@ -44,6 +44,113 @@ pub mod cores {
     pub const DESTAQUE: Color32 = Color32::from_rgb(34, 181, 255);
 }
 
+/// The palette as values, so the family's tools can switch between dark and light.
+/// `branco` is the strongest ink (white on dark, near-black on light) and `preto` the ink
+/// on a `branco` fill.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Paleta {
+    pub claro: bool,
+    pub fundo: Color32,
+    pub superficie: Color32,
+    pub sobre: Color32,
+    pub linha: Color32,
+    pub linha_forte: Color32,
+    pub texto: Color32,
+    pub texto_fraco: Color32,
+    pub texto_apagado: Color32,
+    pub branco: Color32,
+    pub preto: Color32,
+    pub amarelo: Color32,
+    pub erro: Color32,
+    pub verde: Color32,
+    pub destaque: Color32,
+}
+
+impl Paleta {
+    /// The dark palette (the [`cores`] constants).
+    pub const ESCURA: Paleta = Paleta {
+        claro: false,
+        fundo: cores::FUNDO,
+        superficie: cores::SUPERFICIE,
+        sobre: cores::SOBRE,
+        linha: cores::LINHA,
+        linha_forte: cores::LINHA_FORTE,
+        texto: cores::TEXTO,
+        texto_fraco: cores::TEXTO_FRACO,
+        texto_apagado: cores::TEXTO_APAGADO,
+        branco: cores::BRANCO,
+        preto: cores::PRETO,
+        amarelo: cores::AMARELO,
+        erro: cores::ERRO,
+        verde: cores::VERDE,
+        destaque: cores::DESTAQUE,
+    };
+    /// The light palette: the same roles on a near-white background, the signal colours
+    /// darkened to stay readable on it.
+    pub const CLARA: Paleta = Paleta {
+        claro: true,
+        fundo: Color32::from_rgb(245, 246, 248),
+        superficie: Color32::from_rgb(255, 255, 255),
+        sobre: Color32::from_rgb(232, 234, 238),
+        linha: Color32::from_rgb(214, 217, 223),
+        linha_forte: Color32::from_rgb(140, 146, 156),
+        texto: Color32::from_rgb(30, 32, 36),
+        texto_fraco: Color32::from_rgb(84, 90, 100),
+        texto_apagado: Color32::from_rgb(106, 112, 122),
+        branco: Color32::from_rgb(14, 15, 17),
+        preto: Color32::WHITE,
+        amarelo: Color32::from_rgb(158, 108, 0),
+        erro: Color32::from_rgb(196, 38, 30),
+        verde: Color32::from_rgb(28, 132, 48),
+        destaque: Color32::from_rgb(0, 112, 192),
+    };
+
+    /// `c` (a product's accent) made readable as text or a line on this palette.
+    pub fn legivel(&self, c: Color32) -> Color32 {
+        if !self.claro {
+            return c;
+        }
+        // Darken until the luminance is at most about 0.42 (contrast ≥ 4.5 on white).
+        let lum = |c: Color32| {
+            (0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32) / 255.0
+        };
+        let l = lum(c);
+        if l <= 0.42 {
+            return c;
+        }
+        let k = 0.42 / l;
+        Color32::from_rgb(
+            (c.r() as f32 * k) as u8,
+            (c.g() as f32 * k) as u8,
+            (c.b() as f32 * k) as u8,
+        )
+    }
+}
+
+thread_local! {
+    static CLARO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The palette in use on this thread (the UI thread): dark unless [`usar_claro`] said light.
+pub fn paleta() -> Paleta {
+    if tema_claro() {
+        Paleta::CLARA
+    } else {
+        Paleta::ESCURA
+    }
+}
+
+/// Whether the light palette is in use on this thread.
+pub fn tema_claro() -> bool {
+    CLARO.with(|c| c.get())
+}
+
+/// Switches this thread to the light (`true`) or dark palette and restyles `ctx`.
+pub fn usar_claro(ctx: &Context, claro: bool) {
+    CLARO.with(|c| c.set(claro));
+    install_style(ctx);
+}
+
 /// Font family of the bold sans (names, the wordmark).
 pub const NEGRITO: &str = "familia-negrito";
 /// Font family of the bold monospace (buttons).
@@ -169,35 +276,47 @@ pub fn style() -> Style {
 }
 
 pub fn visuals() -> Visuals {
-    use cores::*;
-    let mut v = Visuals::dark();
+    visuals_de(&paleta())
+}
+
+/// The egui visuals painted with `p`.
+pub fn visuals_de(p: &Paleta) -> Visuals {
+    let mut v = if p.claro {
+        Visuals::light()
+    } else {
+        Visuals::dark()
+    };
     let square = CornerRadius::ZERO;
-    v.panel_fill = FUNDO;
-    v.window_fill = SUPERFICIE;
-    v.window_stroke = Stroke::new(1.0, LINHA_FORTE);
+    v.panel_fill = p.fundo;
+    v.window_fill = p.superficie;
+    v.window_stroke = Stroke::new(1.0, p.linha_forte);
     v.window_corner_radius = square;
     v.menu_corner_radius = square;
     v.window_shadow = Shadow::NONE;
     v.popup_shadow = Shadow::NONE;
-    v.extreme_bg_color = FUNDO;
-    v.text_edit_bg_color = Some(FUNDO);
-    v.faint_bg_color = SUPERFICIE;
-    v.code_bg_color = SUPERFICIE;
-    v.hyperlink_color = DESTAQUE;
-    v.warn_fg_color = AMARELO;
-    v.error_fg_color = ERRO;
-    v.selection.bg_fill = Color32::from_rgb(52, 74, 104);
-    v.selection.stroke = Stroke::new(1.0, BRANCO);
-    v.text_cursor.stroke = Stroke::new(2.0, BRANCO);
+    v.extreme_bg_color = p.fundo;
+    v.text_edit_bg_color = Some(p.fundo);
+    v.faint_bg_color = p.superficie;
+    v.code_bg_color = p.superficie;
+    v.hyperlink_color = p.destaque;
+    v.warn_fg_color = p.amarelo;
+    v.error_fg_color = p.erro;
+    v.selection.bg_fill = if p.claro {
+        Color32::from_rgb(196, 218, 245)
+    } else {
+        Color32::from_rgb(52, 74, 104)
+    };
+    v.selection.stroke = Stroke::new(1.0, p.branco);
+    v.text_cursor.stroke = Stroke::new(2.0, p.branco);
     v.striped = false;
     v.collapsing_header_frame = false;
     let w = &mut v.widgets;
     for (state, bg, line, text) in [
-        (&mut w.noninteractive, FUNDO, LINHA, TEXTO),
-        (&mut w.inactive, FUNDO, LINHA, TEXTO),
-        (&mut w.hovered, SOBRE, LINHA_FORTE, BRANCO),
-        (&mut w.active, SOBRE, BRANCO, BRANCO),
-        (&mut w.open, SUPERFICIE, LINHA_FORTE, BRANCO),
+        (&mut w.noninteractive, p.fundo, p.linha, p.texto),
+        (&mut w.inactive, p.fundo, p.linha, p.texto),
+        (&mut w.hovered, p.sobre, p.linha_forte, p.branco),
+        (&mut w.active, p.sobre, p.branco, p.branco),
+        (&mut w.open, p.superficie, p.linha_forte, p.branco),
     ] {
         state.bg_fill = bg;
         state.weak_bg_fill = bg;
@@ -216,7 +335,11 @@ pub fn install(ctx: &Context) {
 }
 
 pub fn install_style(ctx: &Context) {
-    ctx.set_theme(egui::ThemePreference::Dark);
+    ctx.set_theme(if tema_claro() {
+        egui::ThemePreference::Light
+    } else {
+        egui::ThemePreference::Dark
+    });
     let s = style();
     ctx.set_style_of(egui::Theme::Dark, s.clone());
     ctx.set_style_of(egui::Theme::Light, s);
@@ -310,49 +433,49 @@ fn pintar_botao(ui: &Ui, rect: Rect, resp: &Response, text: &str, kind: Botao, e
         let (fill, line, ink) = match kind {
             Botao::Primario => (
                 if hover {
-                    Color32::from_gray(220)
+                    paleta().branco.gamma_multiply(0.85)
                 } else {
-                    cores::BRANCO
+                    paleta().branco
                 },
                 Color32::TRANSPARENT,
-                cores::PRETO,
+                paleta().preto,
             ),
             Botao::Contorno => (
                 if hover {
-                    cores::SOBRE
+                    paleta().sobre
                 } else {
                     Color32::TRANSPARENT
                 },
                 if hover {
-                    cores::LINHA_FORTE
+                    paleta().linha_forte
                 } else {
-                    cores::LINHA
+                    paleta().linha
                 },
-                cores::BRANCO,
+                paleta().branco,
             ),
             Botao::Fantasma => (
                 if hover {
-                    cores::SOBRE
+                    paleta().sobre
                 } else {
                     Color32::TRANSPARENT
                 },
                 Color32::TRANSPARENT,
-                cores::TEXTO,
+                paleta().texto,
             ),
             Botao::Perigo => (
                 if hover {
-                    Color32::from_rgb(48, 24, 24)
+                    paleta().erro.gamma_multiply(0.15)
                 } else {
                     Color32::TRANSPARENT
                 },
-                cores::ERRO,
-                cores::ERRO,
+                paleta().erro,
+                paleta().erro,
             ),
         };
         let (fill, line, ink) = if enabled {
             (fill, line, ink)
         } else {
-            (Color32::TRANSPARENT, cores::LINHA, cores::TEXTO_APAGADO)
+            (Color32::TRANSPARENT, paleta().linha, paleta().texto_apagado)
         };
         let p = ui.painter();
         p.rect_filled(rect, 0.0, fill);
@@ -414,13 +537,13 @@ fn pintar_botao_icone(ui: &Ui, rect: Rect, resp: &Response, icon: Icone, on: boo
         let hover = enabled && resp.hovered();
         let p = ui.painter();
         let (fill, ink) = if on {
-            (cores::BRANCO, cores::PRETO)
+            (paleta().branco, paleta().preto)
         } else if hover {
-            (cores::SOBRE, cores::BRANCO)
+            (paleta().sobre, paleta().branco)
         } else if enabled {
-            (Color32::TRANSPARENT, cores::TEXTO)
+            (Color32::TRANSPARENT, paleta().texto)
         } else {
-            (Color32::TRANSPARENT, cores::TEXTO_APAGADO)
+            (Color32::TRANSPARENT, paleta().texto_apagado)
         };
         p.rect_filled(rect, 0.0, fill);
         if !on {
@@ -430,9 +553,9 @@ fn pintar_botao_icone(ui: &Ui, rect: Rect, resp: &Response, icon: Icone, on: boo
                 Stroke::new(
                     1.0,
                     if hover {
-                        cores::LINHA_FORTE
+                        paleta().linha_forte
                     } else {
-                        cores::LINHA
+                        paleta().linha
                     },
                 ),
                 egui::StrokeKind::Inside,
