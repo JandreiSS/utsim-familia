@@ -23,6 +23,7 @@ pub mod format;
 pub mod id;
 pub mod journal;
 pub mod kanban;
+pub mod merge;
 pub mod op;
 pub mod overview;
 pub mod presence;

@@ -102,10 +102,20 @@ pub enum Language {
     En,
     #[serde(rename = "es")]
     Es,
+    #[serde(rename = "fr")]
+    Fr,
+    #[serde(rename = "it")]
+    It,
 }
 
 impl Language {
-    pub const ALL: [Language; 3] = [Language::PtBr, Language::En, Language::Es];
+    pub const ALL: [Language; 5] = [
+        Language::PtBr,
+        Language::En,
+        Language::Es,
+        Language::Fr,
+        Language::It,
+    ];
 
     /// The name of the language in the language itself.
     pub fn native_name(self) -> &'static str {
@@ -113,6 +123,8 @@ impl Language {
             Language::PtBr => "Português (Brasil)",
             Language::En => "English",
             Language::Es => "Español",
+            Language::Fr => "Français",
+            Language::It => "Italiano",
         }
     }
 }

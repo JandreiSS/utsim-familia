@@ -1,136 +1,97 @@
 //! The text catalogue of the interface (EN13, `docs/plano_ensino_e_jogo.md`, 3.8): every
-//! text a screen shows comes from here, in Portuguese (Brazil), English and Spanish, and a
-//! small renderer of the statements' Markdown (headings, lists, bold).
+//! text a screen shows comes from `idiomas/<código>/ensino.ftl` (`docs/traducao.md`), in the
+//! five languages of the family, and a small renderer of the statements' Markdown (headings,
+//! lists, bold).
 //!
 //! Each entry is a function that answers in the language chosen in "Ajustes"
-//! ([`definir`]). A text with values has `{}` (in order) or `{0}`, `{1}` (by position, for a
-//! language with another word order) and goes through [`f`]. The screens never write a
-//! literal text: the test `nenhum_texto_fora_do_catalogo` reads their source and fails on
-//! one. The mission packages bring their own texts, in the language of the package.
+//! ([`definir`]). A text with values is a [`Modelo`] whose values have names in the files
+//! (`{ $nome }`) and go, in the order of its declaration, through [`f`]. The screens never
+//! write a literal text: the test `nenhum_texto_fora_do_catalogo` reads their source and
+//! fails on one. The mission packages bring their own texts, in the language of the package.
 
 use std::fmt::Display;
-use std::sync::atomic::{AtomicU8, Ordering};
 
 use egui::{RichText, Ui};
 
-/// The languages of the interface.
+pub use utsim_idiomas::{Idioma, atual as idioma_atual, definir};
+
+/// The texts of the app in the five languages, embedded from `idiomas/`.
+pub static TEXTOS: utsim_idiomas::Catalogo = utsim_idiomas::catalogo!("ensino");
+
+/// A text with values: its key in the files and the names of its values, in the order
+/// [`f`] takes them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Idioma {
-    Pt,
-    En,
-    Es,
+pub struct Modelo {
+    pub chave: &'static str,
+    pub nomes: &'static [&'static str],
 }
 
-impl Idioma {
-    pub const TODOS: [Idioma; 3] = [Idioma::Pt, Idioma::En, Idioma::Es];
-
-    /// The code saved in the profile.
-    pub fn codigo(self) -> &'static str {
-        match self {
-            Idioma::Pt => "pt-BR",
-            Idioma::En => "en",
-            Idioma::Es => "es",
-        }
-    }
-
-    /// The name of the language in itself.
-    pub fn nome(self) -> &'static str {
-        match self {
-            Idioma::Pt => "Português",
-            Idioma::En => "English",
-            Idioma::Es => "Español",
-        }
-    }
-
-    /// From a code (`pt-BR`, `pt`, `en-US`, `es`...); Portuguese when unknown.
-    pub fn de_codigo(c: &str) -> Idioma {
-        let c = c.trim().to_ascii_lowercase();
-        if c.starts_with("en") {
-            Idioma::En
-        } else if c.starts_with("es") {
-            Idioma::Es
-        } else {
-            Idioma::Pt
-        }
-    }
+/// The language of a code saved in the profile (`pt-BR`, `en`, `fr`...); Portuguese when
+/// unknown.
+pub fn idioma_de(codigo: &str) -> Idioma {
+    Idioma::de_codigo(codigo).unwrap_or_default()
 }
 
-static IDIOMA: AtomicU8 = AtomicU8::new(0);
+/// Fills a text of the catalogue with its values, in the order of its declaration. A value
+/// that is a whole number or a decimal goes as a number (a plural chooses by it, and it is
+/// written with the language's decimal mark).
+pub fn f(modelo: Modelo, valores: &[&dyn Display]) -> String {
+    let args: Vec<(&str, utsim_idiomas::Valor)> = modelo
+        .nomes
+        .iter()
+        .zip(valores)
+        .map(|(n, v)| (*n, valor(v.to_string())))
+        .collect();
+    TEXTOS.f(modelo.chave, &args)
+}
 
-/// The language of the interface now.
-pub fn idioma_atual() -> Idioma {
-    match IDIOMA.load(Ordering::Relaxed) {
-        1 => Idioma::En,
-        2 => Idioma::Es,
-        _ => Idioma::Pt,
+fn valor(s: String) -> utsim_idiomas::Valor<'static> {
+    if let Ok(n) = s.parse::<i64>()
+        && n.to_string() == s
+    {
+        return n.into();
     }
-}
-
-/// Chooses the language of the interface (for the whole program).
-pub fn definir(i: Idioma) {
-    IDIOMA.store(
-        match i {
-            Idioma::Pt => 0,
-            Idioma::En => 1,
-            Idioma::Es => 2,
-        },
-        Ordering::Relaxed,
-    );
-}
-
-/// One of the three texts, by the language now.
-pub fn escolher(pt: &'static str, en: &'static str, es: &'static str) -> &'static str {
-    match idioma_atual() {
-        Idioma::Pt => pt,
-        Idioma::En => en,
-        Idioma::Es => es,
+    if let Ok(x) = s.parse::<f64>()
+        && x.is_finite()
+        && x.to_string() == s
+    {
+        return x.into();
     }
+    s.into()
 }
 
-/// Fills a text of the catalogue: `{}` takes the next value, `{n}` the value `n`.
-pub fn f(modelo: &str, valores: &[&dyn Display]) -> String {
-    let mut s = String::with_capacity(modelo.len() + 16);
-    let mut proximo = 0;
-    let mut resto = modelo;
-    while let Some(i) = resto.find('{') {
-        s.push_str(&resto[..i]);
-        let depois = &resto[i + 1..];
-        match depois.find('}') {
-            Some(j) if depois[..j].chars().all(|c| c.is_ascii_digit()) => {
-                let n = if j == 0 {
-                    proximo += 1;
-                    proximo - 1
-                } else {
-                    depois[..j].parse().unwrap_or(usize::MAX)
-                };
-                if let Some(v) = valores.get(n) {
-                    s.push_str(&v.to_string());
-                }
-                resto = &depois[j + 1..];
-            }
-            _ => {
-                s.push('{');
-                resto = depois;
-            }
-        }
-    }
-    s.push_str(resto);
-    s
-}
-
-/// Declares the entries of a catalogue: `nome: "pt", "en", "es";`. Each becomes
-/// `pub fn nome() -> &'static str`, and `TODOS` lists them for the tests.
+/// Declares the plain entries of a catalogue: `nome;`. Each becomes
+/// `pub fn nome() -> &'static str`, the text of the key `nome`.
 macro_rules! textos {
-    ($($(#[$m:meta])* $nome:ident: $pt:expr, $en:expr, $es:expr;)*) => {
+    ($($(#[$m:meta])* $nome:ident;)*) => {
         $(
             $(#[$m])*
             pub fn $nome() -> &'static str {
-                $crate::texto::escolher($pt, $en, $es)
+                $crate::texto::TEXTOS.t(stringify!($nome))
             }
         )*
-        /// Every entry: name, Portuguese, English, Spanish.
+        /// Every plain entry, for the tests.
         #[allow(dead_code)]
-        pub(super) const TODOS: &[(&str, &str, &str, &str)] = &[$((stringify!($nome), $pt, $en, $es)),*];
+        pub(super) const NOMES: &[&str] = &[$(stringify!($nome)),*];
+    };
+}
+
+/// Declares the entries with values: `nome(valor1, valor2);`. Each becomes
+/// `pub fn nome() -> Modelo`, filled by [`f`].
+macro_rules! modelos {
+    ($($(#[$m:meta])* $nome:ident($($arg:ident),*);)*) => {
+        $(
+            $(#[$m])*
+            pub fn $nome() -> $crate::texto::Modelo {
+                $crate::texto::Modelo {
+                    chave: stringify!($nome),
+                    nomes: &[$(stringify!($arg)),*],
+                }
+            }
+        )*
+        /// Every entry with values, for the tests.
+        #[allow(dead_code)]
+        pub(super) const MODELOS: &[(&str, &[&str])] = &[$((stringify!($nome), &[$(stringify!($arg)),*])),*];
     };
 }
 
