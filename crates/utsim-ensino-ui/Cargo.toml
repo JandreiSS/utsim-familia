@@ -9,6 +9,8 @@ rust-version = "1.95"
 [dependencies]
 utsim-ensino-core = { path = "../utsim-ensino-core" }
 utsim-ensino-store = { path = "../utsim-ensino-store" }
+# The texts of the screens in the five languages (`idiomas/<código>/ensino.ftl`).
+utsim-idiomas.workspace = true
 # The clock and the program folder of UTSim Seis Sigma (competences of the solved missions).
 utsim-lss-store = { path = "../utsim-lss-store" }
 utsim-core.workspace = true

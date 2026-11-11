@@ -135,6 +135,14 @@ pub struct State {
     /// Number of operations applied.
     #[serde(rename = "operacoes", default)]
     pub count: u64,
+    /// Texts of several lines already replaced, by the operation that wrote them: the common
+    /// version when two people edit such a text at once (see [`crate::merge`]).
+    #[serde(
+        rename = "textos_anteriores",
+        default,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub earlier_texts: BTreeMap<Id, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -196,23 +204,51 @@ impl State {
             self.rejected.push(op.id);
             return;
         }
-        let new = FieldValue {
+        let mut new = FieldValue {
             value: op.value.clone(),
             op: op.id,
             author: op.author,
             lamport: op.lamport,
             at_ms: op.at_ms,
         };
-        let previous = entity.fields.insert(op.field.clone(), new.clone());
-        if let Some(previous) = previous {
-            if op.base != Some(previous.op) && previous.value != op.value {
-                self.conflicts.push(Conflict {
-                    entity: op.entity,
-                    field: op.field.clone(),
-                    kept: new,
-                    replaced: previous,
-                });
+        let previous = entity.fields.get(&op.field).cloned();
+        let mut merged = false;
+        if let Some(previous) = &previous {
+            // Two edits of a text of several lines from the same version: kept together
+            // when they touched different lines.
+            if let (Some(base), Some(kept), Some(mine)) =
+                (op.base, previous.value.as_str(), op.value.as_str())
+                && base != previous.op
+                && let Some(text) = self
+                    .earlier_texts
+                    .get(&base)
+                    .and_then(|b| crate::merge::merge_lines(b, kept, mine))
+            {
+                new.value = Value::from(text);
+                merged = true;
             }
+            if let Some(s) = previous.value.as_str()
+                && (s.contains('\n') || new.value.as_str().is_some_and(|n| n.contains('\n')))
+            {
+                self.earlier_texts.insert(previous.op, s.to_string());
+            }
+        }
+        let entity = self
+            .entities
+            .get_mut(&op.entity.id)
+            .expect("inserted above");
+        entity.fields.insert(op.field.clone(), new.clone());
+        if let Some(previous) = previous
+            && !merged
+            && op.base != Some(previous.op)
+            && previous.value != op.value
+        {
+            self.conflicts.push(Conflict {
+                entity: op.entity,
+                field: op.field.clone(),
+                kept: new,
+                replaced: previous,
+            });
         }
     }
 
