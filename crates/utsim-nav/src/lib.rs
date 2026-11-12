@@ -24,6 +24,7 @@ pub mod body;
 pub mod generate;
 pub mod geom;
 pub mod grid;
+pub mod path3d;
 pub mod router;
 
 pub use aisles::{
@@ -37,4 +38,5 @@ pub use body::{
 pub use generate::{Generated, generate_network};
 pub use geom::Pt;
 pub use grid::{GridOptions, NavGrid, NavPath};
+pub use path3d::{P3, PathNode};
 pub use router::{FreeRouter, NetworkModeRouter};

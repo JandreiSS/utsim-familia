@@ -330,6 +330,16 @@ impl Scene {
                 let r = y.to_radians() as f32;
                 *geom = Geom::new(kind, geom.handling, Some([r.cos(), -r.sin()]));
             }
+            // A belt drawn by nodes follows its route (model x, y, z → scene x, z, −y).
+            let route = object(&replay.blocks[b].name)
+                .and_then(|o| utsim_model::trajeto::valid_route(&o.kind));
+            if let (Some(r), Shape::Belt) = (route, geom.shape) {
+                let line = utsim_model::trajeto::sample(&r.nodes)
+                    .into_iter()
+                    .map(|p| [p[0] as f32, p[2] as f32, -p[1] as f32])
+                    .collect();
+                geom.set_route(line);
+            }
         }
 
         let net = replay.blocks.iter().position(|b| b.kind == "Fluid");
@@ -892,9 +902,13 @@ impl Scene {
                 // Belts and racks put every item where the trace says it is.
                 (Shape::Belt | Shape::Rack, None) => {
                     for &(_, i, at) in list.iter() {
+                        let distance = (geom.shape == Shape::Belt)
+                            .then(|| tl.belt_position(b, i, at))
+                            .flatten();
+                        // On a drawn belt the item turns with the route.
+                        let item_yaw = distance.and_then(|d| geom.belt_item_yaw(d)).unwrap_or(yaw);
                         let spot = if geom.shape == Shape::Belt {
-                            tl.belt_position(b, i, at)
-                                .and_then(|distance| geom.belt_item(distance))
+                            distance.and_then(|d| geom.belt_item(d))
                         } else {
                             tl.rack_slot(b, i, at).and_then(|slot| geom.rack_item(slot))
                         };
@@ -911,6 +925,7 @@ impl Scene {
                                 ),
                                 scale: size / ITEM_SIZE,
                                 drawn: true,
+                                yaw: item_yaw,
                                 ..hidden(i)
                             },
                             None => hidden(i),

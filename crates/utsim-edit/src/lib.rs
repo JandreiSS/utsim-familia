@@ -1087,6 +1087,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             speed: 1.0,
             item_length: 1.0,
             accumulating: true,
+            route: None,
         },
         "Rack" => ObjectKind::Rack {
             bays: 4,
