@@ -123,3 +123,68 @@ fn five_steps_on_a_unit_folder() {
     let _ = inventario::CONFIG;
     let _: Vec<Posto> = Vec::new();
 }
+
+#[test]
+fn hazards_on_the_node_join_the_inventory() {
+    use utsim_model::safety::{HazardDef, HazardGroup, SafetyDef};
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Laboratório", "prof").unwrap();
+    let caminho =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cruzamento_empilhadeira.ron");
+    let mut model = utsim_model::Model::load(&caminho).unwrap();
+    for p in sugerir_postos(&model, &u.postos(), &caminho.display().to_string()) {
+        u.gravar_posto(&p).unwrap();
+    }
+    let prensa = model
+        .objects
+        .iter_mut()
+        .find(|o| o.name == "prensa")
+        .unwrap();
+    prensa.safety = Some(Box::new(SafetyDef {
+        hazards: vec![HazardDef {
+            id: "h1".into(),
+            group: HazardGroup::Physical,
+            description: "Ruído da prensa".into(),
+            controls: "Enclausuramento parcial".into(),
+            probability: 3,
+            severity: 3,
+            ..HazardDef::default()
+        }],
+        ..SafetyDef::default()
+    }));
+    let postos = u.postos();
+    let posto = postos
+        .iter()
+        .find(|p| p.objeto.as_deref() == Some("prensa"))
+        .unwrap();
+
+    // Without the model, only the unit's hazards.
+    assert!(Inventario::ler(&u).perigos.is_empty());
+    let inv = Inventario::ler(&u).com_nos(|_| Some(&model));
+    let meus = inv.perigos_do_posto(&posto.id);
+    assert_eq!(meus.len(), 1);
+    let p = meus[0];
+    assert!(p.eh_do_no());
+    assert_eq!(p.id, format!("no:{}:h1", posto.id));
+    assert_eq!(p.grupo, utsim_seguranca_core::inventario::Grupo::Fisico);
+    assert_eq!(p.controles, "Enclausuramento parcial");
+    // It counts in the alerts, and an action in the unit can point at it.
+    assert_eq!(inv.sem_acao().len(), 1);
+    u.gravar(
+        ACOES,
+        "",
+        &Acao {
+            perigo: p.id.clone(),
+            hierarquia: Hierarquia::Engenharia,
+            descricao: "Cabine acústica".into(),
+            ..Acao::default()
+        },
+    )
+    .unwrap();
+    let inv = Inventario::ler(&u).com_nos(|_| Some(&model));
+    assert!(inv.sem_acao().is_empty());
+    assert_eq!(inv.acoes_do_perigo(&format!("no:{}:h1", posto.id)).len(), 1);
+    // A station whose object is not in the model gets nothing from it.
+    let outro = postos.iter().find(|p| p.id != posto.id).unwrap();
+    assert!(inv.perigos_do_posto(&outro.id).is_empty());
+}
