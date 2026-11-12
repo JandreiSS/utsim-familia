@@ -188,3 +188,63 @@ fn hazards_on_the_node_join_the_inventory() {
     let outro = postos.iter().find(|p| p.id != posto.id).unwrap();
     assert!(inv.perigos_do_posto(&outro.id).is_empty());
 }
+
+#[test]
+fn a_unit_hazard_passes_to_the_node_with_its_actions() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Laboratório", "prof").unwrap();
+    let p = Perigo {
+        posto: "prensa".into(),
+        grupo: inventario::Grupo::Ergonomico,
+        descricao: "Postura curvada".into(),
+        controles: "Pausas".into(),
+        probabilidade: 2,
+        severidade: 3,
+        ..Perigo::default()
+    };
+    let id = u.gravar(PERIGOS, "", &p).unwrap();
+    let outro = u.gravar(PERIGOS, "", &p).unwrap();
+    for perigo in [&id, &outro] {
+        u.gravar(
+            ACOES,
+            "",
+            &Acao {
+                perigo: perigo.clone(),
+                descricao: "Bancada regulável".into(),
+                ..Acao::default()
+            },
+        )
+        .unwrap();
+    }
+    u.gravar(
+        REAVALIACOES,
+        "",
+        &Reavaliacao {
+            perigo: id.clone(),
+            data: "2026-11-01".into(),
+            probabilidade: 1,
+            severidade: 3,
+            ..Reavaliacao::default()
+        },
+    )
+    .unwrap();
+
+    // The node gets the same fields.
+    let h = p.para_o_no();
+    assert_eq!(h.group, utsim_model::safety::HazardGroup::Ergonomic);
+    assert_eq!(h.description, "Postura curvada");
+    assert_eq!(h.controls, "Pausas");
+    assert_eq!((h.probability, h.severity), (2, 3));
+    assert_eq!(Perigo::do_no("prensa", &h).grupo, p.grupo);
+
+    // Its action and reassessment follow it, the other hazard keeps its own.
+    let novo = "no:prensa:h1";
+    assert_eq!(inventario::passar_ao_no(&mut u, &id, novo).unwrap(), 2);
+    let inv = Inventario::ler(&u);
+    assert_eq!(inv.perigos.len(), 1);
+    assert_eq!(inv.perigos[0].id, outro);
+    assert_eq!(inv.acoes_do_perigo(novo).len(), 1);
+    assert_eq!(inv.acoes_do_perigo(&outro).len(), 1);
+    assert_eq!(inv.ultima_reavaliacao(novo).unwrap().probabilidade, 1);
+    assert!(inv.acoes_do_perigo(&id).is_empty());
+}
