@@ -58,6 +58,14 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- Elementos 3D do Blender, segunda passada nos equipamentos:
+  - **Mesa de espera** (`espera.glb`, `espera_medio.glb`), que não existia: 1,20 × 0,80 m, tampo a 0,76 m (a altura da esteira), guias baixas nas bordas compridas, prateleira de baixo, quatro pés niveladores e a faixa amarela no chão (nó `faixa`). Pontos `ponto_entrada` e `ponto_saida`; `dados.tampo` e `dados.area` para distribuir as peças da fila.
+  - **Porta-paletes:** diagonais nos montantes e protetor amarelo no pé das colunas do corredor.
+  - **Torno CNC:** armário elétrico atrás, grelha de ventilação, gaveta de cavaco, trilho da porta e carenagem do cabeçote no topo.
+  - **Célula:** a cerca agora tem tela de fios e rodapé; antes parecia vidro.
+  - **Posto:** gaveteiro, ferramentas no painel e luminária. **Estante:** contraventamento no fundo e aba nas prateleiras.
+  - **Máscara:** os elásticos passam por fora do cabelo, um por cima das orelhas e outro pela nuca; antes o de baixo sumia no cabelo e o de cima cruzava o rabo de cavalo.
+  - Nós, pontos, clipes e tamanhos dos elementos que já existiam não mudaram. Empilhadeira, AGV, robô e esteira foram revistos e ficaram como estavam.
 - Elementos 3D do Blender, operador corrigido (homem e mulher):
   - **Corcunda.** Os clipes do UAL1 dobram o tórax uns 12° para a frente e baixam a cabeça uns 13° em relação ao repouso. A malha de repouso agora vai dobrada ao contrário nas juntas da coluna, com os pesos da pele, e a pessoa fica ereta parada, andando e operando. O esqueleto e os clipes não mudaram.
   - **Pescoço.** O pescoço e a cabeça mantêm as proporções do corpo. Antes a cabeça descia até a junta do UAL1, 10 cm mais baixa, e afundava nos ombros. O arquivo do homem passa a ter 1,86 m e o da mulher, 1,84 m (`altura_base`); a escala por pessoa não muda. As alças do colete e a alça do avental foram refeitas sobre o pescoço novo.
