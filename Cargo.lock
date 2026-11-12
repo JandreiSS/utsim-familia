@@ -8326,6 +8326,7 @@ dependencies = [
  "thiserror 2.0.21",
  "utsim-core",
  "utsim-diagram",
+ "utsim-doe",
  "utsim-ferramentas",
  "utsim-model",
  "utsim-pert",

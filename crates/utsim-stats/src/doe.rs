@@ -235,11 +235,9 @@ pub fn design(
             ));
         }
     }
-    let reps = replicates.max(1);
-    let mut runs = Vec::new();
-    let mut std = 0;
-    for rep in 1..=reps {
-        for row in full_factorial(base) {
+    let rows: Vec<Vec<i8>> = full_factorial(base)
+        .into_iter()
+        .map(|row| {
             let mut levels = row.clone();
             for g in generators {
                 let v = (0..base)
@@ -247,11 +245,42 @@ pub fn design(
                     .fold(1i8, |acc, i| acc * row[i]);
                 levels.push(v);
             }
+            levels
+        })
+        .collect();
+    Ok(from_rows(
+        k,
+        generators,
+        &rows,
+        replicates,
+        center_points,
+        seed,
+    ))
+}
+
+/// A two-level design from its distinct points in standard order (`±1` per factor), such
+/// as the columns of a Plackett-Burman matrix: each point `replicates` times,
+/// `center_points` runs at the center, and the run order shuffled by `seed`. With no
+/// generators the design records no defining relation (a Plackett-Burman design has none;
+/// its interactions are partially confounded with the main effects).
+pub fn from_rows(
+    k: usize,
+    generators: &[Generator],
+    rows: &[Vec<i8>],
+    replicates: usize,
+    center_points: usize,
+    seed: u64,
+) -> Design {
+    let reps = replicates.max(1);
+    let mut runs = Vec::new();
+    let mut std = 0;
+    for rep in 1..=reps {
+        for levels in rows {
             std += 1;
             runs.push(Run {
                 std_order: std,
                 run_order: 0,
-                levels,
+                levels: levels.clone(),
                 center: false,
                 replicate: rep,
             });
@@ -275,14 +304,14 @@ pub fn design(
     for (i, r) in runs.iter_mut().enumerate() {
         r.run_order = i + 1;
     }
-    Ok(Design {
+    Design {
         k,
         generators: generators.to_vec(),
         replicates: reps,
         center_points,
         seed,
         runs,
-    })
+    }
 }
 
 // --- Analysis -----------------------------------------------------------------------------------
