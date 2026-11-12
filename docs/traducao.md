@@ -9,8 +9,8 @@ traduzidos por máquina e aguardam revisão humana (o cabeçalho de cada um avis
 
 Apps já nos arquivos: UTSim Ensino (`ensino.ftl`), UTSim Seis Sigma (`seis-sigma.ftl`) e as
 telas próprias do UTSim Qualidade (`qualidade.ftl`) e do UTSim Segurança do Trabalho
-(`seguranca.ftl`). Os outros seguem o plano do fim desta
-página.
+(`seguranca.ftl`) e o UTSim Estatística (`estatistica.ftl`). Os outros seguem o plano do fim
+desta página.
 
 ## Onde ficam
 
@@ -94,7 +94,7 @@ idioma incompleto.
 - Ensino: declare a entrada em `crates/utsim-ensino-ui/src/texto/cat_*.rs` (`nome;` num
   bloco `textos!`, ou `nome(valor1, valor2);` num bloco `modelos!`) e escreva a chave em
   `idiomas/*/ensino.ftl`. As telas usam `texto::nome()` ou `texto::f(texto::nome(), &[&a, &b])`.
-- Qualidade e Segurança: `tx("chave")` ou `fx("chave", &[("nome", vx(&valor))])` de
+- Qualidade, Segurança e Estatística: `tx("chave")` ou `fx("chave", &[("nome", vx(&valor))])` de
   `src/texto.rs` de cada app (`dx` para um número com casas fixas, já com a
   marca decimal da língua). As chaves começam pelo arquivo da tela (`cep-`, `custos-`...).
 - Seis Sigma: um campo novo na tabela de `crates/utsim-lss-app/src/text*.rs`, preenchido com
@@ -114,7 +114,7 @@ salvo na configuração do app. Cada rodada combina antes com a sessão dona do 
 |---|---|---|---|
 | 2 | UTSim Qualidade | `qualidade.ftl` | Feita: as telas próprias do app (Simulação, Custos, CEP, Planos, 8D, barra lateral). Início, Postos, Modelo e Ferramentas vêm de `utsim-posto-ui`, `utsim-edit` e `utsim-ferramentas`, e os nomes das disciplinas do 8D de `utsim-qualidade-core`: ficam para a rodada 6. A língua fica em `qualidade_seguranca.json`, comum ao Segurança. |
 | 3 | UTSim Segurança | `seguranca.ftl` | Feita: as telas próprias do app (Inventário de riscos, Matriz de risco, Exposição, Ergonomia, Checklist, EPI, Incidentes, Relatório, barra lateral). Início, Postos, Modelo e Ferramentas ficam para a rodada 6, como no Qualidade. |
-| 4 | UTSim Estatística | `estatistica.ftl` | Nomes de testes e saídas numéricas com o formato do idioma. |
+| 4 | UTSim Estatística | `estatistica.ftl` | Feita: menus, barra lateral, planilha, diálogos, formulários das análises, resultados, histórico, Modelo e relatórios; os números com a marca decimal da língua. Os rótulos que vêm das receitas de `utsim-lss-core` (comuns com o Seis Sigma) e os nomes das colunas das planilhas que o app cria seguem em português: ficam para a rodada 6. Os rótulos e as opções dos formulários guardam a chave e traduzem na hora de mostrar (`analise::Campo`, `doe::PLANOS`). |
 | 5 | Lançador (`utsim-launcher`) | `lancador.ftl` | Poucos textos; o idioma escolhido aqui pode virar o padrão dos outros apps. |
 | 6 | `utsim-posto-ui`, `utsim-edit` (abas dos nós), `utsim-ferramentas` e `utsim-ui-tema` | `posto.ftl`, `tema.ftl` | O tema hoje recebe os rótulos prontos (`Rotulos`, `Textos`); passa a lê-los de `tema.ftl`. |
 | 7 | Editor do simulador | `editor.ftl` | O maior volume; dividir por janela. |
