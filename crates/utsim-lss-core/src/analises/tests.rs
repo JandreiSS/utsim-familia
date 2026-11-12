@@ -460,3 +460,84 @@ fn extended_statistics_match_the_crate() {
     assert_eq!(o.value("n"), Some(n as f64));
     assert_eq!(Recipe::Variances { col: 0, group: 1 }.key(), "variancias");
 }
+
+#[test]
+fn ewma_and_cusum_see_a_small_shift() {
+    // 20 points around 10 (σ 0,1), then 10 points 2σ above.
+    let mut text = String::from("x\n");
+    for i in 0..20 {
+        text.push_str(if i % 2 == 0 { "10.1\n" } else { "9.9\n" });
+    }
+    for _ in 0..10 {
+        text.push_str("10.2\n");
+    }
+    let t = Table::parse(&text);
+    let e = Recipe::Ewma {
+        col: 0,
+        lambda: 0.2,
+        l: 3.0,
+        target: Some(10.0),
+        sigma: Some(0.1),
+    };
+    assert_eq!(e.key(), "ewma");
+    let o = run(&e, &t).unwrap();
+    assert!(
+        !o.signals.is_empty() && o.signals[0] >= 20,
+        "{:?}",
+        o.signals
+    );
+    assert_eq!(o.series.len(), 30);
+    assert_eq!(o.lines_on_chart.len(), 3);
+    let arl0 = o.value("ARL sob controle").unwrap();
+    assert!((400.0..750.0).contains(&arl0), "{arl0}");
+    assert!(o.value("ARL com desvio de 1σ").unwrap() < 20.0);
+    // The exact limits are narrower on the first point.
+    let lsc = &o.lines_on_chart[2].1;
+    assert!(lsc[0] < lsc[29] && lsc[29] <= o.value("LSC (estável)").unwrap() + 1e-12);
+
+    let c = Recipe::Cusum {
+        col: 0,
+        k: 0.5,
+        h: 5.0,
+        target: Some(10.0),
+        sigma: Some(0.1),
+    };
+    let o = run(&c, &t).unwrap();
+    assert_eq!(o.signals.first(), Some(&23), "{:?}", o.signals);
+    assert_eq!(o.value("sinais para baixo"), Some(0.0));
+    assert!(o.signal_marks.iter().all(|(_, v)| *v > 0.5 - 1e-9));
+    let arl0 = o.value("ARL sob controle").unwrap();
+    assert!((400.0..550.0).contains(&arl0), "{arl0}");
+    assert!(o.verdict.contains("ponto 24"), "{}", o.verdict);
+
+    // Without target and σ, both come from the data, with a note.
+    let o = run(
+        &Recipe::Ewma {
+            col: 0,
+            lambda: 0.2,
+            l: 3.0,
+            target: None,
+            sigma: None,
+        },
+        &t,
+    )
+    .unwrap();
+    assert!(o.value("σ").unwrap() > 0.0);
+    assert!(o.notes.iter().any(|n| n.contains("amplitude móvel")));
+    // A constant column has no σ.
+    let flat = Table::parse("x\n1\n1\n1\n");
+    assert!(run(&c, &flat).is_ok(), "σ given: runs");
+    assert!(
+        run(
+            &Recipe::Cusum {
+                col: 0,
+                k: 0.5,
+                h: 5.0,
+                target: None,
+                sigma: None
+            },
+            &flat
+        )
+        .is_err()
+    );
+}

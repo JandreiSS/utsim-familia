@@ -13,8 +13,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utsim_quality::arl;
 use utsim_quality::attribute::{self, Rating};
 use utsim_quality::charts::{self, ChartData, ChartKind};
+use utsim_quality::memory::{Cusum, Ewma};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
 use utsim_stats::descriptive::{self, QuantileMethod};
@@ -185,6 +187,27 @@ pub enum Recipe {
         target: f64,
         alpha: f64,
     },
+    /// EWMA chart of individual values: `lambda` (weight of the new point) and `l` (width of
+    /// the limits in σ). The target and σ come from the data (mean and MR̄/1,128) when not
+    /// given; the limits are the exact ones, narrower on the first points.
+    #[serde(rename = "ewma")]
+    Ewma {
+        col: usize,
+        lambda: f64,
+        l: f64,
+        target: Option<f64>,
+        sigma: Option<f64>,
+    },
+    /// Two-sided tabular CUSUM of individual values: `k` (slack) and `h` (decision limit),
+    /// both in σ; target and σ as in [`Recipe::Ewma`].
+    #[serde(rename = "cusum")]
+    Cusum {
+        col: usize,
+        k: f64,
+        h: f64,
+        target: Option<f64>,
+        sigma: Option<f64>,
+    },
 }
 
 impl Recipe {
@@ -216,6 +239,8 @@ impl Recipe {
             Recipe::TwoWayAnova { .. } => "ANOVA de dois fatores",
             Recipe::Regression { .. } => "Regressão linear",
             Recipe::SampleSize { .. } => "Tamanho de amostra e poder",
+            Recipe::Ewma { .. } => "Carta EWMA",
+            Recipe::Cusum { .. } => "Carta CUSUM",
         }
     }
 
@@ -249,6 +274,13 @@ pub struct Outcome {
     /// Further charts (effects of an experiment).
     #[serde(rename = "graficos", default)]
     pub plots: Vec<Plot>,
+    /// Further lines on the chart of `series`, one value per point (limits that change from
+    /// point to point, the other side of a CUSUM).
+    #[serde(rename = "linhas", default, skip_serializing_if = "Vec::is_empty")]
+    pub lines_on_chart: Vec<(String, Vec<f64>)>,
+    /// Where to mark the signals, when not on `series` (point, value).
+    #[serde(rename = "marcas", default, skip_serializing_if = "Vec::is_empty")]
+    pub signal_marks: Vec<(usize, f64)>,
 }
 
 /// A chart of a result: bars (one series) or lines, over labelled points.
@@ -363,6 +395,42 @@ fn verdict_p(p: f64, h1: &str) -> String {
         format!("valor-p {p:.4} < 0,05: há evidência de que {h1}")
     } else {
         format!("valor-p {p:.4} ≥ 0,05: sem evidência de que {h1}")
+    }
+}
+
+/// The note when the target or σ of a chart with memory came from the data.
+const BASE_NOTE: &str = "Alvo e σ calculados dos próprios dados (média e amplitude móvel média / 1,128). Para vigiar um processo, informe os da fase I ou da especificação.";
+
+/// Target and σ of a chart with memory: the given ones, or the mean and MR̄/d2 of the data.
+fn memory_base(x: &[f64], target: Option<f64>, sigma: Option<f64>) -> Result<(f64, f64), String> {
+    need(x, 2, "carta")?;
+    let mu = target.unwrap_or_else(|| x.iter().sum::<f64>() / x.len() as f64);
+    let sd = match sigma {
+        Some(s) => s,
+        None => {
+            let mr: f64 =
+                x.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f64>() / (x.len() - 1) as f64;
+            mr / 1.128
+        }
+    };
+    if !(sd > 0.0 && sd.is_finite()) {
+        return Err("σ precisa ser maior que zero (os dados não variam?)".into());
+    }
+    Ok((mu, sd))
+}
+
+/// The ARL of a scheme after a shift of `shift` σ, by simulation with a fixed seed.
+fn arl_of(scheme: &arl::Scheme, shift: f64) -> f64 {
+    arl::simulate(scheme, shift, 20_000, 7, 100_000).arl
+}
+
+fn memory_verdict(first: Option<usize>, n: usize) -> String {
+    match first {
+        None => "nenhum sinal: a média não se afastou do alvo".into(),
+        Some(i) => format!(
+            "{n} ponto(s) com sinal, o primeiro no ponto {}: a média se afastou do alvo",
+            i + 1
+        ),
     }
 }
 
@@ -1097,6 +1165,112 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 .push("o gráfico mostra os resíduos na ordem dos dados".into());
             o.series = r.residuals.clone();
             o.limits = Some((0.0, -2.0 * r.s, 2.0 * r.s));
+        }
+        Recipe::Ewma {
+            col,
+            lambda,
+            l,
+            target,
+            sigma,
+        } => {
+            let x = t.numbers(*col);
+            let (mu, sd) = memory_base(&x, *target, *sigma)?;
+            let e = Ewma {
+                lambda: *lambda,
+                l: *l,
+                target: mu,
+                sigma: sd,
+                asymptotic: false,
+            };
+            let r = e.run(&x)?;
+            let steady = Ewma {
+                asymptotic: true,
+                ..e
+            }
+            .half_width(0);
+            o.put("pontos", x.len() as f64);
+            o.put("alvo", mu);
+            o.put("σ", sd);
+            o.put("λ", *lambda);
+            o.put("L", *l);
+            o.put("LIC (estável)", mu - steady);
+            o.put("LSC (estável)", mu + steady);
+            let scheme = arl::Scheme::Ewma {
+                lambda: *lambda,
+                l: *l,
+                asymptotic: false,
+            };
+            o.put("ARL sob controle", arl_of(&scheme, 0.0));
+            o.put("ARL com desvio de 1σ", arl_of(&scheme, 1.0));
+            o.put("pontos com sinal", r.signals.len() as f64);
+            o.series = r.z;
+            o.lines_on_chart = vec![
+                ("alvo".into(), vec![mu; x.len()]),
+                ("LIC".into(), r.lcl),
+                ("LSC".into(), r.ucl),
+            ];
+            o.signals = r.signals;
+            o.verdict = memory_verdict(o.signals.first().copied(), o.signals.len());
+            o.notes.push(
+                "A EWMA acumula desvios pequenos e persistentes da média, que a carta de Shewhart só vê tarde. ARL estimada por simulação (20 000 corridas, semente fixa).".into(),
+            );
+            if target.is_none() || sigma.is_none() {
+                o.notes.push(BASE_NOTE.into());
+            }
+        }
+        Recipe::Cusum {
+            col,
+            k,
+            h,
+            target,
+            sigma,
+        } => {
+            let x = t.numbers(*col);
+            let (mu, sd) = memory_base(&x, *target, *sigma)?;
+            let c = Cusum {
+                k: *k,
+                h: *h,
+                target: mu,
+                sigma: sd,
+            };
+            let r = c.run(&x)?;
+            o.put("pontos", x.len() as f64);
+            o.put("alvo", mu);
+            o.put("σ", sd);
+            o.put("K", k * sd);
+            o.put("H", r.h);
+            o.put("ARL sob controle", arl::cusum_siegmund(*k, *h, 0.0));
+            o.put("ARL com desvio de 1σ", arl::cusum_siegmund(*k, *h, 1.0));
+            o.put("sinais para cima", r.signals_up.len() as f64);
+            o.put("sinais para baixo", r.signals_down.len() as f64);
+            if let Some((_, m)) = r.shift_estimates.first() {
+                o.put("média estimada depois do desvio", *m);
+            }
+            let n = x.len();
+            o.lines_on_chart = vec![
+                ("−C⁻ (baixa)".into(), r.lower.iter().map(|v| -v).collect()),
+                ("H".into(), vec![r.h; n]),
+                ("−H".into(), vec![-r.h; n]),
+            ];
+            let mut marks: Vec<(usize, f64)> = r
+                .signals_up
+                .iter()
+                .map(|&i| (i, r.upper[i]))
+                .chain(r.signals_down.iter().map(|&i| (i, -r.lower[i])))
+                .collect();
+            marks.sort_by_key(|m| m.0);
+            let mut sig: Vec<usize> = marks.iter().map(|m| m.0).collect();
+            sig.dedup();
+            o.series = r.upper;
+            o.signal_marks = marks;
+            o.verdict = memory_verdict(sig.first().copied(), sig.len());
+            o.signals = sig;
+            o.notes.push(
+                "C⁺ acumula os desvios para cima da média, C⁻ os para baixo (desenhada abaixo do zero). ARL pela aproximação de Siegmund.".into(),
+            );
+            if target.is_none() || sigma.is_none() {
+                o.notes.push(BASE_NOTE.into());
+            }
         }
         Recipe::SampleSize {
             kind,
