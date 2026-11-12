@@ -34,6 +34,9 @@
 //! - **Who the person is** ([`Sex`], `height_m`, `mass_kg`, `age`, `experience_years`,
 //!   [`Capacity`]): records. The 3D body uses sex, height and mass; the measured load
 //!   capacity enters the model warnings. The kernel never reads them.
+//! - **Time study** ([`TimeStudy`]): the raw stopwatch readings of this person, by task
+//!   and method, marked by the hour of the shift, kept so the fit (`utsim-fit`,
+//!   `fatigue` module) can be redone. The kernel never reads them.
 //!
 //! The metrics go to the block's `custom` metrics (see [`METRICS`]).
 
@@ -91,6 +94,39 @@ pub struct Person {
     /// Measured physical capacity of this person.
     #[serde(skip_serializing_if = "Option::is_none", alias = "capacidade")]
     pub capacity: Option<Capacity>,
+    /// Raw stopwatch readings of this person (time study).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "estudo")]
+    pub study: Option<TimeStudy>,
+}
+
+/// Raw time study of one person in one shift: stopwatch readings marked by the hours
+/// since the start of the shift, and the pauses taken.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeStudy {
+    /// Readings, one entry per task, method and moment of the shift.
+    #[serde(alias = "leituras")]
+    pub readings: Vec<Reading>,
+    /// Pauses taken during the shift, `(start, end)` in hours since its start.
+    #[serde(skip_serializing_if = "Vec::is_empty", alias = "pausas")]
+    pub pauses: Vec<(f64, f64)>,
+}
+
+/// Stopwatch readings of one task, by one method, around one moment of the shift.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Reading {
+    #[serde(alias = "tarefa")]
+    pub task: String,
+    /// Work method ("A", "com gabarito"...); empty: the only one.
+    #[serde(skip_serializing_if = "String::is_empty", alias = "metodo")]
+    pub method: String,
+    /// Hours since the start of the shift.
+    #[serde(alias = "hora")]
+    pub hour: f64,
+    /// Measured times, in the time unit of the model.
+    #[serde(alias = "tempos")]
+    pub times: Vec<f64>,
 }
 
 /// Sex of a person.
@@ -135,6 +171,7 @@ impl Default for Person {
             age: None,
             experience_years: None,
             capacity: None,
+            study: None,
         }
     }
 }
@@ -535,6 +572,28 @@ impl Person {
             .is_some_and(|e| !(e.is_finite() && e >= 0.0))
         {
             out.push("experience_years deve ser finito e >= 0".into());
+        }
+        if let Some(s) = &self.study {
+            for (i, r) in s.readings.iter().enumerate() {
+                if r.task.trim().is_empty() {
+                    out.push(format!("study.readings[{i}]: task não pode ser vazio"));
+                }
+                if !(r.hour.is_finite() && r.hour >= 0.0) {
+                    out.push(format!("study.readings[{i}]: hour deve ser finito e >= 0"));
+                }
+                if r.times.is_empty() || r.times.iter().any(|t| !(t.is_finite() && *t > 0.0)) {
+                    out.push(format!(
+                        "study.readings[{i}]: times precisa de tempos finitos e > 0"
+                    ));
+                }
+            }
+            for (i, (a, b)) in s.pauses.iter().enumerate() {
+                if !(a.is_finite() && b.is_finite() && *a >= 0.0 && b > a) {
+                    out.push(format!(
+                        "study.pauses[{i}]: (início, fim) em horas, com 0 <= início < fim"
+                    ));
+                }
+            }
         }
         if let Some(c) = &self.capacity {
             if !positive(c.load_kg) {

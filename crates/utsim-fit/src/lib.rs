@@ -13,6 +13,7 @@ pub mod data;
 pub mod diagnostics;
 pub mod families;
 pub mod family;
+pub mod fatigue;
 pub mod gof;
 pub mod plots;
 pub mod rank;
