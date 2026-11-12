@@ -62,13 +62,20 @@ fn mesma_semente_mesma_prova() {
         .map(|s| sortear(&p, &m.regras, s).unwrap())
         .collect();
     assert!(outras.len() > 3, "{outras:?}");
-    // Act 7 asks for a model: out of the draw.
+    // Act 7: the model missions (7.1, 7.4) stay out of the draw, the two lever missions go in.
+    let r = [Regra {
+        ato: Some(7),
+        conceito: None,
+        quantidade: 3,
+    }];
+    assert!(sortear(&p, &r, 1).unwrap_err().contains("há 2"));
     let r = [Regra {
         ato: Some(7),
         conceito: None,
         quantidade: 2,
     }];
-    assert!(sortear(&p, &r, 1).is_err());
+    let a = sortear(&p, &r, 1).unwrap();
+    assert!(a.contains(&"ato7/clinica".to_string()) && a.contains(&"ato7/reembolso".to_string()));
     let r = [Regra {
         ato: Some(1),
         conceito: None,

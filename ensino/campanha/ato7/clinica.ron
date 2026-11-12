@@ -1,0 +1,55 @@
+Missao(
+    id: "ato7/clinica",
+    titulo: "Pronto atendimento por turnos",
+    conceitos: ["turno", "disciplina_de_fila", "custo_de_espera", "capacidade"],
+    modelo: "../modelos/clinica.ron",
+    texto: "clinica.md",
+    previsao: [
+        Escolha(
+            id: "quem_espera",
+            pergunta: "Com a escala atual, quem espera mais pelo médico depois da triagem?",
+            opcoes: [
+                (rotulo: "Os pacientes normais", valor: [(chave: "fila_normal.staytime.mean")]),
+                (rotulo: "Os pacientes urgentes", valor: [(chave: "fila_urgente.staytime.mean")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Quantidade(id: "medicos_s1", rotulo: "Médicos no turno S1 (07h às 12h)", chave: "medicos_S1.capacity", de: 4, ate: 7, inicial: 6),
+        Quantidade(id: "medicos_s2", rotulo: "Médicos no turno S2 (12h às 17h)", chave: "medicos_S2.capacity", de: 4, ate: 7, inicial: 5),
+        Quantidade(id: "medicos_s3", rotulo: "Médicos no turno S3 (17h às 21h)", chave: "medicos_S3.capacity", de: 2, ate: 4, inicial: 4),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo diário dos médicos", unidade: "R$",
+         valor: [
+            (chave: "decisao.medicos_s1", fator: 1100.0),
+            (chave: "decisao.medicos_s2", fator: 1100.0),
+            (chave: "decisao.medicos_s3", fator: 880.0),
+         ],
+         objetivo: Menor, meta: 13700.0, peso: 1.0, tolerancia: Absoluta(0.0), casas: 0),
+        (nome: "espera_normal", rotulo: "Espera dos normais pelo médico", unidade: "min",
+         valor: [(chave: "fila_normal.staytime.mean")], objetivo: Menor, meta: 15.0, peso: 0.0, casas: 1),
+        (nome: "espera_urgente", rotulo: "Espera dos urgentes pelo médico", unidade: "min",
+         valor: [(chave: "fila_urgente.staytime.mean")], objetivo: Menor, meta: 3.0, peso: 0.0, casas: 1),
+        (nome: "espera_sala", rotulo: "Espera na sala até a triagem", unidade: "min",
+         valor: [(chave: "sala_espera.staytime.mean")], objetivo: Menor, meta: 8.0, peso: 0.0, casas: 1),
+        (nome: "perdidos", rotulo: "Pacientes perdidos (sala cheia)", unidade: "",
+         valor: [(chave: "model.loss_fraction")], objetivo: Menor, meta: 0.02, peso: 0.0, tolerancia: Absoluta(0.0), casas: 3),
+    ],
+    justificativa: [
+        (pergunta: "Por que o turno S1 não precisa de mais médicos que o S2, se a manhã é a hora mais cheia?",
+         opcoes: ["Porque o S1 começa com a clínica vazia, e o S2 herda a fila da manhã além do pico da tarde", "Porque as consultas da manhã são mais curtas", "Porque a triagem segura os pacientes da manhã"],
+         certa: 0),
+        (pergunta: "O que a prioridade dos urgentes faz com a espera dos normais?",
+         opcoes: ["Aumenta um pouco, porque os urgentes passam na frente, mas são poucos (12 %)", "Diminui, porque os médicos ficam mais livres", "Não muda nada"],
+         certa: 0),
+    ],
+    dicas: [
+        "Em que turno a fila de normais cresce? Compare as esperas antes e depois de mudar um turno só.",
+        "Tire um médico de cada vez, começando pelo turno mais caro por hora de folga, e veja qual meta quebra primeiro.",
+        "Os pacientes que sobram de um turno passam para o seguinte: um médico a mais cedo pode valer um a menos depois.",
+    ],
+    referencia: {"medicos_s1": 5, "medicos_s2": 5, "medicos_s3": 3},
+    animacao: (duracao: 840, unidade: "min"),
+)

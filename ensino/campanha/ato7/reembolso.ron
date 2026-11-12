@@ -1,0 +1,53 @@
+Missao(
+    id: "ato7/reembolso",
+    titulo: "Reembolso no escritório",
+    conceitos: ["lead_time", "lote", "retrabalho", "wip"],
+    modelo: "../modelos/reembolso.ron",
+    texto: "reembolso.md",
+    previsao: [
+        Escolha(
+            id: "onde_espera",
+            pergunta: "Hoje, em que etapa o pedido de reembolso passa mais tempo?",
+            opcoes: [
+                (rotulo: "Esperando o lote de 10 se formar", valor: [(chave: "lote.staytime.mean")]),
+                (rotulo: "No malote até a tesouraria", valor: [(chave: "malote.staytime.mean")]),
+                (rotulo: "Na caixa de entrada do lançamento", valor: [(chave: "caixa.staytime.mean")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "lote", rotulo: "Envio para a aprovação", opcoes: [
+            (rotulo: "Em lotes de 10 pedidos (ou o que houver em 8 h)", ajustes: {"lote.batch": "Some(Batch(size: 10, max_wait: 480.0))"}),
+            (rotulo: "Um pedido de cada vez", ajustes: {"lote.batch": "None"}),
+        ]),
+        Escolha(id: "envio", rotulo: "Envio para a tesouraria", opcoes: [
+            (rotulo: "Malote (de 1 a 8 h)", ajustes: {"malote.process": "Uniform(min: 60.0, max: 480.0)"}),
+            (rotulo: "Pelo sistema (de 5 a 15 min)", ajustes: {"malote.process": "Uniform(min: 5.0, max: 15.0)"}, custo: 12000),
+        ]),
+        Escolha(id: "checklist", rotulo: "Conferência no lançamento", opcoes: [
+            (rotulo: "Sem lista de conferência (10 % devolvidos)", ajustes: {"aprovacao.output": "Weighted([0.90, 0.10])"}),
+            (rotulo: "Com lista de conferência (2 % devolvidos)", ajustes: {"aprovacao.output": "Weighted([0.98, 0.02])", "lancamento.process": "Triangular(min: 6.0, mode: 12.0, max: 24.0)"}, custo: 6000),
+        ]),
+    ],
+    orcamento: 15000,
+    metricas: [
+        (nome: "lead_time", rotulo: "Lead time do pedido (da chegada ao pagamento)", unidade: "min",
+         valor: [(chave: "concluido.time_in_system.mean")], objetivo: Menor, meta: 60.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que mandar um pedido de cada vez encurta o lead time, se os gestores fazem o mesmo trabalho?",
+         opcoes: ["Porque o pedido deixa de esperar os outros nove para seguir", "Porque os gestores aprovam mais depressa um pedido sozinho", "Porque a devolução deixa de existir"],
+         certa: 0),
+        (pergunta: "Com o orçamento curto, por que o envio pelo sistema vale mais que a lista de conferência?",
+         opcoes: ["Porque o malote prende todo pedido por horas, e a devolução atinge só uma parte deles", "Porque a lista de conferência não muda a devolução", "Porque o sistema também elimina o lote"],
+         certa: 0),
+    ],
+    dicas: [
+        "Some quanto tempo o pedido passa em cada etapa e procure as esperas, não o trabalho.",
+        "Mudar o lote não custa nada. Comece por ele.",
+        "Compare o que cada compra tira do lead time: o malote atinge todos os pedidos, a devolução só os devolvidos.",
+    ],
+    referencia: {"lote": 1, "envio": 1, "checklist": 0},
+    animacao: (duracao: 2880, unidade: "min"),
+)
