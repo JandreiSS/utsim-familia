@@ -20,6 +20,7 @@ fn spec(k: usize, fraction: usize) -> ExperimentSpec {
             })
             .collect(),
         fraction,
+        screening: false,
         replicates: 1,
         center_points: 0,
         seed: 2026,
@@ -111,7 +112,7 @@ fn fraction_aliases_and_center_points() {
     s.center_points = 3;
     let d = s.design().unwrap();
     assert_eq!(d.runs.len(), 8 + 3);
-    let lines = alias_lines(&d);
+    let lines = alias_lines(&s, &d);
     assert_eq!(lines[0], "I = ABCD");
     assert_eq!(lines[1], "resolução IV");
     assert!(lines.contains(&"A = BCD".to_string()), "{lines:?}");
@@ -135,6 +136,68 @@ fn fraction_aliases_and_center_points() {
     assert!(matches!(t.design(), Err(ExpError::Levels(_))));
     assert_eq!(full().on_model(), Ok(()));
     assert!(matches!(spec(2, 0).on_model(), Err(ExpError::NoKey(_))));
+}
+
+#[test]
+fn plackett_burman_screening() {
+    let mut s = ExperimentSpec {
+        name: "Triagem".into(),
+        factors: (0..9)
+            .map(|i| FactorSpec {
+                name: format!("X{}", i + 1),
+                low: "0".into(),
+                high: "1".into(),
+                ..FactorSpec::default()
+            })
+            .collect(),
+        screening: true,
+        replicates: 1,
+        seed: 3,
+        response: "y".into(),
+        ..ExperimentSpec::default()
+    };
+    assert_eq!(ExperimentSpec::screening_runs(9), Some(12));
+    assert_eq!(ExperimentSpec::screening_runs(15), Some(16));
+    assert_eq!(ExperimentSpec::screening_runs(16), None);
+    let d = s.design().unwrap();
+    assert_eq!(d.runs.len(), 12);
+    // Balanced, orthogonal columns.
+    for i in 0..9 {
+        assert_eq!(d.runs.iter().map(|r| r.levels[i] as i32).sum::<i32>(), 0);
+        for j in 0..i {
+            let dot: i32 = d
+                .runs
+                .iter()
+                .map(|r| (r.levels[i] * r.levels[j]) as i32)
+                .sum();
+            assert_eq!(dot, 0);
+        }
+    }
+    let lines = alias_lines(&s, &d);
+    assert!(lines[0].contains("12 corridas para 9 fatores"), "{lines:?}");
+    assert!(lines[3].starts_with("2 coluna(s)"), "{lines:?}");
+    // y = 50 + 4A − 3E + 2I: effects 8, −6 and 4; asking for interactions falls back to
+    // the main effects.
+    let ws = worksheet(&s, &d);
+    let filled = fill(&ws, 9, |x| 50.0 + 4.0 * x[0] - 3.0 * x[4] + 2.0 * x[8]);
+    let t = Table::parse(&filled);
+    let (f, resp) = columns(&t.header);
+    assert_eq!(f.len(), 9);
+    let r = Recipe::Factorial {
+        factors: f,
+        response: resp.unwrap(),
+        order: 2,
+    };
+    let o = analises::run(&r, &t).unwrap();
+    assert!((o.value("efeito A").unwrap() - 8.0).abs() < 1e-9);
+    assert!((o.value("efeito E").unwrap() + 6.0).abs() < 1e-9);
+    assert!((o.value("efeito I").unwrap() - 4.0).abs() < 1e-9);
+    assert!(o.value("efeito B").unwrap().abs() < 1e-9);
+    assert!(o.value("efeito AB").is_none());
+    assert!(o.notes.iter().any(|n| n.contains("plano de triagem")));
+    // More than 8 factors only as a screening.
+    s.screening = false;
+    assert_eq!(s.design(), Err(ExpError::Factors));
 }
 
 const MM1: &str = r#"Model(
