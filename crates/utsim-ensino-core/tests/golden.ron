@@ -365,6 +365,42 @@
         ref_valores: [],
     ),
     (
+        missao: "ato7/clinica",
+        referencia: {
+            "medicos_s1": 5.0,
+            "medicos_s2": 5.0,
+            "medicos_s3": 3.0,
+        },
+        base: [
+            ("custo", 15620.0),
+            ("espera_normal", 4.044375583079132),
+            ("espera_urgente", 0.961372136833835),
+            ("espera_sala", 5.951569459027125),
+            ("perdidos", 0.00013856812933025404),
+        ],
+        ref_valores: [
+            ("custo", 13640.0),
+            ("espera_normal", 13.616021717617537),
+            ("espera_urgente", 1.6445511853998918),
+            ("espera_sala", 5.951569459027125),
+            ("perdidos", 0.00013856812933025404),
+        ],
+    ),
+    (
+        missao: "ato7/reembolso",
+        referencia: {
+            "checklist": 0.0,
+            "envio": 1.0,
+            "lote": 1.0,
+        },
+        base: [
+            ("lead_time", 537.4167487614575),
+        ],
+        ref_valores: [
+            ("lead_time", 45.344259283883304),
+        ],
+    ),
+    (
         missao: "ato7/padaria",
         referencia: {},
         base: [],

@@ -4,7 +4,7 @@ Pacote(
     id: "campanha",
     formato: 1,
     titulo: "Campanha UTSim Ensino",
-    versao: "0.5.0",
+    versao: "0.6.0",
     autor: "UTSim",
     descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
@@ -60,6 +60,8 @@ Pacote(
         ]),
         (numero: 7, titulo: "Problemas integrados", missoes: [
             "ato7/linha_retrabalho.ron",
+            "ato7/clinica.ron",
+            "ato7/reembolso.ron",
             "ato7/padaria.ron",
         ]),
         (numero: 8, titulo: "O caso Lean Seis Sigma", missoes: [
