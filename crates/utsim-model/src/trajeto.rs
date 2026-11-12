@@ -17,7 +17,7 @@ use utsim_nav::path3d::{self, P3, PathNode};
 
 use crate::{Model, ObjectDef, ObjectKind};
 
-pub use utsim_nav::path3d::{legs, max_grade, path_length, sample};
+pub use utsim_nav::path3d::{legs, max_grade, path_length, problem, sample};
 
 /// Tipo construtivo da esteira desenhada.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
