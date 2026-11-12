@@ -8210,6 +8210,7 @@ dependencies = [
  "utsim-linhas",
  "utsim-look",
  "utsim-model",
+ "utsim-nav",
  "utsim-objects",
  "utsim-opt",
  "utsim-pasta",
@@ -8296,6 +8297,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui_plot",
+ "getrandom 0.2.17",
  "serde",
  "serde_json",
  "tempfile",
@@ -8555,6 +8557,7 @@ dependencies = [
  "utsim-edit",
  "utsim-estudo",
  "utsim-exposicao",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-posto",
  "utsim-posto-ui",

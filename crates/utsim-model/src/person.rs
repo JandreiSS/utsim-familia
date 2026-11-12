@@ -17,15 +17,24 @@
 //! Every part is optional and a model without `person` runs exactly as before. The
 //! operators of a processor may require a skill with `OperatorUse(requires: "torno")`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use utsim_core::person::{NIOSH_LOAD_CONSTANT, lifting_index, recommended_weight_limit};
 use utsim_core::{Dist, Fatigue};
 
-use crate::{Model, ObjectDef, ObjectKind};
+use crate::{DispatchRule, Model, ObjectDef, ObjectKind};
 
 /// Reference limit of the CLT, art. 198 (kg per employee) [conferir no texto vigente].
 pub const CLT_198_KG: f64 = 60.0;
+/// CLT, art. 390: limit for women in continuous work (kg).
+pub const CLT_390_CONTINUOUS_KG: f64 = 20.0;
+/// CLT, art. 390: limit for women in occasional work (kg).
+pub const CLT_390_OCCASIONAL_KG: f64 = 25.0;
+
+/// Heights (m) outside this range get a warning: probably a typo (cm, feet).
+pub const HEIGHT_RANGE_M: (f64, f64) = (1.40, 2.10);
+/// Body masses (kg) outside this range get a warning: probably a typo (pounds).
+pub const MASS_RANGE_KG: (f64, f64) = (35.0, 200.0);
 
 /// Largest value of a distribution (its mean when unbounded above).
 fn support_max(d: &Dist) -> f64 {
@@ -56,6 +65,98 @@ impl Model {
                 team.iter().filter_map(|m| self.object(m)).collect()
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// Teams with more operators than the processes they operate can use at once
+    /// (capacity × operators per piece): the extra ones never work, however long the queue.
+    /// A team that also carries, repairs or maintains has other work and is left alone, and
+    /// so is one whose members keep different shifts or whose dispatcher spreads the work
+    /// (`RoundRobin`, `LeastBusy`, `LongestIdle`, `Random`): they take turns on purpose.
+    pub(crate) fn idle_operator_warnings(&self, out: &mut Vec<String>) {
+        let mut other: BTreeSet<&str> = BTreeSet::new();
+        for o in &self.objects {
+            other.extend(o.transport.as_deref());
+            if let Some(d) = &o.downtime {
+                other.extend(d.repair_crew.as_deref());
+                other.extend(d.preventive.iter().filter_map(|p| p.crew.as_deref()));
+            }
+        }
+        // A member named directly is counted with its dispatcher's team.
+        let pool_of = |team: &'_ str| -> String {
+            self.objects
+                .iter()
+                .find_map(|o| match &o.kind {
+                    ObjectKind::Dispatcher { team: members, .. }
+                        if members.iter().any(|m| m == team) =>
+                    {
+                        Some(o.name.clone())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| team.to_string())
+        };
+        // Per team: servers × operators per piece over every process it operates.
+        // (node, capacity, operators per piece) of each process a team operates.
+        type Uses<'a> = Vec<(&'a str, usize, usize)>;
+        let mut demand: BTreeMap<String, (usize, Uses)> = BTreeMap::new();
+        for o in &self.objects {
+            let ObjectKind::Processor { capacity, .. } = &o.kind else {
+                continue;
+            };
+            for op in o.kind.operator_uses() {
+                let e = demand.entry(pool_of(&op.team)).or_default();
+                e.0 = e.0.saturating_add(capacity.saturating_mul(op.count));
+                e.1.push((o.name.as_str(), *capacity, op.count));
+            }
+        }
+        let rotates = |team: &str| {
+            self.objects.iter().any(|o| {
+                o.name == team
+                    && matches!(
+                        &o.kind,
+                        ObjectKind::Dispatcher { rule, .. }
+                            if !matches!(rule, DispatchRule::FirstAvailable | DispatchRule::Nearest)
+                    )
+            })
+        };
+        for (team, (usable, uses)) in demand {
+            let members = self.team_members(&team);
+            let size = members.len();
+            if size <= usable
+                || other.contains(team.as_str())
+                || rotates(&team)
+                || members.iter().any(|m| other.contains(m.name.as_str()))
+                || members.windows(2).any(|w| w[0].shifts != w[1].shifts)
+            {
+                continue;
+            }
+            let idle = size - usable;
+            let parados = if idle == 1 {
+                "1 fica parado".to_string()
+            } else {
+                format!("{idle} ficam parados")
+            };
+            out.push(match uses.as_slice() {
+                [(node, capacity, count)] => format!(
+                    "'{team}' tem {size} operadores, mas '{node}' usa no máximo {usable} ao mesmo \
+                     tempo (capacidade {capacity} × {count} por peça): {parados} enquanto a fila \
+                     cresce; aumente a capacidade de '{node}' para {} ou use {} operadores por \
+                     peça (`operators.count`, com `team_speedup` se a equipe faz mais rápido)",
+                    size.div_ceil(*count),
+                    size.div_ceil(*capacity),
+                ),
+                _ => format!(
+                    "'{team}' tem {size} operadores, mas {} usam no máximo {usable} ao mesmo \
+                     tempo (capacidade × operadores por peça): {parados} enquanto as filas \
+                     crescem; aumente a capacidade dos processos ou use mais operadores por \
+                     peça (`operators.count`)",
+                    uses.iter()
+                        .map(|(n, _, _)| format!("'{n}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            });
         }
     }
 
@@ -146,8 +247,27 @@ impl Model {
     }
 
     /// Warnings about people: a skill nobody of the team has, manual loads above the
-    /// reference limits.
+    /// reference limits or the measured capacity, heights and masses out of range.
     pub(crate) fn people_warnings(&self, out: &mut Vec<String>) {
+        for o in &self.objects {
+            let Some(p) = o.person.as_deref() else {
+                continue;
+            };
+            let (lo, hi) = HEIGHT_RANGE_M;
+            if let Some(h) = p.height_m.filter(|h| *h < lo || *h > hi) {
+                out.push(format!(
+                    "{}: altura {h} m fora da faixa usual ({lo} a {hi} m); confira a unidade (metros)",
+                    o.name
+                ));
+            }
+            let (lo, hi) = MASS_RANGE_KG;
+            if let Some(m) = p.mass_kg.filter(|m| *m < lo || *m > hi) {
+                out.push(format!(
+                    "{}: massa {m} kg fora da faixa usual ({lo} a {hi} kg); confira a unidade (kg)",
+                    o.name
+                ));
+            }
+        }
         for (obj, op) in self
             .objects
             .iter()
@@ -256,6 +376,16 @@ impl Model {
                      índice de levantamento {li:.2} > 1 [conferir no texto vigente]"
                 ));
             }
+            if let Some(c) = p.capacity.and_then(|c| c.load_kg).filter(|c| w > *c) {
+                out.push(format!(
+                    "{name}: carrega até {w} kg, acima da capacidade medida dessa pessoa ({c} kg)"
+                ));
+            }
+            if p.sex == Some(utsim_core::Sex::Female) && w > CLT_390_CONTINUOUS_KG {
+                out.push(format!(
+                    "{name}: carrega até {w} kg, acima de {CLT_390_CONTINUOUS_KG} kg, limite da CLT                      (art. 390) para o trabalho contínuo da mulher ({CLT_390_OCCASIONAL_KG} kg no                      ocasional) [conferir no texto vigente]"
+                ));
+            }
             if w > CLT_198_KG {
                 out.push(format!(
                     "{name}: carrega até {w} kg, acima de {CLT_198_KG} kg, limite de referência da CLT \
@@ -272,6 +402,23 @@ impl Model {
             .filter_map(|o| {
                 let p = o.person.as_deref()?;
                 let mut parts = Vec::new();
+                let mut who = Vec::new();
+                match p.sex {
+                    Some(utsim_core::Sex::Female) => who.push("sexo feminino".to_string()),
+                    Some(utsim_core::Sex::Male) => who.push("sexo masculino".to_string()),
+                    None => {}
+                }
+                who.extend(p.height_m.map(|h| format!("{h} m")));
+                who.extend(p.mass_kg.map(|m| format!("{m} kg")));
+                who.extend(p.age.map(|a| format!("{a} anos")));
+                who.extend(p.experience_years.map(|e| format!("{e} anos de experiência")));
+                if let Some(c) = &p.capacity {
+                    who.extend(c.load_kg.map(|k| format!("capacidade medida {k} kg")));
+                    who.extend(c.force_n.map(|n| format!("força medida {n} N")));
+                }
+                if !who.is_empty() {
+                    parts.push(who.join(", "));
+                }
                 match &p.fatigue {
                     None => {}
                     Some(Fatigue::Allowance(a)) => {

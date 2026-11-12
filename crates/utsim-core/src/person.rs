@@ -31,6 +31,12 @@
 //!   other draws): times are divided by `v`, the speed multiplied by `v`.
 //! - **Manual lifting** ([`Lift`], [`recommended_weight_limit`]): a model check only, the
 //!   revised NIOSH lifting equation; the kernel never reads it.
+//! - **Who the person is** ([`Sex`], `height_m`, `mass_kg`, `age`, `experience_years`,
+//!   [`Capacity`]): records. The 3D body uses sex, height and mass; the measured load
+//!   capacity enters the model warnings. The kernel never reads them.
+//! - **Time study** ([`TimeStudy`]): the raw stopwatch readings of this person, by task
+//!   and method, marked by the hour of the shift, kept so the fit (`utsim-fit`,
+//!   `fatigue` module) can be redone. The kernel never reads them.
 //!
 //! The metrics go to the block's `custom` metrics (see [`METRICS`]).
 
@@ -70,6 +76,79 @@ pub struct Person {
     /// Geometry of the manual lift, for the NIOSH check (model warnings only).
     #[serde(skip_serializing_if = "Option::is_none", alias = "levantamento")]
     pub lift: Option<Lift>,
+    /// Sex (`None`: not informed). Chooses the 3D body; no fatigue default depends on it.
+    #[serde(skip_serializing_if = "Option::is_none", alias = "sexo")]
+    pub sex: Option<Sex>,
+    /// Height in metres (the 3D body is scaled to it).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "altura_m")]
+    pub height_m: Option<f64>,
+    /// Body mass in kg (record; the 3D body's width follows the body mass index).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "massa_kg")]
+    pub mass_kg: Option<f64>,
+    /// Age in years (record only).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "idade")]
+    pub age: Option<u32>,
+    /// Years of experience in the job (record only).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "experiencia_anos")]
+    pub experience_years: Option<f64>,
+    /// Measured physical capacity of this person.
+    #[serde(skip_serializing_if = "Option::is_none", alias = "capacidade")]
+    pub capacity: Option<Capacity>,
+    /// Raw stopwatch readings of this person (time study).
+    #[serde(skip_serializing_if = "Option::is_none", alias = "estudo")]
+    pub study: Option<TimeStudy>,
+}
+
+/// Raw time study of one person in one shift: stopwatch readings marked by the hours
+/// since the start of the shift, and the pauses taken.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeStudy {
+    /// Readings, one entry per task, method and moment of the shift.
+    #[serde(alias = "leituras")]
+    pub readings: Vec<Reading>,
+    /// Pauses taken during the shift, `(start, end)` in hours since its start.
+    #[serde(skip_serializing_if = "Vec::is_empty", alias = "pausas")]
+    pub pauses: Vec<(f64, f64)>,
+}
+
+/// Stopwatch readings of one task, by one method, around one moment of the shift.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Reading {
+    #[serde(alias = "tarefa")]
+    pub task: String,
+    /// Work method ("A", "com gabarito"...); empty: the only one.
+    #[serde(skip_serializing_if = "String::is_empty", alias = "metodo")]
+    pub method: String,
+    /// Hours since the start of the shift.
+    #[serde(alias = "hora")]
+    pub hour: f64,
+    /// Measured times, in the time unit of the model.
+    #[serde(alias = "tempos")]
+    pub times: Vec<f64>,
+}
+
+/// Sex of a person.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Sex {
+    #[serde(alias = "Feminino")]
+    Female,
+    #[serde(alias = "Masculino")]
+    Male,
+}
+
+/// Measured capacity of a person. Every part is optional: what was not measured is not
+/// assumed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Capacity {
+    /// Heaviest load this person lifts in the job, in kg.
+    #[serde(skip_serializing_if = "Option::is_none", alias = "carga_kg")]
+    pub load_kg: Option<f64>,
+    /// Greatest force this person exerts (push or pull), in N.
+    #[serde(skip_serializing_if = "Option::is_none", alias = "forca_n")]
+    pub force_n: Option<f64>,
 }
 
 fn is_weight(label: &String) -> bool {
@@ -86,6 +165,13 @@ impl Default for Person {
             variation: None,
             weight_label: "weight".into(),
             lift: None,
+            sex: None,
+            height_m: None,
+            mass_kg: None,
+            age: None,
+            experience_years: None,
+            capacity: None,
+            study: None,
         }
     }
 }
@@ -470,6 +556,52 @@ impl Person {
         }
         if self.weight_label.trim().is_empty() {
             out.push("weight_label não pode ser vazio".into());
+        }
+        let positive = |v: Option<f64>| v.is_none_or(|v| v.is_finite() && v > 0.0);
+        if !positive(self.height_m) {
+            out.push("height_m deve ser finito e > 0 (metros)".into());
+        }
+        if !positive(self.mass_kg) {
+            out.push("mass_kg deve ser finito e > 0 (kg)".into());
+        }
+        if self.age.is_some_and(|a| a > 120) {
+            out.push("age deve ficar entre 0 e 120 anos".into());
+        }
+        if self
+            .experience_years
+            .is_some_and(|e| !(e.is_finite() && e >= 0.0))
+        {
+            out.push("experience_years deve ser finito e >= 0".into());
+        }
+        if let Some(s) = &self.study {
+            for (i, r) in s.readings.iter().enumerate() {
+                if r.task.trim().is_empty() {
+                    out.push(format!("study.readings[{i}]: task não pode ser vazio"));
+                }
+                if !(r.hour.is_finite() && r.hour >= 0.0) {
+                    out.push(format!("study.readings[{i}]: hour deve ser finito e >= 0"));
+                }
+                if r.times.is_empty() || r.times.iter().any(|t| !(t.is_finite() && *t > 0.0)) {
+                    out.push(format!(
+                        "study.readings[{i}]: times precisa de tempos finitos e > 0"
+                    ));
+                }
+            }
+            for (i, (a, b)) in s.pauses.iter().enumerate() {
+                if !(a.is_finite() && b.is_finite() && *a >= 0.0 && b > a) {
+                    out.push(format!(
+                        "study.pauses[{i}]: (início, fim) em horas, com 0 <= início < fim"
+                    ));
+                }
+            }
+        }
+        if let Some(c) = &self.capacity {
+            if !positive(c.load_kg) {
+                out.push("capacity.load_kg deve ser finito e > 0 (kg)".into());
+            }
+            if !positive(c.force_n) {
+                out.push("capacity.force_n deve ser finito e > 0 (N)".into());
+            }
         }
         out
     }

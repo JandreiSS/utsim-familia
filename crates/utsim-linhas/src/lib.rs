@@ -5,6 +5,7 @@
 //! indicators with their report. [`pacote`] reads and checks a pack and places its
 //! presets in a model being edited; [`registro`] holds the lines that come with UTSim.
 
+pub mod alimentacao;
 pub mod lean_office;
 pub mod logistica;
 pub mod manufatura;
@@ -16,6 +17,6 @@ pub mod servicos;
 
 pub use pacote::{Field, Library, ModelRef, Pack, Placement, Preset, Role, Vocabulary};
 pub use registro::{
-    LEAN_OFFICE, LOGISTICA, MANUFATURA, PROCESSOS, QUALIDADE, SAUDE, SEGURANCA, SERVICOS, active,
-    builtin, find,
+    ALIMENTACAO, LEAN_OFFICE, LOGISTICA, MANUFATURA, PROCESSOS, QUALIDADE, SAUDE, SEGURANCA,
+    SERVICOS, active, builtin, find,
 };

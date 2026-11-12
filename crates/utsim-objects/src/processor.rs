@@ -32,6 +32,11 @@ pub struct OperatorUse {
     /// Item label whose value, when the item has it, replaces `priority`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority_label: Option<String>,
+    /// How many times faster the stage goes with this crew than its time says: the drawn
+    /// time is divided by it (absent: 1, no gain). Two people on a machine that one runs
+    /// alone in 10 min and two in 6: `count: 2, team_speedup: Some(1.6667)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_speedup: Option<f64>,
 }
 
 fn one() -> usize {
@@ -552,6 +557,14 @@ impl Processor {
         !self.teams(stage).is_empty()
     }
 
+    /// Product of the `team_speedup` of the teams `stage` needs (1: no gain).
+    fn speedup(&self, stage: Phase) -> f64 {
+        self.teams(stage)
+            .iter()
+            .filter_map(|(_, op)| op.team_speedup)
+            .product()
+    }
+
     /// Starts `stage` for `item`, first getting operators if the stage needs them
     /// and the item does not already hold them.
     fn begin(&mut self, cx: &mut Ctx, item: ItemId, stage: Phase) {
@@ -620,10 +633,13 @@ impl Processor {
                 .and_then(|r| r.time(cx.item(item).label(&r.label)));
             (by_recipe.unwrap_or(&self.process), PROCESS_DONE)
         };
+        // A faster crew: the work drawn is divided by the gain, so the time already done
+        // (initial state) is that much work.
+        let gain = self.speedup(stage);
         let mut t = match elapsed {
-            Some(e) => cx.sample_residual(dist, e),
+            Some(e) => cx.sample_residual(dist, e * gain),
             None => cx.sample_duration(dist),
-        };
+        } / gain;
         // People operating: their pace (fatigue, learning, individual pace).
         if let Some((_, crew)) = self.held.iter().find(|(i, _)| *i == item) {
             let crew: Vec<BlockId> = crew.iter().map(|(_, b)| *b).collect();

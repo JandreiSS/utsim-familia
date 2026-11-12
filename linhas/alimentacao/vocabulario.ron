@@ -1,0 +1,37 @@
+// Vocabulário da linha Alimentação e food service: termo do núcleo -> termo do restaurante,
+// aplicado na interface, nos relatórios e no manual da linha. O núcleo e o .ron não mudam.
+Vocabulary(
+    line: "alimentacao",
+    terms: {
+        // Coisas e objetos.
+        "item": "pedido",
+        "itens": "pedidos",
+        "Source": "pedidos",
+        "Queue": "fila",
+        "Processor": "estação",
+        "Combiner": "montagem",
+        "Separator": "comanda",
+        "Sink": "saída",
+        "Transporter": "funcionário",
+        "Dispatcher": "equipe",
+        "operador": "funcionário",
+        "operadores": "funcionários",
+        // Medidas.
+        "time_in_system": "tempo do pedido",
+        "process_time": "tempo de preparo",
+        "content": "pedidos em preparo",
+        "throughput": "pedidos por hora",
+        "utilization": "ocupação",
+        // Estados.
+        "idle": "parada",
+        "processing": "preparando",
+        "setup": "em preparação",
+        "blocked": "bloqueada",
+        "down": "quebrada",
+        "waiting_operator": "esperando o funcionário",
+        "off_shift": "fechada",
+        "utilize": "trabalhando",
+        "travel_empty": "andando",
+        "empty": "vazia",
+    },
+)

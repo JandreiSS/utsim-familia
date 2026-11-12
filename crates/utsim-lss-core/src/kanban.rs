@@ -32,12 +32,36 @@ pub fn assigned(state: &State, project: Id, person: Id) -> Vec<Action> {
         .into_iter()
         .filter(|a| a.who == Some(person) && a.column != Column::Done)
         .collect();
+    by_due(&mut v);
+    v
+}
+
+/// By due date (cards without one last), then by column and order.
+fn by_due(v: &mut [Action]) {
     v.sort_by(|x, y| {
         (x.due.is_none(), x.due, x.column)
             .cmp(&(y.due.is_none(), y.due, y.column))
             .then(x.order.total_cmp(&y.order))
             .then(x.id.cmp(&y.id))
     });
+}
+
+/// The open cards of a project grouped by person (the gemba page of P7): people by name, the
+/// cards without a person last; inside each group as in [`assigned`]. Groups without open
+/// cards are left out.
+pub fn open_by_person(state: &State, project: Id) -> Vec<(Option<Id>, Vec<Action>)> {
+    let mut groups: BTreeMap<Option<Id>, Vec<Action>> = BTreeMap::new();
+    for a in of_project(state, Kind::Action, project, Action::read) {
+        if a.column != Column::Done {
+            groups.entry(a.who).or_default().push(a);
+        }
+    }
+    let mut v: Vec<(Option<Id>, Vec<Action>)> = groups.into_iter().collect();
+    for (_, cards) in &mut v {
+        by_due(cards);
+    }
+    let name = |who: &Option<Id>| who.map(|p| crate::domain::person_name(state, p).to_lowercase());
+    v.sort_by_key(|(w, _)| (w.is_none(), name(w), *w));
     v
 }
 
@@ -179,6 +203,27 @@ mod tests {
         commit(&mut s, me, e, &mut ids);
         let t: Vec<String> = assigned(&s, p, me).into_iter().map(|a| a.title).collect();
         assert_eq!(t, ["cedo", "tarde", "sem prazo"]);
+        // The gemba page: by person, the cards without a person last, done cards left out.
+        let r = EntityRef::new(Kind::Action, ids());
+        let e = vec![
+            Edit::new(r, fields::action::PROJECT, p.to_string()),
+            Edit::new(r, fields::action::TITLE, "sem dono"),
+        ];
+        commit(&mut s, me, e, &mut ids);
+        let shape: Vec<(Option<Id>, Vec<String>)> = open_by_person(&s, p)
+            .into_iter()
+            .map(|(w, a)| (w, a.into_iter().map(|a| a.title).collect()))
+            .collect();
+        let mut people = vec![
+            (
+                Some(me),
+                vec!["cedo".to_string(), "tarde".into(), "sem prazo".into()],
+            ),
+            (Some(other), vec!["de outro".to_string()]),
+        ];
+        people.sort_by_key(|(w, _)| w.map(|w| w.short().to_lowercase()));
+        people.push((None, vec!["sem dono".to_string()]));
+        assert_eq!(shape, people);
     }
 
     #[test]

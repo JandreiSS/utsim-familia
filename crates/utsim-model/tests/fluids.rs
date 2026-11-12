@@ -333,3 +333,32 @@ fn converter_waits_when_object_is_full() {
     near(&m, "fluidos.reserva.nivel_final", 12.0);
     near(&m, "fluidos.envase.volume", 8.0);
 }
+
+/// A pump near the largest f64 between two tanks. The item that enters `descarga` at
+/// t = 1 drops 6 L into `a`, which the pump empties into `b` in 6 / 1e308 time units:
+/// shorter than the clock can tell apart from t = 1. The step is taken at once (it once
+/// fired at the same instant until the limit of events per instant stopped the run).
+#[test]
+fn a_pump_too_fast_for_the_clock_moves_the_volume_at_once() {
+    let m = model(
+        10.0,
+        0.0,
+        r#"(name: "caminhao", kind: Source(interarrival: Const(1.0), max_arrivals: Some(1))),
+           (name: "descarga", kind: Sink)"#,
+        r#"("caminhao", "descarga")"#,
+        r#"nodes: [
+            (name: "entrada", kind: FromItems(object: "descarga", volume: 6.0)),
+            (name: "a", kind: Tank(capacity: 100.0)),
+            (name: "bomba", kind: Pipe(max_rate: 1e308)),
+            (name: "b", kind: Tank(capacity: 30.0)),
+        ],
+        links: [("entrada", "a"), ("a", "bomba"), ("bomba", "b")],"#,
+    );
+    let r = run(&m).metrics();
+    near(&r, "fluidos.a.nivel_final", 0.0);
+    near(&r, "fluidos.b.nivel_final", 6.0);
+    near(&r, "fluidos.b.nivel_max", 6.0);
+    // From t = 1 to 10 the 6 L sit in b: mean level 6 × 9 / 10.
+    near(&r, "fluidos.b.nivel_medio", 5.4);
+    near(&r, "fluidos.bomba.volume", 6.0);
+}

@@ -1041,3 +1041,112 @@ As propostas seguem no código até o dono responder.
 6. **C-D6 Modelos prontos.** Os três da seção 11.7 (proposta) ou outros: cervejaria com
    fermentação longa, laticínio com pasteurização contínua, farmácia com liberação do lote pela
    qualidade.
+
+---
+
+## 12. Sétima linha: Alimentação e food service
+
+Plano curto, no formato das seções 7 a 11, escrito em 2026-11-10. As linhas da tabela da seção 3
+já estavam feitas; esta é a primeira de fora dela, escolhida porque reaproveita quase tudo o que
+as outras trouxeram (paciência, horário de chegadas, divisão e consolidação de pedidos, pessoas)
+e serve ao ensino de engenharia de produção. Vale a direção do dono de 2026-11-08
+(`docs/plano_integracao_familia.md`, seção 3): a quebra de cada estação fica no `downtime` do
+próprio nó e o EPI de higiene no `ppe`.
+
+### 12.1 O que se estuda num restaurante
+
+Lanchonetes, restaurantes e cozinhas de delivery: pedidos que chegam em picos (almoço, jantar),
+filas no caixa ou na porta, um pedido que se divide entre as estações da cozinha (chapa,
+fritadeira, bebidas) e se junta de novo antes da entrega, mesas que giram, comida pronta que
+esfria esperando o cliente ou o entregador.
+
+Perguntas típicas:
+
+- quantos pedidos saem no pico e quanto tempo cada um leva;
+- quantos clientes desistem na fila e quantos caixas o pico pede;
+- qual estação é o gargalo da cozinha;
+- quantas vezes cada mesa gira na noite;
+- quantos entregadores evitam que a comida esfrie no balcão.
+
+### 12.2 Conceitos mapeados no núcleo
+
+| Conceito | Representação no UTSim | Existe? |
+|---|---|---|
+| Pedido, canal, partes do pedido | item com rótulos (`canal`, `itens`) | existe |
+| Pico do almoço e do jantar | `schedule` do `Source` e calendário | existe |
+| Desistência na fila | `patience` da `Queue` (seção 7) | existe |
+| Comanda que divide o pedido | `Separator` com `SplitBy` e saída `ByLabel("linha")` (seção 8) | existe |
+| Montagem do pedido | `Queue` com `gather` (seção 8) | existe |
+| Comida que esfria no balcão | `patience` na fila de retirada, contada como descarte | existe |
+| Mesas | `Processor` com `capacity` = mesas | existe |
+| Entregadores | `Processor` com `capacity` = entregadores em rota | existe |
+
+Nenhuma peça nova no núcleo. A rodada desta linha corrigiu um laço da rede de fluidos (vazão perto
+do maior `f64`), achado pelo teste de robustez.
+
+### 12.3 Biblioteca
+
+Chegada de pedidos (intervalo, canal, partes, horário), fila de clientes (paciência), caixa,
+comanda, estação da cozinha (tempo, vagas, equipe, quebra), montagem do pedido, balcão de
+retirada (tempo até esfriar), salão com mesas, entrega, equipe, funcionário e saída.
+
+### 12.4 Vocabulário
+
+item → pedido; `Processor` → estação; `Separator` → comanda; `Combiner` → montagem; `Transporter`
+→ funcionário; `idle` → parada; `time_in_system` → tempo do pedido.
+
+### 12.5 Indicadores
+
+Com IC de 95 % entre replicações:
+
+- pedidos por dia e na hora de pico;
+- tempo do pedido (média e 90 % dos pedidos) e pedidos no prazo;
+- desistências e pedidos descartados (comida fria), separados;
+- o mesmo por canal (balcão, drive-thru, delivery);
+- estações: ocupação por lugar, parada, bloqueada, quebrada, feitas e tempo na estação, no turno
+  da estação ou, sem turno, no horário de funcionamento;
+- salões: ocupação das mesas, giro por mesa por dia e tempo à mesa;
+- pedidos por hora do dia;
+- ocupação da equipe.
+
+### 12.6 Relatório
+
+`utsim linha alimentacao relatorio`, com texto, HTML e JSON e com `--prazo` (minutos, padrão 15).
+
+### 12.7 Modelos prontos
+
+| Modelo | O que mostra |
+|---|---|
+| Lanchonete: balcão no almoço | pico, dois caixas com desistência, comanda entre chapa, fritadeira e bebidas, montagem |
+| Restaurante: mesas no jantar | espera na porta com desistência, 25 mesas, caixa com os garçons |
+| Cozinha de delivery | dois picos, preparo, embalagem, balcão onde a comida esfria, entregadores em rota |
+
+### 12.8 Primeiros passos (sem decisão pendente)
+
+| # | Tarefa | Horas | Modelo |
+|---|---|---|---|
+| A1 | Pacote `linhas/alimentacao/` (quebra e EPI nos campos do nó) | 3–4 | Sonnet |
+| A2 | Indicadores e relatório da linha, `utsim linha alimentacao relatorio`, testes à mão | 6–8 | Opus |
+| A3 | Três modelos prontos, golden e capítulo do manual | 6–8 | Sonnet |
+
+**Estado em 2026-11-10: A1 a A3 feitos.** Manual em `docs/manual/src/linhas/alimentacao/index.md`.
+Fica de fora, para depois: o pedido refeito quando a comida esfria (volta para a cozinha), o prazo
+por canal num rótulo do pedido e o entregador próprio que volta à loja como pessoa do modelo.
+
+### 12.9 Decisões do dono
+
+As propostas seguem no código até o dono responder.
+
+1. **A-D1 Nome exibido.** "Alimentação e food service" (proposta) ou "Restaurantes e food
+   service".
+2. **A-D2 Fim do tempo do pedido.** Na saída do modelo: a entrega ao cliente, ou o fim da visita
+   no restaurante (proposta). A alternativa é parar quando o pedido fica pronto.
+3. **A-D3 Entregadores.** Um processo com os entregadores em rota e a viagem só de ida
+   (proposta, entregadores de aplicativo). A alternativa é a frota própria como pessoas que
+   voltam à loja.
+4. **A-D4 Comida fria.** Sai do modelo e conta como descarte, não como desistência (proposta). A
+   alternativa é o pedido voltar para a cozinha e ser refeito.
+5. **A-D5 Prazo.** Um prazo para todo o modelo, em `--prazo` (proposta, padrão 15 minutos). A
+   alternativa é um prazo por canal, num rótulo do pedido.
+6. **A-D6 Modelos prontos.** Os três da seção 12.7 (proposta) ou outros: drive-thru com duas
+   janelas, self-service por quilo, refeitório industrial.

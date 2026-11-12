@@ -1,6 +1,41 @@
 //! Catalogue of the mission editor (editor.rs). Entries start with `ed_`.
 
 textos! {
+    ed_decisao;
+    ed_decisao_dica;
+    ed_decisao_alavancas;
+    ed_decisao_balanceamento;
+    ed_decisao_arranjo;
+    ed_balanceamento;
+    ed_takt;
+    ed_estacoes;
+    ed_cv;
+    ed_passar_takt;
+    ed_tarefas;
+    ed_col_nome;
+    ed_tempo;
+    ed_depois_de;
+    ed_nenhuma;
+    ed_estacao_inicial;
+    ed_tarefa_nova;
+    ed_arranjo;
+    ed_colunas;
+    ed_linhas;
+    ed_celula;
+    ed_maquinas;
+    ed_fixa;
+    ed_fixa_dica;
+    ed_celula_inicial;
+    ed_maquina_nova;
+    ed_fluxos;
+    ed_volume;
+    ed_roteiro;
+    ed_tirar_ultima;
+    ed_fluxo_novo;
+    ed_grade_inicial;
+    ed_conferir_pecas;
+    ed_conferir_pecas_dica;
+    ed_pecas_sem_avisos;
     ed_modelagem_marcar;
     ed_modelagem_marcar_dica;
     ed_modelagem;
@@ -238,6 +273,10 @@ textos! {
 }
 
 modelos! {
+    ed_estacoes_modelo(estacoes);
+    ed_resumo_balanceamento(soma, minimo, ciclo, eficiencia);
+    ed_inicial_viola(motivo);
+    ed_momento_inicial(momento);
     ed_pacote_aberto(titulo, missoes);
     ed_pacote_novo(dir);
     ed_ato_n(ato);

@@ -31,6 +31,10 @@ const TAG_UPDATE: u32 = 1;
 /// Rates below this are treated as zero when computing the next event.
 const RATE_EPS: f64 = 1e-12;
 
+/// Most boundary steps taken at one instant (see [`FluidNet::resolve`]) before the next
+/// one is scheduled as usual.
+const INSTANT_STEPS: usize = 1000;
+
 /// Tolerance used to decide that a quantity reached a boundary (empty, full, volume).
 fn eps(scale: f64) -> f64 {
     1e-9 * scale.max(1.0)
@@ -283,7 +287,28 @@ impl FluidNet {
     }
 
     /// Re-solves the rates, traces what changed and schedules the next boundary event.
+    ///
+    /// With rates near the largest `f64` the next boundary can be closer than the clock can
+    /// tell apart from now (`now + dt == now`): scheduled, it would fire at this same instant,
+    /// move nothing (no time passed) and schedule itself again for ever. Such a step is
+    /// taken at once instead ([`FluidNet::step_at_once`]) and the rates solved again, up to
+    /// [`INSTANT_STEPS`] times.
     fn resolve(&mut self, cx: &mut Ctx) {
+        for _ in 0..INSTANT_STEPS {
+            self.solve_rates(cx);
+            match self.next_boundary() {
+                Some(dt) if cx.now() + dt == cx.now() => {
+                    self.step_at_once(dt);
+                    self.complete_batches(cx);
+                }
+                _ => break,
+            }
+        }
+        self.trace_and_schedule(cx);
+    }
+
+    /// Solves the rates for the current levels.
+    fn solve_rates(&mut self, cx: &mut Ctx) {
         let n = self.def.nodes.len();
         let roles: Vec<Role> = (0..n).map(|i| self.role(i)).collect();
         match solve(&self.graph, &roles) {
@@ -306,6 +331,81 @@ impl FluidNet {
                 self.rate = vec![0.0; self.graph.links.len()];
             }
         }
+    }
+
+    /// Time to the earliest boundary at the current rates: a tank reaching 0 or its
+    /// capacity, or a converter completing a volume (`None`: nothing changes).
+    fn next_boundary(&self) -> Option<f64> {
+        let mut next: Option<f64> = None;
+        for i in 0..self.def.nodes.len() {
+            if let Some(dt) = self.boundary_of(i) {
+                next = Some(next.map_or(dt, |m: f64| m.min(dt)));
+            }
+        }
+        next
+    }
+
+    /// Time until node `i` reaches its own boundary at the current rates.
+    fn boundary_of(&self, i: usize) -> Option<f64> {
+        match &self.def.nodes[i].kind {
+            FluidKind::Tank { capacity, .. } => {
+                let net = self.net(i);
+                if net > RATE_EPS && self.level[i] < capacity - eps(*capacity) {
+                    Some(((capacity - self.level[i]) / net).max(0.0))
+                } else if net < -RATE_EPS && self.level[i] > eps(*capacity) {
+                    Some((self.level[i] / -net).max(0.0))
+                } else {
+                    None
+                }
+            }
+            FluidKind::ToItems { volume, .. } => {
+                let r = self.inflow(i);
+                (r > RATE_EPS).then(|| ((volume - self.acc[i]) / r).max(0.0))
+            }
+            _ => None,
+        }
+    }
+
+    /// Takes a boundary step `dt` too short for the clock without moving `last`: the nodes
+    /// whose boundary it is land exactly on it (a tank empty or full, a converter with its
+    /// volume); the others move by rate × `dt` when that is a finite amount.
+    fn step_at_once(&mut self, dt: f64) {
+        let ends: Vec<Option<f64>> = (0..self.def.nodes.len())
+            .map(|i| self.boundary_of(i))
+            .collect();
+        let reaches = |e: Option<f64>| e.is_some_and(|e| e <= dt * (1.0 + 1e-9));
+        let moved = |rate: f64| {
+            let v = rate * dt;
+            if v.is_finite() { v } else { 0.0 }
+        };
+        for (i, end) in ends.into_iter().enumerate() {
+            let through = self.through(i);
+            self.vol[i] += moved(through);
+            match &self.def.nodes[i].kind {
+                FluidKind::Tank { capacity, .. } => {
+                    let net = self.net(i);
+                    self.level[i] = if reaches(end) {
+                        if net > 0.0 { *capacity } else { 0.0 }
+                    } else {
+                        (self.level[i] + moved(net)).clamp(0.0, *capacity)
+                    };
+                    self.max_level[i] = self.max_level[i].max(self.level[i]);
+                }
+                FluidKind::ToItems { volume, .. } => {
+                    self.acc[i] = if reaches(end) {
+                        self.acc[i].max(*volume)
+                    } else {
+                        self.acc[i] + moved(through)
+                    };
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Traces the nodes whose `(level, rate)` changed and schedules the next boundary event.
+    fn trace_and_schedule(&mut self, cx: &mut Ctx) {
+        let n = self.def.nodes.len();
         for i in 0..n {
             let shown = self.display(i);
             if self.traced[i] != Some(shown) {
@@ -319,31 +419,7 @@ impl FluidNet {
         if let Some(id) = self.event.take() {
             cx.cancel(id);
         }
-        let mut next: Option<f64> = None;
-        let mut consider = |dt: f64| {
-            let dt = dt.max(0.0);
-            next = Some(next.map_or(dt, |m: f64| m.min(dt)));
-        };
-        for i in 0..n {
-            match &self.def.nodes[i].kind {
-                FluidKind::Tank { capacity, .. } => {
-                    let net = self.net(i);
-                    if net > RATE_EPS && self.level[i] < capacity - eps(*capacity) {
-                        consider((capacity - self.level[i]) / net);
-                    } else if net < -RATE_EPS && self.level[i] > eps(*capacity) {
-                        consider(self.level[i] / -net);
-                    }
-                }
-                FluidKind::ToItems { volume, .. } => {
-                    let r = self.inflow(i);
-                    if r > RATE_EPS {
-                        consider((volume - self.acc[i]) / r);
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(dt) = next {
+        if let Some(dt) = self.next_boundary() {
             self.event = Some(cx.schedule(dt, TAG_UPDATE, None));
         }
     }

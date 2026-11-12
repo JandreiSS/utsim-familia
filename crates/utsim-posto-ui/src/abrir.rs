@@ -10,8 +10,10 @@
 //!
 //! - `--utsim-pedido=<id.utsim-pedido.json>`: o pedido de outro app (`utsim-troca`, seção 2
 //!   do plano). O modelo e o nó do contexto, os arquivos de entrada (conferidos pelo hash),
-//!   o conteúdo curto, a ferramenta, a aba, LIE, LSE e subgrupo viram as opções acima. Ao
-//!   fechar, o app grava a resposta no caminho pedido ([`responder`]).
+//!   o conteúdo curto, a ferramenta, a aba, LIE, LSE e subgrupo viram as opções acima. As
+//!   colunas escolhidas (`entrada.colunas`) ficam, nessa ordem, e as outras saem. Com
+//!   `somente_leitura`, o modelo abre sem a trava. Ao fechar, o app grava a resposta no
+//!   caminho pedido ([`responder`]).
 //!
 //! Cada opção aceita `--opcao=valor` e `--opcao valor`. Um caminho solto também abre.
 
@@ -39,6 +41,10 @@ pub struct Abrir {
     pub lie: Option<f64>,
     pub lse: Option<f64>,
     pub subgrupo: Option<usize>,
+    /// As colunas a usar de cada arquivo, pelo nome do cabeçalho e nessa ordem (do pedido).
+    pub colunas: Vec<String>,
+    /// Abrir o modelo só para leitura, sem tomar a trava (do pedido).
+    pub somente_leitura: bool,
     /// O pedido de outro app (`--utsim-pedido`), para responder ao fechar.
     pub pedido: Option<utsim_troca::Pedido>,
     /// O que impediu atender o pedido: vai na resposta, com estado erro.
@@ -153,6 +159,7 @@ impl Abrir {
             self.caminho(m.clone());
             self.no = p.contexto.no.clone();
         }
+        self.somente_leitura = p.somente_leitura;
         match p.acao.as_str() {
             acao::ABRIR_FERRAMENTA | acao::ANALISAR => {
                 match p.conferir_entrada() {
@@ -179,6 +186,7 @@ impl Abrir {
                     }
                 }
                 let e = &p.entrada;
+                self.colunas = e.colunas.clone();
                 self.aba = e.aba.clone().or(self.aba.take());
                 self.lie = e.lie.filter(|x| x.is_finite()).or(self.lie);
                 self.lse = e.lse.filter(|x| x.is_finite()).or(self.lse);
@@ -378,6 +386,7 @@ pub fn ler_dados(a: &Abrir) -> (Vec<Arquivo>, Vec<String>) {
         let r = std::fs::read(p)
             .map_err(|e| e.to_string())
             .and_then(|b| Tabela::importar(&nome, &b, a.aba.as_deref()));
+        let r = r.and_then(|(t, o)| Ok((escolher_colunas(t, &a.colunas)?, o)));
         match r {
             Ok((t, o)) if !t.vazia() => ok.push((nome, t, o)),
             Ok(_) => erros.push(format!("{nome}: o arquivo não tem dados")),
@@ -385,6 +394,35 @@ pub fn ler_dados(a: &Abrir) -> (Vec<Arquivo>, Vec<String>) {
         }
     }
     (ok, erros)
+}
+
+/// Fica com as `colunas` (pelo nome, sem acento nem caixa), na ordem pedida. Sem colunas,
+/// a tabela fica como está. Uma coluna que não existe é erro.
+fn escolher_colunas(t: Tabela, colunas: &[String]) -> Result<Tabela, String> {
+    if colunas.is_empty() {
+        return Ok(t);
+    }
+    let nomes: Vec<String> = t.colunas.iter().map(|c| importar::normalizar(c)).collect();
+    let mut idx = Vec::new();
+    let mut faltam = Vec::new();
+    for c in colunas {
+        match nomes.iter().position(|n| *n == importar::normalizar(c)) {
+            Some(i) => idx.push(i),
+            None => faltam.push(c.as_str()),
+        }
+    }
+    if !faltam.is_empty() {
+        return Err(format!("coluna que não existe: {}", faltam.join(", ")));
+    }
+    let pegar = |l: &[String]| {
+        idx.iter()
+            .map(|&i| l.get(i).cloned().unwrap_or_default())
+            .collect()
+    };
+    Ok(Tabela {
+        colunas: pegar(&t.colunas),
+        linhas: t.linhas.iter().map(|l| pegar(l)).collect(),
+    })
 }
 
 /// A pasta da unidade "Análises avulsas", ao lado da configuração do app.
@@ -448,7 +486,12 @@ pub fn atender(
     if let Some(m) = &a.modelo {
         let quem = pessoa(s);
         match modelo.abrir_em_no(m, a.no.as_deref(), &quem) {
-            Ok(()) => destino = Some(Destino::Modelo),
+            Ok(()) => {
+                if a.somente_leitura {
+                    modelo.soltar_edicao();
+                }
+                destino = Some(Destino::Modelo);
+            }
             Err(e) => erros.push(e),
         }
     }
@@ -793,5 +836,53 @@ mod tests {
         assert_eq!(a.modelo, q.contexto.modelo);
         assert_eq!(a.no.as_deref(), Some("torno"));
         assert!(a.falha_pedido.is_none());
+    }
+
+    #[test]
+    fn request_columns_pick_and_order_and_read_only_model() {
+        use utsim_troca::{Pedido, acao};
+        let dir = tempfile::tempdir().unwrap();
+        let dados = dir.path().join("pecas.csv");
+        std::fs::write(
+            &dados,
+            "Lote;Diâmetro;Peso\n1;25,001;10\n2;24,998;11\n3;25,003;12\n",
+        )
+        .unwrap();
+        let mut p = Pedido::abrir_ferramenta("estatistica", "histograma", &[dados]).unwrap();
+        p.entrada.colunas = vec!["peso".into(), "DIAMETRO".into()];
+        let c = p.gravar(dir.path()).unwrap();
+        let a = Abrir::de_args(Pedido::argumentos(&c));
+        assert_eq!(a.colunas, ["peso", "DIAMETRO"]);
+        let (lidos, erros) = ler_dados(&a);
+        assert!(erros.is_empty(), "{erros:?}");
+        let t = &lidos[0].1;
+        assert_eq!(t.colunas, ["Peso", "Diâmetro"]);
+        assert_eq!(t.linhas[1], ["11", "24,998"]);
+
+        // Coluna que não existe: o arquivo não abre e o erro diz qual.
+        let mut b = a.clone();
+        b.colunas = vec!["altura".into()];
+        let (lidos, erros) = ler_dados(&b);
+        assert!(lidos.is_empty());
+        assert!(erros[0].contains("altura"), "{erros:?}");
+
+        // Só leitura: o modelo abre no nó sem ficar com a trava.
+        let m = copiar_modelo(dir.path());
+        let mut q = Pedido::novo("3d", acao::EDITAR_NO);
+        q.contexto.modelo = Some(m.clone());
+        q.contexto.no = Some("torno".into());
+        q.somente_leitura = true;
+        let c = q.gravar(dir.path()).unwrap();
+        let a = Abrir::de_args(Pedido::argumentos(&c));
+        assert!(a.somente_leitura);
+        let mut s = Sessao::nova(Some(dir.path().join("config.json")));
+        let (mut tm, mut tf) = telas();
+        assert_eq!(atender(&a, &mut s, &mut tm, &mut tf), Some(Destino::Modelo));
+        assert!(tm.aberto() && !tm.pode_editar());
+        assert_eq!(tm.selecionado, "torno");
+        // Sem trava nossa, outro app pode tomar a edição.
+        let (mut outro, _) = telas();
+        outro.abrir(&m, "Bruno").unwrap();
+        assert!(outro.pode_editar());
     }
 }
