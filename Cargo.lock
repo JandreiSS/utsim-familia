@@ -8557,6 +8557,7 @@ dependencies = [
  "utsim-edit",
  "utsim-estudo",
  "utsim-exposicao",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-posto",
  "utsim-posto-ui",
