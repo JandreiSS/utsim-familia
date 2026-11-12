@@ -212,9 +212,9 @@ Os números abaixo são de partida e serão calibrados no construtor de casos (s
 | Missão | Base | O que muda no formato |
 |---|---|---|
 | 7.1 Linha com inspeção e retrabalho | estudo de caso 1 | primeiro com alavancas, depois o aluno completa o modelo |
-| 7.2 Pronto atendimento por turnos | estudo de caso 3 | escala de equipes com custo, chegadas por hora |
+| 7.2 Pronto atendimento por turnos (**feita**, `ato7/clinica`) | estudo de caso 3 | escala de médicos por turno com custo, chegadas por hora, triagem fixa |
 | 7.3 Centro de distribuição | estudo de caso 2 | missão de equipe, competição pareada (seção 2.4) |
-| 7.4 Reembolso de despesas | `reembolso_atual.ron` e `reembolso_futuro.ron` do Lean Office | estado atual e futuro com VSM administrativo |
+| 7.4 Reembolso de despesas (**feita**, `ato7/reembolso`) | `reembolso_atual.ron` do Lean Office | lote, malote e devolução como alavancas com orçamento, do estado atual ao futuro |
 | 7.5 Do enunciado ao modelo | enunciado e dados novos | o aluno modela do zero no UTSim e entrega o `.ron` (degrau 3) |
 
 **Ato 8. O caso Lean Seis Sigma** (seção 3.7).
@@ -453,7 +453,7 @@ Cada conjunto guarda a receita (gerador, parâmetros, semente) e a resposta conh
 
 ### 6.5 Fontes do conteúdo inicial
 
-Os tutoriais 01 a 06 cobrem os atos 1 a 3. Os modelos de `examples/` cobrem os atos 2, 3, 5 e 6. Os três estudos de caso cobrem o ato 7. Os cinco modelos prontos do Lean Office cobrem as missões administrativas. Faltam modelos próprios para o balanceamento (ato 4), para a grade de arranjo (ato 5) e para o caso final (ato 8).
+Os tutoriais 01 a 06 cobrem os atos 1 a 3. Os modelos de `examples/` cobrem os atos 2, 3, 5 e 6. Os três estudos de caso cobrem o ato 7. Os cinco modelos prontos do Lean Office cobrem as missões administrativas. Os atos 4, 5 e 8 já têm modelos próprios em `ensino/campanha/modelos`. No ato 7, a 7.3 (centro de distribuição em equipe) ainda falta.
 
 ### 6.6 Pacotes de conteúdo de outras frentes
 
