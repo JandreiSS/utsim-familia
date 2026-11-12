@@ -348,6 +348,12 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
             set!(obj.ppe);
             return Ok(());
         }
+        // Who the person is (sex, height, mass, age, experience, capacity) and how it tires
+        // and learns: the whole `person` block, `None` to remove it.
+        "person" => {
+            set!(obj.person);
+            return Ok(());
+        }
         "inspection.every"
         | "inspection.detect"
         | "inspection.false_reject"

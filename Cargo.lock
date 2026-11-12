@@ -8210,6 +8210,7 @@ dependencies = [
  "utsim-linhas",
  "utsim-look",
  "utsim-model",
+ "utsim-nav",
  "utsim-objects",
  "utsim-opt",
  "utsim-pasta",
