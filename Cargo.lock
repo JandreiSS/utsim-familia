@@ -8108,6 +8108,7 @@ dependencies = [
  "utsim-edit",
  "utsim-ferramentas",
  "utsim-fit",
+ "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-lss-core",
  "utsim-model",
