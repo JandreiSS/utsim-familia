@@ -336,6 +336,14 @@ pub struct FloorMarking {
     /// Parada obrigatória do veículo antes de um cruzamento com pedestres (s).
     #[serde(default = "default_stop")]
     pub crossing_stop: f64,
+    /// Cor do chão na cena 3D (`"#rrggbb"`; ausente, o cinza de sempre). Nunca lida pela
+    /// simulação.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "cor_do_chao"
+    )]
+    pub floor_color: Option<String>,
 }
 
 impl Default for FloorMarking {
@@ -344,6 +352,7 @@ impl Default for FloorMarking {
             profile: Profile::Brasil,
             line_width: default_line(),
             crossing_stop: default_stop(),
+            floor_color: None,
         }
     }
 }
@@ -355,6 +364,14 @@ impl FloorMarking {
         }
         if !(self.crossing_stop.is_finite() && self.crossing_stop >= 0.0) {
             return Some("floor_marking: crossing_stop deve ser um número >= 0 (segundos)".into());
+        }
+        if let Some(c) = &self.floor_color {
+            let h = c.trim().trim_start_matches('#');
+            if h.len() != 6 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Some(format!(
+                    "floor_marking: floor_color deve ser #rrggbb, não {c}"
+                ));
+            }
         }
         if let Profile::Custom(spec) = &self.profile {
             if let Some(p) = spec.problem() {
