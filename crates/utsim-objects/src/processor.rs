@@ -640,7 +640,8 @@ impl Processor {
             Some(e) => cx.sample_residual(dist, e * gain),
             None => cx.sample_duration(dist),
         } / gain;
-        // People operating: their pace (fatigue, learning, individual pace).
+        // People operating: their pace (fatigue, learning, individual pace), or their own
+        // time for this task.
         if let Some((_, crew)) = self.held.iter().find(|(i, _)| *i == item) {
             let crew: Vec<BlockId> = crew.iter().map(|(_, b)| *b).collect();
             let task = if stage == Phase::Setup {
@@ -648,7 +649,11 @@ impl Processor {
             } else {
                 cx.name().to_string()
             };
-            t = cx.person_time(&crew, &task, t);
+            t = if elapsed.is_some() {
+                cx.person_time_resumed(&crew, &task, t)
+            } else {
+                cx.person_time_crew(&crew, &task, t, gain)
+            };
         }
         let by_people = self.held.iter().any(|(i, _)| *i == item);
         cx.log_work(item, t, by_people);

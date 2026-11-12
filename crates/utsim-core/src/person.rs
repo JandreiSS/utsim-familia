@@ -37,8 +37,16 @@
 //! - **Time study** ([`TimeStudy`]): the raw stopwatch readings of this person, by task
 //!   and method, marked by the hour of the shift, kept so the fit (`utsim-fit`,
 //!   `fatigue` module) can be redone. The kernel never reads them.
+//! - **Own times** ([`TaskTime`], `times`): the rested time of this person in a task, by
+//!   distribution (usually the result of that fit). When the person does the task, the
+//!   kernel draws the time from it, with the person's own random stream, instead of the
+//!   standard time of the station; fatigue and learning still apply, the individual pace
+//!   does not (the person's own times already carry it). Tasks without an entry keep the
+//!   standard time.
 //!
 //! The metrics go to the block's `custom` metrics (see [`METRICS`]).
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -97,6 +105,21 @@ pub struct Person {
     /// Raw stopwatch readings of this person (time study).
     #[serde(skip_serializing_if = "Option::is_none", alias = "estudo")]
     pub study: Option<TimeStudy>,
+    /// Own rested times of this person, by task (the station name, `station:setup`,
+    /// [`TASK_LOAD`], [`TASK_UNLOAD`]).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", alias = "tempos")]
+    pub times: BTreeMap<String, TaskTime>,
+}
+
+/// Rested time of one person in one task.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TaskTime {
+    /// Distribution of the time, in the time unit of the model, with no fatigue.
+    #[serde(alias = "distribuicao")]
+    pub dist: Dist,
+    /// Work method it was measured with ("A", "com gabarito"...); empty: the only one.
+    #[serde(default, skip_serializing_if = "String::is_empty", alias = "metodo")]
+    pub method: String,
 }
 
 /// Raw time study of one person in one shift: stopwatch readings marked by the hours
@@ -172,6 +195,7 @@ impl Default for Person {
             experience_years: None,
             capacity: None,
             study: None,
+            times: BTreeMap::new(),
         }
     }
 }
@@ -595,6 +619,14 @@ impl Person {
                 }
             }
         }
+        for (task, t) in &self.times {
+            if task.trim().is_empty() {
+                out.push("times: o nome da tarefa não pode ser vazio".into());
+            }
+            if let Err(e) = t.dist.validate() {
+                out.push(format!("times[\"{task}\"]: {e}"));
+            }
+        }
         if let Some(c) = &self.capacity {
             if !positive(c.load_kg) {
                 out.push("capacity.load_kg deve ser finito e > 0 (kg)".into());
@@ -639,7 +671,8 @@ pub fn rest_duration(f: f64, target: f64, mu: f64) -> f64 {
 }
 
 /// Names of the metrics a person with a profile adds to its `custom` metrics (the fatigue
-/// ones only with the dynamic model, the learning ones only with a learning curve).
+/// ones only with the dynamic model, the learning ones only with a learning curve,
+/// `own_times` only with own times).
 pub const METRICS: &[&str] = &[
     "person.pace",
     "person.fatigue_mean",
@@ -652,6 +685,7 @@ pub const METRICS: &[&str] = &[
     "person.repetitions",
     "person.learning_factor",
     "person.learning_gain",
+    "person.own_times",
 ];
 
 #[cfg(test)]

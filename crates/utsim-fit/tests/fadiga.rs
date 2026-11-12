@@ -237,3 +237,59 @@ fn the_manual_example_reads_and_fits() {
             .any(|w| w.contains("só 3 horários"))
     );
 }
+
+#[test]
+fn apply_writes_the_own_time_and_keeps_the_rest_of_the_fatigue() {
+    let (t0, beta, work) = (40.0, 0.25, 0.3);
+    let readings: Vec<Reading> = [0.5, 2.5, 5.0, 7.5]
+        .iter()
+        .map(|h| {
+            let m = curve(t0, beta, work, DEFAULT_RECOVERY_PER_HOUR, &[], *h);
+            Reading {
+                method: "A".into(),
+                ..reading(*h, vec![m * 0.98, m, m * 1.02])
+            }
+        })
+        .collect();
+    let mut person = Person {
+        fatigue: Some(Fatigue::Dynamic {
+            work: 1.0,
+            walk: 0.5,
+            carry: 0.1,
+            recovery: 0.002,
+            time_factor: 9.0,
+            speed_factor: 0.3,
+            limit: Some(0.6),
+            target: 0.2,
+        }),
+        study: Some(utsim_core::TimeStudy {
+            readings,
+            pauses: Vec::new(),
+        }),
+        ..Person::default()
+    };
+    let fit = fit_person(&person, "torno", "A", &AutoConfig::default()).unwrap();
+    fit.apply(&mut person, 3600.0);
+    let own = &person.times["torno"];
+    assert_eq!(own.method, "A");
+    close("média do tempo próprio", own.dist.mean(), t0, 0.02);
+    match person.fatigue {
+        Some(Fatigue::Dynamic {
+            work: w,
+            walk,
+            recovery,
+            time_factor,
+            speed_factor,
+            limit,
+            ..
+        }) => {
+            close("λ", w * 3600.0, work, 0.05);
+            close("β", time_factor, beta, 0.05);
+            // Not fitted: what the profile had.
+            assert_eq!((walk, speed_factor, limit), (0.5, 0.3, Some(0.6)));
+            assert_eq!(recovery, 0.002, "μ não estimado fica o do perfil");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(person.validate().is_empty(), "{:?}", person.validate());
+}

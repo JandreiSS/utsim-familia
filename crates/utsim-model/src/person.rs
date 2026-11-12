@@ -267,6 +267,22 @@ impl Model {
                     o.name
                 ));
             }
+            for task in p.times.keys() {
+                let station = task.strip_suffix(":setup").unwrap_or(task);
+                let known = task == utsim_core::person::TASK_LOAD
+                    || task == utsim_core::person::TASK_UNLOAD
+                    || self
+                        .object(station)
+                        .is_some_and(|s| matches!(s.kind, ObjectKind::Processor { .. }));
+                if !known {
+                    out.push(format!(
+                        "{}: tempo próprio da tarefa '{task}', que não é posto (Processor) do                          modelo nem '{}' ou '{}'; ele nunca é usado",
+                        o.name,
+                        utsim_core::person::TASK_LOAD,
+                        utsim_core::person::TASK_UNLOAD
+                    ));
+                }
+            }
         }
         for (obj, op) in self
             .objects
@@ -451,6 +467,21 @@ impl Model {
                         l.rate * 100.0,
                         l.first
                     ));
+                }
+                if !p.times.is_empty() {
+                    let own: Vec<String> = p
+                        .times
+                        .iter()
+                        .map(|(task, t)| {
+                            let method = if t.method.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", método {}", t.method)
+                            };
+                            format!("{task} (média {:.1}{method})", t.dist.mean())
+                        })
+                        .collect();
+                    parts.push(format!("tempos próprios: {}", own.join("; ")));
                 }
                 if !p.skills.is_empty() {
                     parts.push(format!("habilidades: {}", p.skills.join(", ")));

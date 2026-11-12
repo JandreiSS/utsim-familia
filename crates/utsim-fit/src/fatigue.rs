@@ -22,7 +22,7 @@
 //! of the model.
 
 use serde::Serialize;
-use utsim_core::{Fatigue, Person, Reading};
+use utsim_core::{Fatigue, Person, Reading, TaskTime};
 
 use crate::auto::{AutoConfig, AutoFit, auto_fit};
 
@@ -128,6 +128,58 @@ pub struct PersonFit {
     pub curve: FatigueFit,
     /// Distribution of the normalized times (`t0`).
     pub distribution: AutoFit,
+}
+
+impl PersonFit {
+    /// Writes the result into the profile, so the kernel uses it: the rested-time
+    /// distribution becomes the person's own time of the task (`times`), and the curve
+    /// sets the work rate, the time factor and, when it was estimated, the recovery rate
+    /// of the dynamic fatigue (the other fatigue fields, and a recovery that was not
+    /// estimated, keep what the profile had). `units_per_hour`: time units of the model
+    /// in one hour (3600 for seconds).
+    pub fn apply(&self, person: &mut Person, units_per_hour: f64) {
+        person.times.insert(
+            self.curve.task.clone(),
+            TaskTime {
+                dist: self.distribution.dist.clone(),
+                method: self.curve.method.clone(),
+            },
+        );
+        let fitted = self.curve.fatigue(units_per_hour);
+        person.fatigue = Some(match (person.fatigue, fitted) {
+            (
+                Some(Fatigue::Dynamic {
+                    walk,
+                    carry,
+                    recovery,
+                    speed_factor,
+                    limit,
+                    target,
+                    ..
+                }),
+                Fatigue::Dynamic {
+                    work,
+                    recovery: estimated,
+                    time_factor,
+                    ..
+                },
+            ) => Fatigue::Dynamic {
+                work,
+                walk,
+                carry,
+                recovery: if self.curve.recovery_estimated {
+                    estimated
+                } else {
+                    recovery
+                },
+                time_factor,
+                speed_factor,
+                limit,
+                target,
+            },
+            _ => fitted,
+        });
+    }
 }
 
 /// Fatigue level at `hour` (hours since the start of the shift, rested at the start),

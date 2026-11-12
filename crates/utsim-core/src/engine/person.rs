@@ -44,6 +44,8 @@ pub(super) struct PersonState {
     reps: u64,
     learn_sum: f64,
     rests: u64,
+    /// Operations drawn from the person's own times.
+    own: u64,
 }
 
 impl PersonState {
@@ -64,6 +66,7 @@ impl PersonState {
             reps: 0,
             learn_sum: 0.0,
             rests: 0,
+            own: 0,
         }
     }
 
@@ -171,16 +174,25 @@ impl PersonState {
         self.reps = 0;
         self.learn_sum = 0.0;
         self.rests = 0;
+        self.own = 0;
     }
 
-    /// Operation-time multiplier from fatigue and pace at `now` (learning apart).
+    /// Operation-time multiplier from fatigue at `now` (pace and learning apart).
     fn fatigue_factor(&self, now: Time) -> f64 {
-        let fatigue = match self.cfg.fatigue {
+        match self.cfg.fatigue {
             None => 1.0,
             Some(Fatigue::Allowance(p)) => 1.0 + p,
             Some(Fatigue::Dynamic { time_factor, .. }) => 1.0 + time_factor * self.level_at(now),
-        };
-        fatigue / self.pace
+        }
+    }
+
+    /// Rested time of `task` drawn from this person's own times (with its own stream),
+    /// divided by `gain`; `None` when the person has no own time for the task.
+    fn own_time(&mut self, task: &str, gain: f64) -> Option<Time> {
+        let t = self.cfg.times.get(task)?;
+        let x = t.dist.sample(&mut self.rng).max(0.0);
+        self.own += 1;
+        Some(x / gain)
     }
 
     /// Counts one more repetition of `task` and returns its learning multiplier.
@@ -229,6 +241,9 @@ impl PersonState {
             out.push(("person.repetitions".into(), self.reps as f64));
             out.push(("person.learning_factor".into(), factor));
             out.push(("person.learning_gain".into(), 1.0 - factor / curve.first));
+        }
+        if !self.cfg.times.is_empty() {
+            out.push(("person.own_times".into(), self.own as f64));
         }
         out
     }
@@ -284,22 +299,48 @@ impl Ctx<'_> {
     /// Duration of an operation of standard time `t` done by `persons` (the operators of
     /// a station, or the carrier itself) as repetition of `task`: the slowest person sets
     /// the pace (fatigue or allowance, learning, individual pace); each person with a
-    /// learning curve counts one repetition. People without a profile take `t`.
+    /// learning curve counts one repetition. A person with an own time for `task` draws
+    /// its rested time from it in place of `t` (and its individual pace is left out).
+    /// People without a profile take `t`.
     pub fn person_time(&mut self, persons: &[BlockId], task: &str, t: Time) -> Time {
+        self.pace_of(persons, task, t, Some(1.0))
+    }
+
+    /// [`Ctx::person_time`] for a crew whose work goes `gain` times faster than one
+    /// person's: own times are divided by `gain` (`t` already is).
+    pub fn person_time_crew(
+        &mut self,
+        persons: &[BlockId],
+        task: &str,
+        t: Time,
+        gain: f64,
+    ) -> Time {
+        self.pace_of(persons, task, t, Some(gain))
+    }
+
+    /// [`Ctx::person_time`] for the rest of an operation that was already under way (an
+    /// initial state): `t` is the remaining standard time and own times are not drawn.
+    pub fn person_time_resumed(&mut self, persons: &[BlockId], task: &str, t: Time) -> Time {
+        self.pace_of(persons, task, t, None)
+    }
+
+    fn pace_of(&mut self, persons: &[BlockId], task: &str, t: Time, own: Option<f64>) -> Time {
         let now = self.core.now;
-        let mut factor: Option<f64> = None;
+        let mut out: Option<Time> = None;
+        let mut slowest = |x: Time| out = Some(out.map_or(x, |y: Time| y.max(x)));
         for &b in persons {
             let Some(p) = self.core.blocks[b.0].person.as_deref_mut() else {
-                factor = Some(factor.unwrap_or(1.0).max(1.0));
+                slowest(t);
                 continue;
             };
-            let f = p.fatigue_factor(now) * p.learn(task);
-            factor = Some(factor.map_or(f, |g| g.max(f)));
+            // Same arithmetic as before own times existed, so standard times stay exact.
+            let (base, f) = match own.and_then(|gain| p.own_time(task, gain)) {
+                Some(x) => (x, p.fatigue_factor(now) * p.learn(task)),
+                None => (t, p.fatigue_factor(now) / p.pace * p.learn(task)),
+            };
+            slowest(if f != 1.0 { base * f } else { base });
         }
-        match factor {
-            Some(f) if f != 1.0 => t * f,
-            _ => t,
-        }
+        out.unwrap_or(t)
     }
 
     /// Whether this person must pause now (its fatigue reached the limit of its profile):

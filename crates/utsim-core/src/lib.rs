@@ -39,7 +39,8 @@ pub use maintenance::{
     AgeBasis, Maintenance, MaintenanceCost, Preventive, RepairEffect, Trigger, Wear,
 };
 pub use person::{
-    Capacity, Fatigue, Learning, Lift, LoadedWalk, Person, Reading, Sex, TimeStudy, Variation,
+    Capacity, Fatigue, Learning, Lift, LoadedWalk, Person, Reading, Sex, TaskTime, TimeStudy,
+    Variation,
 };
 pub use report::{BlockReport, RunReport, SeriesPoint, TallySummary, Utilization, summarize};
 pub use stats::Histogram;
