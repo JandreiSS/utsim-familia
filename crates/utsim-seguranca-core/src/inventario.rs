@@ -8,6 +8,8 @@
 //! 5. **Acompanhar** effectiveness with reassessments and history ([`Reavaliacao`]).
 
 use serde::{Deserialize, Serialize};
+use utsim_model::Model;
+use utsim_model::safety::{HazardDef, HazardGroup};
 use utsim_posto::{Posto, Unidade, UnidadeErro};
 
 use crate::matriz::Matriz;
@@ -180,6 +182,56 @@ pub const ETAPAS: [&str; 5] = [
     "5. Acompanhar",
 ];
 
+/// Origin of the hazards read from the node of the model (`safety.hazards`). They are
+/// edited on the node (its Segurança tab), not in the unit, and their id is
+/// `no:<station>:<hazard>` so that actions and reassessments in the unit can point at them.
+pub const ORIGEM_NO: &str = "no";
+
+impl Perigo {
+    /// The hazard `h` of the node linked to station `posto`, as the inventory shows it.
+    pub fn do_no(posto: &str, h: &HazardDef) -> Perigo {
+        Perigo {
+            id: format!("{ORIGEM_NO}:{posto}:{}", h.id),
+            posto: posto.to_string(),
+            grupo: match h.group {
+                HazardGroup::Physical => Grupo::Fisico,
+                HazardGroup::Chemical => Grupo::Quimico,
+                HazardGroup::Biological => Grupo::Biologico,
+                HazardGroup::Ergonomic => Grupo::Ergonomico,
+                HazardGroup::Accident => Grupo::Acidente,
+            },
+            descricao: h.description.clone(),
+            fonte: h.source.clone(),
+            circunstancia: h.circumstance.clone(),
+            lesoes: h.injuries.clone(),
+            controles: h.controls.clone(),
+            probabilidade: h.probability as usize,
+            severidade: h.severity as usize,
+            origem: ORIGEM_NO.to_string(),
+        }
+    }
+
+    /// Read from the node: edited there, not in the unit.
+    pub fn eh_do_no(&self) -> bool {
+        self.origem == ORIGEM_NO
+    }
+}
+
+/// The hazards of the node that station `p` is (`Posto::objeto`) in `model`. Empty when
+/// the station names no object or the model does not have it.
+pub fn perigos_do_no(model: &Model, p: &Posto) -> Vec<Perigo> {
+    let Some(nome) = p.objeto.as_deref() else {
+        return Vec::new();
+    };
+    model
+        .objects
+        .iter()
+        .find(|o| o.name == nome)
+        .and_then(|o| o.safety.as_deref())
+        .map(|s| s.hazards.iter().map(|h| Perigo::do_no(&p.id, h)).collect())
+        .unwrap_or_default()
+}
+
 /// Everything of the safety inventory of a unit, read from its state.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Inventario {
@@ -200,6 +252,44 @@ impl Inventario {
             acoes: e.lista(ACOES),
             reavaliacoes: e.lista(REAVALIACOES),
         }
+    }
+
+    /// Adds the hazards of the nodes linked to the stations (`Posto::modelo` and `objeto`).
+    /// `modelo` gives the model of a station (`None` when it has none or it cannot be
+    /// read), so the caller decides how to read and cache the files.
+    pub fn com_nos<'m>(
+        mut self,
+        mut modelo: impl FnMut(&Posto) -> Option<&'m Model>,
+    ) -> Inventario {
+        let mut novos = Vec::new();
+        for p in &self.postos {
+            if let Some(m) = modelo(p) {
+                novos.extend(perigos_do_no(m, p));
+            }
+        }
+        self.perigos.extend(novos);
+        self
+    }
+
+    /// [`Inventario::ler`] with the hazards of the linked nodes, each model file read once
+    /// (a model that cannot be read is left out). For a one-off use, like the report.
+    pub fn ler_com_nos(u: &Unidade) -> Inventario {
+        let inv = Inventario::ler(u);
+        let mut modelos = std::collections::BTreeMap::new();
+        for p in &inv.postos {
+            if let Some(m) = &p.modelo {
+                let c = u.caminho_modelo(m);
+                modelos
+                    .entry(c.clone())
+                    .or_insert_with(|| Model::load(&c).ok());
+            }
+        }
+        inv.com_nos(|p| {
+            p.modelo
+                .as_ref()
+                .and_then(|m| modelos.get(&u.caminho_modelo(m)))
+                .and_then(|m| m.as_ref())
+        })
     }
 
     pub fn perigos_do_posto(&self, posto: &str) -> Vec<&Perigo> {
