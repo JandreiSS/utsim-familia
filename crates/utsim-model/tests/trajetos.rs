@@ -218,7 +218,41 @@ fn a_ramp_lengthens_the_walk() {
         ", heights: [0.0, 1.0, 0.0]",
     );
     assert!((flat - 20.0).abs() < 1e-6, "{flat}");
-    assert!((ramp - 2.0 * 101f64.sqrt()).abs() < 1e-6, "{ramp}");
+    // Up 10 % at Tobler's 0,70 of the speed, down 10 % at full speed (`ramps.rs`).
+    let up = utsim_objects::ramps::walk_factor(0.1);
+    let want = 101f64.sqrt() / up + 101f64.sqrt();
+    assert!((ramp - want).abs() < 1e-6, "{ramp} {want}");
+}
+
+/// Uma rampa de empilhadeira: o veículo reduz subindo e descendo.
+#[test]
+fn a_forklift_slows_down_on_a_ramp() {
+    let text = |extra: &str| {
+        format!(
+            r#"Model(
+            format: 2,
+            name: "rampa_empilhadeira",
+            run: (stop_time: 1000.0, movement: Aisles),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (0.0, 5.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "emp", position: (0.0, 0.0, 0.0), access: (0.0, -3.0)),
+                (name: "out", kind: Sink, position: (20.0, 0.0, 0.0), access: (0.0, -3.0)),
+                (name: "emp", kind: Transporter(speed: 1.0), position: (0.0, -3.0, 0.0),
+                 visual: (asset: "empilhadeira")),
+            ],
+            connections: [("src", "q"), ("q", "out")],
+            aisles: [
+                (name: "via", kind: Forklift, points: [(0.0, -3.0), (10.0, -3.0), (20.0, -3.0)], width: 3.6{extra}),
+            ],
+        )"#
+        )
+    };
+    let flat = run(&model(&text("")));
+    let ramp = run(&model(&text(", heights: [0.0, 1.0, 0.0]")));
+    let f = utsim_objects::ramps::vehicle_factor(0.1);
+    assert!((flat - 20.0).abs() < 1e-6, "{flat}");
+    assert!((ramp - 2.0 * 101f64.sqrt() / f).abs() < 1e-6, "{ramp}");
 }
 
 #[test]

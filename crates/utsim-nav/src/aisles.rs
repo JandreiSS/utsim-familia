@@ -863,8 +863,10 @@ pub fn aisle_network(
         } else if dist(q, b.pos(v)) < JOIN_TOL {
             v
         } else {
-            // Split the edge at q: u → q replaces it, q → v goes to the end.
-            let n = b.node(q);
+            // Split the edge at q: u → q replaces it, q → v goes to the end. On a ramp
+            // the new node is at the height the edge has there.
+            let (zu, zv) = (b.nodes[u].position[2], b.nodes[v].position[2]);
+            let n = b.node_at(q, zu + (zv - zu) * t_of(q, b.pos(u), b.pos(v)));
             let mut tail = b.edges[e].clone();
             tail.from = b.nodes[n].name.clone();
             b.edges[e].to = b.nodes[n].name.clone();
@@ -909,6 +911,16 @@ pub fn aisle_network(
         crossings,
         attachments,
         blocked,
+    }
+}
+
+/// Fração de `q` no segmento `a`–`b` (em planta).
+fn t_of(q: Pt, a: Pt, b: Pt) -> f64 {
+    let l = dist(a, b);
+    if l <= 0.0 {
+        0.0
+    } else {
+        (dist(a, q) / l).clamp(0.0, 1.0)
     }
 }
 

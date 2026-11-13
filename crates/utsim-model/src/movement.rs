@@ -51,6 +51,8 @@ pub struct NavSet {
     /// Cruzamentos pedestre × veículo e a parada obrigatória (s).
     pub(crate) crossings: Vec<CrossingSpec>,
     pub(crate) crossing_stop: f64,
+    /// Rampas da rede de corredores de cada recurso em `Aisles` (só quando há rampa).
+    pub(crate) ramps: HashMap<String, Arc<utsim_objects::ramps::Ramps>>,
 }
 
 impl NavSet {
@@ -69,6 +71,11 @@ impl NavSet {
     }
 
     /// `(board, é veículo)` para o transportador `name`, se ele entra nas reservas.
+    /// As rampas por onde o recurso anda (ele vai mais devagar nelas).
+    pub fn ramps_for(&self, name: &str) -> Option<Arc<utsim_objects::ramps::Ramps>> {
+        self.ramps.get(name).cloned()
+    }
+
     pub fn crossings_for(
         &self,
         name: &str,
