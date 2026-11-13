@@ -4,7 +4,7 @@ Pacote(
     id: "campanha",
     formato: 1,
     titulo: "Campanha UTSim Ensino",
-    versao: "0.7.0",
+    versao: "0.8.0",
     autor: "UTSim",
     descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
@@ -49,6 +49,7 @@ Pacote(
         ]),
         (numero: 5, titulo: "Arranjo físico e movimentação", missoes: [
             "ato5/oficina.ron",
+            "ato5/celular.ron",
             "ato5/armazem.ron",
             "ato5/frota.ron",
         ]),
