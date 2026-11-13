@@ -13,6 +13,8 @@ utsim-fluid.workspace = true
 ron.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# The texts of the node tabs in five languages (idiomas/*/abas.ftl), without egui.
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
 
 [dev-dependencies]
 rand.workspace = true
