@@ -1,0 +1,60 @@
+Missao(
+    id: "ato7/centro_distribuicao",
+    titulo: "Centro de distribuição: pickers e embalagem",
+    conceitos: ["movimentacao_interna", "capacidade", "fila", "custo_de_espera"],
+    modelo: "../modelos/centro_distribuicao.ron",
+    texto: "centro_distribuicao.md",
+    previsao: [
+        Escolha(
+            id: "onde_espera",
+            pergunta: "Hoje, com 5 pickers, onde a caixa do pedido espera mais?",
+            opcoes: [
+                (rotulo: "Na fila de pedidos, esperando um picker", valor: [(chave: "fila_pedidos.staytime.mean")]),
+                (rotulo: "Na fila da embalagem, esperando uma mesa", valor: [(chave: "fila_embalagem.staytime.mean")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "pickers", rotulo: "Pickers", inicial: 1, opcoes: [
+            (rotulo: "4 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\"]"}, numero: 4),
+            (rotulo: "5 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\"]"}, numero: 5),
+            (rotulo: "6 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \"picker_6\"]"}, numero: 6),
+            (rotulo: "7 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \"picker_6\", \"picker_7\"]"}, numero: 7),
+            (rotulo: "8 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \"picker_6\", \"picker_7\", \"picker_8\"]"}, numero: 8),
+            (rotulo: "9 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \"picker_6\", \"picker_7\", \"picker_8\", \"picker_9\"]"}, numero: 9),
+            (rotulo: "10 pickers", ajustes: {"pickers.team": "[\"picker_1\", \"picker_2\", \"picker_3\", \"picker_4\", \"picker_5\", \"picker_6\", \"picker_7\", \"picker_8\", \"picker_9\", \"picker_10\"]"}, numero: 10),
+        ]),
+        Escolha(id: "embalagem", rotulo: "Lugar da embalagem", opcoes: [
+            (rotulo: "Onde está, a 60 m do picking", ajustes: {"fila_embalagem.position": "(60.0, -82.0, 0.0)", "embalagem.position": "(60.0, -84.0, 0.0)"}, numero: 0),
+            (rotulo: "Perto do picking, a 20 m (obra de R$ 360.000)", ajustes: {"fila_embalagem.position": "(60.0, -42.0, 0.0)", "embalagem.position": "(60.0, -44.0, 0.0)"}, numero: 1),
+        ]),
+    ],
+    metricas: [
+        (nome: "custo", rotulo: "Custo em 24 meses (pickers e obra)", unidade: "R$",
+         valor: [
+            (chave: "decisao.pickers", fator: 124800.0),
+            (chave: "decisao.embalagem", fator: 360000.0),
+         ],
+         objetivo: Menor, meta: 1150000.0, peso: 1.0, tolerancia: Absoluta(0.0), casas: 0),
+        (nome: "espera_pedidos", rotulo: "Espera na fila de pedidos", unidade: "s",
+         valor: [(chave: "fila_pedidos.staytime.mean")], objetivo: Menor, meta: 300.0, peso: 0.0, casas: 0),
+        (nome: "espera_embalagem", rotulo: "Espera na fila da embalagem", unidade: "s",
+         valor: [(chave: "fila_embalagem.staytime.mean")], objetivo: Menor, meta: 300.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a embalagem longe pede tantos pickers?",
+         opcoes: ["Porque a maior parte do tempo do picker por pedido é caminhada até a embalagem e de volta", "Porque as mesas de embalagem são lentas", "Porque as empilhadeiras atrasam os paletes"],
+         certa: 0),
+        (pergunta: "Com a embalagem perto, o que limita colocar ainda mais pickers?",
+         opcoes: ["As 5 mesas de embalagem, que passam a receber as caixas em rajadas", "O corredor estreito das empilhadeiras", "A esteira de saída, que ficou mais longa"],
+         certa: 0),
+    ],
+    dicas: [
+        "Quanto tempo um picker gasta por pedido separando e quanto gasta andando?",
+        "Com a embalagem onde está, ache o menor número de pickers que cumpre as duas esperas e anote o custo.",
+        "Faça o mesmo com a embalagem perto e compare os dois custos em 24 meses, já com a obra.",
+    ],
+    referencia: {"pickers": 2, "embalagem": 1},
+    animacao: (duracao: 3600, unidade: "s"),
+)

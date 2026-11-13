@@ -233,6 +233,54 @@ impl TelaModelo {
         Ok(())
     }
 
+    /// Edita o modelo em `caminho` de fora da tela (outra tela do app grava num nó), com a
+    /// trava deste app: toma a trava, aplica `f` ao documento lido do disco, grava o arquivo
+    /// inteiro e solta a trava (a não ser que esta tela já a tivesse). Recusa quando outra
+    /// pessoa ou app edita, ou quando esta tela tem mudança por gravar no mesmo arquivo.
+    /// Depois, se esta tela mostra o mesmo arquivo, ela relê o disco.
+    pub fn editar_arquivo<T>(
+        &mut self,
+        caminho: &Path,
+        pessoa: &str,
+        f: impl FnOnce(&mut Document) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mesma = self.arquivo.as_deref() == Some(caminho);
+        if mesma && self.pode_editar() && self.pendente() {
+            return Err(
+                "A tela Modelo tem mudança por gravar neste modelo. Grave ou desfaça antes.".into(),
+            );
+        }
+        let ja_minha = mesma && self.pode_editar();
+        match trava::travar(caminho, &self.app, pessoa, &self.maquina, agora_ms())
+            .map_err(|e| e.to_string())?
+        {
+            Estado::Minha => {}
+            Estado::DeOutro(t) => {
+                return Err(format!(
+                    "Em edição por {} no {} desde {}",
+                    t.pessoa,
+                    t.app,
+                    hora(t.desde_ms)
+                ));
+            }
+        }
+        let r = Document::open(caminho)
+            .map_err(|e| format!("{}: {e}", caminho.display()))
+            .and_then(|mut doc| {
+                let v = f(&mut doc)?;
+                utsim_pasta::write_replace(caminho, doc.to_text().as_bytes())
+                    .map_err(|e| e.to_string())?;
+                Ok(v)
+            });
+        if !ja_minha {
+            let _ = trava::soltar(caminho, &self.app, pessoa, &self.maquina);
+        }
+        if r.is_ok() && mesma {
+            self.recarregar();
+        }
+        r
+    }
+
     /// Fecha o modelo e solta a trava.
     pub fn fechar(&mut self) {
         self.soltar_trava();

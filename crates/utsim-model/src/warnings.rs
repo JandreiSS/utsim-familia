@@ -151,6 +151,7 @@ impl Model {
         self.people_warnings(&mut out);
         self.crane_warnings(&mut out);
         self.idle_operator_warnings(&mut out);
+        self.route_warnings(&mut out);
         // Free and network movement: access points, paths, network edges over obstacles.
         if !(uses_mobile && all_at_origin) {
             self.movement_warnings(&mut out);

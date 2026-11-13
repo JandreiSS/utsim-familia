@@ -249,6 +249,14 @@ impl Model {
                     scale: visual.and_then(|v| v.scale).unwrap_or(1.0),
                     access: o.access,
                     size: o.size.map(|d| [d[0], d[1]]),
+                    route: match &o.kind {
+                        ObjectKind::Conveyor { route: Some(r), .. }
+                            if utsim_nav::path3d::problem(&r.nodes, "").is_none() =>
+                        {
+                            Some((utsim_nav::path3d::plan_line(&r.line(o.position)), r.width()))
+                        }
+                        _ => None,
+                    },
                 })
             })
             .collect()
@@ -349,6 +357,12 @@ impl Model {
             .zip(fixed)
             .filter_map(|(b, o)| {
                 let (i, e) = b.belt_ends()?;
+                // A drawn belt's ends are at the heights of its first and last nodes.
+                if let ObjectKind::Conveyor { route: Some(r), .. } = &o.kind {
+                    if let Some((ri, re)) = r.ends(o.position).filter(|_| b.route.is_some()) {
+                        return Some((o.name.clone(), ri, re));
+                    }
+                }
                 let z = o.position[2];
                 Some((o.name.clone(), [i[0], i[1], z], [e[0], e[1], z]))
             })
