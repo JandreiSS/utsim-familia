@@ -299,3 +299,42 @@ fn people_walk_under_a_high_belt_and_around_a_low_one() {
     // middle node); the low one is gone around, past an end 10 m away.
     assert!(high < low - 5.0, "alta {high}, baixa {low}");
 }
+
+/// Empilhadeira leva a peça de `q` a `out` pelo corredor de veículos em y = 0; um caminho
+/// de pedestres o atravessa em x = 0, no piso ou por uma passarela a 3 m.
+fn forklift_across(heights: &str) -> f64 {
+    let m = model(&format!(
+        r#"Model(
+            format: 2,
+            name: "passarela",
+            run: (stop_time: 1000.0, movement: Aisles),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (-10.0, 5.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "emp", position: (-10.0, 3.0, 0.0), access: (0.0, -3.0)),
+                (name: "out", kind: Sink, position: (10.0, 3.0, 0.0), access: (0.0, -3.0)),
+                (name: "emp", kind: Transporter(speed: 1.0), position: (-10.0, 0.0, 0.0),
+                 visual: (asset: "empilhadeira")),
+            ],
+            connections: [("src", "q"), ("q", "out")],
+            aisles: [
+                (name: "corredor_A", kind: Forklift, points: [(-12.0, 0.0), (12.0, 0.0)], width: 3.6),
+                (name: "passeio", kind: Pedestrian, points: [(0.0, -10.0), (0.0, -4.0), (0.0, 4.0), (0.0, 10.0)],
+                 width: 1.2{heights}),
+            ],
+        )"#
+    ));
+    assert_eq!(m.aisle_net().crossings.is_empty(), !heights.is_empty());
+    run(&m)
+}
+
+#[test]
+fn a_walkway_takes_the_crossing_away() {
+    let floor = forklift_across("");
+    let walkway = forklift_across(", heights: [0.0, 3.0, 3.0, 0.0]");
+    // The mandatory stop before the pedestrian crossing (2 s by default) is gone.
+    assert!(
+        (floor - walkway - 2.0).abs() < 1e-6,
+        "piso {floor}, passarela {walkway}"
+    );
+}
