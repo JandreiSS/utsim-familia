@@ -1,0 +1,73 @@
+Missao(
+    id: "ato5/celular",
+    titulo: "Funcional ou celular",
+    conceitos: ["arranjo_celular", "arranjo_funcional", "momento_de_transporte"],
+    modelo: "../modelos/oficina_celular.ron",
+    texto: "celular.md",
+    previsao: [
+        Escolha(
+            id: "compartilhada",
+            pergunta: "Qual máquina as duas células vão dividir, e por isso deve ficar entre elas?",
+            opcoes: [
+                (rotulo: "A furadeira"),
+                (rotulo: "O torno"),
+                (rotulo: "A fresa"),
+            ],
+            resposta: Fixa(0),
+        ),
+        Escolha(
+            id: "ganha",
+            pergunta: "O melhor arranjo em células vai andar menos que o melhor arranjo funcional da missão anterior (6.944 m por dia)?",
+            opcoes: [
+                (rotulo: "Sim, bem menos"),
+                (rotulo: "Não, um pouco mais"),
+                (rotulo: "Vai andar exatamente o mesmo"),
+            ],
+            resposta: Fixa(1),
+        ),
+    ],
+    arranjo: (
+        colunas: 4,
+        linhas: 3,
+        celula: 10.0,
+        maquinas: [
+            (id: "doca", nome: "Doca", fixa: true),
+            (id: "serra", nome: "Serra"),
+            (id: "torno", nome: "Torno"),
+            (id: "retifica", nome: "Retífica"),
+            (id: "inspecao", nome: "Inspeção"),
+            (id: "furadeira", nome: "Furadeira"),
+            (id: "serra_b", nome: "Serra nova"),
+            (id: "fresa", nome: "Fresa"),
+            (id: "inspecao_b", nome: "Inspeção nova"),
+        ],
+        fluxos: [
+            (nome: "Eixos", volume: 40.0, roteiro: ["doca", "serra", "torno", "retifica", "inspecao", "doca"]),
+            (nome: "Flanges", volume: 30.0, roteiro: ["doca", "serra", "torno", "furadeira", "inspecao", "doca"]),
+            (nome: "Suportes", volume: 25.0, roteiro: ["doca", "serra_b", "fresa", "furadeira", "inspecao_b", "doca"]),
+            (nome: "Buchas", volume: 20.0, roteiro: ["doca", "torno", "retifica", "inspecao", "doca"]),
+            (nome: "Placas", volume: 15.0, roteiro: ["doca", "fresa", "furadeira", "doca"]),
+        ],
+        inicial: {"doca": 4, "serra": 0, "torno": 1, "retifica": 2, "inspecao": 5, "fresa": 8, "furadeira": 9, "serra_b": 10, "inspecao_b": 11},
+    ),
+    metricas: [
+        (nome: "momento", rotulo: "Momento de transporte (viagens por dia × metros)", unidade: "m",
+         valor: [(chave: "arranjo.momento")], objetivo: Menor, meta: 7200.0, peso: 1.0,
+         tolerancia: Relativa(0.0), casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que as células não andam menos que o arranjo funcional nesta oficina?",
+         opcoes: ["Porque a oficina é pequena e a doca fica no meio: no arranjo funcional todas as máquinas já ficam perto dela, e as máquinas repetidas ocupam lugares bons", "Porque as máquinas novas são mais lentas", "Porque as células mudam os roteiros das famílias"],
+         certa: 0),
+        (pergunta: "O que custa montar as células?",
+         opcoes: ["Comprar máquinas repetidas, que ficam menos ocupadas que a máquina única do arranjo funcional", "Nada, porque as máquinas são as mesmas", "Mudar os roteiros das famílias"],
+         certa: 0),
+    ],
+    dicas: [
+        "Separe as famílias em dois grupos: as que passam pela retífica e as que passam pela fresa.",
+        "Cada célula forma um caminho curto que sai da doca e volta para ela.",
+        "A furadeira atende flanges, suportes e placas: ela fica na divisa entre as duas células. Depois compare o seu momento com o da missão anterior.",
+    ],
+    referencia: {"pos.fresa": 10, "pos.furadeira": 9, "pos.inspecao": 5, "pos.inspecao_b": 8, "pos.retifica": 2, "pos.serra": 0, "pos.serra_b": 6, "pos.torno": 1},
+    animacao: (duracao: 240, unidade: "min"),
+)

@@ -28,6 +28,8 @@ use crate::solver::{Graph, Role, SolveError, solve};
 use crate::{FluidDef, FluidKind};
 
 const TAG_UPDATE: u32 = 1;
+/// Most items one `ToItems` converter may create in a single event.
+const MAX_ITEMS_PER_EVENT: u32 = 100_000;
 /// Rates below this are treated as zero when computing the next event.
 const RATE_EPS: f64 = 1e-12;
 
@@ -225,8 +227,22 @@ impl FluidNet {
             let FluidKind::ToItems { object, volume, .. } = &self.def.nodes[i].kind else {
                 continue;
             };
-            let (volume, e) = (*volume, eps(*volume));
+            // The tolerance must stay below the volume itself: with `eps` alone a
+            // volume under 1e-9 made `acc >= volume - e` always true (endless loop).
+            let (volume, e) = (*volume, eps(*volume).min(*volume * 1e-6));
             let target = self.objects.get(object).copied();
+            // A tiny `volume` against a large accumulation would create billions of
+            // items in one event; stop with a clear error instead of exhausting memory.
+            let pending = (self.acc[i] / volume).floor();
+            if pending > MAX_ITEMS_PER_EVENT as f64 {
+                cx.error(format!(
+                    "conversor '{}' criaria {pending:.0} itens de uma vez (volume por item {volume}); \
+                     aumente o volume por item ou reduza a vazão (limite {MAX_ITEMS_PER_EVENT} por evento)",
+                    self.def.nodes[i].name
+                ));
+                self.acc[i] = 0.0;
+                continue;
+            }
             while !self.blocked[i] && self.acc[i] >= volume - e {
                 self.acc[i] = (self.acc[i] - volume).max(0.0);
                 if self.acc[i] < e {

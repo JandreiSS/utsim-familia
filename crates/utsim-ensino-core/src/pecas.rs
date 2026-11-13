@@ -542,47 +542,125 @@ impl Arranjo {
             }
             return Some(p);
         }
-        // Exhaustive: injective placements of the free machines.
-        let mut total: f64 = 1.0;
-        for i in 0..livres.len() {
-            total *= (celulas.len() - i) as f64;
+        // Exhaustive search with pruning, over injective placements of the free machines.
+        // The moment of the pairs already placed only grows as more machines are placed,
+        // so a branch whose partial moment already reaches the best one is cut. The order
+        // of the search is the declared one, so ties keep the first optimum found.
+        let ids: Vec<String> = self.maquinas.iter().map(|m| m.id.clone()).collect();
+        let n = ids.len();
+        let indice = |id: &str| ids.iter().position(|x| x == id);
+        let mut w = vec![vec![0.0; n]; n];
+        for f in &self.fluxos {
+            for par in f.roteiro.windows(2) {
+                let (a, b) = (indice(&par[0])?, indice(&par[1])?);
+                if a != b {
+                    w[a][b] += f.volume;
+                    w[b][a] += f.volume;
+                }
+            }
         }
-        if total > 3.0e6 {
+        let mut pos: Vec<Option<u32>> = vec![None; n];
+        for (id, c) in &fixas {
+            pos[indice(id)?] = Some(*c);
+        }
+        let livres: Vec<usize> = livres
+            .iter()
+            .map(|m| indice(&m.id))
+            .collect::<Option<_>>()?;
+        // The pairs between fixed machines do not depend on the search.
+        let mut base = 0.0;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                if let (Some(a), Some(b)) = (pos[i], pos[j]) {
+                    base += w[i][j] * self.distancia(a, b);
+                }
+            }
+        }
+        let mut busca = Busca {
+            arranjo: self,
+            ids,
+            w,
+            livres,
+            usada: vec![false; celulas.len()],
+            celulas,
+            pos,
+            nos: 0,
+            estourou: false,
+            melhor: None,
+        };
+        busca.descer(0, base);
+        if busca.estourou {
             return None;
         }
-        let mut melhor: Option<(f64, BTreeMap<String, u32>)> = None;
-        let mut p = fixas.clone();
-        let mut usada = vec![false; celulas.len()];
-        self.permutar(&livres, 0, &celulas, &mut usada, &mut p, &mut melhor);
-        melhor.map(|(_, p)| p)
+        busca.melhor.map(|(_, p)| p)
     }
+}
 
-    fn permutar(
-        &self,
-        livres: &[&MaquinaArranjo],
-        k: usize,
-        celulas: &[u32],
-        usada: &mut Vec<bool>,
-        p: &mut BTreeMap<String, u32>,
-        melhor: &mut Option<(f64, BTreeMap<String, u32>)>,
-    ) {
-        if k == livres.len() {
-            let v = self.momento(p);
-            if melhor.as_ref().is_none_or(|(b, _)| v < *b - 1e-9) {
-                *melhor = Some((v, p.clone()));
+/// Nodes the layout search may visit before it gives up (the grid is too large).
+const LIMITE_DA_BUSCA: u64 = 30_000_000;
+
+struct Busca<'a> {
+    arranjo: &'a Arranjo,
+    ids: Vec<String>,
+    /// Trips between each pair of machines, both ways.
+    w: Vec<Vec<f64>>,
+    livres: Vec<usize>,
+    celulas: Vec<u32>,
+    usada: Vec<bool>,
+    pos: Vec<Option<u32>>,
+    nos: u64,
+    estourou: bool,
+    melhor: Option<(f64, BTreeMap<String, u32>)>,
+}
+
+impl Busca<'_> {
+    fn descer(&mut self, k: usize, parcial: f64) {
+        self.nos += 1;
+        if self.nos > LIMITE_DA_BUSCA {
+            self.estourou = true;
+            return;
+        }
+        if let Some((b, _)) = &self.melhor {
+            if parcial - 1e-6 >= *b - 1e-9 {
+                return;
+            }
+        }
+        if k == self.livres.len() {
+            let p: BTreeMap<String, u32> = self
+                .ids
+                .iter()
+                .zip(&self.pos)
+                .filter_map(|(id, c)| c.map(|c| (id.clone(), c)))
+                .collect();
+            let v = self.arranjo.momento(&p);
+            if self.melhor.as_ref().is_none_or(|(b, _)| v < *b - 1e-9) {
+                self.melhor = Some((v, p));
             }
             return;
         }
-        for (i, c) in celulas.iter().enumerate() {
-            if usada[i] {
+        let m = self.livres[k];
+        for i in 0..self.celulas.len() {
+            if self.usada[i] {
                 continue;
             }
-            usada[i] = true;
-            p.insert(livres[k].id.clone(), *c);
-            self.permutar(livres, k + 1, celulas, usada, p, melhor);
-            usada[i] = false;
+            let c = self.celulas[i];
+            let mut extra = 0.0;
+            for (j, cj) in self.pos.iter().enumerate() {
+                if let Some(cj) = cj {
+                    if self.w[m][j] > 0.0 {
+                        extra += self.w[m][j] * self.arranjo.distancia(c, *cj);
+                    }
+                }
+            }
+            self.usada[i] = true;
+            self.pos[m] = Some(c);
+            self.descer(k + 1, parcial + extra);
+            self.pos[m] = None;
+            self.usada[i] = false;
+            if self.estourou {
+                return;
+            }
         }
-        p.remove(&livres[k].id);
     }
 }
 

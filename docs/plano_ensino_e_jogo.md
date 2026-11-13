@@ -194,7 +194,7 @@ Os números abaixo são de partida e serão calibrados no construtor de casos (s
 | Missão | Situação | Alavancas | Meta e nota | Ensina |
 |---|---|---|---|---|
 | 5.1 Oficina de usinagem | seis máquinas, cinco famílias com roteiros e volumes, grade de 4 por 3 | posicionar as máquinas na grade | menor distância vezes viagens (matriz de-para de `utsim-diagram`) e vazão com a empilhadeira simulada | arranjo funcional, matriz de-para |
-| 5.2 Funcional ou celular | a mesma oficina | agrupar máquinas em células por família | lead time e distância contra a 5.1 | arranjo celular |
+| 5.2 Funcional ou celular (**feita**, `ato5/celular`) | a mesma oficina, com serra e inspeção repetidas e a furadeira dividida | agrupar máquinas em células por família | lead time e distância contra a 5.1 | arranjo celular |
 | 5.3 Giro perto da doca | armazém (`armazem.ron`, `tutorial_04_armazem.ron`) | posição dos itens por giro | tempo médio de separação | endereçamento por giro |
 | 5.4 Frota de transporte | AGVs ou empilhadeiras (`agvs.ron`) | tamanho da frota e regra de chamada | entregas no prazo com o menor custo | movimentação interna |
 
