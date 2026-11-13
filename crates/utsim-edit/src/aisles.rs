@@ -195,6 +195,8 @@ mod tests {
             two_way: true,
             secondary: false,
             profile: None,
+            heights: Vec::new(),
+            radii: Vec::new(),
         })
     }
 
