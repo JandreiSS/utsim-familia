@@ -11,6 +11,7 @@
 //! kappa ≥ 0,75, or the justification recorded) and [`baseline_real`] (a
 //! capability or chart on a data set of origin `Real`).
 
+use crate::texto::{dx, fx, tx, vx};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utsim_quality::arl;
@@ -213,34 +214,34 @@ pub enum Recipe {
 impl Recipe {
     pub fn label(&self) -> &'static str {
         match self {
-            Recipe::Descriptive { .. } => "Estatística descritiva",
-            Recipe::Normality { .. } => "Normalidade (Anderson-Darling)",
-            Recipe::Capability { .. } => "Capacidade do processo",
-            Recipe::Chart { .. } => "Carta de controle",
-            Recipe::TOne { .. } => "Teste t de uma amostra",
-            Recipe::TTwo { .. } => "Teste t de duas amostras",
-            Recipe::TPaired { .. } => "Teste t pareado",
-            Recipe::Anova { .. } => "ANOVA de um fator com Tukey",
-            Recipe::ChiSquare { .. } => "Qui-quadrado de independência",
-            Recipe::Proportion { .. } => "Teste de uma proporção",
-            Recipe::TwoProportions { .. } => "Teste de duas proporções",
-            Recipe::MannWhitney { .. } => "Mann-Whitney",
-            Recipe::Wilcoxon { .. } => "Wilcoxon pareado",
-            Recipe::GageRr { .. } => "MSA: Gage R&R",
-            Recipe::Type1 { .. } => "MSA: estudo do tipo 1",
-            Recipe::Bias { .. } => "MSA: viés",
-            Recipe::Linearity { .. } => "MSA: linearidade",
-            Recipe::Attribute { .. } => "MSA: concordância de atributos",
-            Recipe::Factorial { .. } => "Experimento fatorial 2^k",
-            Recipe::Variances { .. } => "Igualdade de variâncias (Levene e Bartlett)",
-            Recipe::KruskalWallis { .. } => "Kruskal-Wallis",
-            Recipe::MoodMedian { .. } => "Teste da mediana de Mood",
-            Recipe::Friedman { .. } => "Friedman",
-            Recipe::TwoWayAnova { .. } => "ANOVA de dois fatores",
-            Recipe::Regression { .. } => "Regressão linear",
-            Recipe::SampleSize { .. } => "Tamanho de amostra e poder",
-            Recipe::Ewma { .. } => "Carta EWMA",
-            Recipe::Cusum { .. } => "Carta CUSUM",
+            Recipe::Descriptive { .. } => tx("analises-estatistica_descritiva"),
+            Recipe::Normality { .. } => tx("analises-normalidade_anderson_darling"),
+            Recipe::Capability { .. } => tx("analises-capacidade_do_processo"),
+            Recipe::Chart { .. } => tx("analises-carta_de_controle"),
+            Recipe::TOne { .. } => tx("analises-teste_t_de_uma_amostra"),
+            Recipe::TTwo { .. } => tx("analises-teste_t_de_duas_amostras"),
+            Recipe::TPaired { .. } => tx("analises-teste_t_pareado"),
+            Recipe::Anova { .. } => tx("analises-anova_de_um_fator_com"),
+            Recipe::ChiSquare { .. } => tx("analises-qui_quadrado_de_independencia"),
+            Recipe::Proportion { .. } => tx("analises-teste_de_uma_proporcao"),
+            Recipe::TwoProportions { .. } => tx("analises-teste_de_duas_proporcoes"),
+            Recipe::MannWhitney { .. } => tx("analises-mann_whitney"),
+            Recipe::Wilcoxon { .. } => tx("analises-wilcoxon_pareado"),
+            Recipe::GageRr { .. } => tx("analises-msa_gage_r_r"),
+            Recipe::Type1 { .. } => tx("analises-msa_estudo_do_tipo_1"),
+            Recipe::Bias { .. } => tx("analises-msa_vies"),
+            Recipe::Linearity { .. } => tx("analises-msa_linearidade"),
+            Recipe::Attribute { .. } => tx("analises-msa_concordancia_de_atributos"),
+            Recipe::Factorial { .. } => tx("analises-experimento_fatorial_2_k"),
+            Recipe::Variances { .. } => tx("analises-igualdade_de_variancias_levene_e"),
+            Recipe::KruskalWallis { .. } => tx("analises-kruskal_wallis"),
+            Recipe::MoodMedian { .. } => tx("analises-teste_da_mediana_de_mood"),
+            Recipe::Friedman { .. } => tx("analises-friedman"),
+            Recipe::TwoWayAnova { .. } => tx("analises-anova_de_dois_fatores"),
+            Recipe::Regression { .. } => tx("analises-regressao_linear"),
+            Recipe::SampleSize { .. } => tx("analises-tamanho_de_amostra_e_poder"),
+            Recipe::Ewma { .. } => tx("analises-carta_ewma"),
+            Recipe::Cusum { .. } => tx("analises-carta_cusum"),
         }
     }
 
@@ -381,9 +382,9 @@ fn grouped(t: &Table, col: usize, group: usize) -> (Vec<String>, Vec<Vec<f64>>) 
 
 fn need(v: &[f64], n: usize, what: &str) -> Result<(), String> {
     if v.len() < n {
-        Err(format!(
-            "{what}: são precisos ao menos {n} valores numéricos (há {})",
-            v.len()
+        Err(fx(
+            "analises-sao_precisos_ao_menos_valores",
+            &[("what", vx(&what)), ("n", vx(&n)), ("v", vx(&v.len()))],
         ))
     } else {
         Ok(())
@@ -392,14 +393,22 @@ fn need(v: &[f64], n: usize, what: &str) -> Result<(), String> {
 
 fn verdict_p(p: f64, h1: &str) -> String {
     if p < 1.0 - LEVEL {
-        format!("valor-p {p:.4} < 0,05: há evidência de que {h1}")
+        fx(
+            "analises-valor_p_0_05_ha",
+            &[("p", dx(format!("{:.4}", p))), ("h1", vx(&h1))],
+        )
     } else {
-        format!("valor-p {p:.4} ≥ 0,05: sem evidência de que {h1}")
+        fx(
+            "analises-valor_p_0_05_sem",
+            &[("p", dx(format!("{:.4}", p))), ("h1", vx(&h1))],
+        )
     }
 }
 
 /// The note when the target or σ of a chart with memory came from the data.
-const BASE_NOTE: &str = "Alvo e σ calculados dos próprios dados (média e amplitude móvel média / 1,128). Para vigiar um processo, informe os da fase I ou da especificação.";
+fn base_note() -> &'static str {
+    tx("analises-alvo_e_calculados_dos_proprios")
+}
 
 /// Target and σ of a chart with memory: the given ones, or the mean and MR̄/d2 of the data.
 fn memory_base(x: &[f64], target: Option<f64>, sigma: Option<f64>) -> Result<(f64, f64), String> {
@@ -414,7 +423,7 @@ fn memory_base(x: &[f64], target: Option<f64>, sigma: Option<f64>) -> Result<(f6
         }
     };
     if !(sd > 0.0 && sd.is_finite()) {
-        return Err("σ precisa ser maior que zero (os dados não variam?)".into());
+        return Err(tx("analises-precisa_ser_maior_que_zero").into());
     }
     Ok((mu, sd))
 }
@@ -426,10 +435,10 @@ fn arl_of(scheme: &arl::Scheme, shift: f64) -> f64 {
 
 fn memory_verdict(first: Option<usize>, n: usize) -> String {
     match first {
-        None => "nenhum sinal: a média não se afastou do alvo".into(),
-        Some(i) => format!(
-            "{n} ponto(s) com sinal, o primeiro no ponto {}: a média se afastou do alvo",
-            i + 1
+        None => tx("analises-nenhum_sinal_a_media_nao").into(),
+        Some(i) => fx(
+            "analises-ponto_s_com_sinal_o",
+            &[("n", vx(&n)), ("i", vx(&(i + 1)))],
         ),
     }
 }
@@ -441,8 +450,8 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
         Recipe::Descriptive { col } => {
             let x = t.numbers(*col);
             need(&x, 1, "descritiva")?;
-            let d =
-                descriptive::describe(&x, LEVEL, QuantileMethod::default()).ok_or("sem valores")?;
+            let d = descriptive::describe(&x, LEVEL, QuantileMethod::default())
+                .ok_or(tx("analises-sem_valores"))?;
             for (l, v) in [
                 ("n", d.n as f64),
                 ("média", d.mean),
@@ -461,29 +470,34 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 o.put("IC 95 % da média (inferior)", ci.low);
                 o.put("IC 95 % da média (superior)", ci.high);
             }
-            o.verdict = format!(
-                "média {:.4} e desvio {:.4} de {} valores",
-                d.mean, d.sd, d.n
+            o.verdict = fx(
+                "analises-media_e_desvio_de_valores",
+                &[
+                    ("mean", dx(format!("{:.4}", d.mean))),
+                    ("sd", dx(format!("{:.4}", d.sd))),
+                    ("n", vx(&d.n)),
+                ],
             );
             o.series = x;
         }
         Recipe::Normality { col } => {
             let x = t.numbers(*col);
             need(&x, 3, "normalidade")?;
-            let a = utsim_quality::normality::anderson_darling(&x).ok_or("sem variação")?;
+            let a = utsim_quality::normality::anderson_darling(&x)
+                .ok_or(tx("analises-sem_variacao"))?;
             o.put("n", a.n as f64);
             o.put("A²", a.a2);
             o.put("A*²", a.a2_star);
             o.put("valor-p", a.p_value);
             o.verdict = if a.p_value < 0.05 {
-                format!(
-                    "valor-p {:.4} < 0,05: os dados não parecem normais",
-                    a.p_value
+                fx(
+                    "analises-valor_p_0_05_os",
+                    &[("p_value", dx(format!("{:.4}", a.p_value)))],
                 )
             } else {
-                format!(
-                    "valor-p {:.4} ≥ 0,05: sem evidência contra a normalidade",
-                    a.p_value
+                fx(
+                    "analises-valor_p_0_05_sem-2",
+                    &[("p_value", dx(format!("{:.4}", a.p_value)))],
                 )
             };
             o.series = x;
@@ -532,11 +546,20 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 o.put("valor-p A-D", n.p_value);
             }
             o.verdict = if c.cpk.value >= 1.33 {
-                format!("Cpk {:.2} ≥ 1,33: processo capaz", c.cpk.value)
+                fx(
+                    "analises-cpk_1_33_processo_capaz",
+                    &[("value", dx(format!("{:.2}", c.cpk.value)))],
+                )
             } else if c.cpk.value >= 1.0 {
-                format!("Cpk {:.2} entre 1 e 1,33: capaz com ressalva", c.cpk.value)
+                fx(
+                    "analises-cpk_entre_1_e_1",
+                    &[("value", dx(format!("{:.2}", c.cpk.value)))],
+                )
             } else {
-                format!("Cpk {:.2} < 1: processo não capaz", c.cpk.value)
+                fx(
+                    "analises-cpk_1_processo_nao_capaz",
+                    &[("value", dx(format!("{:.2}", c.cpk.value)))],
+                )
             };
             o.notes = c.notes.clone();
             o.series = x;
@@ -555,7 +578,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                     None => vec![1.0; counts.len()],
                 };
                 if counts.len() != sizes.len() {
-                    return Err("contagens e tamanhos com números de linhas diferentes".into());
+                    return Err(tx("analises-contagens_e_tamanhos_com_numeros").into());
                 }
                 ChartData::Attributes { counts, sizes }
             } else {
@@ -578,7 +601,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 RuleSet::western_electric()
             };
             let ch = charts::phase1(*kind, &data, &[], &rules)?;
-            let p = ch.panels.first().ok_or("carta sem painel")?;
+            let p = ch.panels.first().ok_or(tx("analises-carta_sem_painel"))?;
             o.series = p.values.iter().map(|v| v.unwrap_or(f64::NAN)).collect();
             o.limits = Some((
                 p.center.first().copied().unwrap_or(f64::NAN),
@@ -601,53 +624,56 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             o.put("pontos com sinal", sig.len() as f64);
             o.signals = sig;
             o.verdict = if ch.in_control() {
-                "nenhuma regra violada: processo sob controle estatístico".into()
+                tx("analises-nenhuma_regra_violada_processo_sob").into()
             } else {
-                format!(
-                    "{} ponto(s) com sinal: há causas especiais a investigar",
-                    o.signals.len()
+                fx(
+                    "analises-ponto_s_com_sinal_ha",
+                    &[("signals", vx(&o.signals.len()))],
                 )
             };
             o.notes = ch.notes.clone();
         }
         Recipe::TOne { col, mu0 } => {
             let x = t.numbers(*col);
-            need(&x, 2, "teste t")?;
+            need(&x, 2, tx("analises-teste_t"))?;
             let r = hypothesis::t_one_sample(&x, *mu0, LEVEL, Alternative::TwoSided)
-                .ok_or("dados insuficientes")?;
+                .ok_or(tx("analises-dados_insuficientes"))?;
             o.put("média", r.estimate);
             o.put("t", r.t);
             o.put("gl", r.df);
             o.put("valor-p", r.p_value);
             o.put("IC inferior", r.ci.low);
             o.put("IC superior", r.ci.high);
-            o.verdict = verdict_p(r.p_value, &format!("a média difere de {mu0}"));
+            o.verdict = verdict_p(
+                r.p_value,
+                &fx("analises-a_media_difere_de", &[("mu0", vx(&mu0))]),
+            );
         }
         Recipe::TTwo { a, b, pooled } => {
             let (x, y) = (t.numbers(*a), t.numbers(*b));
-            need(&x, 2, "amostra 1")?;
-            need(&y, 2, "amostra 2")?;
+            need(&x, 2, tx("analises-amostra_1"))?;
+            need(&y, 2, tx("analises-amostra_2"))?;
             let r = hypothesis::t_two_sample(&x, &y, 0.0, *pooled, LEVEL, Alternative::TwoSided)
-                .ok_or("dados insuficientes")?;
+                .ok_or(tx("analises-dados_insuficientes"))?;
             o.put("diferença das médias", r.estimate);
             o.put("t", r.t);
             o.put("gl", r.df);
             o.put("valor-p", r.p_value);
             o.put("IC inferior", r.ci.low);
             o.put("IC superior", r.ci.high);
-            o.verdict = verdict_p(r.p_value, "as médias diferem");
+            o.verdict = verdict_p(r.p_value, tx("analises-as_medias_diferem"));
         }
         Recipe::TPaired { a, b } => {
             let (x, y) = t.pairs(*a, *b);
             need(&x, 2, "pares")?;
             let r = hypothesis::t_paired(&x, &y, 0.0, LEVEL, Alternative::TwoSided)
-                .ok_or("dados insuficientes")?;
+                .ok_or(tx("analises-dados_insuficientes"))?;
             o.put("diferença média", r.estimate);
             o.put("t", r.t);
             o.put("valor-p", r.p_value);
             o.put("IC inferior", r.ci.low);
             o.put("IC superior", r.ci.high);
-            o.verdict = verdict_p(r.p_value, "há diferença entre os pares");
+            o.verdict = verdict_p(r.p_value, tx("analises-ha_diferenca_entre_os_pares"));
         }
         Recipe::Anova { col, group } => {
             let labels = t.texts(*group);
@@ -668,8 +694,8 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 }
             }
             let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
-            let r =
-                hypothesis::one_way_anova(&refs, LEVEL).ok_or("são precisos 2 grupos com dados")?;
+            let r = hypothesis::one_way_anova(&refs, LEVEL)
+                .ok_or(tx("analises-sao_precisos_2_grupos_com"))?;
             o.put("grupos", r.anova.groups as f64);
             o.put("F", r.anova.f);
             o.put("valor-p", r.anova.p_value);
@@ -677,7 +703,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             for (k, m) in keys.iter().zip(&r.anova.means) {
                 o.put(&format!("média de {k}"), *m);
             }
-            o.verdict = verdict_p(r.anova.p_value, "alguma média de grupo difere");
+            o.verdict = verdict_p(r.anova.p_value, tx("analises-alguma_media_de_grupo_difere"));
         }
         Recipe::ChiSquare { a, b } => {
             let (ra, rb) = (t.texts(*a), t.texts(*b));
@@ -698,11 +724,12 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                     table[i][j] += 1.0;
                 }
             }
-            let r = hypothesis::chi_square_independence(&table).ok_or("tabela insuficiente")?;
+            let r = hypothesis::chi_square_independence(&table)
+                .ok_or(tx("analises-tabela_insuficiente"))?;
             o.put("X²", r.statistic);
             o.put("gl", r.df as f64);
             o.put("valor-p", r.p_value);
-            o.verdict = verdict_p(r.p_value, "as duas variáveis estão associadas");
+            o.verdict = verdict_p(r.p_value, tx("analises-as_duas_variaveis_estao_associadas"));
         }
         Recipe::Proportion { x, n, p0 } => {
             let r = hypothesis::one_proportion(
@@ -713,33 +740,39 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 LEVEL,
                 Alternative::TwoSided,
             )
-            .ok_or("proporção inválida (0 < p0 < 1, x ≤ n)")?;
+            .ok_or(tx("analises-proporcao_invalida_0_p0_1"))?;
             o.put("p", r.p_hat);
             o.put("valor-p", r.p_value);
             o.put("IC inferior", r.ci.low);
             o.put("IC superior", r.ci.high);
-            o.verdict = verdict_p(r.p_value, &format!("a proporção difere de {p0}"));
+            o.verdict = verdict_p(
+                r.p_value,
+                &fx("analises-a_proporcao_difere_de", &[("p0", vx(&p0))]),
+            );
         }
         Recipe::TwoProportions { x1, n1, x2, n2 } => {
             let r = hypothesis::two_proportions(*x1, *n1, *x2, *n2, LEVEL, Alternative::TwoSided)
-                .ok_or("proporções inválidas")?;
+                .ok_or(tx("analises-proporcoes_invalidas"))?;
             o.put("p1", r.p_hat[0]);
             o.put("p2", r.p_hat[1]);
             o.put("diferença", r.difference);
             o.put("valor-p", r.p_value);
-            o.verdict = verdict_p(r.p_value, "as proporções diferem");
+            o.verdict = verdict_p(r.p_value, tx("analises-as_proporcoes_diferem"));
         }
         Recipe::MannWhitney { a, b } => {
             let (x, y) = (t.numbers(*a), t.numbers(*b));
-            need(&x, 1, "amostra 1")?;
-            need(&y, 1, "amostra 2")?;
+            need(&x, 1, tx("analises-amostra_1"))?;
+            need(&y, 1, tx("analises-amostra_2"))?;
             let r =
                 nonparametric::mann_whitney(&x, &y, RankMethod::default(), Alternative::TwoSided)
-                    .ok_or("dados insuficientes")?;
+                    .ok_or(tx("analises-dados_insuficientes"))?;
             o.put("U1", r.u1);
             o.put("valor-p", r.p_value);
             o.put("deslocamento (Hodges-Lehmann)", r.shift);
-            o.verdict = verdict_p(r.p_value, "as distribuições diferem em posição");
+            o.verdict = verdict_p(
+                r.p_value,
+                tx("analises-as_distribuicoes_diferem_em_posicao"),
+            );
         }
         Recipe::Wilcoxon { a, b } => {
             let (x, y) = t.pairs(*a, *b);
@@ -751,11 +784,11 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 RankMethod::default(),
                 Alternative::TwoSided,
             )
-            .ok_or("sem diferenças diferentes de zero")?;
+            .ok_or(tx("analises-sem_diferencas_diferentes_de_zero"))?;
             o.put("W+", r.w_plus);
             o.put("valor-p", r.p_value);
             o.put("pseudomediana", r.pseudo_median);
-            o.verdict = verdict_p(r.p_value, "há diferença entre os pares");
+            o.verdict = verdict_p(r.p_value, tx("analises-ha_diferenca_entre_os_pares"));
         }
         Recipe::GageRr {
             part,
@@ -792,7 +825,10 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 }
             }
             o.put("ndc", g.ndc as f64);
-            o.verdict = format!("{}; ndc = {}", g.verdict(), g.ndc);
+            o.verdict = fx(
+                "analises-ndc",
+                &[("verdict", vx(&g.verdict())), ("ndc", vx(&g.ndc))],
+            );
             o.notes = g.warnings.clone();
         }
         Recipe::Type1 {
@@ -801,7 +837,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             tolerance,
         } => {
             let x = t.numbers(*col);
-            need(&x, 10, "estudo do tipo 1")?;
+            need(&x, 10, tx("analises-estudo_do_tipo_1"))?;
             let r = type1(&x, *reference, *tolerance)?;
             o.put("n", x.len() as f64);
             o.put("média", r.mean);
@@ -810,14 +846,20 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             o.put("Cg", r.cg);
             o.put("Cgk", r.cgk);
             o.verdict = if r.cg >= 1.33 && r.cgk >= 1.33 {
-                format!(
-                    "Cg {:.2} e Cgk {:.2} ≥ 1,33: instrumento capaz",
-                    r.cg, r.cgk
+                fx(
+                    "analises-cg_e_cgk_1_33",
+                    &[
+                        ("cg", dx(format!("{:.2}", r.cg))),
+                        ("cgk", dx(format!("{:.2}", r.cgk))),
+                    ],
                 )
             } else {
-                format!(
-                    "Cg {:.2} ou Cgk {:.2} < 1,33: instrumento não capaz",
-                    r.cg, r.cgk
+                fx(
+                    "analises-cg_ou_cgk_1_33",
+                    &[
+                        ("cg", dx(format!("{:.2}", r.cg))),
+                        ("cgk", dx(format!("{:.2}", r.cgk))),
+                    ],
                 )
             };
             o.series = x;
@@ -828,7 +870,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             tolerance,
         } => {
             let x = t.numbers(*col);
-            need(&x, 10, "estudo de viés")?;
+            need(&x, 10, tx("analises-estudo_de_vies"))?;
             let b = msa::bias(*reference, &x, LEVEL)?;
             o.put("n", b.n as f64);
             o.put("média", b.mean);
@@ -842,14 +884,17 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 o.put("%viés da tolerância", 100.0 * b.bias.abs() / tol);
             }
             o.verdict = if b.p_value < ALPHA {
-                format!(
-                    "viés de {:.4} significativo (valor-p {:.4}): o instrumento lê deslocado da referência",
-                    b.bias, b.p_value
+                fx(
+                    "analises-vies_de_significativo_valor_p",
+                    &[
+                        ("bias", dx(format!("{:.4}", b.bias))),
+                        ("p_value", dx(format!("{:.4}", b.p_value))),
+                    ],
                 )
             } else {
-                format!(
-                    "viés não significativo (valor-p {:.4}): o intervalo do viés contém zero",
-                    b.p_value
+                fx(
+                    "analises-vies_nao_significativo_valor_p",
+                    &[("p_value", dx(format!("{:.4}", b.p_value)))],
                 )
             };
             o.series = x;
@@ -876,17 +921,20 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 o.put(&format!("viés em {}", b.reference), b.bias);
             }
             o.verdict = if l.p_slope < ALPHA {
-                format!(
-                    "o viés muda ao longo da faixa (inclinação {:.4}, valor-p {:.4}): há problema de linearidade",
-                    l.slope, l.p_slope
+                fx(
+                    "analises-o_vies_muda_ao_longo",
+                    &[
+                        ("slope", dx(format!("{:.4}", l.slope))),
+                        ("p_slope", dx(format!("{:.4}", l.p_slope))),
+                    ],
                 )
             } else if l.p_intercept < ALPHA {
-                format!(
-                    "viés constante ao longo da faixa (valor-p do intercepto {:.4}): corrigir o deslocamento",
-                    l.p_intercept
+                fx(
+                    "analises-vies_constante_ao_longo_da",
+                    &[("p_intercept", dx(format!("{:.4}", l.p_intercept)))],
                 )
             } else {
-                "sem viés nem problema de linearidade ao longo da faixa".to_string()
+                tx("analises-sem_vies_nem_problema_de").to_string()
             };
             o.series = l.per_reference.iter().map(|b| b.bias).collect();
         }
@@ -931,24 +979,26 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 }
             }
             o.verdict = match kappa {
-                Some(k) if k >= KAPPA_LIMIT => {
-                    format!("kappa {k:.2} ≥ 0,75: concordância boa, sistema aceito")
-                }
-                Some(k) if k >= 0.4 => {
-                    format!(
-                        "kappa {k:.2} entre 0,40 e 0,75: concordância razoável, melhorar o critério"
-                    )
-                }
-                Some(k) => format!("kappa {k:.2} < 0,40: concordância fraca, sistema não aceito"),
-                None => "sem kappa: precisa de ao menos dois avaliadores ou repetições".to_string(),
+                Some(k) if k >= KAPPA_LIMIT => fx(
+                    "analises-kappa_0_75_concordancia_boa",
+                    &[("k", dx(format!("{:.2}", k)))],
+                ),
+                Some(k) if k >= 0.4 => fx(
+                    "analises-kappa_entre_0_40_e",
+                    &[("k", dx(format!("{:.2}", k)))],
+                ),
+                Some(k) => fx(
+                    "analises-kappa_0_40_concordancia_fraca",
+                    &[("k", dx(format!("{:.2}", k)))],
+                ),
+                None => tx("analises-sem_kappa_precisa_de_ao").to_string(),
             };
             o.notes = a.warnings.clone();
         }
         Recipe::Variances { col, group } => {
             let (keys, groups) = grouped(t, *col, *group);
             let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
-            let l =
-                variances::levene(&refs).ok_or("são precisos 2 grupos com 2 valores ou mais")?;
+            let l = variances::levene(&refs).ok_or(tx("analises-sao_precisos_2_grupos_com-2"))?;
             o.put("Levene (mediana)", l.statistic);
             o.put("valor-p Levene", l.p_value);
             if let Some(b) = variances::bartlett(&refs) {
@@ -958,37 +1008,34 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             for (k, s) in keys.iter().zip(&l.sds) {
                 o.put(&format!("desvio de {k}"), *s);
             }
-            o.verdict = verdict_p(l.p_value, "as variâncias dos grupos diferem (Levene)");
-            o.notes.push(
-                "Levene com a mediana serve para qualquer distribuição; Bartlett supõe dados normais"
-                    .into(),
-            );
+            o.verdict = verdict_p(l.p_value, tx("analises-as_variancias_dos_grupos_diferem"));
+            o.notes
+                .push(tx("analises-levene_com_a_mediana_serve").into());
         }
         Recipe::KruskalWallis { col, group } => {
             let (keys, groups) = grouped(t, *col, *group);
             let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
             let r =
-                ranks::kruskal_wallis(&refs).ok_or("são precisos 2 grupos com dados diferentes")?;
+                ranks::kruskal_wallis(&refs).ok_or(tx("analises-sao_precisos_2_grupos_com-3"))?;
             o.put("H", r.statistic);
             o.put("gl", r.df);
             o.put("valor-p", r.p_value);
             for (k, m) in keys.iter().zip(&r.per_group) {
                 o.put(&format!("posto médio de {k}"), *m);
             }
-            o.verdict = verdict_p(r.p_value, "alguma mediana de grupo difere");
+            o.verdict = verdict_p(r.p_value, tx("analises-alguma_mediana_de_grupo_difere"));
         }
         Recipe::MoodMedian { col, group } => {
             let (keys, groups) = grouped(t, *col, *group);
             let refs: Vec<&[f64]> = groups.iter().map(Vec::as_slice).collect();
-            let r = ranks::mood_median(&refs)
-                .ok_or("são precisos 2 grupos e valores dos dois lados da mediana geral")?;
+            let r = ranks::mood_median(&refs).ok_or(tx("analises-sao_precisos_2_grupos_e"))?;
             o.put("χ²", r.statistic);
             o.put("gl", r.df);
             o.put("valor-p", r.p_value);
             for (k, m) in keys.iter().zip(&r.per_group) {
                 o.put(&format!("mediana de {k}"), *m);
             }
-            o.verdict = verdict_p(r.p_value, "alguma mediana de grupo difere");
+            o.verdict = verdict_p(r.p_value, tx("analises-alguma_mediana_de_grupo_difere"));
         }
         Recipe::Friedman {
             value,
@@ -1019,16 +1066,16 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 }
             }
             if table.iter().flatten().any(|v| v.is_nan()) {
-                return Err("cada bloco precisa de um valor de cada tratamento".into());
+                return Err(tx("analises-cada_bloco_precisa_de_um").into());
             }
-            let r = ranks::friedman(&table).ok_or("são precisos 2 blocos e 2 tratamentos")?;
+            let r = ranks::friedman(&table).ok_or(tx("analises-sao_precisos_2_blocos_e"))?;
             o.put("Q", r.statistic);
             o.put("gl", r.df);
             o.put("valor-p", r.p_value);
             for (k, m) in kt.iter().zip(&r.per_group) {
                 o.put(&format!("posto médio de {k}"), *m);
             }
-            o.verdict = verdict_p(r.p_value, "algum tratamento difere");
+            o.verdict = verdict_p(r.p_value, tx("analises-algum_tratamento_difere"));
         }
         Recipe::TwoWayAnova { value, a, b } => {
             let (ta, tb) = (t.texts(*a), t.texts(*b));
@@ -1065,16 +1112,19 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 .map(|l| name(l.source))
                 .collect();
             o.verdict = if active.is_empty() {
-                "nenhum efeito significativo a 5 %".into()
+                tx("analises-nenhum_efeito_significativo_a_5").into()
             } else {
-                format!("efeitos significativos a 5 %: {}", active.join(", "))
+                fx(
+                    "analises-efeitos_significativos_a_5",
+                    &[("active", vx(&active.join(", ")))],
+                )
             };
             if r.replicates == 1 {
                 o.notes
-                    .push("sem repetições: a interação vira o erro (modelo aditivo)".into());
+                    .push(tx("analises-sem_repeticoes_a_interacao_vira").into());
             }
             o.plots.push(Plot {
-                title: format!("Interação {ha} × {hb}"),
+                title: fx("analises-interacao", &[("ha", vx(&ha)), ("hb", vx(&hb))]),
                 bars: false,
                 labels: r.levels_a.clone(),
                 series: r
@@ -1095,7 +1145,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             predictors,
         } => {
             if predictors.is_empty() {
-                return Err("escolha ao menos um preditor".into());
+                return Err(tx("analises-escolha_ao_menos_um_preditor").into());
             }
             let mut x: Vec<Vec<f64>> = vec![Vec::new(); predictors.len()];
             let mut y = Vec::new();
@@ -1143,26 +1193,36 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 .map(|c| format!("{:+.4}·{}", c.estimate, c.name))
                 .collect::<Vec<_>>()
                 .join(" ");
-            o.verdict = format!(
-                "{} = {:.4} {eq}; R² {:.3}; {}",
-                t.header
-                    .get(*response)
-                    .cloned()
-                    .unwrap_or_else(|| "y".into()),
-                r.coefs[0].estimate,
-                r.r2,
-                if r.f_p_value < ALPHA {
-                    "modelo significativo a 5 %"
-                } else {
-                    "modelo não significativo a 5 %"
-                }
+            o.verdict = fx(
+                "analises-r2",
+                &[
+                    (
+                        "y",
+                        vx(&t
+                            .header
+                            .get(*response)
+                            .cloned()
+                            .unwrap_or_else(|| "y".into())),
+                    ),
+                    ("estimate", dx(format!("{:.4}", r.coefs[0].estimate))),
+                    ("eq", vx(&eq)),
+                    ("r2", dx(format!("{:.3}", r.r2))),
+                    (
+                        "a",
+                        vx(&if r.f_p_value < ALPHA {
+                            "modelo significativo a 5 %"
+                        } else {
+                            "modelo não significativo a 5 %"
+                        }),
+                    ),
+                ],
             );
             if r.coefs.iter().any(|c| c.vif.is_some_and(|v| v > 5.0)) {
                 o.notes
-                    .push("VIF acima de 5: preditores muito correlacionados entre si".into());
+                    .push(tx("analises-vif_acima_de_5_preditores").into());
             }
             o.notes
-                .push("o gráfico mostra os resíduos na ordem dos dados".into());
+                .push(tx("analises-o_grafico_mostra_os_residuos").into());
             o.series = r.residuals.clone();
             o.limits = Some((0.0, -2.0 * r.s, 2.0 * r.s));
         }
@@ -1211,11 +1271,10 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             ];
             o.signals = r.signals;
             o.verdict = memory_verdict(o.signals.first().copied(), o.signals.len());
-            o.notes.push(
-                "A EWMA acumula desvios pequenos e persistentes da média, que a carta de Shewhart só vê tarde. ARL estimada por simulação (20 000 corridas, semente fixa).".into(),
-            );
+            o.notes
+                .push(tx("analises-a_ewma_acumula_desvios_pequenos").into());
             if target.is_none() || sigma.is_none() {
-                o.notes.push(BASE_NOTE.into());
+                o.notes.push(base_note().into());
             }
         }
         Recipe::Cusum {
@@ -1248,9 +1307,12 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             }
             let n = x.len();
             o.lines_on_chart = vec![
-                ("−C⁻ (baixa)".into(), r.lower.iter().map(|v| -v).collect()),
+                (
+                    tx("analises-c_baixa").into(),
+                    r.lower.iter().map(|v| -v).collect(),
+                ),
                 ("H".into(), vec![r.h; n]),
-                ("−H".into(), vec![-r.h; n]),
+                (tx("analises-h").into(), vec![-r.h; n]),
             ];
             let mut marks: Vec<(usize, f64)> = r
                 .signals_up
@@ -1265,11 +1327,10 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             o.signal_marks = marks;
             o.verdict = memory_verdict(sig.first().copied(), sig.len());
             o.signals = sig;
-            o.notes.push(
-                "C⁺ acumula os desvios para cima da média, C⁻ os para baixo (desenhada abaixo do zero). ARL pela aproximação de Siegmund.".into(),
-            );
+            o.notes
+                .push(tx("analises-c_acumula_os_desvios_para").into());
             if target.is_none() || sigma.is_none() {
-                o.notes.push(BASE_NOTE.into());
+                o.notes.push(base_note().into());
             }
         }
         Recipe::SampleSize {
@@ -1285,14 +1346,14 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 _ => power::Design::TwoProportions { p1: *a, p2: *b },
             };
             let n = power::sample_size(d, *target, *alpha)
-                .ok_or("parâmetros impossíveis: confira a diferença, o desvio ou as proporções")?;
+                .ok_or(tx("analises-parametros_impossiveis_confira_a_diferenca"))?;
             o.put("n", n as f64);
             if let Some(p) = power::power(d, n, *alpha) {
                 o.put("poder com esse n", p);
             }
             o.verdict = match kind {
-                0 => format!("{n} observações"),
-                _ => format!("{n} observações em cada grupo"),
+                0 => fx("analises-observacoes", &[("n", vx(&n))]),
+                _ => fx("analises-observacoes_em_cada_grupo", &[("n", vx(&n))]),
             };
         }
         Recipe::Factorial {
@@ -1301,7 +1362,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             order,
         } => {
             if factors.len() < 2 {
-                return Err("escolha ao menos dois fatores".into());
+                return Err(tx("analises-escolha_ao_menos_dois_fatores").into());
             }
             let num = |r: &Vec<String>, c: usize| {
                 r.get(c)
@@ -1325,15 +1386,14 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 }
             }
             if y.len() < 4 {
-                return Err(
-                    "o experimento precisa de ao menos 4 corridas com a resposta preenchida".into(),
-                );
+                return Err(tx("analises-o_experimento_precisa_de_ao").into());
             }
             for (i, c) in cols.iter_mut().enumerate() {
                 let coded = c.iter().all(|v| [-1.0, 0.0, 1.0].contains(v));
                 if !coded {
-                    *c = doe::code(c)
-                        .ok_or_else(|| format!("o fator {} tem um só nível", doe::letter(i)))?;
+                    *c = doe::code(c).ok_or_else(|| {
+                        fx("analises-o_fator_tem_um_so", &[("i", vx(&doe::letter(i)))])
+                    })?;
                 }
             }
             let x: Vec<Vec<f64>> = (0..y.len())
@@ -1345,9 +1405,7 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 Ok(a) => a,
                 Err(e) if *order > 1 => match doe::analyze(&x, &y, 1, LEVEL) {
                     Ok(a) => {
-                        o.notes.push(
-                            "plano de triagem (como o Plackett-Burman): as interações ficam parcialmente confundidas com os efeitos principais, e só os efeitos principais foram estimados".into(),
-                        );
+                        o.notes.push(tx("analises-plano_de_triagem_como_o").into());
                         a
                     }
                     Err(_) => return Err(e),
@@ -1409,19 +1467,22 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             if let Some(l) = &a.lenth {
                 o.put("PSE de Lenth", l.pse);
                 o.put("margem de erro de Lenth", l.me);
-                o.notes.push(
-                    "sem grau de liberdade para o erro: os valores-p vêm do pseudo erro padrão de Lenth"
-                        .into(),
-                );
+                o.notes
+                    .push(tx("analises-sem_grau_de_liberdade_para").into());
             }
             for (m, f) in &a.confounded {
                 o.notes.push(if *f == 0 {
-                    format!("{} confundido com a média", doe::term_name(*m))
+                    fx(
+                        "analises-confundido_com_a_media",
+                        &[("m", vx(&doe::term_name(*m)))],
+                    )
                 } else {
-                    format!(
-                        "{} confundido com {}",
-                        doe::term_name(*m),
-                        doe::term_name(*f)
+                    fx(
+                        "analises-confundido_com",
+                        &[
+                            ("m", vx(&doe::term_name(*m))),
+                            ("f", vx(&doe::term_name(*f))),
+                        ],
                     )
                 });
             }
@@ -1432,22 +1493,25 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 .map(|e| doe::term_name(e.term))
                 .collect();
             o.verdict = if active.is_empty() {
-                "nenhum termo ativo a 5 %".to_string()
+                tx("analises-nenhum_termo_ativo_a_5").to_string()
             } else {
-                format!("termos ativos a 5 %: {}", active.join(", "))
+                fx(
+                    "analises-termos_ativos_a_5",
+                    &[("active", vx(&active.join(", ")))],
+                )
             };
             if a.anova
                 .iter()
                 .any(|l| l.source == "curvatura" && l.p_value.is_some_and(|p| p < ALPHA))
             {
                 o.verdict
-                    .push_str("; curvatura significativa: a resposta não é linear entre os níveis");
+                    .push_str(tx("analises-curvatura_significativa_a_resposta_nao"));
             }
             // Pareto of the effects, main effects and the interactions in the model.
             let mut by: Vec<&doe::Effect> = a.effects.iter().collect();
             by.sort_by(|p, q| q.effect.abs().total_cmp(&p.effect.abs()));
             o.plots.push(Plot {
-                title: "Pareto dos efeitos (valor absoluto)".into(),
+                title: tx("analises-pareto_dos_efeitos_valor_absoluto").into(),
                 bars: true,
                 labels: by.iter().map(|e| doe::term_name(e.term)).collect(),
                 series: vec![(
@@ -1456,9 +1520,9 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 )],
             });
             o.plots.push(Plot {
-                title: "Efeitos principais".into(),
+                title: tx("analises-efeitos_principais").into(),
                 bars: false,
-                labels: vec!["baixo (−1)".into(), "alto (+1)".into()],
+                labels: vec![tx("analises-baixo_1").into(), tx("analises-alto_1").into()],
                 series: (0..k)
                     .map(|i| {
                         let (lo, hi) = doe::main_effect_means(&x, &y, i);
@@ -1471,15 +1535,24 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 let (i, j) = (ij[0], ij[1]);
                 let m = doe::interaction_means(&x, &y, i, j);
                 o.plots.push(Plot {
-                    title: format!("Interação {} × {}", doe::letter(i), doe::letter(j)),
+                    title: fx(
+                        "analises-interacao-2",
+                        &[("i", vx(&doe::letter(i))), ("j", vx(&doe::letter(j)))],
+                    ),
                     bars: false,
                     labels: vec![
-                        format!("{} baixo", doe::letter(i)),
-                        format!("{} alto", doe::letter(i)),
+                        fx("analises-baixo", &[("i", vx(&doe::letter(i)))]),
+                        fx("analises-alto", &[("i", vx(&doe::letter(i)))]),
                     ],
                     series: vec![
-                        (format!("{} baixo", doe::letter(j)), m[0].to_vec()),
-                        (format!("{} alto", doe::letter(j)), m[1].to_vec()),
+                        (
+                            fx("analises-baixo", &[("j", vx(&doe::letter(j)))]),
+                            m[0].to_vec(),
+                        ),
+                        (
+                            fx("analises-alto", &[("j", vx(&doe::letter(j)))]),
+                            m[1].to_vec(),
+                        ),
                     ],
                 });
             }
@@ -1502,12 +1575,12 @@ pub struct Type1 {
 
 pub fn type1(x: &[f64], reference: f64, tolerance: f64) -> Result<Type1, String> {
     if tolerance.is_nan() || tolerance <= 0.0 {
-        return Err("informe a tolerância (LSE − LIE) positiva".into());
+        return Err(tx("analises-informe_a_tolerancia_lse_lie").into());
     }
     let mean = descriptive::mean(x);
     let sd = descriptive::std_dev(x);
     if sd.is_nan() || sd <= 0.0 {
-        return Err("medições sem variação: Cg não existe".into());
+        return Err(tx("analises-medicoes_sem_variacao_cg_nao").into());
     }
     let bias = mean - reference;
     Ok(Type1 {
@@ -1632,7 +1705,10 @@ pub fn record(
 
 /// Runs the recipe of a saved analysis again on the data set's text: the same numbers.
 pub fn rerun(a: &Analysis, text: &str) -> Result<Outcome, String> {
-    let r = a.recipe.as_ref().ok_or("análise sem receita")?;
+    let r = a
+        .recipe
+        .as_ref()
+        .ok_or(tx("analises-analise_sem_receita"))?;
     run(r, &Table::parse(text))
 }
 

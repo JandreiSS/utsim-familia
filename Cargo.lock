@@ -7994,6 +7994,7 @@ dependencies = [
  "serde_json",
  "utsim-core",
  "utsim-fluid",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-objects",
 ]
@@ -8235,10 +8236,11 @@ dependencies = [
 
 [[package]]
 name = "utsim-launcher"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "eframe",
  "tempfile",
+ "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-ui-tema",
  "winresource",
@@ -8328,6 +8330,7 @@ dependencies = [
  "utsim-diagram",
  "utsim-doe",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-pert",
  "utsim-quality",
