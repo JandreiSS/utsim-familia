@@ -51,6 +51,8 @@ pub struct NavSet {
     /// Cruzamentos pedestre × veículo e a parada obrigatória (s).
     pub(crate) crossings: Vec<CrossingSpec>,
     pub(crate) crossing_stop: f64,
+    /// Rampas da rede de corredores de cada recurso em `Aisles` (só quando há rampa).
+    pub(crate) ramps: HashMap<String, Arc<utsim_objects::ramps::Ramps>>,
 }
 
 impl NavSet {
@@ -69,6 +71,11 @@ impl NavSet {
     }
 
     /// `(board, é veículo)` para o transportador `name`, se ele entra nas reservas.
+    /// As rampas por onde o recurso anda (ele vai mais devagar nelas).
+    pub fn ramps_for(&self, name: &str) -> Option<Arc<utsim_objects::ramps::Ramps>> {
+        self.ramps.get(name).cloned()
+    }
+
     pub fn crossings_for(
         &self,
         name: &str,
@@ -264,8 +271,22 @@ impl Model {
 
     /// Obstáculos da navegação: áreas dos objetos fixos e `obstacles` do modelo (paredes e
     /// colunas da planta ou desenhados à mão).
+    ///
+    /// Uma esteira desenhada que passa no alto (a [`crate::trajeto::HEADROOM`] do piso ou
+    /// mais) não bloqueia quem passa por baixo: só os trechos baixos e as pernas.
     pub fn nav_obstacles(&self) -> Vec<Obstacle> {
-        let mut out: Vec<Obstacle> = self.nav_bodies().iter().map(Body::obstacle).collect();
+        let mut out: Vec<Obstacle> = Vec::new();
+        for b in self.nav_bodies() {
+            let elevated = b.route.as_ref().and_then(|_| {
+                let o = self.objects.iter().find(|o| o.name == b.name)?;
+                let r = crate::trajeto::valid_route(&o.kind)?;
+                crate::trajeto::elevated_obstacles(&o.name, o.position, r)
+            });
+            match elevated {
+                Some(parts) => out.extend(parts),
+                None => out.push(b.obstacle()),
+            }
+        }
         out.extend(self.obstacles.iter().cloned());
         out
     }

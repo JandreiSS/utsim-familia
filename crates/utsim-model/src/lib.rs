@@ -1773,6 +1773,7 @@ impl Model {
                         .router(nav.router(&obj.name))
                         .use_ends(self.routed_mode(obj).is_some())
                         .crossings(nav.crossings_for(&obj.name, &crossings))
+                        .ramps(nav.ramps_for(&obj.name))
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
                         .home(*home || home_at.is_some() || home_object.is_some())

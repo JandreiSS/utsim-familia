@@ -174,6 +174,77 @@ pub fn valid_route(kind: &ObjectKind) -> Option<&BeltRoute> {
     }
 }
 
+/// Altura livre (m) sob a esteira para se passar por baixo dela: a parte de baixo da
+/// estrutura ([`FRAME_DEPTH`] abaixo da superfície) a pelo menos esta altura do piso.
+pub const HEADROOM: f64 = 2.2;
+/// Profundidade da estrutura sob a superfície da esteira (m), a mesma do desenho 3D.
+pub const FRAME_DEPTH: f64 = 0.14;
+/// Lado de uma perna no piso (m), com folga para a sapata.
+pub const LEG: f64 = 0.12;
+
+/// Obstáculos no piso de uma esteira desenhada que passa no alto: os trechos baixos
+/// (a faixa da largura) e as pernas sob cada nó alto. `None` quando nenhum trecho dá
+/// passagem por baixo (a faixa inteira continua sendo o corpo dela).
+pub fn elevated_obstacles(
+    name: &str,
+    origin: [f64; 3],
+    r: &BeltRoute,
+) -> Option<Vec<utsim_nav::Obstacle>> {
+    let line = r.line(origin);
+    let high = |p: P3| p[2] - FRAME_DEPTH >= HEADROOM;
+    if !line.iter().any(|p| high(*p)) {
+        return None;
+    }
+    let w = r.width() + 0.09;
+    let mut out = Vec::new();
+    let mut k = 0;
+    for seg in line.windows(2) {
+        if high(seg[0]) && high(seg[1]) {
+            continue;
+        }
+        let plan = path3d::plan_line(seg);
+        if path3d::dist3([plan[0][0], plan[0][1], 0.0], [plan[1][0], plan[1][1], 0.0]) <= 1e-9 {
+            continue;
+        }
+        k += 1;
+        out.push(utsim_nav::Obstacle {
+            name: format!("{name}_trecho_{k}"),
+            polygon: path3d::band(&plan, w),
+        });
+    }
+    let nodes = r.line(origin);
+    for (i, n) in r.nodes.iter().enumerate() {
+        let at = [
+            n.at[0] + origin[0],
+            n.at[1] + origin[1],
+            n.at[2] + origin[2],
+        ];
+        if !high(at) {
+            continue;
+        }
+        // The two legs, beside the line at this node.
+        let j = nodes
+            .iter()
+            .enumerate()
+            .min_by(|a, b| path3d::dist3(*a.1, at).total_cmp(&path3d::dist3(*b.1, at)))
+            .map_or(0, |(j, _)| j);
+        let a = nodes[j.min(nodes.len() - 2)];
+        let b = nodes[j.min(nodes.len() - 2) + 1];
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let len = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-9);
+        let side = [-d[1] / len, d[0] / len];
+        for s in [-1.0, 1.0] {
+            let off = s * (r.width() / 2.0 + 0.0225);
+            let c = [at[0] + side[0] * off, at[1] + side[1] * off];
+            out.push(utsim_nav::Obstacle {
+                name: format!("{name}_perna_{}_{}", i + 1, if s < 0.0 { "d" } else { "e" }),
+                polygon: utsim_nav::geom::rectangle(c, [LEG / 2.0, LEG / 2.0], 0.0),
+            });
+        }
+    }
+    Some(out)
+}
+
 impl Model {
     pub(crate) fn validate_routes(&self, errors: &mut Vec<String>) {
         for o in &self.objects {

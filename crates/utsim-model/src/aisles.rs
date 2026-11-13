@@ -105,6 +105,51 @@ impl Model {
                 .insert(t.name.clone(), router as Arc<dyn Router>);
             set.crossing_users
                 .insert(t.name.clone(), user == User::Vehicle);
+            // Ramps: the edges of its network with a difference in height.
+            let def = &nets[&user];
+            let pos: HashMap<&str, [f64; 3]> = def
+                .nodes
+                .iter()
+                .map(|n| (n.name.as_str(), n.position))
+                .collect();
+            let edges: Vec<([f64; 3], [f64; 3])> = def
+                .edges
+                .iter()
+                .filter_map(|e| Some((*pos.get(e.from.as_str())?, *pos.get(e.to.as_str())?)))
+                .filter(|(a, b)| a[2] != b[2])
+                .collect();
+            // Stairs: the edges of the aisles marked `stair`, in the whole network.
+            let stair_names: BTreeSet<&str> = self
+                .aisles
+                .iter()
+                .filter(|a| a.stair)
+                .map(|a| a.name.as_str())
+                .collect();
+            let all_pos: HashMap<&str, [f64; 3]> = net
+                .network
+                .nodes
+                .iter()
+                .map(|n| (n.name.as_str(), n.position))
+                .collect();
+            let stairs: Vec<([f64; 3], [f64; 3])> = net
+                .network
+                .edges
+                .iter()
+                .zip(&net.edges)
+                .filter(|(_, i)| stair_names.contains(i.aisle.as_str()))
+                .filter_map(|(e, _)| {
+                    Some((*all_pos.get(e.from.as_str())?, *all_pos.get(e.to.as_str())?))
+                })
+                .collect();
+            if !edges.is_empty() || !stairs.is_empty() {
+                set.ramps.insert(
+                    t.name.clone(),
+                    Arc::new(
+                        utsim_objects::ramps::Ramps::new(&edges, user == User::Vehicle)
+                            .with_stairs(&stairs),
+                    ),
+                );
+            }
         }
         set.crossings = net
             .crossings
