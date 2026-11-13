@@ -25,9 +25,98 @@ use utsim_estudo::{
 use utsim_ferramentas::relatorios::{Chart, ChartKind, Tone};
 use utsim_model::Model;
 
+use crate::modelo::TelaModelo;
 use crate::sessao::Sessao;
 use crate::trabalho::Trabalho;
 use crate::util;
+
+/// Pedido de gravar os limites de especificação (LIE, LSE) de uma ferramenta na
+/// característica do nó de onde vieram os dados simulados (mão dupla com o modelo).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PedidoLimites {
+    /// Modelo como está na origem dos dados (relativo à pasta de unidade ou absoluto).
+    pub modelo: String,
+    pub objeto: String,
+    pub caracteristica: String,
+    pub lie: Option<f64>,
+    pub lse: Option<f64>,
+}
+
+/// O pedido de limites de uma aplicação: só histograma e capacidade com dados simulados
+/// de uma característica de um nó.
+pub fn limites_da_aplicacao(a: &Aplicacao) -> Option<PedidoLimites> {
+    if !matches!(
+        a.ferramenta,
+        Ferramenta::Histograma | Ferramenta::Capacidade
+    ) {
+        return None;
+    }
+    let Origem::Simulado {
+        modelo,
+        objeto,
+        leitura,
+        ..
+    } = &a.origem
+    else {
+        return None;
+    };
+    let caracteristica = leitura.strip_prefix(CARACTERISTICA)?.trim();
+    if modelo.is_empty() || caracteristica.is_empty() {
+        return None;
+    }
+    Some(PedidoLimites {
+        modelo: modelo.clone(),
+        objeto: objeto.clone(),
+        caracteristica: caracteristica.to_string(),
+        lie: a.parametros.lie,
+        lse: a.parametros.lse,
+    })
+}
+
+/// Grava os limites do pedido na característica do modelo, com a trava do app
+/// ([`TelaModelo::editar_arquivo`]). A característica é procurada primeiro no nó do pedido,
+/// depois nos outros nós. Devolve o nó onde gravou.
+pub fn gravar_limites(
+    p: &PedidoLimites,
+    s: &Sessao,
+    modelo: &mut TelaModelo,
+) -> Result<String, String> {
+    let caminho = s
+        .unidade
+        .as_ref()
+        .map_or_else(|| PathBuf::from(&p.modelo), |u| u.caminho_modelo(&p.modelo));
+    let autor = s.config.autor.clone();
+    modelo.editar_arquivo(&caminho, &autor, |doc| {
+        let achar = |o: &utsim_model::ObjectDef| {
+            o.quality
+                .as_ref()
+                .and_then(|q| {
+                    q.characteristics
+                        .iter()
+                        .position(|c| c.name == p.caracteristica)
+                })
+                .map(|i| (o.name.clone(), i))
+        };
+        let objs = &doc.model().objects;
+        let (no, i) = objs
+            .iter()
+            .filter(|o| o.name == p.objeto)
+            .chain(objs.iter().filter(|o| o.name != p.objeto))
+            .find_map(achar)
+            .ok_or_else(|| format!("A característica {} não está no modelo.", p.caracteristica))?;
+        for (campo, v) in [("lsl", p.lie), ("usl", p.lse)] {
+            let valor = v.map(|x| x.to_string()).unwrap_or_default();
+            let c = utsim_edit::abas::editar(
+                doc.model(),
+                &no,
+                &format!("quality.characteristics[{i}].{campo}"),
+                &valor,
+            )?;
+            doc.apply(c)?;
+        }
+        Ok(no)
+    })
+}
 
 /// Leituras que a simulação oferece para a ferramenta neste nó (ex.: "defeitos por tipo",
 /// "característica diâmetro").
@@ -127,6 +216,9 @@ pub struct TelaFerramentas {
     pub filtro_no: Option<(String, String)>,
     /// Pedido de abrir um nó, resolvido no próximo quadro (com a lista em dia).
     pedido_no: Option<(String, String)>,
+    /// Limites que a pessoa pediu para gravar no nó, atendidos pelo app com a tela Modelo
+    /// ([`TelaFerramentas::atender_limites`]).
+    pub pedido_limites: Option<PedidoLimites>,
     /// Id do estudo aberto.
     pub selecionado: String,
     /// A cópia de trabalho do estudo aberto.
@@ -168,6 +260,7 @@ impl TelaFerramentas {
             filtro: String::new(),
             filtro_no: None,
             pedido_no: None,
+            pedido_limites: None,
             selecionado: String::new(),
             estudo: None,
             aplicacao: String::new(),
@@ -393,6 +486,20 @@ impl TelaFerramentas {
         self.puxar.chave = None;
         self.puxar.erro.clear();
         self.confirmar = None;
+    }
+
+    /// Atende o pedido de gravar os limites no nó, se houver, e diz o resultado na barra.
+    pub fn atender_limites(&mut self, s: &mut Sessao, modelo: &mut TelaModelo) {
+        let Some(p) = self.pedido_limites.take() else {
+            return;
+        };
+        match gravar_limites(&p, s, modelo) {
+            Ok(no) => s.avisar(format!(
+                "LIE e LSE gravados na característica {} do nó {no}.",
+                p.caracteristica
+            )),
+            Err(e) => s.falhar(format!("Os limites não foram para o nó: {e}")),
+        }
     }
 
     /// Mostra os estudos do nó e, se não há nenhum, prepara um estudo novo com o nó.
@@ -1165,6 +1272,18 @@ impl TelaFerramentas {
             Ferramenta::A3 => a3_ui(ui, a),
             _ => {
                 parametros_ui(ui, a);
+                if let Some(p) = limites_da_aplicacao(a)
+                    && ui
+                        .button("Gravar LIE e LSE no nó")
+                        .on_hover_text(format!(
+                            "Grava estes limites na característica {} do modelo (aba \
+                             Qualidade do nó {}), com a trava do modelo.",
+                            p.caracteristica, p.objeto
+                        ))
+                        .clicked()
+                {
+                    self.pedido_limites = Some(p);
+                }
                 if let Some(dica) = dica_da_tabela(a.ferramenta) {
                     ui.label(RichText::new(dica).small().weak());
                 }

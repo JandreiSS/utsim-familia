@@ -29,6 +29,8 @@ utsim-doe.workspace = true
 # Integration with the model (plan 3.1 to 3.4): the model, its diagrams and its runs.
 utsim-model.workspace = true
 utsim-diagram.workspace = true
+# The recipes' texts in five languages (idiomas/*/receitas.ftl), without egui.
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
 
 [dev-dependencies]
 proptest = { version = "=1.11.0", default-features = false, features = ["std"] }

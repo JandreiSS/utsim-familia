@@ -338,3 +338,71 @@ fn a_walkway_takes_the_crossing_away() {
         "piso {floor}, passarela {walkway}"
     );
 }
+
+#[test]
+fn a_stair_is_slower_than_walking() {
+    let stair = walk(
+        "(0.0, -3.0), (10.0, -3.0), (20.0, -3.0)",
+        ", heights: [0.0, 1.0, 0.0], stair: true",
+    );
+    let up = utsim_objects::ramps::stair_factor(0.1);
+    let down = utsim_objects::ramps::stair_factor(-0.1);
+    let want = 101f64.sqrt() / up + 101f64.sqrt() / down;
+    assert!((stair - want).abs() < 1e-6, "{stair} {want}");
+}
+
+#[test]
+fn a_stair_is_for_pedestrians_only() {
+    let text = r#"Model(
+        format: 2, name: "x", run: (stop_time: 10.0), objects: [], connections: [],
+        aisles: [(name: "e", kind: Forklift, points: [(0.0, 0.0), (5.0, 0.0)], width: 3.6,
+                  heights: [0.0, 2.0], stair: true)],
+    )"#;
+    assert!(Model::parse(text).unwrap().validate().is_err());
+}
+
+/// Duas esteiras desenhadas em série: a primeira entrega na segunda, com a saída dela a
+/// `top` m e a entrada da segunda a `low` m.
+fn two_belts(top: f64, low: f64, gap: f64) -> Model {
+    model(&format!(
+        r#"Model(
+            format: 2,
+            name: "queda",
+            run: (stop_time: 1000.0),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (-2.0, 0.0, 0.0)),
+                (name: "a", kind: Conveyor(length: 4.0, speed: 1.0, item_length: 0.5,
+                    route: Some((nodes: [(at: (0.0, 0.0, {top})), (at: (4.0, 0.0, {top}))]))),
+                 position: (0.0, 0.0, 0.0)),
+                (name: "b", kind: Conveyor(length: 4.0, speed: 1.0, item_length: 0.5,
+                    route: Some((nodes: [(at: ({x}, 0.0, {low})), (at: ({x2}, 0.0, {low}))]))),
+                 position: (0.0, 0.0, 0.0)),
+                (name: "out", kind: Sink, position: (12.0, 0.0, 0.0)),
+            ],
+            connections: [("src", "a"), ("a", "b"), ("b", "out")],
+        )"#,
+        x = 4.0 + gap,
+        x2 = 8.0 + gap
+    ))
+}
+
+#[test]
+fn an_item_falling_between_belts_takes_the_time_of_the_fall() {
+    let level = run(&two_belts(1.0, 1.0, 0.0));
+    let drop = run(&two_belts(1.0, 0.6, 0.0));
+    assert!((level - 8.0).abs() < 1e-6, "{level}");
+    let fall = utsim_model::trajeto::fall_time(0.4);
+    assert!((fall - (0.8f64 / 9.81).sqrt()).abs() < 1e-12);
+    assert!((drop - (8.0 + fall)).abs() < 1e-6, "{drop}");
+}
+
+#[test]
+fn a_high_drop_a_gap_and_a_climb_are_warned() {
+    let w = two_belts(1.5, 0.6, 0.0).warnings();
+    assert!(w.iter().any(|m| m.contains("cai 0.90 m")), "{w:?}");
+    let w = two_belts(1.0, 1.0, 0.8).warnings();
+    assert!(w.iter().any(|m| m.contains("cai fora")), "{w:?}");
+    let w = two_belts(0.6, 1.0, 0.0).warnings();
+    assert!(w.iter().any(|m| m.contains("não sobe")), "{w:?}");
+}
