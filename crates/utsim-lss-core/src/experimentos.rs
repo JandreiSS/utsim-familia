@@ -6,6 +6,11 @@
 //! filled worksheet is a data set like any other, and the analysis is the recipe
 //! [`crate::analises::Recipe::Factorial`].
 //!
+//! For screening many factors, the plan can be a Plackett-Burman design (the matrices of
+//! `utsim_doe`, 8, 12 or 16 runs for up to 15 factors): the main effects are free of each
+//! other, and every two-factor interaction is partially confounded with them, so it serves
+//! to find the few factors that matter before a factorial on them.
+//!
 //! When every factor names a model parameter (`objeto.campo`), the UTSim model runs the
 //! experiment: one scenario per point of the design with common random numbers, the
 //! replications as the replicates, and the results saved as a data set of origin
@@ -46,6 +51,9 @@ pub struct ExperimentSpec {
     /// `p` of `2^(k−p)`: 0 for the full factorial, 1 for the half, 2 for the quarter...
     #[serde(rename = "fracao")]
     pub fraction: usize,
+    /// A Plackett-Burman screening design instead of a fraction (`fraction` is ignored).
+    #[serde(rename = "triagem", default)]
+    pub screening: bool,
     #[serde(rename = "replicas")]
     pub replicates: usize,
     #[serde(rename = "pontos_centrais")]
@@ -59,7 +67,7 @@ pub struct ExperimentSpec {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ExpError {
-    #[error("o experimento precisa de 2 a 8 fatores")]
+    #[error("o experimento precisa de 2 a 8 fatores (a triagem de Plackett-Burman vai até 15)")]
     Factors,
     #[error("dê um nome a cada fator")]
     NoName,
@@ -75,8 +83,11 @@ pub enum ExpError {
     Design(String),
 }
 
-/// Most factors offered (the table of fractions goes to 8).
+/// Most factors of a factorial or a fraction (the table of fractions goes to 8).
 pub const MAX_FACTORS: usize = 8;
+
+/// Most factors of a Plackett-Burman screening (16 runs).
+pub const MAX_SCREENING: usize = 15;
 
 fn number(s: &str) -> Option<f64> {
     let t = s.trim();
@@ -139,10 +150,21 @@ impl ExperimentSpec {
             .ok_or(ExpError::Fraction(self.k(), self.fraction))
     }
 
+    /// The number of runs of the Plackett-Burman design for `k` factors (one replicate,
+    /// no center points).
+    pub fn screening_runs(k: usize) -> Option<usize> {
+        utsim_doe::pb_runs(k).filter(|_| (2..=MAX_SCREENING).contains(&k))
+    }
+
     /// The design, after checking the factors.
     pub fn design(&self) -> Result<Design, ExpError> {
         let k = self.k();
-        if !(2..=MAX_FACTORS).contains(&k) {
+        let most = if self.screening {
+            MAX_SCREENING
+        } else {
+            MAX_FACTORS
+        };
+        if !(2..=most).contains(&k) {
             return Err(ExpError::Factors);
         }
         for f in &self.factors {
@@ -156,6 +178,20 @@ impl ExperimentSpec {
             if self.center_points > 0 && f.level(0).is_empty() {
                 return Err(ExpError::Center(f.name.clone()));
             }
+        }
+        if self.screening {
+            let n = Self::screening_runs(k).ok_or(ExpError::Factors)?;
+            let m = utsim_doe::pb_matrix(n)
+                .ok_or_else(|| ExpError::Design(format!("sem Plackett-Burman de {n} corridas")))?;
+            let rows: Vec<Vec<i8>> = m.into_iter().map(|r| r[..k].to_vec()).collect();
+            return Ok(doe::from_rows(
+                k,
+                &[],
+                &rows,
+                self.replicates.max(1),
+                self.center_points,
+                self.seed,
+            ));
         }
         doe::design(
             k,
@@ -229,8 +265,24 @@ pub fn worksheet(spec: &ExperimentSpec, d: &Design) -> String {
 }
 
 /// The defining relation, the resolution and the aliases of the main effects and the
-/// two-factor interactions, in words (`I = ABCD`, "resolução IV", `A = BCD`...).
-pub fn alias_lines(d: &Design) -> Vec<String> {
+/// two-factor interactions, in words (`I = ABCD`, "resolução IV", `A = BCD`...); for a
+/// Plackett-Burman screening, what it estimates and what it confounds.
+pub fn alias_lines(spec: &ExperimentSpec, d: &Design) -> Vec<String> {
+    if spec.screening {
+        let n = d.runs.iter().filter(|r| !r.center).count() / d.replicates.max(1);
+        let mut v = vec![
+            format!("Plackett-Burman de {n} corridas para {} fatores (triagem)", d.k),
+            "efeitos principais livres entre si (resolução III)".to_string(),
+            "cada interação de dois fatores fica parcialmente confundida com os efeitos principais: use a triagem para achar os poucos fatores que importam e estude-os depois num fatorial".to_string(),
+        ];
+        if n > d.k + 1 {
+            v.push(format!(
+                "{} coluna(s) da matriz sem fator dão graus de liberdade ao erro",
+                n - 1 - d.k
+            ));
+        }
+        return v;
+    }
     let words = d.words();
     if words.is_empty() {
         return vec!["fatorial completo: nenhum efeito confundido".to_string()];
@@ -353,7 +405,7 @@ pub fn simulated_csv(
 /// set, and of the first column after the factors (the response).
 pub fn columns(header: &[String]) -> (Vec<usize>, Option<usize>) {
     let mut f = Vec::new();
-    for i in 0..MAX_FACTORS {
+    for i in 0..MAX_SCREENING {
         let l = doe::letter(i).to_string();
         match header.iter().position(|h| *h == l) {
             Some(c) => f.push(c),
