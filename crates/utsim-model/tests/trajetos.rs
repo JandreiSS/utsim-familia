@@ -264,3 +264,38 @@ fn a_curved_path_is_walked_along_its_curve() {
     assert!((sharp - 2.0 * 200f64.sqrt()).abs() < 1e-6, "{sharp}");
     assert!(round < sharp - 0.5, "{round} {sharp}");
 }
+
+/// Operador leva a peça de `q` (0, −4) a `out` (0, 4), em movimento livre, com uma esteira
+/// desenhada atravessando o caminho em y = 0, de x = −10 a 10, na altura `z`.
+fn under(z: f64) -> f64 {
+    let m = model(&format!(
+        r#"Model(
+            format: 2,
+            name: "por_baixo",
+            run: (stop_time: 1000.0, movement: Free),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (3.0, -6.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "op", position: (3.0, -4.0, 0.0), access: (-3.0, 0.0)),
+                (name: "out", kind: Sink, position: (3.0, 4.0, 0.0), access: (-3.0, 0.0)),
+                (name: "op", kind: Transporter(speed: 1.0, clearance: 0.5), position: (0.0, -4.0, 0.0),
+                 visual: (asset: "operador")),
+                (name: "alta", kind: Conveyor(length: 20.0, speed: 1.0, item_length: 1.0,
+                    route: Some((nodes: [(at: (-10.0, 0.0, {z})), (at: (0.0, 0.0, {z})), (at: (10.0, 0.0, {z}))]))),
+                 position: (0.0, 0.0, 0.0)),
+                (name: "fim", kind: Sink, position: (12.0, 0.0, 0.0)),
+            ],
+            connections: [("src", "q"), ("q", "out"), ("alta", "fim")],
+        )"#
+    ));
+    run(&m)
+}
+
+#[test]
+fn people_walk_under_a_high_belt_and_around_a_low_one() {
+    let low = under(0.8);
+    let high = under(3.0);
+    // Under the high belt the way is about straight (it only steps around the legs of the
+    // middle node); the low one is gone around, past an end 10 m away.
+    assert!(high < low - 5.0, "alta {high}, baixa {low}");
+}
