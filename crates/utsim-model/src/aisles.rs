@@ -105,6 +105,28 @@ impl Model {
                 .insert(t.name.clone(), router as Arc<dyn Router>);
             set.crossing_users
                 .insert(t.name.clone(), user == User::Vehicle);
+            // Ramps: the edges of its network with a difference in height.
+            let def = &nets[&user];
+            let pos: HashMap<&str, [f64; 3]> = def
+                .nodes
+                .iter()
+                .map(|n| (n.name.as_str(), n.position))
+                .collect();
+            let edges: Vec<([f64; 3], [f64; 3])> = def
+                .edges
+                .iter()
+                .filter_map(|e| Some((*pos.get(e.from.as_str())?, *pos.get(e.to.as_str())?)))
+                .filter(|(a, b)| a[2] != b[2])
+                .collect();
+            if !edges.is_empty() {
+                set.ramps.insert(
+                    t.name.clone(),
+                    Arc::new(utsim_objects::ramps::Ramps::new(
+                        &edges,
+                        user == User::Vehicle,
+                    )),
+                );
+            }
         }
         set.crossings = net
             .crossings

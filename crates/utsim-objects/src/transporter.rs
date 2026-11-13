@@ -255,6 +255,8 @@ pub struct Transporter {
     router: Option<Arc<dyn Router>>,
     /// Pedestrian × vehicle crossings (movement `Aisles`) and whether this is a vehicle.
     crossings: Option<(Arc<Mutex<Crossings>>, bool)>,
+    /// Ramps of the aisle network (slower on them); `None`: none.
+    ramps: Option<Arc<crate::ramps::Ramps>>,
     multitask: Option<Multitask>,
     /// Open cases other than the current one, in turn order; `true` once its station
     /// got `MSG_ARRIVED`.
@@ -296,6 +298,7 @@ impl Transporter {
             announce_on_resume: false,
             router: None,
             crossings: None,
+            ramps: None,
             multitask: None,
             others: VecDeque::new(),
             started: Vec::new(),
@@ -392,6 +395,20 @@ impl Transporter {
     pub fn crossings(mut self, crossings: Option<(Arc<Mutex<Crossings>>, bool)>) -> Self {
         self.crossings = crossings;
         self
+    }
+
+    /// The ramps of the aisle network: on them it goes slower (`ramps.rs`).
+    pub fn ramps(mut self, ramps: Option<Arc<crate::ramps::Ramps>>) -> Self {
+        self.ramps = ramps.filter(|r| !r.is_empty());
+        self
+    }
+
+    /// Speed on `path` at `speed`: slower when it goes up or down a ramp.
+    fn speed_on(&self, path: &[[f64; 3]], speed: f64) -> f64 {
+        match &self.ramps {
+            Some(r) => r.speed_on(path, speed),
+            None => speed,
+        }
     }
 
     /// Routes this transporter's travels with `router` instead of the simulation's one
@@ -551,12 +568,13 @@ impl Transporter {
             Some(r) => r.route(self.position, target),
             None => cx.route(self.position, target),
         };
+        let speed = self.speed_on(&path, self.cur_speed);
         if let Some((board, vehicle)) = self.crossings.clone() {
             let plan = crossing_plan(
                 &path,
                 &board.lock().unwrap_or_else(|e| e.into_inner()),
                 vehicle,
-                self.cur_speed,
+                speed,
                 self.acceleration,
                 self.deceleration,
             );
@@ -585,7 +603,7 @@ impl Transporter {
         }
         let t = travel_time(
             path_length(&path),
-            self.cur_speed,
+            speed,
             self.acceleration,
             self.deceleration,
         );
@@ -1048,7 +1066,7 @@ impl Transporter {
             };
             let t = travel_time(
                 path_length(&path),
-                self.speed,
+                self.speed_on(&path, self.speed),
                 self.acceleration,
                 self.deceleration,
             );
