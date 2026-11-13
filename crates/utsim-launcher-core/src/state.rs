@@ -41,6 +41,9 @@ pub struct LauncherState {
     /// Dark, light or the system's theme.
     #[serde(default)]
     pub theme: Theme,
+    /// Language of the window (`pt-BR`, `en`, `es`, `fr`, `it`); none follows the system.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 /// The launcher's colours.
