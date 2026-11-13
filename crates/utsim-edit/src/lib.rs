@@ -24,6 +24,7 @@ pub mod network;
 pub mod preset;
 pub mod ron_text;
 pub mod teams;
+pub mod texto;
 
 use std::path::{Path, PathBuf};
 

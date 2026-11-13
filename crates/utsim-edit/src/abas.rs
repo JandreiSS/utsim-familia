@@ -8,6 +8,7 @@
 //! brackets: `inspection.detect`, `safety.hazards[0].severity`, `downtime.mtbf`. A path
 //! that names a block alone (`quality`, `safety`...) is the switch that adds or removes it.
 
+use crate::texto::{fx, tx, vx};
 use serde_json::Value;
 use utsim_core::Dist;
 use utsim_model::quality::PPE_NAMES;
@@ -28,9 +29,9 @@ impl Aba {
 
     pub fn nome(self) -> &'static str {
         match self {
-            Aba::Qualidade => "Qualidade",
-            Aba::Seguranca => "Segurança",
-            Aba::Manutencao => "Manutenção",
+            Aba::Qualidade => tx("abas-qualidade"),
+            Aba::Seguranca => tx("abas-seguranca"),
+            Aba::Manutencao => tx("abas-manutencao"),
         }
     }
 }
@@ -179,7 +180,7 @@ pub fn campos(model: &Model, objeto: &str, aba: Aba) -> Result<Vec<Campo>, Strin
         .objects
         .iter()
         .find(|o| o.name == objeto)
-        .ok_or_else(|| format!("o objeto '{objeto}' não existe"))?;
+        .ok_or_else(|| fx("abas-o_objeto_nao_existe", &[("objeto", vx(&objeto))]))?;
     let mut out = Vec::new();
     match aba {
         Aba::Qualidade => qualidade(obj, &mut out),
@@ -195,22 +196,20 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "sink_role",
-                "Papel nos relatórios de qualidade",
+                tx("abas-papel_nos_relatorios_de_qualidade"),
                 Tipo::Escolha,
                 papel,
                 0,
             )
             .escolhas(&["", "Customer", "Scrap"])
-            .ajuda(
-                "Customer: o que chega aqui é entregue ao cliente (conta o escape). Scrap: refugo.",
-            ),
+            .ajuda(tx("abas-customer_o_que_chega_aqui")),
         );
         return;
     }
     if !processa(obj) {
         out.push(campo(
             "",
-            "Este tipo de objeto não tem dados de qualidade.",
+            tx("abas-este_tipo_de_objeto_nao"),
             Tipo::Info,
             String::new(),
             0,
@@ -221,17 +220,17 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "quality",
-            "Gera defeitos ou mede características",
+            tx("abas-gera_defeitos_ou_mede_caracteristicas"),
             Tipo::Bloco,
             sim(!q.is_null()),
             0,
         )
-        .ajuda("Defeitos sorteados por peça e características medidas, com o plano de controle."),
+        .ajuda(tx("abas-defeitos_sorteados_por_peca_e")),
     );
     if !q.is_null() {
         out.push(campo(
             "quality.defects",
-            "Defeitos",
+            tx("abas-defeitos"),
             Tipo::Lista,
             String::new(),
             1,
@@ -247,7 +246,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             ));
             out.push(campo(
                 format!("{p}.name"),
-                "Tipo de defeito",
+                tx("abas-tipo_de_defeito"),
                 Tipo::Texto,
                 num(get(d, "name")),
                 3,
@@ -255,7 +254,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(
                 campo(
                     format!("{p}.probability"),
-                    "Probabilidade por peça",
+                    tx("abas-probabilidade_por_peca"),
                     Tipo::Real,
                     num(get(d, "probability")),
                     3,
@@ -266,7 +265,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             if n > 0 {
                 out.push(campo(
                     format!("{p}.factors"),
-                    "Fatores (editar no arquivo)",
+                    tx("abas-fatores_editar_no_arquivo"),
                     Tipo::Info,
                     n.to_string(),
                     3,
@@ -275,7 +274,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         }
         out.push(campo(
             "quality.characteristics",
-            "Características medidas",
+            tx("abas-caracteristicas_medidas"),
             Tipo::Lista,
             String::new(),
             1,
@@ -291,35 +290,35 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             ));
             out.push(campo(
                 format!("{p}.name"),
-                "Nome",
+                tx("abas-nome"),
                 Tipo::Texto,
                 num(get(c, "name")),
                 3,
             ));
             out.push(campo(
                 format!("{p}.value"),
-                "Valor",
+                tx("abas-valor"),
                 Tipo::Distribuicao,
                 dist_text(get(c, "value")),
                 3,
             ));
             out.push(campo(
                 format!("{p}.drift"),
-                "Deriva por peça",
+                tx("abas-deriva_por_peca"),
                 Tipo::Real,
                 num(get(c, "drift")),
                 3,
             ));
             out.push(campo(
                 format!("{p}.lsl"),
-                "Limite inferior (LIE)",
+                tx("abas-limite_inferior_lie"),
                 Tipo::RealOpcional,
                 num(get(c, "lsl")),
                 3,
             ));
             out.push(campo(
                 format!("{p}.usl"),
-                "Limite superior (LSE)",
+                tx("abas-limite_superior_lse"),
                 Tipo::RealOpcional,
                 num(get(c, "usl")),
                 3,
@@ -327,7 +326,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         }
         out.push(campo(
             "quality.control",
-            "Plano de controle",
+            tx("abas-plano_de_controle"),
             Tipo::Lista,
             String::new(),
             1,
@@ -347,7 +346,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
                 .collect();
             let mut ch = campo(
                 format!("{p}.characteristic"),
-                "Característica",
+                tx("abas-caracteristica"),
                 Tipo::Escolha,
                 num(get(c, "characteristic")),
                 3,
@@ -356,7 +355,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(ch);
             out.push(campo(
                 format!("{p}.method"),
-                "Método e instrumento",
+                tx("abas-metodo_e_instrumento"),
                 Tipo::Texto,
                 num(get(c, "method")),
                 3,
@@ -364,7 +363,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(
                 campo(
                     format!("{p}.msa_ok"),
-                    "Sistema de medição aprovado",
+                    tx("abas-sistema_de_medicao_aprovado"),
                     Tipo::Escolha,
                     num(get(c, "msa_ok")),
                     3,
@@ -373,7 +372,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             );
             out.push(campo(
                 format!("{p}.frequency"),
-                "Frequência",
+                tx("abas-frequencia"),
                 Tipo::Texto,
                 num(get(c, "frequency")),
                 3,
@@ -381,7 +380,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(
                 campo(
                     format!("{p}.sample_size"),
-                    "Tamanho da amostra",
+                    tx("abas-tamanho_da_amostra"),
                     Tipo::InteiroOpcional,
                     num(get(c, "sample_size")),
                     3,
@@ -391,7 +390,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(
                 campo(
                     format!("{p}.chart"),
-                    "Carta de controle",
+                    tx("abas-carta_de_controle"),
                     Tipo::Escolha,
                     num(get(c, "chart")),
                     3,
@@ -400,14 +399,14 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             );
             out.push(campo(
                 format!("{p}.reaction"),
-                "Reação a um sinal",
+                tx("abas-reacao_a_um_sinal"),
                 Tipo::Texto,
                 num(get(c, "reaction")),
                 3,
             ));
             out.push(campo(
                 format!("{p}.fmea"),
-                "Linha do FMEA",
+                tx("abas-linha_do_fmea"),
                 Tipo::Texto,
                 num(get(c, "fmea")),
                 3,
@@ -416,7 +415,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "quality.unit_cost",
-                "Valor agregado por peça",
+                tx("abas-valor_agregado_por_peca"),
                 Tipo::RealOpcional,
                 num(get(&q, "unit_cost")),
                 1,
@@ -426,7 +425,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "quality.escape_cost",
-                "Custo de cada defeito no cliente",
+                tx("abas-custo_de_cada_defeito_no"),
                 Tipo::RealOpcional,
                 num(get(&q, "escape_cost")),
                 1,
@@ -438,18 +437,18 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "inspection",
-            "É uma estação de inspeção",
+            tx("abas-e_uma_estacao_de_inspecao"),
             Tipo::Bloco,
             sim(!i.is_null()),
             0,
         )
-        .ajuda("Saída por rótulo, nas portas aprovado, retrabalho e refugo."),
+        .ajuda(tx("abas-saida_por_rotulo_nas_portas")),
     );
     if !i.is_null() {
         out.push(
             campo(
                 "inspection.every",
-                "Inspeciona uma peça a cada",
+                tx("abas-inspeciona_uma_peca_a_cada"),
                 Tipo::Inteiro,
                 num(get(&i, "every")),
                 1,
@@ -459,7 +458,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "inspection.detect",
-                "Probabilidade de detectar",
+                tx("abas-probabilidade_de_detectar"),
                 Tipo::Real,
                 num(get(&i, "detect")),
                 1,
@@ -469,7 +468,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "inspection.false_reject",
-                "Alarme falso",
+                tx("abas-alarme_falso"),
                 Tipo::Real,
                 num(get(&i, "false_reject")),
                 1,
@@ -479,7 +478,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "inspection.on_reject",
-                "Peça rejeitada vai para",
+                tx("abas-peca_rejeitada_vai_para"),
                 Tipo::Escolha,
                 num(get(&i, "on_reject")),
                 1,
@@ -489,7 +488,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "inspection.max_rework",
-                "Passagens de retrabalho permitidas",
+                tx("abas-passagens_de_retrabalho_permitidas"),
                 Tipo::InteiroOpcional,
                 num(get(&i, "max_rework")),
                 1,
@@ -499,7 +498,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "inspection.cost",
-                "Custo por peça inspecionada",
+                tx("abas-custo_por_peca_inspecionada"),
                 Tipo::RealOpcional,
                 num(get(&i, "cost")),
                 1,
@@ -508,7 +507,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         );
         out.push(campo(
             "inspection.measure",
-            "Medições",
+            tx("abas-medicoes"),
             Tipo::Lista,
             String::new(),
             1,
@@ -524,7 +523,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             ));
             out.push(campo(
                 format!("{p}.characteristic"),
-                "Característica",
+                tx("abas-caracteristica"),
                 Tipo::Texto,
                 num(get(m, "characteristic")),
                 3,
@@ -532,7 +531,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
             out.push(
                 campo(
                     format!("{p}.sigma"),
-                    "Desvio do sistema de medição",
+                    tx("abas-desvio_do_sistema_de_medicao"),
                     Tipo::Real,
                     num(get(m, "sigma")),
                     3,
@@ -544,7 +543,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
     let r = bloco(obj, "rework");
     out.push(campo(
         "rework",
-        "É um posto de retrabalho",
+        tx("abas-e_um_posto_de_retrabalho"),
         Tipo::Bloco,
         sim(!r.is_null()),
         0,
@@ -553,7 +552,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "rework.fix",
-                "Probabilidade de corrigir",
+                tx("abas-probabilidade_de_corrigir"),
                 Tipo::Real,
                 num(get(&r, "fix")),
                 1,
@@ -563,7 +562,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 "rework.cost",
-                "Custo por passagem",
+                tx("abas-custo_por_passagem"),
                 Tipo::RealOpcional,
                 num(get(&r, "cost")),
                 1,
@@ -576,7 +575,7 @@ fn qualidade(obj: &ObjectDef, out: &mut Vec<Campo>) {
 fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     let mut epi = campo(
         "ppe",
-        "EPI exigido no posto",
+        tx("abas-epi_exigido_no_posto"),
         Tipo::Conjunto,
         obj.ppe.join(", "),
         0,
@@ -593,18 +592,18 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "",
-            "Zonas de risco que contêm o posto",
+            tx("abas-zonas_de_risco_que_contem"),
             Tipo::Info,
             zonas.join(", "),
             0,
         )
-        .ajuda("As zonas são desenhadas no piso, com a ferramenta Zona do editor."),
+        .ajuda(tx("abas-as_zonas_sao_desenhadas_no")),
     );
     operacao(model, obj, out);
     let s = bloco(obj, "safety");
     out.push(campo(
         "safety",
-        "Perigos e ergonomia do posto",
+        tx("abas-perigos_e_ergonomia_do_posto"),
         Tipo::Bloco,
         sim(!s.is_null()),
         0,
@@ -614,7 +613,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     }
     out.push(campo(
         "safety.hazards",
-        "Perigos",
+        tx("abas-perigos"),
         Tipo::Lista,
         String::new(),
         1,
@@ -631,7 +630,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 format!("{p}.group"),
-                "Grupo",
+                tx("abas-grupo"),
                 Tipo::Escolha,
                 num(get(h, "group")),
                 3,
@@ -646,35 +645,35 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         );
         out.push(campo(
             format!("{p}.description"),
-            "Perigo",
+            tx("abas-perigo"),
             Tipo::Texto,
             num(get(h, "description")),
             3,
         ));
         out.push(campo(
             format!("{p}.source"),
-            "Fonte",
+            tx("abas-fonte"),
             Tipo::Texto,
             num(get(h, "source")),
             3,
         ));
         out.push(campo(
             format!("{p}.circumstance"),
-            "Circunstância",
+            tx("abas-circunstancia"),
             Tipo::Texto,
             num(get(h, "circumstance")),
             3,
         ));
         out.push(campo(
             format!("{p}.injuries"),
-            "Lesões possíveis",
+            tx("abas-lesoes_possiveis"),
             Tipo::Texto,
             num(get(h, "injuries")),
             3,
         ));
         out.push(campo(
             format!("{p}.controls"),
-            "Controles existentes",
+            tx("abas-controles_existentes"),
             Tipo::Texto,
             num(get(h, "controls")),
             3,
@@ -683,7 +682,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 format!("{p}.probability"),
-                "Probabilidade (degrau)",
+                tx("abas-probabilidade_degrau"),
                 Tipo::Inteiro,
                 num(get(h, "probability")),
                 3,
@@ -693,7 +692,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 format!("{p}.severity"),
-                "Severidade (degrau)",
+                tx("abas-severidade_degrau"),
                 Tipo::Inteiro,
                 num(get(h, "severity")),
                 3,
@@ -703,7 +702,7 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     }
     out.push(campo(
         "safety.ergonomics",
-        "Ergonomia por elemento",
+        tx("abas-ergonomia_por_elemento"),
         Tipo::Lista,
         String::new(),
         1,
@@ -719,34 +718,34 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         ));
         out.push(campo(
             format!("{p}.actor"),
-            "Pessoa",
+            tx("abas-pessoa"),
             Tipo::Texto,
             num(get(m, "actor")),
             3,
         ));
         out.push(campo(
             format!("{p}.element"),
-            "Elemento",
+            tx("abas-elemento"),
             Tipo::Texto,
             num(get(m, "element")),
             3,
         ));
         for (k, r) in [
-            ("trunk", "Tronco"),
-            ("arms", "Braços"),
-            ("neck", "Pescoço"),
-            ("legs", "Pernas"),
+            ("trunk", tx("abas-tronco")),
+            ("arms", tx("abas-bracos")),
+            ("neck", tx("abas-pescoco")),
+            ("legs", tx("abas-pernas")),
         ] {
             out.push(
                 campo(format!("{p}.{k}"), r, Tipo::Inteiro, num(get(m, k)), 3)
                     .faixa(0.0, 3.0)
-                    .ajuda("0 neutra, 1 leve, 2 acentuada, 3 extrema"),
+                    .ajuda(tx("abas-0_neutra_1_leve_2")),
             );
         }
         out.push(
             campo(
                 format!("{p}.load_kg"),
-                "Carga",
+                tx("abas-carga"),
                 Tipo::Real,
                 num(get(m, "load_kg")),
                 3,
@@ -757,24 +756,24 @@ fn seguranca(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
         out.push(
             campo(
                 format!("{p}.grip"),
-                "Pega",
+                tx("abas-pega"),
                 Tipo::Inteiro,
                 num(get(m, "grip")),
                 3,
             )
             .faixa(0.0, 2.0)
-            .ajuda("0 boa, 1 regular, 2 ruim"),
+            .ajuda(tx("abas-0_boa_1_regular_2")),
         );
         out.push(
             campo(
                 format!("{p}.vibration"),
-                "Vibração",
+                tx("abas-vibracao"),
                 Tipo::Inteiro,
                 num(get(m, "vibration")),
                 3,
             )
             .faixa(0.0, 2.0)
-            .ajuda("0 nenhuma, 1 alguma, 2 forte"),
+            .ajuda(tx("abas-0_nenhuma_1_alguma_2")),
         );
     }
 }
@@ -789,24 +788,24 @@ fn operacao(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "operation",
-            "Regra de operação (quem pode operar)",
+            tx("abas-regra_de_operacao_quem_pode"),
             Tipo::Bloco,
             sim(!op.is_null()),
             0,
         )
-        .ajuda("Sem a regra, qualquer pessoa da equipe opera o posto, sem tempo de entrar e sair."),
+        .ajuda(tx("abas-sem_a_regra_qualquer_pessoa")),
     );
     let Some(regra) = obj.operation.as_deref() else {
         return;
     };
     let mut habilidades = campo(
         "operation.skills",
-        "Habilidades exigidas",
+        tx("abas-habilidades_exigidas"),
         Tipo::Conjunto,
         regra.skills.join(", "),
         1,
     )
-    .ajuda("Todo operador precisa de todas, além das exigidas por cada equipe.");
+    .ajuda(tx("abas-todo_operador_precisa_de_todas"));
     for o in &model.objects {
         for s in o.person.iter().flat_map(|p| p.skills.iter()) {
             if !habilidades.escolhas.contains(s) {
@@ -819,23 +818,26 @@ fn operacao(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "operation.require_ppe",
-            "Exigir o EPI do posto e das zonas",
+            tx("abas-exigir_o_epi_do_posto"),
             Tipo::Booleano,
             sim(regra.require_ppe),
             1,
         )
-        .ajuda("O EPI que a pessoa veste é o EPI do nó dela."),
+        .ajuda(tx("abas-o_epi_que_a_pessoa")),
     );
     if regra.require_ppe {
         out.push(campo(
             "",
-            "EPI exigido de quem opera",
+            tx("abas-epi_exigido_de_quem_opera"),
             Tipo::Info,
             model.required_ppe(obj).join(", "),
             1,
         ));
     }
-    for (chave, rotulo) in [("enter", "Tempo para entrar"), ("leave", "Tempo para sair")] {
+    for (chave, rotulo) in [
+        ("enter", tx("abas-tempo_para_entrar")),
+        ("leave", tx("abas-tempo_para_sair")),
+    ] {
         out.push(
             campo(
                 format!("operation.{chave}"),
@@ -845,7 +847,7 @@ fn operacao(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
                 1,
             )
             .unidade("s")
-            .ajuda("Vazio: sem tempo. Exemplo: Const(15.0)"),
+            .ajuda(tx("abas-vazio_sem_tempo_exemplo_const")),
         );
     }
 }
@@ -854,7 +856,7 @@ fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     let d = bloco(obj, "downtime");
     out.push(campo(
         "downtime",
-        "Quebra e tem manutenção",
+        tx("abas-quebra_e_tem_manutencao"),
         Tipo::Bloco,
         sim(!d.is_null()),
         0,
@@ -864,14 +866,14 @@ fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     }
     out.push(campo(
         "downtime.mtbf",
-        "Tempo entre falhas (MTBF)",
+        tx("abas-tempo_entre_falhas_mtbf"),
         Tipo::Distribuicao,
         dist_text(get(&d, "mtbf")),
         1,
     ));
     out.push(campo(
         "downtime.mttr",
-        "Tempo de reparo (MTTR)",
+        tx("abas-tempo_de_reparo_mttr"),
         Tipo::Distribuicao,
         dist_text(get(&d, "mttr")),
         1,
@@ -879,17 +881,17 @@ fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     out.push(
         campo(
             "downtime.basis",
-            "O tempo entre falhas conta",
+            tx("abas-o_tempo_entre_falhas_conta"),
             Tipo::Escolha,
             num(get(&d, "basis")),
             1,
         )
         .escolhas(&["Clock", "Busy", "Cycles"])
-        .ajuda("Clock: tempo de relógio. Busy: só o tempo trabalhando. Cycles: peças processadas."),
+        .ajuda(tx("abas-clock_tempo_de_relogio_busy")),
     );
     out.push(campo(
         "downtime.repair_crew",
-        "Equipe de reparo",
+        tx("abas-equipe_de_reparo"),
         Tipo::Texto,
         num(get(&d, "repair_crew")),
         1,
@@ -897,7 +899,7 @@ fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     let n = lista(&d, "preventive").len();
     out.push(campo(
         "downtime.preventive",
-        "Preventivas (editar no arquivo)",
+        tx("abas-preventivas_editar_no_arquivo"),
         Tipo::Info,
         n.to_string(),
         1,
@@ -905,7 +907,7 @@ fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     if !get(&d, "wear").is_null() {
         out.push(campo(
             "downtime.wear",
-            "Desgaste (editar no arquivo)",
+            tx("abas-desgaste_editar_no_arquivo"),
             Tipo::Info,
             "sim".into(),
             1,
@@ -927,14 +929,14 @@ fn passos(caminho: &str) -> Result<Vec<Passo>, String> {
             None => (parte, ""),
         };
         if nome.is_empty() {
-            return Err(format!("caminho inválido: '{caminho}'"));
+            return Err(fx("abas-caminho_invalido", &[("caminho", vx(&caminho))]));
         }
         out.push(Passo::Chave(nome.into()));
         for idx in resto.split('[').filter(|s| !s.is_empty()) {
             let n = idx
                 .trim_end_matches(']')
                 .parse()
-                .map_err(|_| format!("caminho inválido: '{caminho}'"))?;
+                .map_err(|_| fx("abas-caminho_invalido", &[("caminho", vx(&caminho))]))?;
             out.push(Passo::Indice(n));
         }
     }
@@ -957,7 +959,12 @@ fn alvo<'a>(raiz: &'a mut Value, passos: &[Passo], caminho: &str) -> Result<&'a 
             Passo::Indice(i) => v
                 .as_array_mut()
                 .and_then(|a| a.get_mut(*i))
-                .ok_or_else(|| format!("'{caminho}': item {i} não existe"))?,
+                .ok_or_else(|| {
+                    fx(
+                        "abas-item_nao_existe",
+                        &[("caminho", vx(&caminho)), ("i", vx(&i))],
+                    )
+                })?,
         };
     }
     Ok(v)
@@ -982,7 +989,7 @@ fn novo_bloco(nome: &str) -> Result<Value, String> {
                     .map_err(|e| e.to_string())?;
             serde_json::to_value(d)
         }
-        _ => return Err(format!("'{nome}' não é um bloco do nó")),
+        _ => return Err(fx("abas-nao_e_um_bloco_do", &[("nome", vx(&nome))])),
     };
     v.map_err(|e| e.to_string())
 }
@@ -990,7 +997,12 @@ fn novo_bloco(nome: &str) -> Result<Value, String> {
 /// The command for the whole block `nome` with content `v` (`Null` removes it).
 fn comando(objeto: &str, nome: &str, v: Value) -> Result<Command, String> {
     let name = objeto.to_string();
-    let e = |e: serde_json::Error| format!("valor inválido para '{nome}': {e}");
+    let e = |e: serde_json::Error| {
+        fx(
+            "abas-valor_invalido_para",
+            &[("nome", vx(&nome)), ("e", vx(&e))],
+        )
+    };
     Ok(match nome {
         "quality" => Command::SetQuality {
             name,
@@ -1024,7 +1036,7 @@ fn comando(objeto: &str, nome: &str, v: Value) -> Result<Command, String> {
             name,
             operation: serde_json::from_value(v).map_err(e)?,
         },
-        _ => return Err(format!("'{nome}' não é um bloco do nó")),
+        _ => return Err(fx("abas-nao_e_um_bloco_do", &[("nome", vx(&nome))])),
     })
 }
 
@@ -1037,7 +1049,10 @@ fn achar_campo(model: &Model, objeto: &str, caminho: &str) -> Result<Campo, Stri
             return Ok(c);
         }
     }
-    Err(format!("'{caminho}' não é um campo editável de '{objeto}'"))
+    Err(fx(
+        "abas-nao_e_um_campo_editavel",
+        &[("caminho", vx(&caminho)), ("objeto", vx(&objeto))],
+    ))
 }
 
 fn obj<'a>(model: &'a Model, objeto: &str) -> Result<&'a ObjectDef, String> {
@@ -1045,7 +1060,7 @@ fn obj<'a>(model: &'a Model, objeto: &str) -> Result<&'a ObjectDef, String> {
         .objects
         .iter()
         .find(|o| o.name == objeto)
-        .ok_or_else(|| format!("o objeto '{objeto}' não existe"))
+        .ok_or_else(|| fx("abas-o_objeto_nao_existe", &[("objeto", vx(&objeto))]))
 }
 
 /// The command that sets field `caminho` of `objeto` to `valor` (as typed in the tab).
@@ -1054,7 +1069,7 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
     let o = obj(model, objeto)?;
     let passos = passos(caminho)?;
     let Some(Passo::Chave(nome)) = passos.first() else {
-        return Err(format!("caminho inválido: '{caminho}'"));
+        return Err(fx("abas-caminho_invalido", &[("caminho", vx(&caminho))]));
     };
     let t = valor.trim();
     let sim_nao = |t: &str| match t.to_lowercase().as_str() {
@@ -1064,16 +1079,20 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
     };
     let fora = |x: f64| c.min.is_some_and(|m| x < m) || c.max.is_some_and(|m| x > m);
     let faixa = || match (c.min, c.max) {
-        (Some(a), Some(b)) if b < f64::MAX => format!(" (de {a} a {b})"),
-        (Some(a), _) => format!(" (a partir de {a})"),
+        (Some(a), Some(b)) if b < f64::MAX => fx("abas-de_a", &[("a", vx(&a)), ("b", vx(&b))]),
+        (Some(a), _) => fx("abas-a_partir_de", &[("a", vx(&a))]),
         _ => String::new(),
     };
     let novo: Value = match c.tipo {
         Tipo::Info | Tipo::Lista | Tipo::Item => {
-            return Err(format!("'{}' não se edita por aqui", c.rotulo));
+            return Err(fx(
+                "abas-nao_se_edita_por_aqui",
+                &[("rotulo", vx(&c.rotulo))],
+            ));
         }
         Tipo::Bloco => {
-            let liga = sim_nao(t).ok_or_else(|| format!("'{}': use sim ou não", c.rotulo))?;
+            let liga = sim_nao(t)
+                .ok_or_else(|| fx("abas-use_sim_ou_nao", &[("rotulo", vx(&c.rotulo))]))?;
             let atual = bloco(o, nome);
             let v = match (liga, atual.is_null()) {
                 (true, true) => novo_bloco(nome)?,
@@ -1082,21 +1101,28 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
             };
             return comando(objeto, nome, v);
         }
-        Tipo::Booleano => {
-            Value::Bool(sim_nao(t).ok_or_else(|| format!("'{}': use sim ou não", c.rotulo))?)
-        }
+        Tipo::Booleano => Value::Bool(
+            sim_nao(t).ok_or_else(|| fx("abas-use_sim_ou_nao", &[("rotulo", vx(&c.rotulo))]))?,
+        ),
         Tipo::Inteiro | Tipo::InteiroOpcional | Tipo::Real | Tipo::RealOpcional => {
             let opcional = matches!(c.tipo, Tipo::InteiroOpcional | Tipo::RealOpcional);
             if t.is_empty() && opcional {
                 Value::Null
             } else {
-                let x = numero(t).ok_or_else(|| format!("'{}' deve ser um número", c.rotulo))?;
+                let x = numero(t)
+                    .ok_or_else(|| fx("abas-deve_ser_um_numero", &[("rotulo", vx(&c.rotulo))]))?;
                 let inteiro = matches!(c.tipo, Tipo::Inteiro | Tipo::InteiroOpcional);
                 if inteiro && x.fract() != 0.0 {
-                    return Err(format!("'{}' deve ser um número inteiro", c.rotulo));
+                    return Err(fx(
+                        "abas-deve_ser_um_numero_inteiro",
+                        &[("rotulo", vx(&c.rotulo))],
+                    ));
                 }
                 if fora(x) {
-                    return Err(format!("'{}' fora da faixa{}", c.rotulo, faixa()));
+                    return Err(fx(
+                        "abas-fora_da_faixa",
+                        &[("rotulo", vx(&c.rotulo)), ("faixa", vx(&faixa()))],
+                    ));
                 }
                 if inteiro {
                     serde_json::json!(x as i64)
@@ -1108,10 +1134,12 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
         Tipo::Texto => Value::String(t.to_string()),
         Tipo::Escolha => {
             if !c.escolhas.is_empty() && !c.escolhas.iter().any(|e| e == t) {
-                return Err(format!(
-                    "'{}': escolha uma de {}",
-                    c.rotulo,
-                    c.escolhas.join(", ")
+                return Err(fx(
+                    "abas-escolha_uma_de",
+                    &[
+                        ("rotulo", vx(&c.rotulo)),
+                        ("escolhas", vx(&c.escolhas.join(", "))),
+                    ],
                 ));
             }
             if c.caminho.ends_with(".msa_ok") {
@@ -1134,8 +1162,12 @@ pub fn editar(model: &Model, objeto: &str, caminho: &str, valor: &str) -> Result
         ),
         Tipo::Distribuicao if t.is_empty() && c.caminho.starts_with("operation.") => Value::Null,
         Tipo::Distribuicao => {
-            let d: Dist = ron::from_str(t)
-                .map_err(|e| format!("'{}': distribuição inválida ({e})", c.rotulo))?;
+            let d: Dist = ron::from_str(t).map_err(|e| {
+                fx(
+                    "abas-distribuicao_invalida",
+                    &[("rotulo", vx(&c.rotulo)), ("e", vx(&e))],
+                )
+            })?;
             serde_json::to_value(d).map_err(|e| e.to_string())?
         }
     };
@@ -1168,14 +1200,14 @@ fn item_novo(lista: &str, n: usize) -> Result<Value, String> {
         .map_err(|e| e.to_string())?,
         "safety.hazards" => serde_json::to_value(HazardDef {
             id: format!("h{}", n + 1),
-            description: "novo perigo".into(),
+            description: tx("abas-novo_perigo").into(),
             ..HazardDef::default()
         })
         .map_err(|e| e.to_string())?,
         "safety.ergonomics" => {
             serde_json::to_value(ErgonomicsMark::default()).map_err(|e| e.to_string())?
         }
-        _ => return Err(format!("'{lista}' não é uma lista das abas")),
+        _ => return Err(fx("abas-nao_e_uma_lista_das", &[("lista", vx(&lista))])),
     };
     Ok(v)
 }
@@ -1189,14 +1221,14 @@ fn com_lista(
     let o = obj(model, objeto)?;
     let (nome, campo_lista) = lista
         .split_once('.')
-        .ok_or_else(|| format!("'{lista}' não é uma lista das abas"))?;
+        .ok_or_else(|| fx("abas-nao_e_uma_lista_das", &[("lista", vx(&lista))]))?;
     let mut b = bloco(o, nome);
     if b.is_null() {
-        return Err(format!("ligue o bloco '{nome}' antes"));
+        return Err(fx("abas-ligue_o_bloco_antes", &[("nome", vx(&nome))]));
     }
     let arr = b
         .as_object_mut()
-        .ok_or("bloco inválido")?
+        .ok_or(tx("abas-bloco_invalido"))?
         .entry(campo_lista.to_string())
         .or_insert(Value::Array(Vec::new()));
     if !arr.is_array() {
@@ -1221,7 +1253,7 @@ pub fn adicionar(model: &Model, objeto: &str, lista: &str) -> Result<Command, St
         .and_then(|q| q.characteristics.first())
         .map(|c| c.name.clone());
     if lista == "quality.control" && primeira.is_none() {
-        return Err("cadastre uma característica medida antes do plano de controle".into());
+        return Err(tx("abas-cadastre_uma_caracteristica_medida_antes").into());
     }
     com_lista(model, objeto, lista, |a| {
         let mut n = a.len();
@@ -1246,7 +1278,10 @@ pub fn adicionar(model: &Model, objeto: &str, lista: &str) -> Result<Command, St
 pub fn remover(model: &Model, objeto: &str, lista: &str, indice: usize) -> Result<Command, String> {
     com_lista(model, objeto, lista, |a| {
         if indice >= a.len() {
-            return Err(format!("'{lista}': item {indice} não existe"));
+            return Err(fx(
+                "abas-item_nao_existe-2",
+                &[("lista", vx(&lista)), ("indice", vx(&indice))],
+            ));
         }
         a.remove(indice);
         Ok(())
