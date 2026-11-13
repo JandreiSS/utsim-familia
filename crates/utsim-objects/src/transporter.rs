@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::crane::{AxisTimes, CraneSpec};
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
@@ -83,6 +84,10 @@ const RESTED: u32 = 7;
 const SLICE: u32 = 8;
 /// Multitasking: the turn to the next case is done.
 const SWITCHED: u32 = 9;
+/// Crane: the hook is back up with the item hooked (go and deliver it).
+const RAISED_LOADED: u32 = 11;
+/// Crane: the hook is back up after unhooking (the task is done).
+const RAISED_EMPTY: u32 = 12;
 
 /// One piece of an AGV route: a controlled/free network edge or a connector between
 /// a point off the network and its node.
@@ -268,6 +273,44 @@ pub struct Transporter {
     switches: u64,
     switching: TimeWeighted,
     open: TimeWeighted,
+    /// Overhead crane mode (see [`Transporter::crane`]).
+    crane: Option<Box<CraneState>>,
+}
+
+/// Run-time state of a crane: where the hook is and the statistics of the window.
+struct CraneState {
+    spec: CraneSpec,
+    /// Height of the hook (its floor position is the transporter's `position`).
+    hook_z: f64,
+    /// Time the item hooked now has been hanging since (start of the raise).
+    loaded_since: Option<Time>,
+    /// Raise still to do after the current hooking or unhooking.
+    raise: Time,
+    trips: u64,
+    refused: u64,
+    loaded_time: f64,
+    axes: AxisTimes,
+}
+
+impl CraneState {
+    fn hook(&self, position: [f64; 3]) -> crate::crane::Hook {
+        let (u, v) = self.spec.local(position);
+        crate::crane::Hook {
+            u,
+            v,
+            z: self.hook_z,
+        }
+    }
+
+    fn reset_stats(&mut self, now: Time) {
+        self.trips = 0;
+        self.refused = 0;
+        self.loaded_time = 0.0;
+        self.axes = AxisTimes::default();
+        if self.loaded_since.is_some() {
+            self.loaded_since = Some(now);
+        }
+    }
 }
 
 impl Transporter {
@@ -305,7 +348,87 @@ impl Transporter {
             switches: 0,
             switching: TimeWeighted::default(),
             open: TimeWeighted::default(),
+            crane: None,
         }
+    }
+
+    /// Overhead crane mode ([`crate::crane`]): travel by the bridge, trolley and hoist
+    /// axes of `spec` inside its covered rectangle (no router, no traffic), the hook
+    /// lowered and raised around each load and unload (`load_time` and `unload_time` are
+    /// the hooking and unhooking), and items heavier than the capacity refused.
+    pub fn crane(mut self, spec: Option<CraneSpec>) -> Self {
+        self.crane = spec.map(|spec| {
+            Box::new(CraneState {
+                hook_z: spec.hook_height,
+                spec,
+                loaded_since: None,
+                raise: 0.0,
+                trips: 0,
+                refused: 0,
+                loaded_time: 0.0,
+                axes: AxisTimes::default(),
+            })
+        });
+        self
+    }
+
+    /// The crane refuses this task: an item heavier than its capacity.
+    fn too_heavy(&self, cx: &Ctx, request: &TaskRequest) -> bool {
+        let (Some(c), TaskKind::Transport { item, .. }) = (&self.crane, request.kind) else {
+            return false;
+        };
+        match cx.item(item).label(&c.spec.weight_label) {
+            Some(utsim_core::Value::Num(kg)) => *kg > c.spec.capacity_kg,
+            _ => false,
+        }
+    }
+
+    /// Crane travel to above `target`: the axes' time, a straight leg on the floor.
+    fn crane_travel(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
+        let c = self.crane.as_mut().expect("crane mode");
+        let hook = c.hook(self.position);
+        let (t, axes, end) = c.spec.travel(hook, target);
+        c.axes += axes;
+        c.hook_z = end.z;
+        let to = c.spec.global(end.u, end.v, 0.0);
+        let path = vec![self.position, to];
+        cx.set_state(state);
+        if t > 0.0 {
+            cx.trace_travel(path.clone(), t);
+        }
+        let leg = Leg {
+            path,
+            start: cx.now(),
+            duration: t,
+        };
+        self.arm(cx, t, tag, Some(leg));
+    }
+
+    /// Hoist time around hooking or unhooking at `block` (before, after), counted.
+    fn crane_hoist(&mut self, cx: &Ctx, block: BlockId) -> (Time, Time) {
+        let at = cx.position(block);
+        let Some(c) = self.crane.as_mut() else {
+            return (0.0, 0.0);
+        };
+        let hook = c.hook(self.position);
+        let (down, up, end) = c.spec.hoist_around(hook, at);
+        c.hook_z = end.z;
+        c.axes.hoist += down + up;
+        c.raise = up;
+        (down, up)
+    }
+
+    /// Crane: the raise after hooking or unhooking, when there is one.
+    fn crane_raise(&mut self, cx: &mut Ctx, tag: u32) -> bool {
+        let Some(c) = self.crane.as_mut() else {
+            return false;
+        };
+        let up = std::mem::take(&mut c.raise);
+        if up <= 0.0 {
+            return false;
+        }
+        self.arm(cx, up, tag, None);
+        true
     }
 
     /// Works on several cases at once (see [`Multitask`]); `None` = one at a time.
@@ -543,6 +666,10 @@ impl Transporter {
 
     /// Starts moving to `target` in travel state `state`; `tag` fires on arrival.
     fn travel(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
+        if self.crane.is_some() {
+            self.crane_travel(cx, target, tag, state);
+            return;
+        }
         let load = if state == State::TravelLoaded {
             self.load_kg(cx)
         } else {
@@ -787,6 +914,18 @@ impl Transporter {
 
     /// Takes the next trip from the queue and starts driving to its first stop.
     fn begin_trip(&mut self, cx: &mut Ctx) {
+        // A crane refuses (and counts) the items heavier than its capacity: they stay
+        // where they are.
+        while self.queue.front().is_some_and(|r| self.too_heavy(cx, r)) {
+            self.queue.pop_front();
+            if let Some(c) = self.crane.as_mut() {
+                c.refused += 1;
+            }
+            if self.queue.is_empty() {
+                self.go_idle(cx, true);
+                return;
+            }
+        }
         let Some(head) = self.queue.pop_front() else {
             return;
         };
@@ -1127,6 +1266,12 @@ impl Behavior for Transporter {
         self.open = TimeWeighted::default();
         self.abandon_route(cx);
         self.position = cx.position(cx.me());
+        if let Some(c) = self.crane.as_mut() {
+            c.hook_z = c.spec.hook_height;
+            c.loaded_since = None;
+            c.raise = 0.0;
+            c.reset_stats(0.0);
+        }
         cx.set_state(State::Idle);
     }
 
@@ -1266,11 +1411,28 @@ impl Behavior for Transporter {
             return;
         };
         match (tag, task.kind) {
-            (ARRIVED_PICKUP, TaskKind::Transport { .. }) => {
+            (ARRIVED_PICKUP, TaskKind::Transport { from, .. }) => {
                 cx.set_state(State::Loading);
                 let t = cx.sample_duration(&self.load_time);
                 let t = Self::handling_time(cx, TASK_LOAD, t);
-                self.arm(cx, t, LOADED, None);
+                // A crane lowers the hook first; it raises it after hooking.
+                let (down, _) = self.crane_hoist(cx, from);
+                self.arm(cx, down + t, LOADED, None);
+            }
+            (RAISED_LOADED, TaskKind::Transport { .. }) => {
+                self.k = 0;
+                self.deliver_leg(cx);
+            }
+            (LOADED, TaskKind::Transport { item, .. }) if self.crane.is_some() => {
+                // Hooked: the item leaves and hangs from the hook from now on.
+                cx.pick_up(item);
+                if let Some(c) = self.crane.as_mut() {
+                    c.loaded_since = Some(cx.now());
+                }
+                if !self.crane_raise(cx, RAISED_LOADED) {
+                    self.k = 0;
+                    self.deliver_leg(cx);
+                }
             }
             (LOADED, TaskKind::Transport { item, .. }) => {
                 cx.pick_up(item);
@@ -1284,11 +1446,27 @@ impl Behavior for Transporter {
                     self.deliver_leg(cx);
                 }
             }
-            (ARRIVED_DROP, TaskKind::Transport { .. }) => {
+            (ARRIVED_DROP, TaskKind::Transport { to, .. }) => {
                 cx.set_state(State::Unloading);
                 let t = cx.sample_duration(&self.unload_time);
                 let t = Self::handling_time(cx, TASK_UNLOAD, t);
-                self.arm(cx, t, UNLOADED, None);
+                let (down, _) = self.crane_hoist(cx, to);
+                if let Some(c) = self.crane.as_mut() {
+                    // It stops hanging when it touches down, before the unhooking.
+                    if let Some(since) = c.loaded_since.take() {
+                        c.loaded_time += (cx.now() + down - since).max(0.0);
+                    }
+                    c.trips += 1;
+                }
+                self.arm(cx, down + t, UNLOADED, None);
+            }
+            (RAISED_EMPTY, TaskKind::Transport { .. }) => self.finish(cx),
+            (UNLOADED, TaskKind::Transport { item, to, port, .. }) if self.crane.is_some() => {
+                // Unhooked: the item is delivered; the hook goes back up.
+                cx.drop_off(item, to, port);
+                if !self.crane_raise(cx, RAISED_EMPTY) {
+                    self.finish(cx);
+                }
             }
             (UNLOADED, TaskKind::Transport { item, to, port, .. }) => {
                 cx.drop_off(item, to, port);
@@ -1420,6 +1598,9 @@ impl Behavior for Transporter {
     }
 
     fn on_warmup(&mut self, cx: &mut Ctx) {
+        if let Some(c) = self.crane.as_mut() {
+            c.reset_stats(cx.now());
+        }
         self.switches = 0;
         self.switching.reset(cx.now());
         self.open.reset(cx.now());
@@ -1428,15 +1609,32 @@ impl Behavior for Transporter {
     /// With multitasking: `multitask.switches` (turns from one case to another),
     /// `multitask.switching` (fraction of the window spent turning) and `multitask.open`
     /// (mean open cases).
+    ///
+    /// A crane: `crane.trips` (items delivered), `crane.refused` (items heavier than the
+    /// capacity), `crane.loaded_time` (time with an item hanging from the hook) and the
+    /// time each axis moved, `crane.bridge_time`, `crane.trolley_time`,
+    /// `crane.hoist_time`.
     fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
-        if self.multitask.is_none() {
-            return Vec::new();
+        let mut out = Vec::new();
+        if let Some(c) = &self.crane {
+            let hanging = c.loaded_since.map_or(0.0, |s| (now - s).max(0.0));
+            out.extend([
+                ("crane.trips".to_string(), c.trips as f64),
+                ("crane.refused".to_string(), c.refused as f64),
+                ("crane.loaded_time".to_string(), c.loaded_time + hanging),
+                ("crane.bridge_time".to_string(), c.axes.bridge),
+                ("crane.trolley_time".to_string(), c.axes.trolley),
+                ("crane.hoist_time".to_string(), c.axes.hoist),
+            ]);
         }
-        vec![
-            ("multitask.switches".to_string(), self.switches as f64),
-            ("multitask.switching".to_string(), self.switching.mean(now)),
-            ("multitask.open".to_string(), self.open.mean(now)),
-        ]
+        if self.multitask.is_some() {
+            out.extend([
+                ("multitask.switches".to_string(), self.switches as f64),
+                ("multitask.switching".to_string(), self.switching.mean(now)),
+                ("multitask.open".to_string(), self.open.mean(now)),
+            ]);
+        }
+        out
     }
 
     fn on_message(&mut self, cx: &mut Ctx, from: BlockId, tag: u32, payload: u64) {

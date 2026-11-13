@@ -235,7 +235,7 @@ impl Model {
 
     /// Heaviest value of the weight label `label` that the sources give their items
     /// (0 when no source sets it).
-    fn max_weight(&self, label: &str) -> f64 {
+    pub(crate) fn max_weight(&self, label: &str) -> f64 {
         self.objects
             .iter()
             .filter_map(|o| match &o.kind {

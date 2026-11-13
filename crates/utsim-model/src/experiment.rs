@@ -448,6 +448,21 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "break_object",
             ],
         ),
+        ObjectKind::Crane { .. } => (
+            "Crane",
+            &[
+                "bridge",
+                "trolley",
+                "hoist",
+                "hook_height",
+                "attach",
+                "detach",
+                "capacity_t",
+                "motion",
+                "weight_label",
+                "home",
+            ],
+        ),
         ObjectKind::Dispatcher { .. } => (
             "Dispatcher",
             &["team", "rule", "pick", "preempt", "metrics"],

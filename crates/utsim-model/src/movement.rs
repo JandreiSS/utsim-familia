@@ -226,7 +226,10 @@ impl Model {
                         bays: *bays,
                         bay_width: *bay_width,
                     },
-                    ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. } => {
+                    // A crane runs overhead: it is not an obstacle on the floor.
+                    ObjectKind::Transporter { .. }
+                    | ObjectKind::Crane { .. }
+                    | ObjectKind::Dispatcher { .. } => {
                         return None;
                     }
                 };
