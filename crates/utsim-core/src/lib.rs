@@ -12,6 +12,7 @@ pub mod engine;
 pub mod init;
 pub mod item;
 pub mod item_log;
+pub mod lugares;
 pub mod maintenance;
 pub mod person;
 pub mod report;

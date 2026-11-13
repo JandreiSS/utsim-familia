@@ -112,6 +112,8 @@ impl Eq for Scheduled {}
 struct Pending {
     item: ItemId,
     port: Option<usize>,
+    /// Order among the released items ([`Ctx::release_ranked`]); `None` for the others.
+    rank: Option<f64>,
 }
 
 #[derive(Default)]
@@ -163,6 +165,10 @@ struct BlockRuntime {
     state_when_up: Option<State>,
     contents: Vec<ItemId>,
     outbox: VecDeque<Pending>,
+    /// Released items taken back ([`Ctx::withhold`]), with the output they had drawn.
+    withheld: Vec<Pending>,
+    /// Where a carrier stands to take an item ([`Ctx::set_pickup_point`]).
+    pickups: Vec<(ItemId, [f64; 3])>,
     stats: BlockStats,
     series: Vec<SeriesPoint>,
     rng: SimRng,
@@ -333,6 +339,8 @@ impl Core {
             rt.contents.remove(pos);
         }
         rt.outbox.retain(|p| p.item != item);
+        rt.withheld.retain(|p| p.item != item);
+        rt.pickups.retain(|p| p.0 != item);
         self.update_content(b);
     }
 
@@ -664,6 +672,59 @@ impl Ctx<'_> {
         let pending = self.route_output(id);
         self.core.blocks[self.me.0].outbox.push_front(pending);
         self.core.mark_dirty(self.me);
+    }
+
+    /// Takes back an item this block released that has no destination yet (it is still
+    /// waiting in the output): it stays here, not ready to leave, until released again
+    /// (the output it drew is kept). False when it was not waiting there: never released,
+    /// already on its way, or promised to a carrier.
+    pub fn withhold(&mut self, id: ItemId) -> bool {
+        let rt = &mut self.core.blocks[self.me.0];
+        let Some(at) = rt.outbox.iter().position(|p| p.item == id) else {
+            return false;
+        };
+        let pending = rt.outbox.remove(at).expect("index in range");
+        rt.withheld.push(pending);
+        true
+    }
+
+    /// Marks the item as ready to leave, ahead of the released items with a larger `rank`
+    /// (ties keep the order of release; items released without a rank stay ahead). An item
+    /// taken back by [`Ctx::withhold`] keeps the output it had drawn.
+    pub fn release_ranked(&mut self, id: ItemId, rank: f64) {
+        let rt = &mut self.core.blocks[self.me.0];
+        let mut pending = match rt.withheld.iter().position(|p| p.item == id) {
+            Some(at) => rt.withheld.remove(at),
+            None => self.route_output(id),
+        };
+        pending.rank = Some(rank);
+        let outbox = &mut self.core.blocks[self.me.0].outbox;
+        match outbox.iter().position(|p| p.rank.is_some_and(|r| r > rank)) {
+            Some(at) => outbox.insert(at, pending),
+            None => outbox.push_back(pending),
+        }
+        self.core.mark_dirty(self.me);
+    }
+
+    /// Where a carrier stands to take `id` from this block (a place on a table, a pallet,
+    /// a shelf); `None` goes back to the block's output end, else its position.
+    pub fn set_pickup_point(&mut self, id: ItemId, point: Option<[f64; 3]>) {
+        let rt = &mut self.core.blocks[self.me.0];
+        rt.pickups.retain(|p| p.0 != id);
+        if let Some(point) = point {
+            rt.pickups.push((id, point));
+        }
+    }
+
+    /// Where a carrier stands to take `item` from `block`: the point the block set for it
+    /// ([`Ctx::set_pickup_point`]), else `None` (the carrier goes to the block's output end
+    /// or position, as before).
+    pub fn pickup_point(&self, block: BlockId, item: ItemId) -> Option<[f64; 3]> {
+        self.core.blocks[block.0]
+            .pickups
+            .iter()
+            .find(|p| p.0 == item)
+            .map(|p| p.1)
     }
 
     /// Marks the item as ready to leave, ahead of the released items it outranks by the
@@ -1009,7 +1070,11 @@ impl Ctx<'_> {
                 }
             }
         };
-        Pending { item: id, port }
+        Pending {
+            item: id,
+            port,
+            rank: None,
+        }
     }
 }
 
@@ -1135,6 +1200,8 @@ impl Simulation {
             state_when_up: None,
             contents: Vec::new(),
             outbox: VecDeque::new(),
+            withheld: Vec::new(),
+            pickups: Vec::new(),
             stats: if self.core.keep_raw {
                 BlockStats {
                     staytime: Tally::with_raw(),

@@ -350,6 +350,12 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         }
         // Who the person is (sex, height, mass, age, experience, capacity) and how it tires
         // and learns: the whole `person` block, `None` to remove it.
+        // The waiting area of a queue (a table, a pallet, a shelf, a floor), `None` for a
+        // plain queue.
+        "waiting_area" => {
+            set!(obj.waiting_area);
+            return Ok(());
+        }
         "person" => {
             set!(obj.person);
             return Ok(());

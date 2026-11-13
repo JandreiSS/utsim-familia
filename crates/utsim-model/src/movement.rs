@@ -252,7 +252,12 @@ impl Model {
                     yaw,
                     scale: visual.and_then(|v| v.scale).unwrap_or(1.0),
                     access: o.access,
-                    size: o.size.map(|d| [d[0], d[1]]),
+                    size: o.size.map(|d| [d[0], d[1]]).or_else(|| {
+                        o.waiting_area.map(|w| {
+                            let d = w.default_size();
+                            [d[0], d[1]]
+                        })
+                    }),
                     route: match &o.kind {
                         ObjectKind::Conveyor { route: Some(r), .. }
                             if utsim_nav::path3d::problem(&r.nodes, "").is_none() =>
@@ -308,6 +313,39 @@ impl Model {
             clearance,
             &points,
             &GridOptions::default(),
+        )
+    }
+
+    /// The places of the waiting area of `obj` (a `Queue` with `waiting_area`) for the
+    /// simulation: where a carrier stands to take the item of each place (in front of it,
+    /// on the access side, at a person's clearance; with `access`, at its `y` and shifted
+    /// along `x` to the place) and the place it rests on. `None` without one.
+    pub(crate) fn waiting_places(
+        &self,
+        obj: &ObjectDef,
+    ) -> Option<Vec<utsim_core::lugares::Lugar>> {
+        let w = obj
+            .waiting_area
+            .filter(|_| matches!(obj.kind, ObjectKind::Queue { .. }))?;
+        let body = self.nav_bodies().into_iter().find(|b| b.name == obj.name)?;
+        let half = body.half();
+        let clearance = utsim_nav::default_clearance(utsim_nav::Role::Person);
+        let (ax, ay) = match obj.access {
+            Some(a) => (a[0], a[1]),
+            None => (0.0, -(half[1] + clearance + utsim_nav::body::ACCESS_GAP)),
+        };
+        Some(
+            w.places(obj.size)
+                .iter()
+                .map(|p| {
+                    let at =
+                        utsim_nav::geom::to_world(body.center, [ax + p.center[0], ay], body.yaw);
+                    utsim_core::lugares::Lugar {
+                        acesso: [at[0], at[1], obj.position[2]],
+                        abaixo: p.below,
+                    }
+                })
+                .collect(),
         )
     }
 

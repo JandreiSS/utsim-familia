@@ -5,6 +5,7 @@ pub mod analysis;
 mod arrivals;
 pub mod csv;
 pub mod dados;
+pub mod espera;
 pub mod experiment;
 pub mod exposure;
 mod format2;
@@ -26,6 +27,7 @@ pub mod teams;
 pub mod trajeto;
 mod warnings;
 
+pub use espera::{WaitingArea, WaitingKind};
 pub use line::SYMBOL_IDS;
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
 pub use movement::{Movement, NavSet};
@@ -289,6 +291,12 @@ pub struct ObjectDef {
         alias = "area_por_item"
     )]
     pub area_per_item: Option<f64>,
+    /// A real waiting area on a `Queue` (a table, a pallet, a shelf, a marked floor,
+    /// [`espera`]): each item takes a place of its grid, only the items with nothing on top
+    /// can leave (the oldest of them first) and the carrier goes to the front of the item
+    /// it takes. Absent: a plain queue, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "espera")]
+    pub waiting_area: Option<WaitingArea>,
     /// Transporter used as a person: fatigue, learning curve, skills, walking speed with
     /// a load, individual pace and manual lifting check ([`utsim_core::person`]). Absent:
     /// none of these effects.
@@ -785,6 +793,27 @@ impl Model {
                         "{}: size (comprimento, largura, altura) deve ser finito e > 0",
                         obj.name
                     ));
+                }
+            }
+            if let Some(w) = &obj.waiting_area {
+                match &obj.kind {
+                    ObjectKind::Queue {
+                        batch,
+                        gather,
+                        waves,
+                        ..
+                    } => {
+                        if batch.is_some() || gather.is_some() || waves.is_some() {
+                            errors.push(format!(
+                                "{}: waiting_area ainda não combina com lote, consolidação ou ondas",
+                                obj.name
+                            ));
+                        }
+                        if let Some(e) = w.problem() {
+                            errors.push(format!("{}: {e}", obj.name));
+                        }
+                    }
+                    _ => errors.push(format!("{}: waiting_area vale só para Queue", obj.name)),
                 }
             }
             if let Some(a) = obj.area_per_item {
@@ -1644,6 +1673,7 @@ impl Model {
                     waves,
                 } => Box::new(
                     Queue::new(self.queue_capacity(obj).or(*capacity))
+                        .lugares(self.waiting_places(obj))
                         .patience(patience.clone())
                         .gather(gather.clone())
                         .waves(waves.clone())

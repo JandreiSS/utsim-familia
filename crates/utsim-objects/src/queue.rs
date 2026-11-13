@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
 use utsim_core::init::Accepts;
+use utsim_core::lugares::{Lugar, Lugares};
 use utsim_core::{Behavior, BlockState, Ctx, Dist, EventId, Item, ItemId, State, Time, Value};
 
 use crate::timer::PausableTimer;
@@ -110,6 +113,14 @@ impl Waves {
 /// **Waves** ([`Queue::waves`]). Items (whole orders, with consolidation) wait and all
 /// leave together at each wave time of the cycle, in the queue's order.
 ///
+/// **Places** ([`Queue::lugares`]): a real waiting area (a table, a pallet, a shelf, a
+/// marked floor) whose places are known ([`utsim_core::lugares`]). Each item takes the
+/// first free place with support and is traced there (`Slot`); the carrier that takes it
+/// goes to the front of its place ([`Ctx::set_pickup_point`]). Only items with nothing on
+/// top can leave: among them, the oldest (the newest with `Lifo`; by the label with
+/// `order`). An item covered by a new one is taken back from the output until it is free
+/// again; an item already promised to a carrier is never covered.
+///
 /// **Patience** ([`Queue::patience`]). Each item draws its patience when it enters; if it
 /// is still here when that time is over (it did not get into the next object), it gives up:
 /// it gets the label `abandonou = 1` and leaves the model. The patience runs also while the
@@ -139,6 +150,13 @@ pub struct Queue {
     wave_held: Vec<ItemId>,
     /// Waves released since the warm-up.
     waves_released: u64,
+    /// The places of a real waiting area, when it has them.
+    lugares: Option<Lugares>,
+    /// Order of arrival of the items in the places (the rank of the free ones).
+    chegada: HashMap<ItemId, u64>,
+    seq: u64,
+    /// Items the queue let go that wait for the ones on top to leave.
+    liberados: HashSet<ItemId>,
 }
 
 impl Queue {
@@ -160,6 +178,76 @@ impl Queue {
             waves: None,
             wave_held: Vec::new(),
             waves_released: 0,
+            lugares: None,
+            chegada: HashMap::new(),
+            seq: 0,
+            liberados: HashSet::new(),
+        }
+    }
+
+    /// The places of a real waiting area (see [`Queue`]); `None` or empty: none.
+    pub fn lugares(mut self, lugares: Option<Vec<Lugar>>) -> Self {
+        self.lugares = lugares.filter(|l| !l.is_empty()).map(Lugares::new);
+        self
+    }
+
+    fn rank(&self, id: ItemId) -> f64 {
+        let s = self.chegada.get(&id).copied().unwrap_or(u64::MAX) as f64;
+        match self.discipline {
+            Discipline::Lifo => -s,
+            Discipline::Fifo => s,
+        }
+    }
+
+    /// The item takes its place; the one it covers is taken back from the output.
+    fn place(&mut self, cx: &mut Ctx, id: ItemId) {
+        let Some(l) = self.lugares.as_mut() else {
+            return;
+        };
+        self.seq += 1;
+        self.chegada.insert(id, self.seq);
+        let promised = |i: ItemId| !cx.item(i).awaiting_transport;
+        if let Some(k) = l.entrar_com(id, promised) {
+            cx.trace_slot(id, k);
+        }
+        cx.set_pickup_point(id, l.acesso(id));
+        if let Some(under) = l.sob(id) {
+            cx.withhold(under);
+        }
+    }
+
+    /// The item left its place: one from beside the area may take it, and the one under it
+    /// may go now.
+    fn unplace(&mut self, cx: &mut Ctx, id: ItemId) {
+        self.liberados.remove(&id);
+        self.chegada.remove(&id);
+        let Some(l) = self.lugares.as_mut() else {
+            return;
+        };
+        let under = l.sob(id);
+        let promised = |i: ItemId| !cx.item(i).awaiting_transport;
+        let moved = l.sair_com(id, promised);
+        if let Some((m, k)) = moved {
+            cx.trace_slot(m, k);
+            cx.set_pickup_point(m, l.acesso(m));
+            if let Some(u) = l.sob(m) {
+                cx.withhold(u);
+            }
+        }
+        if let Some(u) = under
+            && self.liberados.contains(&u)
+            && self.lugares.as_ref().is_some_and(|l| l.livre(u))
+        {
+            self.let_go(cx, u);
+        }
+    }
+
+    /// Ready to leave, in the queue's order.
+    fn let_go(&self, cx: &mut Ctx, id: ItemId) {
+        match &self.order {
+            Some(LabelOrder::Asc(l)) => cx.release_ordered(id, l, false),
+            Some(LabelOrder::Desc(l)) => cx.release_ordered(id, l, true),
+            None => cx.release_ranked(id, self.rank(id)),
         }
     }
 
@@ -245,6 +333,10 @@ impl Queue {
         if !cx.contents().contains(&item) || cx.item(item).awaiting_transport {
             return;
         }
+        // Under another item it cannot get out.
+        if self.lugares.as_ref().is_some_and(|l| !l.livre(item)) {
+            return;
+        }
         let waited: Time = cx.now() - cx.item(item).entered_at;
         cx.item_mut(item)
             .set_label(ABANDONED_LABEL, Value::Num(1.0));
@@ -256,6 +348,8 @@ impl Queue {
             lines.retain(|i| *i != item);
         }
         self.groups.retain(|(_, lines, _)| !lines.is_empty());
+        // Destroying does not call `on_exit`: the place is freed here.
+        self.unplace(cx, item);
         cx.destroy(item);
     }
 
@@ -275,7 +369,15 @@ impl Queue {
         self
     }
 
-    fn release_one(&self, cx: &mut Ctx, id: ItemId) {
+    fn release_one(&mut self, cx: &mut Ctx, id: ItemId) {
+        if let Some(l) = &self.lugares {
+            // Only an item with nothing on top goes now; the others when uncovered.
+            self.liberados.insert(id);
+            if l.livre(id) {
+                self.let_go(cx, id);
+            }
+            return;
+        }
         match (&self.order, self.discipline) {
             (Some(LabelOrder::Asc(l)), _) => cx.release_ordered(id, l, false),
             (Some(LabelOrder::Desc(l)), _) => cx.release_ordered(id, l, true),
@@ -320,6 +422,12 @@ impl Behavior for Queue {
         self.groups.clear();
         self.wave_held.clear();
         self.waves_released = 0;
+        if let Some(l) = self.lugares.as_mut() {
+            l.clear();
+        }
+        self.chegada.clear();
+        self.seq = 0;
+        self.liberados.clear();
         if let Some(delay) = self.waves.as_ref().and_then(|w| w.next(cx.now(), false)) {
             cx.schedule(delay, WAVE, None);
         }
@@ -374,6 +482,7 @@ impl Behavior for Queue {
     }
 
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, _port: usize) {
+        self.place(cx, item);
         if let Some(p) = &self.patience {
             let p = p.clone();
             let wait = cx.sample_duration(&p);
@@ -423,6 +532,7 @@ impl Behavior for Queue {
     }
 
     fn on_exit(&mut self, cx: &mut Ctx, item: ItemId) {
+        self.unplace(cx, item);
         if let Some(at) = self.giving_up.iter().position(|(i, _)| *i == item) {
             let (_, event) = self.giving_up.remove(at);
             cx.cancel(event);
