@@ -149,6 +149,7 @@ impl Model {
         out.extend(crate::dados::warnings(self));
         self.maintenance_warnings(&mut out);
         self.people_warnings(&mut out);
+        self.crane_warnings(&mut out);
         self.idle_operator_warnings(&mut out);
         self.route_warnings(&mut out);
         // Free and network movement: access points, paths, network edges over obstacles.

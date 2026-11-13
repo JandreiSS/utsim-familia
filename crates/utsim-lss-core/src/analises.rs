@@ -209,6 +209,14 @@ pub enum Recipe {
         target: Option<f64>,
         sigma: Option<f64>,
     },
+    /// Response surface: the second-order model on the factor columns (coded, as in the
+    /// worksheet of a central composite or a Box-Behnken), its coefficients and the
+    /// stationary point.
+    #[serde(rename = "superficie_resposta")]
+    Surface {
+        factors: Vec<usize>,
+        response: usize,
+    },
 }
 
 impl Recipe {
@@ -242,6 +250,7 @@ impl Recipe {
             Recipe::SampleSize { .. } => tx("analises-tamanho_de_amostra_e_poder"),
             Recipe::Ewma { .. } => tx("analises-carta_ewma"),
             Recipe::Cusum { .. } => tx("analises-carta_cusum"),
+            Recipe::Surface { .. } => tx("analises-superficie_de_resposta"),
         }
     }
 
@@ -403,6 +412,215 @@ fn verdict_p(p: f64, h1: &str) -> String {
             &[("p", dx(format!("{:.4}", p))), ("h1", vx(&h1))],
         )
     }
+}
+
+/// The response surface analysis (see [`Recipe::Surface`]).
+fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Result<(), String> {
+    let k = factors.len();
+    if !(2..=utsim_doe::MAX_CCD_FACTORS).contains(&k) {
+        return Err(fx(
+            "analises-superficie_fatores",
+            &[("n", vx(&utsim_doe::MAX_CCD_FACTORS))],
+        ));
+    }
+    let num = |r: &Vec<String>, c: usize| {
+        r.get(c)
+            .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+    };
+    let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+    // In a worksheet of the app the coded A, B... are followed by the actual levels.
+    let real_col = |i: usize| {
+        let col = factors[k - 1] + 1 + i;
+        (header(factors[i]) == doe::letter(i).to_string()
+            && col != response
+            && !factors.contains(&col)
+            && col < t.header.len())
+        .then_some(col)
+    };
+    let mut x: Vec<Vec<f64>> = Vec::new();
+    let mut y = Vec::new();
+    let mut real: Vec<Vec<Option<f64>>> = Vec::new();
+    for r in &t.rows {
+        let (Some(v), Some(xs)) = (
+            num(r, response),
+            factors
+                .iter()
+                .map(|c| num(r, *c))
+                .collect::<Option<Vec<f64>>>(),
+        ) else {
+            continue;
+        };
+        y.push(v);
+        x.push(xs);
+        real.push(
+            (0..k)
+                .map(|i| real_col(i).and_then(|c| num(r, c)))
+                .collect(),
+        );
+    }
+    let terms = utsim_doe::quadratic_terms(k);
+    if y.len() < terms.len() + 2 {
+        return Err(fx(
+            "analises-superficie_corridas",
+            &[("k", vx(&k)), ("n", vx(&(terms.len() + 2)))],
+        ));
+    }
+    // Coded columns are symmetric around zero; other columns are coded by their extremes.
+    for i in 0..k {
+        let col: Vec<f64> = x.iter().map(|r| r[i]).collect();
+        let (lo, hi) = col
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                (a.min(*v), b.max(*v))
+            });
+        if hi <= 3.0 && (lo + hi).abs() < 1e-6 && hi > 0.0 {
+            continue;
+        }
+        let coded = doe::code(&col)
+            .ok_or_else(|| fx("analises-o_fator_tem_um_so", &[("i", vx(&doe::letter(i)))]))?;
+        for (r, v) in x.iter_mut().zip(coded) {
+            r[i] = v;
+        }
+        o.notes.push(fx(
+            "analises-superficie_codificada",
+            &[("x", vx(&doe::letter(i)))],
+        ));
+    }
+    // The actual units of each factor, by a straight line from the coded column.
+    let to_real: Vec<Option<(f64, f64)>> = (0..k)
+        .map(|i| {
+            let pts: Vec<(f64, f64)> = x
+                .iter()
+                .zip(&real)
+                .filter_map(|(r, re)| re[i].map(|v| (r[i], v)))
+                .collect();
+            if pts.len() < 2 {
+                return None;
+            }
+            let n = pts.len() as f64;
+            let mx = pts.iter().map(|p| p.0).sum::<f64>() / n;
+            let my = pts.iter().map(|p| p.1).sum::<f64>() / n;
+            let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+            if sxx <= 0.0 {
+                return None;
+            }
+            let b = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>() / sxx;
+            Some((my - b * mx, b))
+        })
+        .collect();
+    let name = |i: usize| match real_col(i) {
+        Some(c) if to_real[i].is_some() => header(c),
+        _ => header(factors[i]),
+    };
+    if (0..k).any(|i| name(i) != doe::letter(i).to_string()) {
+        o.notes.push(
+            (0..k)
+                .map(|i| format!("{} = {}", doe::letter(i), name(i)))
+                .collect::<Vec<_>>()
+                .join("; "),
+        );
+    }
+    let m = utsim_doe::Model::fit(&terms, &x, &y, LEVEL)?;
+    let reg = &m.regression;
+    o.put("corridas", y.len() as f64);
+    o.put("R²", reg.r2);
+    o.put("R² ajustado", reg.r2_adj);
+    if reg.f_p_value.is_finite() {
+        o.put("valor-p do modelo", reg.f_p_value);
+    }
+    for c in &reg.coefs {
+        o.put(&format!("coef {}", c.name), c.estimate);
+        if c.name != "constante" && c.p_value.is_finite() {
+            o.put(&format!("valor-p {}", c.name), c.p_value);
+        }
+    }
+    let radius = x.iter().flatten().fold(0.0f64, |a, v| a.max(v.abs()));
+    match m.stationary() {
+        Some(s) => {
+            for i in 0..k {
+                o.put(
+                    &format!("ponto estacionário {}", doe::letter(i)),
+                    s.coded[i],
+                );
+            }
+            for (i, map) in to_real.iter().enumerate() {
+                if let Some((a, b)) = map {
+                    o.put(
+                        &format!("ponto estacionário {} (real)", name(i)),
+                        a + b * s.coded[i],
+                    );
+                }
+            }
+            o.put("resposta prevista no ponto estacionário", s.predicted);
+            let dist = s.coded.iter().map(|v| v * v).sum::<f64>().sqrt();
+            let what = match s.nature {
+                utsim_doe::Nature::Maximum => tx("analises-superficie_maximo"),
+                utsim_doe::Nature::Minimum => tx("analises-superficie_minimo"),
+                utsim_doe::Nature::Saddle => tx("analises-superficie_sela"),
+                utsim_doe::Nature::Ridge => tx("analises-superficie_crista"),
+            };
+            o.verdict = if dist > radius + 1e-9 {
+                fx("analises-superficie_fora", &[("w", vx(&what))])
+            } else {
+                what.to_string()
+            };
+            o.notes.push(fx(
+                "analises-superficie_autovalores",
+                &[(
+                    "v",
+                    vx(&s
+                        .eigenvalues
+                        .iter()
+                        .map(|v| format!("{v:.4}"))
+                        .collect::<Vec<_>>()
+                        .join("; ")),
+                )],
+            ));
+        }
+        None => {
+            o.verdict = tx("analises-superficie_sem_ponto").into();
+        }
+    }
+    if reg.df_error < 1.0 {
+        o.notes.push(tx("analises-superficie_sem_erro").into());
+    }
+    let coefs = &reg.coefs[1..];
+    o.plots.push(Plot {
+        title: tx("analises-superficie_termos").into(),
+        bars: true,
+        labels: coefs.iter().map(|c| c.name.clone()).collect(),
+        series: vec![(
+            "|t|".into(),
+            coefs
+                .iter()
+                .map(|c| if c.t.is_finite() { c.t.abs() } else { 0.0 })
+                .collect(),
+        )],
+    });
+    let steps: Vec<f64> = (0..=10)
+        .map(|j| -radius + 2.0 * radius * j as f64 / 10.0)
+        .collect();
+    o.plots.push(Plot {
+        title: tx("analises-superficie_por_fator").into(),
+        bars: false,
+        labels: steps.iter().map(|v| format!("{v:.2}")).collect(),
+        series: (0..k)
+            .map(|i| {
+                (
+                    doe::letter(i).to_string(),
+                    steps
+                        .iter()
+                        .map(|v| {
+                            let mut p = vec![0.0; k];
+                            p[i] = *v;
+                            m.predict(&p)
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+    });
+    Ok(())
 }
 
 /// The note when the target or σ of a chart with memory came from the data.
@@ -1225,6 +1443,9 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 .push(tx("analises-o_grafico_mostra_os_residuos").into());
             o.series = r.residuals.clone();
             o.limits = Some((0.0, -2.0 * r.s, 2.0 * r.s));
+        }
+        Recipe::Surface { factors, response } => {
+            surface(t, factors, *response, &mut o)?;
         }
         Recipe::Ewma {
             col,

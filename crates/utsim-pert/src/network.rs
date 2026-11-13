@@ -908,7 +908,9 @@ fn object_activity(obj: &ObjectDef, successors: usize) -> Activity {
             dwell.is_none().then(|| "sem dwell: 0".into()),
         ),
         // Mobile resources never reach here (filtered out of the selection).
-        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. } => ("Recurso", vec![], None),
+        ObjectKind::Transporter { .. }
+        | ObjectKind::Crane { .. }
+        | ObjectKind::Dispatcher { .. } => ("Recurso", vec![], None),
     };
     Activity {
         name: obj.name.clone(),
