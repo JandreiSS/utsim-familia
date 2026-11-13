@@ -281,6 +281,25 @@
         ],
     ),
     (
+        missao: "ato5/celular",
+        referencia: {
+            "pos.fresa": 10.0,
+            "pos.furadeira": 9.0,
+            "pos.inspecao": 5.0,
+            "pos.inspecao_b": 8.0,
+            "pos.retifica": 2.0,
+            "pos.serra": 0.0,
+            "pos.serra_b": 6.0,
+            "pos.torno": 1.0,
+        },
+        base: [
+            ("momento", 8043.089293671483),
+        ],
+        ref_valores: [
+            ("momento", 7128.913080879409),
+        ],
+    ),
+    (
         missao: "ato5/armazem",
         referencia: {
             "pos.item_a": 7.0,
