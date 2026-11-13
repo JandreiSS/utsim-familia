@@ -218,7 +218,41 @@ fn a_ramp_lengthens_the_walk() {
         ", heights: [0.0, 1.0, 0.0]",
     );
     assert!((flat - 20.0).abs() < 1e-6, "{flat}");
-    assert!((ramp - 2.0 * 101f64.sqrt()).abs() < 1e-6, "{ramp}");
+    // Up 10 % at Tobler's 0,70 of the speed, down 10 % at full speed (`ramps.rs`).
+    let up = utsim_objects::ramps::walk_factor(0.1);
+    let want = 101f64.sqrt() / up + 101f64.sqrt();
+    assert!((ramp - want).abs() < 1e-6, "{ramp} {want}");
+}
+
+/// Uma rampa de empilhadeira: o veículo reduz subindo e descendo.
+#[test]
+fn a_forklift_slows_down_on_a_ramp() {
+    let text = |extra: &str| {
+        format!(
+            r#"Model(
+            format: 2,
+            name: "rampa_empilhadeira",
+            run: (stop_time: 1000.0, movement: Aisles),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (0.0, 5.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "emp", position: (0.0, 0.0, 0.0), access: (0.0, -3.0)),
+                (name: "out", kind: Sink, position: (20.0, 0.0, 0.0), access: (0.0, -3.0)),
+                (name: "emp", kind: Transporter(speed: 1.0), position: (0.0, -3.0, 0.0),
+                 visual: (asset: "empilhadeira")),
+            ],
+            connections: [("src", "q"), ("q", "out")],
+            aisles: [
+                (name: "via", kind: Forklift, points: [(0.0, -3.0), (10.0, -3.0), (20.0, -3.0)], width: 3.6{extra}),
+            ],
+        )"#
+        )
+    };
+    let flat = run(&model(&text("")));
+    let ramp = run(&model(&text(", heights: [0.0, 1.0, 0.0]")));
+    let f = utsim_objects::ramps::vehicle_factor(0.1);
+    assert!((flat - 20.0).abs() < 1e-6, "{flat}");
+    assert!((ramp - 2.0 * 101f64.sqrt() / f).abs() < 1e-6, "{ramp}");
 }
 
 #[test]
@@ -229,4 +263,78 @@ fn a_curved_path_is_walked_along_its_curve() {
     let round = walk(pts, ", radii: [0.0, 4.0, 0.0]");
     assert!((sharp - 2.0 * 200f64.sqrt()).abs() < 1e-6, "{sharp}");
     assert!(round < sharp - 0.5, "{round} {sharp}");
+}
+
+/// Operador leva a peça de `q` (0, −4) a `out` (0, 4), em movimento livre, com uma esteira
+/// desenhada atravessando o caminho em y = 0, de x = −10 a 10, na altura `z`.
+fn under(z: f64) -> f64 {
+    let m = model(&format!(
+        r#"Model(
+            format: 2,
+            name: "por_baixo",
+            run: (stop_time: 1000.0, movement: Free),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (3.0, -6.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "op", position: (3.0, -4.0, 0.0), access: (-3.0, 0.0)),
+                (name: "out", kind: Sink, position: (3.0, 4.0, 0.0), access: (-3.0, 0.0)),
+                (name: "op", kind: Transporter(speed: 1.0, clearance: 0.5), position: (0.0, -4.0, 0.0),
+                 visual: (asset: "operador")),
+                (name: "alta", kind: Conveyor(length: 20.0, speed: 1.0, item_length: 1.0,
+                    route: Some((nodes: [(at: (-10.0, 0.0, {z})), (at: (0.0, 0.0, {z})), (at: (10.0, 0.0, {z}))]))),
+                 position: (0.0, 0.0, 0.0)),
+                (name: "fim", kind: Sink, position: (12.0, 0.0, 0.0)),
+            ],
+            connections: [("src", "q"), ("q", "out"), ("alta", "fim")],
+        )"#
+    ));
+    run(&m)
+}
+
+#[test]
+fn people_walk_under_a_high_belt_and_around_a_low_one() {
+    let low = under(0.8);
+    let high = under(3.0);
+    // Under the high belt the way is about straight (it only steps around the legs of the
+    // middle node); the low one is gone around, past an end 10 m away.
+    assert!(high < low - 5.0, "alta {high}, baixa {low}");
+}
+
+/// Empilhadeira leva a peça de `q` a `out` pelo corredor de veículos em y = 0; um caminho
+/// de pedestres o atravessa em x = 0, no piso ou por uma passarela a 3 m.
+fn forklift_across(heights: &str) -> f64 {
+    let m = model(&format!(
+        r#"Model(
+            format: 2,
+            name: "passarela",
+            run: (stop_time: 1000.0, movement: Aisles),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), first_at_zero: true, max_arrivals: 1),
+                 position: (-10.0, 5.0, 0.0)),
+                (name: "q", kind: Queue(), transport: "emp", position: (-10.0, 3.0, 0.0), access: (0.0, -3.0)),
+                (name: "out", kind: Sink, position: (10.0, 3.0, 0.0), access: (0.0, -3.0)),
+                (name: "emp", kind: Transporter(speed: 1.0), position: (-10.0, 0.0, 0.0),
+                 visual: (asset: "empilhadeira")),
+            ],
+            connections: [("src", "q"), ("q", "out")],
+            aisles: [
+                (name: "corredor_A", kind: Forklift, points: [(-12.0, 0.0), (12.0, 0.0)], width: 3.6),
+                (name: "passeio", kind: Pedestrian, points: [(0.0, -10.0), (0.0, -4.0), (0.0, 4.0), (0.0, 10.0)],
+                 width: 1.2{heights}),
+            ],
+        )"#
+    ));
+    assert_eq!(m.aisle_net().crossings.is_empty(), !heights.is_empty());
+    run(&m)
+}
+
+#[test]
+fn a_walkway_takes_the_crossing_away() {
+    let floor = forklift_across("");
+    let walkway = forklift_across(", heights: [0.0, 3.0, 3.0, 0.0]");
+    // The mandatory stop before the pedestrian crossing (2 s by default) is gone.
+    assert!(
+        (floor - walkway - 2.0).abs() < 1e-6,
+        "piso {floor}, passarela {walkway}"
+    );
 }

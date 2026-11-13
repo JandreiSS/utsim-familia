@@ -7,6 +7,7 @@ pub mod network;
 mod processor;
 mod queue;
 mod rack;
+pub mod ramps;
 mod separator;
 mod sink;
 mod source;

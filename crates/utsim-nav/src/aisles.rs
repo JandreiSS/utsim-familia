@@ -24,6 +24,14 @@ use crate::geom::{Pt, dist, point_polygon, point_segment, polyline_length, segme
 /// ponta a menos disso de outro eixo encaixa nele (junção em T).
 pub const JOIN_TOL: f64 = 0.01;
 
+/// Diferença de altura (m) a partir da qual dois corredores que se cruzam na planta estão
+/// em níveis diferentes (uma passarela sobre um corredor): não se juntam ali.
+pub const LEVEL_TOL: f64 = 0.3;
+
+/// Altura livre (m) acima da qual um corredor passa por cima dos obstáculos do piso (uma
+/// passarela sobre as máquinas).
+pub const OVERHEAD: f64 = 2.2;
+
 /// Quem pode usar um corredor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AisleKind {
@@ -647,9 +655,13 @@ impl Builder {
         self.node_at(p, 0.0)
     }
 
-    /// Nó em `p` à altura `z` (a de uma rampa); um nó que já existe ali fica com a sua.
+    /// Nó em `p` à altura `z` (a de uma rampa): o que já existe ali no mesmo nível (a menos
+    /// de [`LEVEL_TOL`]), senão um novo; em outro nível é outro nó (a passarela sobre o
+    /// corredor).
     fn node_at(&mut self, p: Pt, z: f64) -> usize {
-        if let Some(i) = (0..self.nodes.len()).find(|&i| dist(self.pos(i), p) < JOIN_TOL) {
+        if let Some(i) = (0..self.nodes.len()).find(|&i| {
+            dist(self.pos(i), p) < JOIN_TOL && (self.nodes[i].position[2] - z).abs() < LEVEL_TOL
+        }) {
             return i;
         }
         self.nodes.push(NodeDef {
@@ -717,22 +729,37 @@ pub fn aisle_network(
     let mut blocked = Vec::new();
     for (si, &(ai, p, q)) in segs.iter().enumerate() {
         let mut ts = vec![0.0, 1.0];
+        let z_here = |t: f64| segs3[si].1[2] + (segs3[si].2[2] - segs3[si].1[2]) * t;
         for (sj, &(_, c, d)) in segs.iter().enumerate() {
             if si == sj {
                 continue;
             }
+            // Height of the other line at its parameter `u`.
+            let z_there = |u: f64| segs3[sj].1[2] + (segs3[sj].2[2] - segs3[sj].1[2]) * u;
             if let Some(t) = intersection(p, q, c, d) {
-                ts.push(t);
+                let x = lerp(p, q, t);
+                // Grade separated: a walkway over an aisle does not meet it.
+                if (z_here(t) - z_there(project(x, c, d))).abs() < LEVEL_TOL {
+                    ts.push(t);
+                }
             }
-            for e in [c, d] {
+            for (e, u) in [(c, 0.0), (d, 1.0)] {
                 if point_segment(e, p, q) < JOIN_TOL {
-                    ts.push(project(e, p, q));
+                    let t = project(e, p, q);
+                    if (z_here(t) - z_there(u)).abs() < LEVEL_TOL {
+                        ts.push(t);
+                    }
                 }
             }
         }
+        // High enough, the line passes over the obstacles of the floor.
+        let overhead = segs3[si].1[2].min(segs3[si].2[2]) >= OVERHEAD;
         // Cut where the centre line enters and leaves each obstacle: every piece is then
         // wholly inside or wholly outside it.
-        for o in obstacles.iter().filter(|o| o.polygon.len() >= 3) {
+        for o in obstacles
+            .iter()
+            .filter(|o| o.polygon.len() >= 3 && !overhead)
+        {
             let n = o.polygon.len();
             for k in 0..n {
                 if let Some(t) = intersection(p, q, o.polygon[k], o.polygon[(k + 1) % n]) {
@@ -752,7 +779,11 @@ pub fn aisle_network(
                     let mid = lerp(y, x, 0.5);
                     let crossed: Vec<String> = obstacles
                         .iter()
-                        .filter(|o| o.polygon.len() >= 3 && point_polygon(mid, &o.polygon) <= 0.0)
+                        .filter(|o| {
+                            !overhead
+                                && o.polygon.len() >= 3
+                                && point_polygon(mid, &o.polygon) <= 0.0
+                        })
                         .map(|o| o.name.clone())
                         .collect();
                     if crossed.is_empty() {
@@ -817,7 +848,7 @@ pub fn aisle_network(
         {
             continue;
         }
-        let mut cands: Vec<(f64, usize, f64)> = Vec::new();
+        let mut cands: Vec<(f64, usize, f64, bool)> = Vec::new();
         for (e, info) in b.info.iter().enumerate() {
             if !matches!(info.usage, EdgeUse::Aisle(k) if k.allows(*user)) {
                 continue;
@@ -825,8 +856,16 @@ pub fn aisle_network(
             let (u, v) = (b.index(&b.edges[e].from), b.index(&b.edges[e].to));
             let (pu, pv) = (b.pos(u), b.pos(v));
             let t = project(*p, pu, pv);
-            cands.push((dist(*p, lerp(pu, pv, t)), e, t));
+            // Objects stand on the floor: they reach a walkway above them only by its
+            // ramp, so the lines at their level come first.
+            let z = b.nodes[u].position[2] + (b.nodes[v].position[2] - b.nodes[u].position[2]) * t;
+            cands.push((dist(*p, lerp(pu, pv, t)), e, t, z.abs() >= LEVEL_TOL));
         }
+        if cands.iter().any(|c| !c.3) {
+            cands.retain(|c| !c.3);
+        }
+        let mut cands: Vec<(f64, usize, f64)> =
+            cands.into_iter().map(|c| (c.0, c.1, c.2)).collect();
         cands.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
         let Some(&(_, first_e, first_t)) = cands.first() else {
             attachments.push(Attachment {
@@ -863,8 +902,10 @@ pub fn aisle_network(
         } else if dist(q, b.pos(v)) < JOIN_TOL {
             v
         } else {
-            // Split the edge at q: u → q replaces it, q → v goes to the end.
-            let n = b.node(q);
+            // Split the edge at q: u → q replaces it, q → v goes to the end. On a ramp
+            // the new node is at the height the edge has there.
+            let (zu, zv) = (b.nodes[u].position[2], b.nodes[v].position[2]);
+            let n = b.node_at(q, zu + (zv - zu) * t_of(q, b.pos(u), b.pos(v)));
             let mut tail = b.edges[e].clone();
             tail.from = b.nodes[n].name.clone();
             b.edges[e].to = b.nodes[n].name.clone();
@@ -909,6 +950,16 @@ pub fn aisle_network(
         crossings,
         attachments,
         blocked,
+    }
+}
+
+/// Fração de `q` no segmento `a`–`b` (em planta).
+fn t_of(q: Pt, a: Pt, b: Pt) -> f64 {
+    let l = dist(a, b);
+    if l <= 0.0 {
+        0.0
+    } else {
+        (dist(a, q) / l).clamp(0.0, 1.0)
     }
 }
 
@@ -1228,6 +1279,26 @@ mod tests {
                 1.2,
             ),
         ]
+    }
+
+    #[test]
+    fn a_walkway_over_an_aisle_does_not_meet_it() {
+        let mut aisles = cross();
+        // The pedestrian line goes up to 3 m before the forklift aisle and down after it.
+        aisles[1].points = vec![[0.0, -10.0], [0.0, -4.0], [0.0, 4.0], [0.0, 10.0]];
+        aisles[1].heights = vec![0.0, 3.0, 3.0, 0.0];
+        let net = aisle_network(&aisles, &[], &[]);
+        assert!(net.crossings.is_empty());
+        // Two separate lines: 1 edge + 3 edges, no shared node.
+        assert_eq!(net.network.edges.len(), 4);
+        assert_eq!(net.network.nodes.len(), 6);
+        // A machine under the walkway does not cut it.
+        let machine = Obstacle {
+            name: "maquina".into(),
+            polygon: vec![[-1.0, 1.0], [1.0, 1.0], [1.0, 3.0], [-1.0, 3.0]],
+        };
+        let net = aisle_network(&aisles, &[machine], &[]);
+        assert!(net.blocked.iter().all(|b| b.aisle != "passeio_1"));
     }
 
     #[test]
