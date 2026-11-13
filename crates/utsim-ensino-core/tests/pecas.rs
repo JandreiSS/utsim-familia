@@ -133,10 +133,81 @@ fn arranjo_momento_e_otimo() {
     assert!(v.contains("mesma célula"), "{v}");
 }
 
+/// The search with pruning gives the same moment as trying every placement.
+#[test]
+fn busca_do_arranjo_igual_a_forca_bruta() {
+    let ids = ["doca", "a", "b", "c", "d", "e"];
+    let a = Arranjo {
+        colunas: 3,
+        linhas: 3,
+        celula: 10.0,
+        maquinas: ids
+            .iter()
+            .map(|m| MaquinaArranjo {
+                id: m.to_string(),
+                nome: m.to_string(),
+                fixa: *m == "doca",
+            })
+            .collect(),
+        fluxos: [
+            (30.0, "doca a b c doca"),
+            (20.0, "doca d b e doca"),
+            (12.0, "doca e a doca"),
+            (7.0, "doca c d e b doca"),
+        ]
+        .iter()
+        .map(|(v, r)| Fluxo {
+            nome: r.to_string(),
+            volume: *v,
+            roteiro: r.split(' ').map(String::from).collect(),
+        })
+        .collect(),
+        inicial: atrib(&[("doca", 3), ("a", 0), ("b", 1), ("c", 2), ("d", 4), ("e", 5)]),
+    };
+    let o = a.otimo().unwrap();
+    assert!(a.violacao(&o).is_none());
+    let livres: Vec<u32> = (0..9).filter(|c| *c != 3).collect();
+    let mut melhor = f64::INFINITY;
+    for &ca in &livres {
+        for &cb in &livres {
+            for &cc in &livres {
+                for &cd in &livres {
+                    for &ce in &livres {
+                        let cs = [ca, cb, cc, cd, ce];
+                        let mut u = cs.to_vec();
+                        u.sort();
+                        u.dedup();
+                        if u.len() < 5 {
+                            continue;
+                        }
+                        let p = atrib(&[("doca", 3), ("a", ca), ("b", cb), ("c", cc), ("d", cd), ("e", ce)]);
+                        melhor = melhor.min(a.momento(&p));
+                    }
+                }
+            }
+        }
+    }
+    assert!((a.momento(&o) - melhor).abs() < 1e-6, "{} {melhor}", a.momento(&o));
+}
+
+/// In the small workshop the cells walk a little more than the best functional layout.
+#[test]
+fn celulas_andam_mais_que_o_funcional_na_oficina() {
+    let p = carregar_campanha().unwrap();
+    let otimo = |id: &str| {
+        let a = p.missao(id).unwrap().missao.arranjo.clone().unwrap();
+        let o = a.otimo().unwrap();
+        a.momento(&o)
+    };
+    let (funcional, celular) = (otimo("ato5/oficina"), otimo("ato5/celular"));
+    assert!((funcional - 6943.5).abs() < 0.5, "{funcional}");
+    assert!((celular - 7128.9).abs() < 0.5, "{celular}");
+}
+
 #[test]
 fn distancias_da_grade_batem_com_a_matriz_de_para() {
     let p = carregar_campanha().unwrap();
-    for id in ["ato5/oficina", "ato5/armazem"] {
+    for id in ["ato5/oficina", "ato5/celular", "ato5/armazem"] {
         let m = p.missao(id).unwrap();
         let ar = m.missao.arranjo.as_ref().unwrap();
         let d = m.missao.completar(&m.missao.referencia);
