@@ -1887,6 +1887,9 @@ impl Model {
             }
             if let Some(transfer) = self.effective_transfer(obj) {
                 sim.set_transfer(id, transfer);
+            } else if let Some(fall) = self.belt_drop(obj) {
+                // A drawn belt dropping its items onto a lower one: the fall takes time.
+                sim.set_transfer(id, fall);
             }
         }
         for (from, to) in &self.connections {

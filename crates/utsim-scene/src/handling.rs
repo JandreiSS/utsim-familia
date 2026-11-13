@@ -272,6 +272,13 @@ pub struct BeltTrack {
     /// `(item, time)` the item left the belt (from the trace).
     exits: Vec<(usize, f64)>,
     max_snap: f64,
+    /// How far the belt surface itself has moved, `(time, metres)` at every change: it
+    /// stops with a breakdown or shift, and a non-accumulating belt stops while its front
+    /// item waits at the end (the 3D view scrolls the belt by it).
+    travel: Vec<(f64, f64)>,
+    /// The same, counting only while there are items on the belt (rollers turn under
+    /// the items of a gravity belt).
+    loaded: Vec<(f64, f64)>,
 }
 
 struct Builder {
@@ -310,6 +317,12 @@ impl Builder {
         let dt = t - self.since;
         let moving = self.moving();
         let scale = self.p.length.max(1.0);
+        let run = if moving { self.p.speed * dt } else { 0.0 };
+        let last = |v: &Vec<(f64, f64)>| v.last().map_or(0.0, |p| p.1);
+        let s = last(&self.track.travel) + run;
+        self.track.travel.push((t, s));
+        let l = last(&self.track.loaded) + if self.items.is_empty() { 0.0 } else { run };
+        self.track.loaded.push((t, l));
         for k in 0..self.items.len() {
             let (p0, target) = (self.pos[k], self.target(k));
             let (p1, clamp_at) = if moving {
@@ -414,6 +427,8 @@ impl BeltTrack {
             },
             open: HashMap::new(),
         };
+        b.track.travel.push((b.since, 0.0));
+        b.track.loaded.push((b.since, 0.0));
         for ev in events {
             match *ev {
                 BeltEv::In { t, item } => b.enter(t, item),
@@ -434,6 +449,17 @@ impl BeltTrack {
 
     pub fn params(&self) -> BeltParams {
         self.params
+    }
+
+    /// How far the belt surface has moved by `t` (m); `loaded`: only while carrying items.
+    pub fn surface_travel(&self, t: f64, loaded: bool) -> f64 {
+        let v = if loaded { &self.loaded } else { &self.travel };
+        let k = v.partition_point(|p| p.0 <= t);
+        match (k.checked_sub(1).map(|i| v[i]), v.get(k)) {
+            (Some(a), Some(b)) if b.0 > a.0 => a.1 + (b.1 - a.1) * (t - a.0) / (b.0 - a.0),
+            (Some(a), _) => a.1,
+            (None, _) => 0.0,
+        }
     }
 
     /// Distance from the start of the belt of `item` at `t`, if it is on the belt then.
@@ -633,5 +659,31 @@ mod tests {
         .sanitized();
         assert_eq!((r.bays, r.levels), (1, MAX_LEVELS));
         assert!(r.bay_width.is_finite() && r.level_height > 0.0);
+    }
+
+    #[test]
+    fn a_non_accumulating_belt_stops_while_its_front_item_waits() {
+        // 4 m at 1 m/s: the item arrives at t = 4 and leaves at t = 10; the belt stands
+        // still from 4 to 10 and runs again after.
+        let p = BeltParams {
+            length: 4.0,
+            speed: 1.0,
+            item_length: 1.0,
+            accumulating: false,
+        };
+        let ev = [
+            BeltEv::In { t: 0.0, item: 0 },
+            BeltEv::Out { t: 10.0, item: 0 },
+        ];
+        let tr = BeltTrack::build(p, &ev, 12.0);
+        assert!((tr.surface_travel(2.0, false) - 2.0).abs() < 1e-9);
+        assert!((tr.surface_travel(7.0, false) - 4.0).abs() < 1e-9);
+        assert!((tr.surface_travel(12.0, false) - 6.0).abs() < 1e-9);
+        // Loaded only while the item rode: 4 m.
+        assert!((tr.surface_travel(12.0, true) - 4.0).abs() < 1e-9);
+        let mut acc = p;
+        acc.accumulating = true;
+        let tr = BeltTrack::build(acc, &ev, 12.0);
+        assert!((tr.surface_travel(7.0, false) - 7.0).abs() < 1e-9);
     }
 }
