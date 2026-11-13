@@ -214,20 +214,22 @@ pub fn elevated_obstacles(
     }
     let nodes = r.line(origin);
     for (i, n) in r.nodes.iter().enumerate() {
-        let at = [
+        let node = [
             n.at[0] + origin[0],
             n.at[1] + origin[1],
             n.at[2] + origin[2],
         ];
-        if !high(at) {
-            continue;
-        }
-        // The two legs, beside the line at this node.
+        // The two legs, beside the line under this node: at a rounded corner the node is
+        // off the arc, so they stand under the point of the arc nearest to it (as drawn).
         let j = nodes
             .iter()
             .enumerate()
-            .min_by(|a, b| path3d::dist3(*a.1, at).total_cmp(&path3d::dist3(*b.1, at)))
+            .min_by(|a, b| path3d::dist3(*a.1, node).total_cmp(&path3d::dist3(*b.1, node)))
             .map_or(0, |(j, _)| j);
+        let at = nodes[j];
+        if !high(at) {
+            continue;
+        }
         let a = nodes[j.min(nodes.len() - 2)];
         let b = nodes[j.min(nodes.len() - 2) + 1];
         let d = [b[0] - a[0], b[1] - a[1]];
