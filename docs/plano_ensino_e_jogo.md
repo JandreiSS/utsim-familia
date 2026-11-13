@@ -213,7 +213,7 @@ Os números abaixo são de partida e serão calibrados no construtor de casos (s
 |---|---|---|
 | 7.1 Linha com inspeção e retrabalho | estudo de caso 1 | primeiro com alavancas, depois o aluno completa o modelo |
 | 7.2 Pronto atendimento por turnos (**feita**, `ato7/clinica`) | estudo de caso 3 | escala de médicos por turno com custo, chegadas por hora, triagem fixa |
-| 7.3 Centro de distribuição | estudo de caso 2 | missão de equipe, competição pareada (seção 2.4) |
+| 7.3 Centro de distribuição (**feita** como missão individual, `ato7/centro_distribuicao`) | estudo de caso 2 | pickers e lugar da embalagem com custo de 24 meses. A versão de equipe, com competição pareada (seção 2.4), espera a turma piloto |
 | 7.4 Reembolso de despesas (**feita**, `ato7/reembolso`) | `reembolso_atual.ron` do Lean Office | lote, malote e devolução como alavancas com orçamento, do estado atual ao futuro |
 | 7.5 Do enunciado ao modelo | enunciado e dados novos | o aluno modela do zero no UTSim e entrega o `.ron` (degrau 3) |
 
@@ -453,7 +453,7 @@ Cada conjunto guarda a receita (gerador, parâmetros, semente) e a resposta conh
 
 ### 6.5 Fontes do conteúdo inicial
 
-Os tutoriais 01 a 06 cobrem os atos 1 a 3. Os modelos de `examples/` cobrem os atos 2, 3, 5 e 6. Os três estudos de caso cobrem o ato 7. Os cinco modelos prontos do Lean Office cobrem as missões administrativas. Os atos 4, 5 e 8 já têm modelos próprios em `ensino/campanha/modelos`. No ato 7, a 7.3 (centro de distribuição em equipe) ainda falta.
+Os tutoriais 01 a 06 cobrem os atos 1 a 3. Os modelos de `examples/` cobrem os atos 2, 3, 5 e 6. Os três estudos de caso cobrem o ato 7. Os cinco modelos prontos do Lean Office cobrem as missões administrativas. Os atos 4, 5 e 8 já têm modelos próprios em `ensino/campanha/modelos`. No ato 7, as missões 7.1 a 7.5 do plano existem, e só o modo de equipe da 7.3 ainda falta.
 
 ### 6.6 Pacotes de conteúdo de outras frentes
 

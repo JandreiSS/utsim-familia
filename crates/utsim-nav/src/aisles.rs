@@ -114,11 +114,120 @@ pub struct Aisle {
     /// Perfil de marcação só deste corredor (ausente: o do modelo).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<Profile>,
+    /// Altura de cada ponto (m), na ordem de `points`; vazio: tudo no piso. Um caminho
+    /// fica no piso, salvo numa rampa (até um mezanino, por exemplo).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub heights: Vec<f64>,
+    /// Raio da curva em cada ponto (m), na ordem de `points`; vazio ou 0: quina viva.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub radii: Vec<f64>,
 }
 
 impl Aisle {
+    /// Comprimento real: a linha central com as curvas e as rampas, em 3D.
     pub fn length(&self) -> f64 {
-        polyline_length(&self.points)
+        if self.is_plain() {
+            return polyline_length(&self.points);
+        }
+        crate::path3d::length3(&self.centerline())
+    }
+
+    /// Sem alturas nem curvas: a linha central é a dos pontos (os modelos antigos).
+    pub fn is_plain(&self) -> bool {
+        self.heights.iter().all(|h| *h == 0.0) && self.radii.iter().all(|r| *r <= 0.0)
+    }
+
+    /// Os pontos como nós de trajeto (com altura e raio).
+    pub fn nodes(&self) -> Vec<crate::path3d::PathNode> {
+        self.points
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::path3d::PathNode {
+                at: [p[0], p[1], self.heights.get(i).copied().unwrap_or(0.0)],
+                radius: self.radii.get(i).copied().filter(|r| *r > 0.0),
+            })
+            .collect()
+    }
+
+    /// Linha central real, em 3D: os pontos com as curvas amostradas e as alturas.
+    pub fn centerline(&self) -> Vec<crate::path3d::P3> {
+        if self.is_plain() {
+            return self.points.iter().map(|p| [p[0], p[1], 0.0]).collect();
+        }
+        crate::path3d::sample(&self.nodes())
+    }
+
+    /// A linha central real em planta (as faixas no piso seguem as curvas).
+    pub fn plan(&self) -> Vec<Pt> {
+        if self.is_plain() {
+            return self.points.clone();
+        }
+        crate::path3d::plan_line(&self.centerline())
+    }
+
+    /// Põe o ponto `p` (à altura `z`, sem curva) na posição `i`, mantendo as alturas e os
+    /// raios alinhados com os pontos.
+    pub fn insert_point(&mut self, i: usize, p: Pt, z: f64) {
+        let i = i.min(self.points.len());
+        if !self.heights.is_empty() || z != 0.0 {
+            self.heights.resize(self.points.len(), 0.0);
+            self.heights.insert(i, z);
+        }
+        if !self.radii.is_empty() {
+            self.radii.resize(self.points.len(), 0.0);
+            self.radii.insert(i, 0.0);
+        }
+        self.points.insert(i, p);
+    }
+
+    /// Tira o ponto `i` (com a sua altura e o seu raio).
+    pub fn remove_point(&mut self, i: usize) {
+        if i >= self.points.len() {
+            return;
+        }
+        self.points.remove(i);
+        if i < self.heights.len() {
+            self.heights.remove(i);
+        }
+        if i < self.radii.len() {
+            self.radii.remove(i);
+        }
+    }
+
+    /// Muda a altura do ponto `i` (todas zero: a lista some e o arquivo fica como antes).
+    pub fn set_height(&mut self, i: usize, z: f64) {
+        if i >= self.points.len() {
+            return;
+        }
+        self.heights.resize(self.points.len(), 0.0);
+        self.heights[i] = z;
+        if self.heights.iter().all(|h| *h == 0.0) {
+            self.heights.clear();
+        }
+    }
+
+    /// Muda o raio da curva no ponto `i` (0: quina viva).
+    pub fn set_radius(&mut self, i: usize, r: f64) {
+        if i >= self.points.len() {
+            return;
+        }
+        self.radii.resize(self.points.len(), 0.0);
+        self.radii[i] = r.max(0.0);
+        if self.radii.iter().all(|r| *r <= 0.0) {
+            self.radii.clear();
+        }
+    }
+
+    /// Inverte o sentido (pontos, alturas e raios juntos).
+    pub fn reverse(&mut self) {
+        let n = self.points.len();
+        self.heights
+            .resize(if self.heights.is_empty() { 0 } else { n }, 0.0);
+        self.radii
+            .resize(if self.radii.is_empty() { 0 } else { n }, 0.0);
+        self.points.reverse();
+        self.heights.reverse();
+        self.radii.reverse();
     }
 
     /// Mensagem de erro, se o corredor não serve.
@@ -132,6 +241,24 @@ impl Aisle {
         if !self.points.iter().flatten().all(|v| v.is_finite()) {
             return Some(format!(
                 "corredor '{}': as coordenadas precisam ser finitas",
+                self.name
+            ));
+        }
+        if self.heights.len() > self.points.len() || self.radii.len() > self.points.len() {
+            return Some(format!(
+                "corredor '{}': há mais alturas ou raios que pontos",
+                self.name
+            ));
+        }
+        if !self
+            .heights
+            .iter()
+            .chain(&self.radii)
+            .all(|v| v.is_finite())
+            || self.radii.iter().any(|r| *r < 0.0)
+        {
+            return Some(format!(
+                "corredor '{}': alturas e raios precisam ser finitos (raio >= 0)",
                 self.name
             ));
         }
@@ -517,12 +644,17 @@ impl Builder {
 
     /// Nó em `p` (o primeiro a menos de [`JOIN_TOL`], senão um novo `n<k>`).
     fn node(&mut self, p: Pt) -> usize {
+        self.node_at(p, 0.0)
+    }
+
+    /// Nó em `p` à altura `z` (a de uma rampa); um nó que já existe ali fica com a sua.
+    fn node_at(&mut self, p: Pt, z: f64) -> usize {
         if let Some(i) = (0..self.nodes.len()).find(|&i| dist(self.pos(i), p) < JOIN_TOL) {
             return i;
         }
         self.nodes.push(NodeDef {
             name: format!("n{}", self.nodes.len() + 1),
-            position: [p[0], p[1], 0.0],
+            position: [p[0], p[1], z],
         });
         self.nodes.len() - 1
     }
@@ -565,11 +697,17 @@ pub fn aisle_network(
     points: &[(String, Pt, User)],
 ) -> AisleNet {
     let valid: Vec<&Aisle> = aisles.iter().filter(|a| a.problem().is_none()).collect();
-    let segs: Vec<(usize, Pt, Pt)> = valid
+    // The real centre lines (curves sampled, ramps at their heights).
+    let lines: Vec<Vec<crate::path3d::P3>> = valid.iter().map(|a| a.centerline()).collect();
+    let segs3: Vec<(usize, crate::path3d::P3, crate::path3d::P3)> = lines
         .iter()
         .enumerate()
-        .flat_map(|(i, a)| a.points.windows(2).map(move |w| (i, w[0], w[1])))
-        .filter(|(_, a, b)| dist(*a, *b) > 0.0)
+        .flat_map(|(i, l)| l.windows(2).map(move |w| (i, w[0], w[1])))
+        .filter(|(_, a, b)| dist([a[0], a[1]], [b[0], b[1]]) > 0.0)
+        .collect();
+    let segs: Vec<(usize, Pt, Pt)> = segs3
+        .iter()
+        .map(|(i, a, b)| (*i, [a[0], a[1]], [b[0], b[1]]))
         .collect();
     let mut b = Builder {
         nodes: Vec::new(),
@@ -604,10 +742,11 @@ pub fn aisle_network(
         }
         ts.sort_by(f64::total_cmp);
         let aisle = valid[ai];
+        let (za, zb) = (segs3[si].1[2], segs3[si].2[2]);
         let mut prev: Option<(usize, Pt)> = None;
         for t in ts {
             let x = lerp(p, q, t);
-            let n = b.node(x);
+            let n = b.node_at(x, za + (zb - za) * t);
             if let Some((m, y)) = prev {
                 if m != n {
                     let mid = lerp(y, x, 0.5);
@@ -929,7 +1068,7 @@ pub fn polygon_area(poly: &[Pt]) -> f64 {
 /// Direção do trecho do corredor que passa mais perto de `p`.
 fn direction_at(aisle: &Aisle, p: Pt) -> Pt {
     let mut best = (f64::INFINITY, [1.0, 0.0]);
-    for w in aisle.points.windows(2) {
+    for w in aisle.plan().windows(2) {
         let d = point_segment(p, w[0], w[1]);
         if d < best.0 {
             best = (d, unit(w[0], w[1]));
@@ -954,10 +1093,11 @@ pub fn floor_marks(aisles: &[Aisle], net: &AisleNet, marking: &FloorMarking) -> 
     for a in aisles.iter().filter(|a| a.problem().is_none()) {
         let spec = spec_of(a);
         let half = a.width / 2.0;
+        let line = a.plan();
         for side in [1.0, -1.0] {
-            let outer = offset_polyline(&a.points, side * half);
-            let inner = offset_polyline(&a.points, side * (half - lw).max(0.0));
-            for i in 0..a.points.len() - 1 {
+            let outer = offset_polyline(&line, side * half);
+            let inner = offset_polyline(&line, side * (half - lw).max(0.0));
+            for i in 0..line.len() - 1 {
                 out.push(MarkShape {
                     source: a.name.clone(),
                     pattern: Pattern::Continuous,
@@ -978,7 +1118,7 @@ pub fn floor_marks(aisles: &[Aisle], net: &AisleNet, marking: &FloorMarking) -> 
             while s < len {
                 // Point and direction at arc length s.
                 let mut walked = 0.0;
-                for w in a.points.windows(2) {
+                for w in line.windows(2) {
                     let l = dist(w[0], w[1]);
                     if l > 0.0 && walked + l >= s {
                         let u = unit(w[0], w[1]);
@@ -1068,6 +1208,8 @@ mod tests {
             two_way: true,
             secondary: false,
             profile: None,
+            heights: Vec::new(),
+            radii: Vec::new(),
         }
     }
 

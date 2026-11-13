@@ -159,16 +159,21 @@ impl Handling {
     pub fn of(kind: &ObjectKind) -> Option<Self> {
         match kind {
             ObjectKind::Conveyor {
-                length,
-                speed,
                 item_length,
                 accumulating,
-            } => Some(Handling::Conveyor(BeltParams {
-                length: *length,
-                speed: *speed,
-                item_length: *item_length,
-                accumulating: *accumulating,
-            })),
+                ..
+            } => {
+                // A drawn belt: the length of its route and the speed that gives the same
+                // transit time, as the simulation uses them.
+                let (length, speed) =
+                    utsim_model::trajeto::belt_params_of(kind).unwrap_or((5.0, 1.0));
+                Some(Handling::Conveyor(BeltParams {
+                    length,
+                    speed,
+                    item_length: *item_length,
+                    accumulating: *accumulating,
+                }))
+            }
             ObjectKind::Rack {
                 bays,
                 levels,

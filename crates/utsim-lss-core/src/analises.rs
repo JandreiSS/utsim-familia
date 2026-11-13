@@ -1339,7 +1339,21 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             let x: Vec<Vec<f64>> = (0..y.len())
                 .map(|r| cols.iter().map(|c| c[r]).collect())
                 .collect();
-            let a = doe::analyze(&x, &y, (*order).max(1), LEVEL)?;
+            // A screening design (Plackett-Burman) has no interaction column orthogonal to
+            // the main effects: the analysis falls back to the main effects alone.
+            let a = match doe::analyze(&x, &y, (*order).max(1), LEVEL) {
+                Ok(a) => a,
+                Err(e) if *order > 1 => match doe::analyze(&x, &y, 1, LEVEL) {
+                    Ok(a) => {
+                        o.notes.push(
+                            "plano de triagem (como o Plackett-Burman): as interações ficam parcialmente confundidas com os efeitos principais, e só os efeitos principais foram estimados".into(),
+                        );
+                        a
+                    }
+                    Err(_) => return Err(e),
+                },
+                Err(e) => return Err(e),
+            };
             let k = factors.len();
             let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
             // In a worksheet of the app the coded A, B... are followed by the actual levels
