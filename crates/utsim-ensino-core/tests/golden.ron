@@ -401,6 +401,23 @@
         ],
     ),
     (
+        missao: "ato7/centro_distribuicao",
+        referencia: {
+            "embalagem": 1.0,
+            "pickers": 2.0,
+        },
+        base: [
+            ("custo", 624000.0),
+            ("espera_pedidos", 3514.659335250278),
+            ("espera_embalagem", 0.22631424588399635),
+        ],
+        ref_valores: [
+            ("custo", 1108800.0),
+            ("espera_pedidos", 154.07871756492088),
+            ("espera_embalagem", 15.951681286233496),
+        ],
+    ),
+    (
         missao: "ato7/padaria",
         referencia: {},
         base: [],
