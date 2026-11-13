@@ -7994,6 +7994,7 @@ dependencies = [
  "serde_json",
  "utsim-core",
  "utsim-fluid",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-objects",
 ]
@@ -8093,7 +8094,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8329,6 +8330,7 @@ dependencies = [
  "utsim-diagram",
  "utsim-doe",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-pert",
  "utsim-quality",
