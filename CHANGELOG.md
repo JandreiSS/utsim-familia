@@ -58,6 +58,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- Trajetos: passagem entre esteiras desenhadas com desnível (a queda leva o tempo de queda livre √(2h/g) na ligação; avisos para queda acima de 0,5 m, vão acima de 0,3 m e entrega para esteira mais alta). Mover e girar o trajeto inteiro: quadrado verde no meio para arrastar, setas sem nó selecionado e R/Shift+R (15°), também no painel.
 - Trajetos: animação fiel da esteira desenhada (a correia para com quebra, turno ou, sem acúmulo, com a peça da frente esperando; tambores e roletes giram com o que de fato andou, `BeltTrack::surface_travel`). Vista de perfil do trajeto selecionado (altura × distância, inclinação por trecho, nós arrastáveis só em altura).
 - Trajetos: inclinação fixa ao desenhar (a altura do próximo nó sai da distância em planta); escada como caminho (`stair: true`: só pedestres, 45 % da velocidade subindo e 55 % descendo, degraus de 18 cm na cena); junção e desvio de esteiras em T (um nó na linha de outra esteira a divide e liga as partes, em um só passo de desfazer).
 - Trajetos: alça de curva no meio de cada trecho do trajeto selecionado (arrastar põe um nó com o maior raio que cabe) e "Desenhar paralelo" no painel (outro trajeto ao lado, mesmas alturas, curvas concêntricas).
