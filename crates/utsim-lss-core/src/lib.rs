@@ -28,6 +28,7 @@ pub mod op;
 pub mod overview;
 pub mod presence;
 pub mod state;
+pub mod texto;
 pub mod tools;
 
 // Stage L1, project management (`docs/plano_lean_seis_sigma.md`, 1.1 to 1.10).
