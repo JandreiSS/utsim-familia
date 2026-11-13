@@ -338,3 +338,25 @@ fn a_walkway_takes_the_crossing_away() {
         "piso {floor}, passarela {walkway}"
     );
 }
+
+#[test]
+fn a_stair_is_slower_than_walking() {
+    let stair = walk(
+        "(0.0, -3.0), (10.0, -3.0), (20.0, -3.0)",
+        ", heights: [0.0, 1.0, 0.0], stair: true",
+    );
+    let up = utsim_objects::ramps::stair_factor(0.1);
+    let down = utsim_objects::ramps::stair_factor(-0.1);
+    let want = 101f64.sqrt() / up + 101f64.sqrt() / down;
+    assert!((stair - want).abs() < 1e-6, "{stair} {want}");
+}
+
+#[test]
+fn a_stair_is_for_pedestrians_only() {
+    let text = r#"Model(
+        format: 2, name: "x", run: (stop_time: 10.0), objects: [], connections: [],
+        aisles: [(name: "e", kind: Forklift, points: [(0.0, 0.0), (5.0, 0.0)], width: 3.6,
+                  heights: [0.0, 2.0], stair: true)],
+    )"#;
+    assert!(Model::parse(text).unwrap().validate().is_err());
+}

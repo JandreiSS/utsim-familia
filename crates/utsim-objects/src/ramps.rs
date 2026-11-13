@@ -13,6 +13,11 @@
 //!   em rampa por segurança, subindo ou descendo: `limitar(1 − 4·|g|, 0,3, 1)`. Em 10 %,
 //!   0,6.
 //!
+//! - **Escada** ([`stair_factor`]): na escada a pessoa anda ao longo da inclinação a 45 %
+//!   da velocidade no plano subindo e a 55 % descendo (a ordem de grandeza das medidas de
+//!   escadas em edifícios: ~0,55 e ~0,7 m/s ao longo da escada para ~1,3 m/s no plano).
+//!   Veículos não usam escada.
+//!
 //! O tempo de um trajeto é o de andar o comprimento equivalente `Σ Lᵢ ÷ fᵢ` na velocidade
 //! do recurso; o transportador usa a velocidade média equivalente `v·L ÷ Σ (Lᵢ ÷ fᵢ)` no
 //! trajeto inteiro (com a aceleração dele).
@@ -31,6 +36,11 @@ pub fn vehicle_factor(g: f64) -> f64 {
     (1.0 - 4.0 * g.abs()).clamp(0.3, 1.0)
 }
 
+/// Fator de velocidade a pé numa escada, subindo (`g > 0`) ou descendo.
+pub fn stair_factor(g: f64) -> f64 {
+    if g > 0.0 { 0.45 } else { 0.55 }
+}
+
 fn key(p: [f64; 3]) -> [u64; 3] {
     p.map(f64::to_bits)
 }
@@ -40,6 +50,8 @@ fn key(p: [f64; 3]) -> [u64; 3] {
 #[derive(Clone, Debug, Default)]
 pub struct Ramps {
     edges: HashSet<([u64; 3], [u64; 3])>,
+    /// The ones that are stairs.
+    stairs: HashSet<([u64; 3], [u64; 3])>,
     vehicle: bool,
 }
 
@@ -53,8 +65,20 @@ impl Ramps {
         }
         Ramps {
             edges: set,
+            stairs: HashSet::new(),
             vehicle,
         }
+    }
+
+    /// Marca os trechos de escada (`edges`, também como rampa).
+    pub fn with_stairs(mut self, edges: &[([f64; 3], [f64; 3])]) -> Self {
+        for (a, b) in edges {
+            for pair in [(key(*a), key(*b)), (key(*b), key(*a))] {
+                self.edges.insert(pair);
+                self.stairs.insert(pair);
+            }
+        }
+        self
     }
 
     pub fn is_empty(&self) -> bool {
@@ -64,9 +88,16 @@ impl Ramps {
     fn factor(&self, a: [f64; 3], b: [f64; 3]) -> f64 {
         let run = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
         if run <= 0.0 {
-            return 1.0;
+            return if self.stairs.contains(&(key(a), key(b))) {
+                stair_factor(b[2] - a[2])
+            } else {
+                1.0
+            };
         }
         let g = (b[2] - a[2]) / run;
+        if self.stairs.contains(&(key(a), key(b))) {
+            return stair_factor(g);
+        }
         if self.vehicle {
             vehicle_factor(g)
         } else {

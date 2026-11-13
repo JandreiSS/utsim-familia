@@ -129,6 +129,10 @@ pub struct Aisle {
     /// Raio da curva em cada ponto (m), na ordem de `points`; vazio ou 0: quina viva.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub radii: Vec<f64>,
+    /// Escada: os trechos com desnível são degraus (só pedestres, mais devagar; ver
+    /// `utsim_objects::ramps`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stair: bool,
 }
 
 impl Aisle {
@@ -267,6 +271,12 @@ impl Aisle {
         {
             return Some(format!(
                 "corredor '{}': alturas e raios precisam ser finitos (raio >= 0)",
+                self.name
+            ));
+        }
+        if self.stair && self.kind != AisleKind::Pedestrian {
+            return Some(format!(
+                "corredor '{}': escada só serve a pedestres (kind: Pedestrian)",
                 self.name
             ));
         }
@@ -1261,6 +1271,7 @@ mod tests {
             profile: None,
             heights: Vec::new(),
             radii: Vec::new(),
+            stair: false,
         }
     }
 
