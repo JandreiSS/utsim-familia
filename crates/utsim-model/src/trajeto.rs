@@ -247,7 +247,63 @@ pub fn elevated_obstacles(
     Some(out)
 }
 
+/// Aceleração da gravidade (m/s²).
+pub const GRAVITY: f64 = 9.81;
+/// Queda (m) abaixo da qual a passagem entre esteiras é imediata.
+pub const DROP_MIN: f64 = 0.05;
+/// Queda (m) acima da qual há aviso: a peça bate ao cair (use calha ou desça a esteira).
+pub const DROP_WARN: f64 = 0.5;
+/// Vão horizontal (m) acima do qual a peça cai fora entre as duas pontas.
+pub const GAP_WARN: f64 = 0.3;
+
+/// Tempo de queda livre de uma altura `h` (m): `√(2h/g)`.
+pub fn fall_time(h: f64) -> f64 {
+    (2.0 * h.max(0.0) / GRAVITY).sqrt()
+}
+
+/// Uma passagem de esteira desenhada para outra: `(destino, queda em m (positiva desce),
+/// vão horizontal em m)`.
+pub(crate) type Handoff = (String, f64, f64);
+
 impl Model {
+    /// As passagens da esteira desenhada `obj` para as esteiras desenhadas que ela
+    /// alimenta (ponta de saída dela → ponta de entrada da outra).
+    pub(crate) fn handoffs(&self, obj: &ObjectDef) -> Vec<Handoff> {
+        let Some(r) = valid_route(&obj.kind) else {
+            return Vec::new();
+        };
+        let Some((_, out)) = r.ends(obj.position) else {
+            return Vec::new();
+        };
+        self.connections
+            .iter()
+            .filter(|(f, _)| *f == obj.name)
+            .filter_map(|(_, to)| {
+                let o = self.objects.iter().find(|o| o.name == *to)?;
+                let (inp, _) = valid_route(&o.kind)?.ends(o.position)?;
+                let gap = ((out[0] - inp[0]).powi(2) + (out[1] - inp[1]).powi(2)).sqrt();
+                Some((to.clone(), out[2] - inp[2], gap))
+            })
+            .collect()
+    }
+
+    /// A passagem com queda da esteira desenhada `obj` para a primeira esteira desenhada
+    /// mais baixa que ela alimenta: o tempo de queda livre, como atraso da ligação.
+    pub(crate) fn belt_drop(&self, obj: &ObjectDef) -> Option<utsim_core::TransferDef> {
+        if obj.transfer.is_some() {
+            return None;
+        }
+        let (_, h, _) = self
+            .handoffs(obj)
+            .into_iter()
+            .find(|(_, h, _)| *h >= DROP_MIN)?;
+        Some(utsim_core::TransferDef {
+            speed: f64::INFINITY,
+            delay: fall_time(h),
+            path: Default::default(),
+        })
+    }
+
     pub(crate) fn validate_routes(&self, errors: &mut Vec<String>) {
         for o in &self.objects {
             let ObjectKind::Conveyor {
@@ -315,6 +371,25 @@ impl Model {
                         o.name,
                         ROLLING * 100.0,
                         PUSHED * 100.0
+                    ));
+                }
+            }
+            for (to, h, gap) in self.handoffs(o) {
+                if h > DROP_WARN {
+                    out.push(format!(
+                        "{}: a peça cai {:.2} m até '{to}'; acima de {:.1} m ela bate (use calha ou desça a esteira)",
+                        o.name, h, DROP_WARN
+                    ));
+                } else if h < -0.02 {
+                    out.push(format!(
+                        "{}: a ponta de entrada de '{to}' está {:.2} m acima da saída; a peça não sobe sozinha",
+                        o.name, -h
+                    ));
+                }
+                if gap > GAP_WARN {
+                    out.push(format!(
+                        "{}: as pontas com '{to}' estão a {:.2} m uma da outra; a peça cai fora",
+                        o.name, gap
                     ));
                 }
             }
