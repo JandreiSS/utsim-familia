@@ -162,7 +162,14 @@ fn busca_do_arranjo_igual_a_forca_bruta() {
             roteiro: r.split(' ').map(String::from).collect(),
         })
         .collect(),
-        inicial: atrib(&[("doca", 3), ("a", 0), ("b", 1), ("c", 2), ("d", 4), ("e", 5)]),
+        inicial: atrib(&[
+            ("doca", 3),
+            ("a", 0),
+            ("b", 1),
+            ("c", 2),
+            ("d", 4),
+            ("e", 5),
+        ]),
     };
     let o = a.otimo().unwrap();
     assert!(a.violacao(&o).is_none());
@@ -180,14 +187,25 @@ fn busca_do_arranjo_igual_a_forca_bruta() {
                         if u.len() < 5 {
                             continue;
                         }
-                        let p = atrib(&[("doca", 3), ("a", ca), ("b", cb), ("c", cc), ("d", cd), ("e", ce)]);
+                        let p = atrib(&[
+                            ("doca", 3),
+                            ("a", ca),
+                            ("b", cb),
+                            ("c", cc),
+                            ("d", cd),
+                            ("e", ce),
+                        ]);
                         melhor = melhor.min(a.momento(&p));
                     }
                 }
             }
         }
     }
-    assert!((a.momento(&o) - melhor).abs() < 1e-6, "{} {melhor}", a.momento(&o));
+    assert!(
+        (a.momento(&o) - melhor).abs() < 1e-6,
+        "{} {melhor}",
+        a.momento(&o)
+    );
 }
 
 /// In the small workshop the cells walk a little more than the best functional layout.
