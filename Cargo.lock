@@ -8208,6 +8208,7 @@ dependencies = [
  "utsim-exposicao",
  "utsim-fit",
  "utsim-flow",
+ "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-linhas",
  "utsim-look",
