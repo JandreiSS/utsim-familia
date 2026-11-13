@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 mod net;
 pub mod solver;
 
+/// Most items a `ToItems` converter may create per time unit at its `max_rate`.
+const MAX_ITEMS_PER_TIME: f64 = 1e6;
+
 pub use net::FluidNet;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -101,6 +104,17 @@ impl FluidDef {
                 | FluidKind::ToItems { object, volume, .. } => {
                     if !objects.contains(object.as_str()) {
                         errors.push(format!("{at}: objeto '{object}' não existe"));
+                    }
+                    if let FluidKind::ToItems {
+                        max_rate: Some(r), ..
+                    } = &n.kind
+                        && positive(*volume)
+                        && r / volume > MAX_ITEMS_PER_TIME
+                    {
+                        errors.push(format!(
+                            "{at}: vazão {r} com volume por item {volume} criaria mais de \
+                             {MAX_ITEMS_PER_TIME:.0} itens por unidade de tempo; aumente o volume por item"
+                        ));
                     }
                     !positive(*volume)
                 }
@@ -198,5 +212,27 @@ mod tests {
         assert!(e.iter().any(|m| m.contains("ciclo")), "{e:?}");
         let e = net(vec![("a", "z")]).validate(&objects);
         assert!(e.iter().any(|m| m.contains("'z'")), "{e:?}");
+    }
+
+    #[test]
+    fn tiny_converter_volume_is_rejected() {
+        let objects: HashSet<&str> = ["fila"].into_iter().collect();
+        let mut def = net(vec![("a", "b")]);
+        def.nodes[1].kind = FluidKind::ToItems {
+            object: "fila".into(),
+            volume: 1e-9,
+            max_rate: Some(2.0),
+        };
+        let e = def.validate(&objects);
+        assert!(
+            e.iter().any(|m| m.contains("por unidade de tempo")),
+            "{e:?}"
+        );
+        def.nodes[1].kind = FluidKind::ToItems {
+            object: "fila".into(),
+            volume: 0.5,
+            max_rate: Some(2.0),
+        };
+        assert!(def.validate(&objects).is_empty());
     }
 }
