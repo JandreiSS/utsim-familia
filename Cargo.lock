@@ -8239,6 +8239,7 @@ version = "0.2.1"
 dependencies = [
  "eframe",
  "tempfile",
+ "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-ui-tema",
  "winresource",
