@@ -161,6 +161,11 @@ const LINHAS: &[(&str, &str)] = &[
     ),
     ("poder com esse n", "linha-poder_com_esse_n"),
     ("corridas", "linha-corridas"),
+    (
+        "resposta prevista no ponto estacionário",
+        "linha-resposta_no_ponto_estacionario",
+    ),
+    ("constante", "linha-constante"),
     ("curvatura", "linha-curvatura"),
     ("valor-p curvatura", "linha-valor_p_curvatura"),
     ("PSE de Lenth", "linha-pse_de_lenth"),
@@ -178,6 +183,13 @@ const LINHAS: &[(&str, &str)] = &[
 
 /// The labels built with a name (`média de {k}`): text before, text after, key.
 const MODELOS: &[(&str, &str, &str)] = &[
+    ("coef ", "", "linha-coef"),
+    (
+        "ponto estacionário ",
+        " (real)",
+        "linha-ponto_estacionario_real",
+    ),
+    ("ponto estacionário ", "", "linha-ponto_estacionario"),
     ("média de ", "", "linha-media_de"),
     ("%VE ", "", "linha-pct_ve"),
     ("%tolerância ", "", "linha-pct_tolerancia"),

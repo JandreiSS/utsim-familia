@@ -11,6 +11,11 @@
 //! other, and every two-factor interaction is partially confounded with them, so it serves
 //! to find the few factors that matter before a factorial on them.
 //!
+//! To find the best setting of the few factors left, the plan can be a response surface
+//! (`utsim_doe`): the central composite (rotatable or face centered) or the Box-Behnken,
+//! analysed by the recipe [`crate::analises::Recipe::Surface`] (the second-order model and
+//! its stationary point).
+//!
 //! When every factor names a model parameter (`objeto.campo`), the UTSim model runs the
 //! experiment: one scenario per point of the design with common random numbers, the
 //! replications as the replicates, and the results saved as a data set of origin
@@ -54,6 +59,14 @@ pub struct ExperimentSpec {
     /// A Plackett-Burman screening design instead of a fraction (`fraction` is ignored).
     #[serde(rename = "triagem", default)]
     pub screening: bool,
+    /// A response surface plan instead of a two-level one (`fraction` and `screening` are
+    /// ignored, and so are the replicates).
+    #[serde(
+        rename = "superficie",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub surface: Option<Surface>,
     #[serde(rename = "replicas")]
     pub replicates: usize,
     #[serde(rename = "pontos_centrais")]
@@ -63,6 +76,82 @@ pub struct ExperimentSpec {
     /// Name of the response column of the worksheet.
     #[serde(rename = "resposta")]
     pub response: String,
+}
+
+/// A response surface plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Surface {
+    /// Central composite with the axial points at `α = (2^k)^(1/4)` (rotatable).
+    #[serde(rename = "composto_central")]
+    CentralComposite,
+    /// Central composite with `α = 1`: three levels per factor.
+    #[serde(rename = "composto_face")]
+    FaceCentered,
+    #[serde(rename = "box_behnken")]
+    BoxBehnken,
+}
+
+impl Surface {
+    pub const ALL: [Surface; 3] = [
+        Surface::CentralComposite,
+        Surface::FaceCentered,
+        Surface::BoxBehnken,
+    ];
+
+    /// Whether the plan exists for `k` factors (central composite 2 to 6, Box-Behnken 3 to 5).
+    pub fn fits(self, k: usize) -> bool {
+        match self {
+            Surface::BoxBehnken => (3..=5).contains(&k),
+            _ => (2..=utsim_doe::MAX_CCD_FACTORS).contains(&k),
+        }
+    }
+
+    /// The design for `k` factors.
+    pub fn design(self, k: usize, centers: usize, seed: u64) -> Result<utsim_doe::Design, String> {
+        match self {
+            Surface::CentralComposite => {
+                utsim_doe::central_composite(k, utsim_doe::Alpha::Rotatable, (centers, 0), 1, seed)
+            }
+            Surface::FaceCentered => utsim_doe::central_composite(
+                k,
+                utsim_doe::Alpha::FaceCentered,
+                (centers, 0),
+                1,
+                seed,
+            ),
+            Surface::BoxBehnken => {
+                if centers == 0 {
+                    return Err("o Box-Behnken precisa de ao menos um ponto central".into());
+                }
+                utsim_doe::box_behnken(k, centers, seed)
+            }
+        }
+    }
+}
+
+/// What a run of a plan is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunKind {
+    Factorial,
+    Axial,
+    Center,
+}
+
+/// One run of any plan, with the coded levels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanRun {
+    pub run_order: usize,
+    pub std_order: usize,
+    pub kind: RunKind,
+    pub coded: Vec<f64>,
+}
+
+/// The runs of the plan in run order, and the lines that describe it (aliases, resolution,
+/// what the surface estimates).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plan {
+    pub runs: Vec<PlanRun>,
+    pub lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -79,6 +168,8 @@ pub enum ExpError {
     Center(String),
     #[error("o fator {0} não diz qual parâmetro do modelo ele muda (objeto.campo)")]
     NoKey(String),
+    #[error("o fator {0} precisa de níveis numéricos para os pontos axiais")]
+    Axial(String),
     #[error("{0}")]
     Design(String),
 }
@@ -126,6 +217,23 @@ impl FactorSpec {
                     }
                 }
             }
+        }
+    }
+}
+
+impl FactorSpec {
+    /// The level written for any coded value: the written levels at `−1`, `0` and `+1`,
+    /// and in between or beyond (the axial points) by the numeric levels; empty when the
+    /// levels are not numbers.
+    pub fn level_at(&self, x: f64) -> String {
+        for c in [-1i8, 0, 1] {
+            if (x - f64::from(c)).abs() < 1e-9 {
+                return self.level(c);
+            }
+        }
+        match (number(&self.low), number(&self.high)) {
+            (Some(a), Some(b)) => show(0.5 * (a + b) + x * 0.5 * (b - a)),
+            _ => String::new(),
         }
     }
 }
@@ -203,6 +311,101 @@ impl ExperimentSpec {
         .map_err(ExpError::Design)
     }
 
+    /// The plan of any kind: the runs in run order and what it estimates.
+    pub fn plan(&self) -> Result<Plan, ExpError> {
+        let Some(surface) = self.surface else {
+            let d = self.design()?;
+            return Ok(Plan {
+                runs: d
+                    .runs
+                    .iter()
+                    .map(|r| PlanRun {
+                        run_order: r.run_order,
+                        std_order: r.std_order,
+                        kind: if r.center {
+                            RunKind::Center
+                        } else {
+                            RunKind::Factorial
+                        },
+                        coded: r.levels.iter().map(|l| f64::from(*l)).collect(),
+                    })
+                    .collect(),
+                lines: alias_lines(self, &d),
+            });
+        };
+        let k = self.k();
+        if !surface.fits(k) {
+            return Err(ExpError::Design(match surface {
+                Surface::BoxBehnken => "o Box-Behnken vai de 3 a 5 fatores".into(),
+                _ => format!(
+                    "o composto central vai de 2 a {} fatores",
+                    utsim_doe::MAX_CCD_FACTORS
+                ),
+            }));
+        }
+        for f in &self.factors {
+            if f.name.trim().is_empty() {
+                return Err(ExpError::NoName);
+            }
+            if f.low.trim().is_empty() || f.high.trim() == f.low.trim() || f.high.trim().is_empty()
+            {
+                return Err(ExpError::Levels(f.name.clone()));
+            }
+            if f.level(0).is_empty() {
+                return Err(ExpError::Center(f.name.clone()));
+            }
+            if surface == Surface::CentralComposite
+                && (number(&f.low).is_none() || number(&f.high).is_none())
+            {
+                return Err(ExpError::Axial(f.name.clone()));
+            }
+        }
+        let d = surface
+            .design(k, self.center_points, self.seed)
+            .map_err(ExpError::Design)?;
+        let terms = utsim_doe::quadratic_terms(k).len() + 1;
+        let alpha = d.alpha.map(show).unwrap_or_default();
+        let nc = self.center_points;
+        let mut lines = vec![match surface {
+            Surface::CentralComposite => format!(
+                "composto central rotacionável: {} pontos fatoriais, {} axiais em ±α = {alpha} e {nc} centros",
+                1 << k,
+                2 * k
+            ),
+            Surface::FaceCentered => format!(
+                "composto de face centrada: {} pontos fatoriais, {} axiais nas faces (α = 1) e {nc} centros; três níveis por fator",
+                1 << k,
+                2 * k
+            ),
+            Surface::BoxBehnken => format!(
+                "Box-Behnken: {} pontos no meio das arestas do cubo e {nc} centros; nenhuma corrida com todos os fatores nos extremos",
+                d.points.len() - nc
+            ),
+        }];
+        lines.push(format!(
+            "estima o modelo de segunda ordem completo ({terms} coeficientes: a constante, os efeitos principais, as interações de dois fatores e os quadrados)"
+        ));
+        if d.points.len() <= terms {
+            lines.push("sem graus de liberdade para o erro: acrescente pontos centrais".into());
+        }
+        let mut runs: Vec<PlanRun> = d
+            .points
+            .iter()
+            .map(|p| PlanRun {
+                run_order: p.run_order,
+                std_order: p.std_order,
+                kind: match p.kind {
+                    utsim_doe::Kind::Factorial => RunKind::Factorial,
+                    utsim_doe::Kind::Axial => RunKind::Axial,
+                    utsim_doe::Kind::Center => RunKind::Center,
+                },
+                coded: p.coded.clone(),
+            })
+            .collect();
+        runs.sort_by_key(|r| r.run_order);
+        Ok(Plan { runs, lines })
+    }
+
     /// Whether every factor names a model parameter (the simulator can run it).
     pub fn on_model(&self) -> Result<(), ExpError> {
         match self.factors.iter().find(|f| !f.key.contains('.')) {
@@ -227,20 +430,30 @@ fn factor_header(spec: &ExperimentSpec) -> Vec<String> {
     h
 }
 
-fn factor_cells(spec: &ExperimentSpec, levels: &[i8]) -> Vec<String> {
-    let mut c: Vec<String> = levels.iter().map(|l| l.to_string()).collect();
+/// A coded level: `-1`, `0` and `1` as integers, the axial ones with a decimal comma.
+fn coded_cell(x: f64) -> String {
+    if (x - x.round()).abs() < 1e-9 {
+        format!("{}", x.round() as i64)
+    } else {
+        show(x)
+    }
+}
+
+fn factor_cells(spec: &ExperimentSpec, levels: &[f64]) -> Vec<String> {
+    let mut c: Vec<String> = levels.iter().map(|l| coded_cell(*l)).collect();
     c.extend(
         spec.factors
             .iter()
             .zip(levels)
-            .map(|(f, l)| cell(&f.level(*l))),
+            .map(|(f, l)| cell(&f.level_at(*l))),
     );
     c
 }
 
 /// The collection worksheet in run order: `ordem;ordem_padrao;centro;A;B;...;<fatores>;
-/// <resposta>` with the response empty, to be filled and imported as a data set.
-pub fn worksheet(spec: &ExperimentSpec, d: &Design) -> String {
+/// <resposta>` with the response empty, to be filled and imported as a data set. The
+/// column `centro` says `sim`, `não` or, for the axial points of a surface, `axial`.
+pub fn worksheet(spec: &ExperimentSpec, plan: &Plan) -> String {
     let mut h = vec![
         "ordem".to_string(),
         "ordem_padrao".to_string(),
@@ -250,13 +463,18 @@ pub fn worksheet(spec: &ExperimentSpec, d: &Design) -> String {
     h.push(spec.response_name());
     let mut out = h.join(";");
     out.push('\n');
-    for r in &d.runs {
+    for r in &plan.runs {
         let mut c = vec![
             r.run_order.to_string(),
             r.std_order.to_string(),
-            if r.center { "sim" } else { "não" }.to_string(),
+            match r.kind {
+                RunKind::Center => "sim",
+                RunKind::Axial => "axial",
+                RunKind::Factorial => "não",
+            }
+            .to_string(),
         ];
-        c.extend(factor_cells(spec, &r.levels));
+        c.extend(factor_cells(spec, &r.coded));
         c.push(String::new());
         out.push_str(&c.join(";"));
         out.push('\n');
@@ -333,12 +551,15 @@ pub fn alias_lines(spec: &ExperimentSpec, d: &Design) -> Vec<String> {
 /// The distinct points of the design (factorial points in standard order, then the
 /// center once), as model scenarios named `P1`, `P2`...; the first scenario has the
 /// levels of the first point.
-pub fn scenarios(spec: &ExperimentSpec, d: &Design) -> Result<Vec<(Vec<i8>, Scenario)>, ExpError> {
+pub fn scenarios(
+    spec: &ExperimentSpec,
+    plan: &Plan,
+) -> Result<Vec<(Vec<f64>, Scenario)>, ExpError> {
     spec.on_model()?;
-    let mut points: Vec<(usize, Vec<i8>)> = Vec::new();
-    for r in &d.runs {
-        if !points.iter().any(|(_, l)| *l == r.levels) {
-            points.push((r.std_order, r.levels.clone()));
+    let mut points: Vec<(usize, Vec<f64>)> = Vec::new();
+    for r in &plan.runs {
+        if !points.iter().any(|(_, l)| *l == r.coded) {
+            points.push((r.std_order, r.coded.clone()));
         }
     }
     points.sort_by_key(|(s, _)| *s);
@@ -350,7 +571,7 @@ pub fn scenarios(spec: &ExperimentSpec, d: &Design) -> Result<Vec<(Vec<i8>, Scen
                 .factors
                 .iter()
                 .zip(&levels)
-                .map(|(f, l)| (f.key.trim().to_string(), f.level(*l)))
+                .map(|(f, l)| (f.key.trim().to_string(), f.level_at(*l)))
                 .collect();
             (
                 levels,
@@ -367,7 +588,7 @@ pub fn scenarios(spec: &ExperimentSpec, d: &Design) -> Result<Vec<(Vec<i8>, Scen
 /// replication, with the coded and the actual levels and one column per KPI.
 pub fn simulated_csv(
     spec: &ExperimentSpec,
-    points: &[(Vec<i8>, Scenario)],
+    points: &[(Vec<f64>, Scenario)],
     results: &[ScenarioResult],
     measures: &[String],
 ) -> String {

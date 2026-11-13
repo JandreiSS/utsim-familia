@@ -238,3 +238,24 @@ linha-valor_p_de = valeur p { $x }
 linha-coeficiente = coefficient { $x }
 linha-vif = VIF { $x }
 linha-efeito = effet { $x }
+
+# Superfície de resposta (Seis Sigma, P3)
+analises-superficie_de_resposta = Surface de réponse
+analises-superficie_fatores = choisissez de 2 à { $n } facteurs
+analises-superficie_corridas = la surface à { $k } facteurs demande au moins { $n } essais avec la réponse remplie
+analises-superficie_codificada = la colonne de { $x } n'était pas codée : ses extrêmes sont devenus −1 et +1
+analises-superficie_maximo = le point stationnaire est un maximum de la réponse
+analises-superficie_minimo = le point stationnaire est un minimum de la réponse
+analises-superficie_sela = le point stationnaire est un col : la réponse monte dans une direction et descend dans une autre
+analises-superficie_crista = la surface est une crête : il y a une ligne de points presque égaux, sans point unique
+analises-superficie_fora = { $w }, hors de la région de l'expérience (c'est une extrapolation : confirmez-le par de nouveaux essais)
+analises-superficie_autovalores = valeurs propres de la partie quadratique : { $v } (toutes négatives : maximum ; toutes positives : minimum ; signes mêlés : col)
+analises-superficie_sem_ponto = le modèle n'a pas de point stationnaire unique
+analises-superficie_sem_erro = aucun degré de liberté pour l'erreur : pas de valeurs p ; ajoutez des points au centre
+analises-superficie_termos = Termes du modèle (|t|)
+analises-superficie_por_fator = Réponse prévue par facteur (les autres au centre)
+linha-resposta_no_ponto_estacionario = réponse prévue au point stationnaire
+linha-constante = constante
+linha-coef = coef { $x }
+linha-ponto_estacionario = point stationnaire { $x }
+linha-ponto_estacionario_real = point stationnaire { $x } (réel)

@@ -21,6 +21,7 @@ fn spec(k: usize, fraction: usize) -> ExperimentSpec {
             .collect(),
         fraction,
         screening: false,
+        surface: None,
         replicates: 1,
         center_points: 0,
         seed: 2026,
@@ -36,7 +37,10 @@ fn fill(csv: &str, k: usize, f: impl Fn(&[f64]) -> f64) -> String {
             out.push_str(line);
         } else {
             let cells: Vec<&str> = line.split(';').collect();
-            let x: Vec<f64> = cells[3..3 + k].iter().map(|c| c.parse().unwrap()).collect();
+            let x: Vec<f64> = cells[3..3 + k]
+                .iter()
+                .map(|c| c.replace(',', ".").parse().unwrap())
+                .collect();
             let mut c: Vec<String> = cells.iter().map(|s| s.to_string()).collect();
             let last = c.len() - 1;
             c[last] = f(&x).to_string().replace('.', ",");
@@ -50,8 +54,7 @@ fn fill(csv: &str, k: usize, f: impl Fn(&[f64]) -> f64) -> String {
 #[test]
 fn worksheet_filled_and_analysed() {
     let s = spec(3, 0);
-    let d = s.design().unwrap();
-    let ws = worksheet(&s, &d);
+    let ws = worksheet(&s, &s.plan().unwrap());
     let t = Table::parse(&ws);
     assert_eq!(
         t.header,
@@ -117,7 +120,7 @@ fn fraction_aliases_and_center_points() {
     assert_eq!(lines[1], "resolução IV");
     assert!(lines.contains(&"A = BCD".to_string()), "{lines:?}");
     assert!(lines.contains(&"AB = CD".to_string()), "{lines:?}");
-    let ws = worksheet(&s, &d);
+    let ws = worksheet(&s, &s.plan().unwrap());
     let centers: Vec<&str> = ws.lines().filter(|l| l.contains(";sim;")).collect();
     assert_eq!(centers.len(), 3);
     assert!(centers[0].contains(";12;22;32;42;"), "{}", centers[0]);
@@ -178,7 +181,7 @@ fn plackett_burman_screening() {
     assert!(lines[3].starts_with("2 coluna(s)"), "{lines:?}");
     // y = 50 + 4A − 3E + 2I: effects 8, −6 and 4; asking for interactions falls back to
     // the main effects.
-    let ws = worksheet(&s, &d);
+    let ws = worksheet(&s, &s.plan().unwrap());
     let filled = fill(&ws, 9, |x| 50.0 + 4.0 * x[0] - 3.0 * x[4] + 2.0 * x[8]);
     let t = Table::parse(&filled);
     let (f, resp) = columns(&t.header);
@@ -241,8 +244,7 @@ fn full() -> ExperimentSpec {
 fn the_model_runs_the_experiment() {
     let m = crate::simulacao::parse(MM1, None).unwrap();
     let s = full();
-    let d = s.design().unwrap();
-    let pts = scenarios(&s, &d).unwrap();
+    let pts = scenarios(&s, &s.plan().unwrap()).unwrap();
     assert_eq!(pts.len(), 4);
     assert_eq!(pts[0].1.name, "P1");
     assert_eq!(pts[0].1.set["maquina.process"], "Exp(mean: 0.8)");
@@ -272,4 +274,81 @@ fn the_model_runs_the_experiment() {
     // A faster machine lowers its utilization.
     assert!(o.value("efeito A").unwrap() < -0.1, "{o:?}");
     assert!(o.value("valor-p A").unwrap() < 0.05);
+}
+
+#[test]
+fn central_composite_surface_finds_the_maximum() {
+    let s = ExperimentSpec {
+        name: "Superfície".into(),
+        factors: vec![
+            FactorSpec {
+                name: "Temperatura".into(),
+                low: "100".into(),
+                high: "120".into(),
+                ..FactorSpec::default()
+            },
+            FactorSpec {
+                name: "Tempo".into(),
+                low: "10".into(),
+                high: "20".into(),
+                ..FactorSpec::default()
+            },
+        ],
+        surface: Some(Surface::CentralComposite),
+        center_points: 5,
+        seed: 4,
+        response: "y".into(),
+        ..ExperimentSpec::default()
+    };
+    let plan = s.plan().unwrap();
+    assert_eq!(plan.runs.len(), 4 + 4 + 5);
+    assert!(plan.lines[0].contains("α = 1,414214"), "{:?}", plan.lines);
+    let ws = worksheet(&s, &plan);
+    let axial: Vec<&str> = ws.lines().filter(|l| l.contains(";axial;")).collect();
+    assert_eq!(axial.len(), 4);
+    // An axial point of Temperatura at +α: 110 + 1,414214 × 10.
+    assert!(ws.contains(";1,414214;0;124,142136;15;"), "{ws}");
+    // y = 80 + 4A + 2B − 2A² − B²: maximum at A = 1, B = 1 (120 and 20), y = 83.
+    let filled = fill(&ws, 2, |x| {
+        80.0 + 4.0 * x[0] + 2.0 * x[1] - 2.0 * x[0] * x[0] - x[1] * x[1]
+    });
+    let t = Table::parse(&filled);
+    let (f, resp) = columns(&t.header);
+    let r = Recipe::Surface {
+        factors: f,
+        response: resp.unwrap(),
+    };
+    let o = analises::run(&r, &t).unwrap();
+    assert!((o.value("coef A²").unwrap() + 2.0).abs() < 1e-6);
+    assert!((o.value("ponto estacionário A").unwrap() - 1.0).abs() < 1e-6);
+    assert!((o.value("ponto estacionário B").unwrap() - 1.0).abs() < 1e-6);
+    assert!((o.value("ponto estacionário Temperatura (real)").unwrap() - 120.0).abs() < 1e-4);
+    assert!((o.value("ponto estacionário Tempo (real)").unwrap() - 20.0).abs() < 1e-4);
+    assert!((o.value("resposta prevista no ponto estacionário").unwrap() - 83.0).abs() < 1e-6);
+    assert!(
+        o.verdict.starts_with("o ponto estacionário é um máximo"),
+        "{}",
+        o.verdict
+    );
+    assert_eq!(o.plots.len(), 2);
+    assert_eq!(r.key(), "superficie_resposta");
+    // Box-Behnken needs center points and 3 to 5 factors.
+    let mut b = s.clone();
+    b.surface = Some(Surface::BoxBehnken);
+    assert!(matches!(b.plan(), Err(ExpError::Design(_))));
+    b.factors.push(FactorSpec {
+        name: "Pressão".into(),
+        low: "1".into(),
+        high: "2".into(),
+        ..FactorSpec::default()
+    });
+    assert_eq!(b.plan().unwrap().runs.len(), 12 + 5);
+    b.center_points = 0;
+    assert!(b.plan().is_err());
+    // Text levels have no axial points.
+    let mut c = s.clone();
+    c.factors[0].low = "X".into();
+    c.factors[0].high = "Y".into();
+    c.factors[0].center = "Z".into();
+    assert_eq!(c.plan(), Err(ExpError::Axial("Temperatura".into())));
 }
