@@ -181,6 +181,18 @@ def estatistica():
     return svg + "</svg>\n"
 
 
+def produto():
+    """Desenvolvimento de Produto: um cubo em perspectiva (o produto) com um visto."""
+    svg = fundo("#ee6d9b", "#8a1a47")
+    svg += f'  <polygon points="{pts([(128, 40), (204, 84), (128, 128), (52, 84)])}" fill="#ffffff"/>\n'
+    svg += f'  <polygon points="{pts([(52, 92), (124, 134), (124, 218), (52, 176)])}" fill="#ffffff" fill-opacity="0.82"/>\n'
+    svg += f'  <polygon points="{pts([(132, 134), (204, 92), (204, 176), (132, 218)])}" fill="#ffffff" fill-opacity="0.62"/>\n'
+    svg += '  <circle cx="188" cy="188" r="46" fill="#8a1a47"/>\n'
+    svg += '  <circle cx="188" cy="188" r="37" fill="#ffffff"/>\n'
+    svg += '  <path d="M170 189 L184 203 L208 175" fill="none" stroke="#c42f68" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>\n'
+    return svg + "</svg>\n"
+
+
 def main():
     FONTE.mkdir(parents=True, exist_ok=True)
     (ICONE / "utsim.svg").write_text(logo_oficial(), encoding="utf-8", newline="\n")
@@ -190,6 +202,7 @@ def main():
         ("lean-seis-sigma", seis_sigma),
         ("ensino", ensino),
         ("estatistica", estatistica),
+        ("produto", produto),
     ):
         (FONTE / f"{nome}.svg").write_text(func(), encoding="utf-8", newline="\n")
     print(f"SVG gerados em {ICONE}")
