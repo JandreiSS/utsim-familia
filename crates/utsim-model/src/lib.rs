@@ -23,6 +23,7 @@ mod spans;
 pub mod state;
 pub mod synthetic;
 pub mod teams;
+pub mod trajeto;
 mod warnings;
 
 pub use line::SYMBOL_IDS;
@@ -34,8 +35,10 @@ pub use quality::{
 };
 pub use spans::SpanDef;
 pub use state::InitialState;
+pub use trajeto::{BeltDrive, BeltRoute, BeltStyle};
 pub use utsim_cad::FloorPlanDef;
 pub use utsim_nav::Obstacle;
+pub use utsim_nav::path3d::PathNode;
 pub use utsim_nav::{Aisle, AisleKind, FloorMarking, MarkShape, Pattern, Profile, ProfileSpec};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -543,6 +546,10 @@ pub enum ObjectKind {
         /// Items queue up at the end when blocked (true) or the whole belt stops (false).
         #[serde(default = "yes")]
         accumulating: bool,
+        /// Trajeto desenhado por nós (ver [`trajeto`]): com ele, o comprimento é o do
+        /// trajeto em 3D e as pontas são o primeiro e o último nó.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        route: Option<Box<BeltRoute>>,
     },
     /// Addressable storage: `bays` × `levels` positions.
     Rack {
@@ -1120,6 +1127,7 @@ impl Model {
                     length,
                     speed,
                     item_length,
+                    route,
                     ..
                 } => {
                     let positive = |v: f64| v.is_finite() && v > 0.0;
@@ -1128,7 +1136,7 @@ impl Model {
                             "{}: length, speed e item_length devem ser finitos e > 0",
                             obj.name
                         ));
-                    } else if item_length > length {
+                    } else if item_length > length && route.is_none() {
                         errors.push(format!(
                             "{}: item_length maior que length: nenhum item cabe na esteira",
                             obj.name
@@ -1283,6 +1291,7 @@ impl Model {
         self.validate_mobile(&kind_of, &mut errors);
         self.validate_movement(&mut errors);
         self.validate_aisles(&mut errors);
+        self.validate_routes(&mut errors);
         self.validate_logic(&mut errors);
         self.validate_quality(&mut errors);
         self.validate_spans(&mut errors);
@@ -1714,11 +1723,13 @@ impl Model {
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),
                 ObjectKind::Conveyor {
-                    length,
-                    speed,
                     item_length,
                     accumulating,
-                } => Box::new(Conveyor::new(*length, *speed, *item_length, *accumulating)),
+                    ..
+                } => {
+                    let (length, speed) = trajeto::belt_params(obj).unwrap_or((1.0, 1.0));
+                    Box::new(Conveyor::new(length, speed, *item_length, *accumulating))
+                }
                 ObjectKind::Rack {
                     bays,
                     levels,

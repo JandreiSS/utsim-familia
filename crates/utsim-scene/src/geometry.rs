@@ -17,6 +17,9 @@ pub struct Geom {
     pub yaw: f32,
     /// Sanitized parameters of a conveyor or rack.
     pub handling: Option<Handling>,
+    /// Drawn belt: the real line of its route (curves sampled), relative to the block
+    /// base, in scene space (Y up). Items ride along it.
+    pub route: Option<Vec<[f32; 3]>>,
 }
 
 impl Geom {
@@ -37,6 +40,7 @@ impl Geom {
                 half: style::extents(shape).0,
                 yaw: 0.0,
                 handling: None,
+                route: None,
             },
         }
     }
@@ -55,6 +59,7 @@ impl Geom {
             half: [c * hl + s * hw, BELT_THICKNESS / 2.0, s * hl + c * hw],
             yaw,
             handling: Some(Handling::Conveyor(p)),
+            route: None,
         }
     }
 
@@ -68,6 +73,7 @@ impl Geom {
             ],
             yaw: 0.0,
             handling: Some(Handling::Rack(p)),
+            route: None,
         }
     }
 
@@ -122,12 +128,70 @@ impl Geom {
     pub fn belt_item(&self, distance: f64) -> Option<([f32; 3], f32)> {
         let p = self.belt_params()?;
         let size = p.item_size();
+        if let Some((at, _)) = self.route_at(distance - p.item_length / 2.0) {
+            // The route is the top of the belt (the nodes give the height of the surface).
+            return Some(([at[0], at[1] + size / 2.0 + 0.01, at[2]], size));
+        }
         let along = (distance - p.item_length / 2.0 - p.length / 2.0) as f32;
         let (s, c) = self.yaw.sin_cos();
         Some((
             [along * c, BELT_THICKNESS + size / 2.0 + 0.01, -along * s],
             size,
         ))
+    }
+
+    /// Point and unit direction of the drawn route `s` along it (scene space, relative to
+    /// the block base); `None` without a route.
+    pub fn route_at(&self, s: f64) -> Option<([f32; 3], [f32; 3])> {
+        let line = self.route.as_ref().filter(|l| l.len() >= 2)?;
+        let mut left = s.max(0.0) as f32;
+        for (k, w) in line.windows(2).enumerate() {
+            let d = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]];
+            let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if len <= 1e-6 {
+                continue;
+            }
+            if left <= len || k + 2 == line.len() {
+                let t = (left / len).min(1.0);
+                let u = [d[0] / len, d[1] / len, d[2] / len];
+                return Some((
+                    [w[0][0] + d[0] * t, w[0][1] + d[1] * t, w[0][2] + d[2] * t],
+                    u,
+                ));
+            }
+            left -= len;
+        }
+        Some((*line.last()?, [1.0, 0.0, 0.0]))
+    }
+
+    /// Heading of an item `distance` from the start of a drawn belt (the yaw convention
+    /// of [`Geom::yaw`]); `None` without a route.
+    pub fn belt_item_yaw(&self, distance: f64) -> Option<f32> {
+        let p = self.belt_params()?;
+        let (_, u) = self.route_at(distance - p.item_length / 2.0)?;
+        Some((-u[2]).atan2(u[0]))
+    }
+
+    /// Turns this belt into a drawn one: `line` is the real route relative to the block
+    /// base, in scene space. The box becomes the one around the line, both ways from the
+    /// base (so it still contains the belt when centred on it).
+    pub fn set_route(&mut self, line: Vec<[f32; 3]>) {
+        if line.len() < 2 || self.shape != Shape::Belt {
+            return;
+        }
+        let w = BELT_WIDTH / 2.0;
+        let mut half = [0.0f32; 3];
+        for p in &line {
+            half[0] = half[0].max(p[0].abs() + w);
+            half[1] = half[1].max(p[1].abs() + BELT_THICKNESS);
+            half[2] = half[2].max(p[2].abs() + w);
+        }
+        self.half = half;
+        let d = [line[1][0] - line[0][0], line[1][2] - line[0][2]];
+        if d[0].abs() + d[1].abs() > 1e-6 {
+            self.yaw = (-d[1]).atan2(d[0]);
+        }
+        self.route = Some(line);
     }
 
     /// Center of the item stored in `slot`, relative to the block base, and its cube edge.
@@ -258,5 +322,22 @@ mod tests {
         // A conveyor or a rack without model parameters still gets a drawable size.
         assert!(Geom::new("Conveyor", None, None).half[0] > 1.0);
         assert!(Geom::new("Rack", None, None).half[1] > 0.5);
+    }
+
+    #[test]
+    fn a_drawn_belt_carries_its_items_along_the_route() {
+        // 4 m along +X, then 3 m up and along -Z (model +y), at the surface height 0,8.
+        let mut g = Geom::new("Conveyor", belt(7.0), None);
+        g.set_route(vec![[0.0, 0.8, 0.0], [4.0, 0.8, 0.0], [4.0, 0.8, -3.0]]);
+        // Item 1 m long: its centre is 0,5 m behind its front edge.
+        let (c, _) = g.belt_item(5.5).unwrap();
+        assert!(
+            (c[0] - 4.0).abs() < 1e-5 && (c[2] + 1.0).abs() < 1e-5,
+            "{c:?}"
+        );
+        assert!(c[1] > 0.8);
+        let yaw = g.belt_item_yaw(5.5).unwrap();
+        assert!((yaw - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
+        assert!(g.half[0] >= 4.0 && g.half[2] >= 3.0);
     }
 }

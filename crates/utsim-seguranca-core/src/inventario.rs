@@ -211,6 +211,29 @@ impl Perigo {
         }
     }
 
+    /// The hazard as it goes to the node (`safety.hazards`): the same fields, the id is
+    /// given by the node.
+    pub fn para_o_no(&self) -> HazardDef {
+        HazardDef {
+            group: match self.grupo {
+                Grupo::Fisico => HazardGroup::Physical,
+                Grupo::Quimico => HazardGroup::Chemical,
+                Grupo::Biologico => HazardGroup::Biological,
+                Grupo::Ergonomico => HazardGroup::Ergonomic,
+                Grupo::Acidente => HazardGroup::Accident,
+            },
+            description: self.descricao.clone(),
+            source: self.fonte.clone(),
+            circumstance: self.circunstancia.clone(),
+            injuries: self.lesoes.clone(),
+            controls: self.controles.clone(),
+            probability: self.probabilidade.min(u8::MAX as usize) as u8,
+            severity: self.severidade.min(u8::MAX as usize) as u8,
+            origin: self.origem.clone(),
+            ..HazardDef::default()
+        }
+    }
+
     /// Read from the node: edited there, not in the unit.
     pub fn eh_do_no(&self) -> bool {
         self.origem == ORIGEM_NO
@@ -344,6 +367,31 @@ impl Inventario {
             })
             .collect()
     }
+}
+
+/// After unit hazard `antigo` was copied to the node as `novo` (`no:<station>:<hazard>`):
+/// its actions and reassessments now point at `novo` and the unit record goes. Returns how
+/// many actions and reassessments moved.
+pub fn passar_ao_no(u: &mut Unidade, antigo: &str, novo: &str) -> Result<usize, UnidadeErro> {
+    let mut n = 0;
+    for col in [ACOES, REAVALIACOES] {
+        let mudar: Vec<(String, serde_json::Value)> = u
+            .estado()
+            .brutos(col)
+            .filter(|(_, v)| v.get("perigo").and_then(|x| x.as_str()) == Some(antigo))
+            .map(|(id, v)| {
+                let mut v = v.clone();
+                v["perigo"] = serde_json::Value::String(novo.to_string());
+                (id.clone(), v)
+            })
+            .collect();
+        for (id, v) in mudar {
+            u.gravar(col, &id, &v)?;
+            n += 1;
+        }
+    }
+    u.remover(PERIGOS, antigo)?;
+    Ok(n)
 }
 
 /// Saves the matrix of the unit (it replaces the previous one in the whole register).

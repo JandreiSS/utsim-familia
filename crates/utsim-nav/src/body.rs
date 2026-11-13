@@ -95,6 +95,9 @@ pub struct Body {
     /// esteira e o porta-paletes ficam com as dos seus campos (`length`, vãos) e não as
     /// leem. Com medidas, a escala não muda a área.
     pub size: Option<Pt>,
+    /// Esteira desenhada por nós: a linha real em planta (absoluta) e a largura (m). Com
+    /// ela, a área é a faixa em volta da linha e as pontas são as da linha.
+    pub route: Option<(Vec<Pt>, f64)>,
 }
 
 /// Quanto o recurso fica para dentro da ponta da esteira, ao lado dela (m).
@@ -120,6 +123,9 @@ impl Body {
         if !matches!(self.shape, Shape::Conveyor { .. }) {
             return None;
         }
+        if let Some((line, _)) = self.route.as_ref().filter(|(l, _)| l.len() >= 2) {
+            return Some((line[0], line[line.len() - 1]));
+        }
         let x = self.half()[0];
         Some((
             to_world(self.center, [-x, 0.0], self.yaw),
@@ -137,6 +143,12 @@ impl Body {
             let p = self.access_point(clearance);
             return Some((p, p));
         }
+        if let Some((line, w)) = self.route.as_ref().filter(|(l, _)| l.len() >= 2) {
+            let off = w / 2.0 + clearance.max(0.0) + ACCESS_GAP;
+            let len = crate::geom::polyline_length(line);
+            let reach = END_REACH.min(len / 2.0);
+            return Some((beside(line, reach, off), beside(line, len - reach, off)));
+        }
         let h = self.half();
         let x = (h[0] - END_REACH).max(0.0);
         let y = -(h[1] + clearance.max(0.0) + ACCESS_GAP);
@@ -148,6 +160,9 @@ impl Body {
 
     /// Retângulo da área ocupada.
     pub fn polygon(&self) -> Vec<Pt> {
+        if let Some((line, w)) = self.route.as_ref().filter(|(l, _)| l.len() >= 2) {
+            return crate::path3d::band(line, *w);
+        }
         rectangle(self.center, self.half(), self.yaw)
     }
 
@@ -165,11 +180,29 @@ impl Body {
     /// [`ACCESS_GAP`] da borda: a empilhadeira encosta de frente no porta-paletes e a
     /// pessoa fica ao lado da máquina. Com `access` no modelo, vale o ponto dado.
     pub fn access_point(&self, clearance: f64) -> Pt {
+        if let (None, Some((line, w))) = (
+            self.access,
+            self.route.as_ref().filter(|(l, _)| l.len() >= 2),
+        ) {
+            let len = crate::geom::polyline_length(line);
+            return beside(line, len / 2.0, w / 2.0 + clearance.max(0.0) + ACCESS_GAP);
+        }
         let local = self
             .access
             .unwrap_or([0.0, -(self.half()[1] + clearance.max(0.0) + ACCESS_GAP)]);
         to_world(self.center, local, self.yaw)
     }
+}
+
+/// Ponto a `s` metros do início da linha em planta, deslocado `off` para a direita do
+/// sentido dela (o lado `-y` de uma esteira reta).
+fn beside(line: &[Pt], s: f64, off: f64) -> Pt {
+    let pts: Vec<[f64; 3]> = line.iter().map(|p| [p[0], p[1], 0.0]).collect();
+    let Some((p, d)) = crate::path3d::point_at(&pts, s) else {
+        return line[0];
+    };
+    let n = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-12);
+    [p[0] + d[1] / n * off, p[1] - d[0] / n * off]
 }
 
 /// Papel do recurso móvel, que define a sua largura.
@@ -243,6 +276,7 @@ mod tests {
             scale: 1.0,
             access: None,
             size: None,
+            route: None,
         }
     }
 

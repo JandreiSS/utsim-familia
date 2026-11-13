@@ -1,0 +1,299 @@
+//! Esteira desenhada por nós (`route` da esteira): a geometria entra no resultado.
+//!
+//! - Comprimento da esteira = comprimento 3D do trajeto (com as curvas e as subidas). Ele
+//!   substitui `length`: tempo de passagem = comprimento ÷ velocidade e capacidade =
+//!   comprimento ÷ `item_length`.
+//! - Inclinação: acima do limite do tipo ([`BeltStyle::max_slope`] ou `max_slope` dado) há
+//!   aviso; a peça escorrega ou tomba.
+//! - Esteira por gravidade (roletes livres): a velocidade de cada trecho sai da inclinação
+//!   ([`gravity_speed`]), e a velocidade da esteira é a que dá o mesmo tempo de passagem
+//!   do trajeto inteiro: `L ÷ Σ (Lᵢ ÷ vᵢ)`.
+//!
+//! As pontas de entrada e de saída são o primeiro e o último nó; o corpo no piso é a faixa
+//! da largura da esteira em volta do trajeto.
+
+use serde::{Deserialize, Serialize};
+use utsim_nav::path3d::{self, P3, PathNode};
+
+use crate::{Model, ObjectDef, ObjectKind};
+
+pub use utsim_nav::path3d::{legs, max_grade, path_length, problem, sample};
+
+/// Tipo construtivo da esteira desenhada.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BeltStyle {
+    /// Esteira simples (correia lisa ou roletes, sem guias).
+    #[default]
+    Simple,
+    /// Esteira com canaletas (guias laterais altas que seguram a peça).
+    Channeled,
+}
+
+impl BeltStyle {
+    /// Inclinação máxima padrão (graus). Correia lisa: a peça escorrega acima de ~15°;
+    /// com as canaletas laterais (e taliscas) ela sobe até ~25°.
+    pub fn max_slope(self) -> f64 {
+        match self {
+            BeltStyle::Simple => 15.0,
+            BeltStyle::Channeled => 25.0,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BeltStyle::Simple => "esteira simples",
+            BeltStyle::Channeled => "esteira com canaletas",
+        }
+    }
+}
+
+/// O que move a peça.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BeltDrive {
+    /// Motorizada: a peça anda na velocidade da esteira, suba ou desça.
+    #[default]
+    Powered,
+    /// Roletes livres por gravidade: a velocidade sai da inclinação ([`gravity_speed`]).
+    Gravity,
+}
+
+/// Inclinação (fração, 0,015 = 1,5 %) abaixo da qual a peça não anda sozinha nos roletes
+/// livres: a resistência ao rolamento.
+pub const ROLLING: f64 = 0.015;
+/// Inclinação a partir da qual a peça já chega à velocidade-limite (os roletes de freio
+/// seguram nela).
+pub const FULL_GRADE: f64 = 0.05;
+/// Velocidade mínima num trecho plano ou em subida por gravidade, como fração da
+/// velocidade-limite: a peça só anda empurrada pelas de trás.
+pub const PUSHED: f64 = 0.1;
+
+/// Velocidade num trecho por gravidade com essa inclinação (descendo é positiva), com
+/// `limit` a velocidade-limite (o `speed` da esteira, segurada pelos roletes de freio):
+/// `limit × clamp((g − ROLLING) ÷ (FULL_GRADE − ROLLING), PUSHED, 1)`.
+pub fn gravity_speed(grade_down: f64, limit: f64) -> f64 {
+    let f = (grade_down - ROLLING) / (FULL_GRADE - ROLLING);
+    limit * f.clamp(PUSHED, 1.0)
+}
+
+/// Trajeto desenhado de uma esteira.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BeltRoute {
+    /// Nós, relativos à posição da esteira (o primeiro costuma ser `[0, 0, 0]`).
+    pub nodes: Vec<PathNode>,
+    #[serde(default)]
+    pub style: BeltStyle,
+    #[serde(default)]
+    pub drive: BeltDrive,
+    /// Inclinação máxima (graus); ausente: a do tipo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_slope: Option<f64>,
+    /// Largura (m); ausente: [`DEFAULT_WIDTH`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
+}
+
+/// Largura padrão de uma esteira desenhada (m).
+pub const DEFAULT_WIDTH: f64 = 0.6;
+
+impl BeltRoute {
+    pub fn width(&self) -> f64 {
+        self.width
+            .filter(|w| w.is_finite() && *w > 0.0)
+            .unwrap_or(DEFAULT_WIDTH)
+    }
+
+    pub fn max_slope(&self) -> f64 {
+        self.max_slope.unwrap_or(self.style.max_slope())
+    }
+
+    /// A linha real em coordenadas absolutas (a esteira está em `origin`).
+    pub fn line(&self, origin: [f64; 3]) -> Vec<P3> {
+        path3d::sample(&self.nodes)
+            .into_iter()
+            .map(|p| [p[0] + origin[0], p[1] + origin[1], p[2] + origin[2]])
+            .collect()
+    }
+
+    pub fn length(&self) -> f64 {
+        path3d::path_length(&self.nodes)
+    }
+
+    /// Velocidade equivalente (mesmo tempo de passagem) com `speed` a da esteira.
+    pub fn speed(&self, speed: f64) -> f64 {
+        match self.drive {
+            BeltDrive::Powered => speed,
+            BeltDrive::Gravity => {
+                let pts = path3d::sample(&self.nodes);
+                let (mut len, mut time) = (0.0, 0.0);
+                for w in pts.windows(2) {
+                    let d = path3d::dist3(w[0], w[1]);
+                    if d <= 0.0 {
+                        continue;
+                    }
+                    let down = -path3d::grade(w[0], w[1]);
+                    let v = gravity_speed(if down.is_finite() { down } else { 1.0 }, speed);
+                    len += d;
+                    time += d / v;
+                }
+                if time > 0.0 { len / time } else { speed }
+            }
+        }
+    }
+
+    /// Pontas de entrada e de saída (primeiro e último nó), absolutas.
+    pub fn ends(&self, origin: [f64; 3]) -> Option<(P3, P3)> {
+        let line = self.line(origin);
+        Some((*line.first()?, *line.last()?))
+    }
+}
+
+/// Comprimento, velocidade e item da esteira que a simulação usa: com trajeto, o
+/// comprimento é o do trajeto e a velocidade a equivalente; sem, os campos.
+pub fn belt_params(obj: &ObjectDef) -> Option<(f64, f64)> {
+    belt_params_of(&obj.kind)
+}
+
+/// O mesmo que [`belt_params`], só pelo tipo.
+pub fn belt_params_of(kind: &ObjectKind) -> Option<(f64, f64)> {
+    let ObjectKind::Conveyor { length, speed, .. } = kind else {
+        return None;
+    };
+    match valid_route(kind) {
+        Some(r) => Some((r.length(), r.speed(*speed))),
+        None => Some((*length, *speed)),
+    }
+}
+
+/// O trajeto da esteira, se ela tem um que serve.
+pub fn valid_route(kind: &ObjectKind) -> Option<&BeltRoute> {
+    match kind {
+        ObjectKind::Conveyor { route: Some(r), .. } if path3d::problem(&r.nodes, "").is_none() => {
+            Some(r)
+        }
+        _ => None,
+    }
+}
+
+impl Model {
+    pub(crate) fn validate_routes(&self, errors: &mut Vec<String>) {
+        for o in &self.objects {
+            let ObjectKind::Conveyor {
+                route: Some(r),
+                item_length,
+                ..
+            } = &o.kind
+            else {
+                continue;
+            };
+            if let Some(p) = path3d::problem(&r.nodes, &o.name) {
+                errors.push(p);
+                continue;
+            }
+            if r.width.is_some_and(|w| !(w.is_finite() && w > 0.0)) {
+                errors.push(format!("{}: a largura da esteira deve ser > 0 (m)", o.name));
+            }
+            if r.max_slope
+                .is_some_and(|s| !(s.is_finite() && s > 0.0 && s < 90.0))
+            {
+                errors.push(format!(
+                    "{}: max_slope deve ficar entre 0 e 90 graus",
+                    o.name
+                ));
+            }
+            if *item_length > r.length() {
+                errors.push(format!(
+                    "{}: item_length maior que o trajeto desenhado ({:.2} m): nenhum item cabe",
+                    o.name,
+                    r.length()
+                ));
+            }
+        }
+    }
+
+    pub(crate) fn route_warnings(&self, out: &mut Vec<String>) {
+        for o in &self.objects {
+            let ObjectKind::Conveyor { route: Some(r), .. } = &o.kind else {
+                continue;
+            };
+            if path3d::problem(&r.nodes, &o.name).is_some() {
+                continue;
+            }
+            let line = path3d::sample(&r.nodes);
+            let worst = path3d::degrees(path3d::max_grade(&line));
+            if worst > r.max_slope() + 1e-9 {
+                out.push(format!(
+                    "{}: trecho com {:.1}° de inclinação, acima do máximo de {:.0}° da {}; a \
+                     peça escorrega ou tomba",
+                    o.name,
+                    worst,
+                    r.max_slope(),
+                    r.style.label()
+                ));
+            }
+            if r.drive == BeltDrive::Gravity {
+                let slow = line.windows(2).any(|w| {
+                    path3d::dist3(w[0], w[1]) > 1e-9 && -path3d::grade(w[0], w[1]) < ROLLING
+                });
+                if slow {
+                    out.push(format!(
+                        "{}: esteira por gravidade com trecho plano ou em subida (menos de \
+                         {:.1} % de descida); ali a peça só anda empurrada, a {:.0} % da \
+                         velocidade",
+                        o.name,
+                        ROLLING * 100.0,
+                        PUSHED * 100.0
+                    ));
+                }
+            }
+            if line.iter().any(|p| p[2] + o.position[2] < -1e-9) {
+                out.push(format!("{}: nó abaixo do piso", o.name));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(nodes: Vec<PathNode>, drive: BeltDrive) -> BeltRoute {
+        BeltRoute {
+            nodes,
+            style: BeltStyle::Simple,
+            drive,
+            max_slope: None,
+            width: None,
+        }
+    }
+
+    #[test]
+    fn gravity_speed_follows_the_slope() {
+        assert_eq!(gravity_speed(0.0, 1.0), PUSHED);
+        assert_eq!(gravity_speed(0.10, 1.0), 1.0);
+        let mid = gravity_speed((ROLLING + FULL_GRADE) / 2.0, 1.0);
+        assert!((mid - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_powered_belt_keeps_its_speed_and_a_gravity_one_slows_when_flatter() {
+        let steep = route(
+            vec![
+                PathNode::new([0.0, 0.0, 1.0]),
+                PathNode::new([10.0, 0.0, 0.0]),
+            ],
+            BeltDrive::Gravity,
+        );
+        let gentle = route(
+            vec![
+                PathNode::new([0.0, 0.0, 0.3]),
+                PathNode::new([10.0, 0.0, 0.0]),
+            ],
+            BeltDrive::Gravity,
+        );
+        assert!((steep.speed(0.5) - 0.5).abs() < 1e-12);
+        assert!(gentle.speed(0.5) < 0.5);
+        let mut powered = gentle.clone();
+        powered.drive = BeltDrive::Powered;
+        assert_eq!(powered.speed(0.5), 0.5);
+    }
+}

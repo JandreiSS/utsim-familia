@@ -132,6 +132,12 @@ pub enum Command {
         name: String,
         size: Option<[f64; 3]>,
     },
+    /// Trajeto desenhado de uma esteira (`None`: volta a ser reta, pelo `length`). Com
+    /// trajeto, o `length` passa a ser o comprimento dele (o que o painel mostra).
+    SetRoute {
+        name: String,
+        route: Option<Box<utsim_model::BeltRoute>>,
+    },
     /// Floor area per item of a queue (`None`: removes it; the capacity alone counts).
     SetAreaPerItem {
         name: String,
@@ -253,6 +259,29 @@ pub enum Command {
         name: String,
         downtime: Option<utsim_model::DowntimeDef>,
     },
+}
+
+fn set_route(
+    model: &mut Model,
+    name: &str,
+    new: &Option<Box<utsim_model::BeltRoute>>,
+) -> Result<(), String> {
+    if let Some(p) = new
+        .as_ref()
+        .and_then(|r| utsim_model::trajeto::problem(&r.nodes, name))
+    {
+        return Err(p);
+    }
+    let obj = object_mut(model, name)?;
+    let ObjectKind::Conveyor { length, route, .. } = &mut obj.kind else {
+        return Err(format!("'{name}' não é uma esteira"));
+    };
+    if let Some(r) = new {
+        // Millimetres: what the panel shows, with no noise from the sampled arcs.
+        *length = (r.length() * 1000.0).round() / 1000.0;
+    }
+    *route = new.clone();
+    Ok(())
 }
 
 fn object_mut<'a>(model: &'a mut Model, name: &str) -> Result<&'a mut ObjectDef, String> {
@@ -669,6 +698,7 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::RemoveAisle { name } => aisles::remove_aisle(model, name)?,
         Command::SetAccess { name, access } => aisles::set_access(model, name, *access)?,
         Command::SetSize { name, size } => aisles::set_size(model, name, *size)?,
+        Command::SetRoute { name, route } => set_route(model, name, route)?,
         Command::SetAreaPerItem { name, area } => aisles::set_area_per_item(model, name, *area)?,
         Command::SetMovement { name, movement } => aisles::set_movement(model, name, *movement)?,
         Command::SetClearance { name, clearance } => {
@@ -1087,6 +1117,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             speed: 1.0,
             item_length: 1.0,
             accumulating: true,
+            route: None,
         },
         "Rack" => ObjectKind::Rack {
             bays: 4,
