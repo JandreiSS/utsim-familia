@@ -119,3 +119,81 @@ fn a_waiting_area_is_checked() {
     };
     assert_eq!(w.element(), "estante_espera");
 }
+
+#[test]
+fn the_carrier_goes_to_the_front_of_the_item_it_takes() {
+    let text = |area: &str| {
+        format!(
+            r#"Model(
+                name: "retirada",
+                run: (stop_time: 200.0, seed: 1, replications: 1),
+                objects: [
+                    (name: "fonte", kind: Source(interarrival: Const(1.0), first_at_zero: true, max_arrivals: Some(6)),
+                     position: (0.0, 0.0, 0.0)),
+                    (name: "fila", kind: Queue(), position: (4.0, 0.0, 0.0), transport: Some("lia"){area}),
+                    (name: "maquina", kind: Processor(process: Const(5.0)), position: (8.0, -3.0, 0.0)),
+                    (name: "saida", kind: Sink, position: (12.0, -3.0, 0.0)),
+                    (name: "lia", kind: Transporter(speed: 1.0), position: (8.0, -3.0, 0.0)),
+                ],
+                connections: [("fonte", "fila"), ("fila", "maquina"), ("maquina", "saida")],
+            )"#
+        )
+    };
+    let ends = |m: &Model| -> Vec<[f64; 3]> {
+        let r = m.replay(0).unwrap();
+        let lia = r.blocks.iter().position(|b| b.name == "lia").unwrap();
+        r.records
+            .iter()
+            .filter_map(|rec| match &rec.event {
+                TraceEvent::Travel { carrier, path, .. } if *carrier == lia => path.last().copied(),
+                _ => None,
+            })
+            .collect()
+    };
+    // A plain queue: to its centre.
+    let plain = Model::parse(&text("")).unwrap();
+    assert!(
+        ends(&plain)
+            .iter()
+            .any(|p| (p[0] - 4.0).abs() < 1e-9 && p[1].abs() < 1e-9)
+    );
+    // On the table: to the front (-y, outside the table) of each item's place.
+    let m = Model::parse(&text(", waiting_area: Some((kind: Table))")).unwrap();
+    m.validate().unwrap();
+    let w = m
+        .objects
+        .iter()
+        .find(|o| o.name == "fila")
+        .unwrap()
+        .waiting_area
+        .unwrap();
+    let xs: Vec<f64> = w.places(None).iter().map(|p| 4.0 + p.center[0]).collect();
+    let pickups: Vec<[f64; 3]> = ends(&m)
+        .into_iter()
+        .filter(|p| p[1] < 0.0 && p[1] > -2.0)
+        .collect();
+    assert!(!pickups.is_empty(), "{:?}", ends(&m));
+    for p in &pickups {
+        assert!(p[1] < -0.5, "in front of the table: {p:?}");
+        assert!(
+            xs.iter().any(|x| (x - p[0]).abs() < 1e-9),
+            "{p:?} vs {xs:?}"
+        );
+    }
+    // Not all at the centre: the places along the table differ.
+    assert!(
+        pickups.iter().any(|p| (p[0] - 4.0).abs() > 0.2),
+        "{pickups:?}"
+    );
+    // The distance changes the result.
+    let busy = |m: &Model| {
+        m.run_replications()
+            .unwrap()
+            .remove(0)
+            .block("lia")
+            .unwrap()
+            .states
+            .clone()
+    };
+    assert_ne!(busy(&plain), busy(&m));
+}

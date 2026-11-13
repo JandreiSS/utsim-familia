@@ -932,7 +932,7 @@ impl Transporter {
         self.trip = vec![head];
         self.k = 0;
         match head.kind {
-            TaskKind::Transport { from, .. } => {
+            TaskKind::Transport { from, item, .. } => {
                 let mut i = 0;
                 while self.trip.len() < self.capacity && i < self.queue.len() {
                     let same = matches!(
@@ -945,11 +945,15 @@ impl Transporter {
                         i += 1;
                     }
                 }
-                let target = if self.use_ends {
-                    cx.output_end(from)
-                } else {
-                    cx.position(from)
-                };
+                // The front of the item's own place (a real waiting area), else the belt's
+                // output end or the object; the crane goes above it the same way.
+                let target = cx.pickup_point(from, item).unwrap_or_else(|| {
+                    if self.use_ends {
+                        cx.output_end(from)
+                    } else {
+                        cx.position(from)
+                    }
+                });
                 self.travel(cx, target, ARRIVED_PICKUP, State::TravelEmpty);
             }
             TaskKind::Operate { station, .. } => {

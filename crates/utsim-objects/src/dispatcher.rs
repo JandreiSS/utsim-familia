@@ -377,8 +377,11 @@ impl Dispatcher {
     /// Where the work of `request` starts.
     fn start_of(cx: &Ctx, request: &TaskRequest) -> [f64; 3] {
         match request.kind {
-            // Where the item is picked up: a belt's output end, else the centre.
-            TaskKind::Transport { from, .. } => cx.output_end(from),
+            // Where the item is picked up: its own place in a real waiting area, a belt's
+            // output end, else the centre.
+            TaskKind::Transport { from, item, .. } => cx
+                .pickup_point(from, item)
+                .unwrap_or_else(|| cx.output_end(from)),
             TaskKind::Operate { station, .. } => cx.position(station),
         }
     }
