@@ -285,6 +285,8 @@ pub mod navegacao;
 
 pub mod arquivos;
 
+pub mod campos;
+
 /// Widgets with the UTSim look that egui does not have.
 pub mod widgets {
     use egui::{Button, CornerRadius, Response, RichText, Stroke, Ui, Widget};
