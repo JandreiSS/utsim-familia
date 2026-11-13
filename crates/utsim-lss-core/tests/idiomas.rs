@@ -9,12 +9,14 @@ use utsim_lss_core::texto::{TEXTOS, rotulo};
 fn as_receitas_nas_cinco_linguas() {
     assert!(TEXTOS.faltas().is_empty(), "{:?}", TEXTOS.faltas());
     let receita = Recipe::Descriptive { col: 0 };
-    let tabela = Table::parse("x
+    let tabela = Table::parse(
+        "x
 1
 2
 3
 4
-");
+",
+    );
     let mut nomes = Vec::new();
     for i in Idioma::TODOS {
         utsim_idiomas::definir_nesta_thread(Some(i));
