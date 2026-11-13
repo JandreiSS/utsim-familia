@@ -17,6 +17,7 @@ mod maintenance;
 mod movement;
 mod multitask;
 mod person;
+mod product;
 pub mod quality;
 pub mod replay;
 pub mod safety;
@@ -32,6 +33,7 @@ pub use espera::{WaitingArea, WaitingKind};
 pub use line::SYMBOL_IDS;
 pub use maintenance::{DowntimeDef, Every, OeeDef, PreventiveDef};
 pub use movement::{Movement, NavSet};
+pub use product::ProductLink;
 pub use quality::{
     CharacteristicDef, DefectDef, DefectFactor, InspectionDef, MeasureDef, QualityDef, RejectTo,
     ReworkDef, SinkRole, ZoneDef, ZoneKind,
@@ -198,6 +200,9 @@ pub struct Model {
     /// only their `ppe`, for operation rules with `require_ppe` ([`OperationDef`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zones: Vec<ZoneDef>,
+    /// Product project the model came from ([`ProductLink`]). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<ProductLink>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

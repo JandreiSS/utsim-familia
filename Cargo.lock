@@ -8464,6 +8464,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "utsim-produto-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "utsim-core",
+ "utsim-idiomas",
+ "utsim-model",
+ "utsim-produto-core",
+ "utsim-ui-tema",
+ "winresource",
+]
+
+[[package]]
+name = "utsim-produto-core"
+version = "0.1.0"
+dependencies = [
+ "ron 0.8.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "utsim-core",
+ "utsim-model",
+ "utsim-pasta",
+]
+
+[[package]]
 name = "utsim-publicar"
 version = "0.1.0"
 dependencies = [
