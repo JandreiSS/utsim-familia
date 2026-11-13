@@ -369,7 +369,9 @@ pub fn default_symbol(obj: &ObjectDef, options: &Options) -> Symbol {
             }
         }
         // Mobile resources are not steps; the value is never drawn.
-        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. } => Symbol::Transporte,
+        ObjectKind::Transporter { .. }
+        | ObjectKind::Crane { .. }
+        | ObjectKind::Dispatcher { .. } => Symbol::Transporte,
     }
 }
 
@@ -388,7 +390,11 @@ fn node_kind(kind: &ObjectKind) -> Option<NodeKind> {
         ObjectKind::Sink => NodeKind::Sink,
         ObjectKind::Conveyor { .. } => NodeKind::Conveyor,
         ObjectKind::Rack { .. } => NodeKind::Rack,
-        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. } => return None,
+        ObjectKind::Transporter { .. }
+        | ObjectKind::Crane { .. }
+        | ObjectKind::Dispatcher { .. } => {
+            return None;
+        }
     })
 }
 
@@ -526,7 +532,9 @@ fn describe(obj: &ObjectDef) -> (Option<f64>, Vec<String>, Vec<String>) {
                 details.push(format!("permanência mínima {}", num(t)));
             }
         }
-        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. } => {}
+        ObjectKind::Transporter { .. }
+        | ObjectKind::Crane { .. }
+        | ObjectKind::Dispatcher { .. } => {}
     }
     if let Some(dt) = &obj.downtime {
         let part = |d: &utsim_core::Dist| dist_mean(d).map_or("?".to_string(), num);

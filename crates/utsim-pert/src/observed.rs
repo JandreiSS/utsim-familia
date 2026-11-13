@@ -241,7 +241,7 @@ impl Setup {
         let mut separator = vec![false; n];
         for (i, o) in model.objects.iter().enumerate() {
             role[i] = match &o.kind {
-                ObjectKind::Transporter { .. } => Role::Carrier,
+                ObjectKind::Transporter { .. } | ObjectKind::Crane { .. } => Role::Carrier,
                 _ if !selected[i] => Role::Ignore,
                 ObjectKind::Source { .. } => Role::Source,
                 ObjectKind::Sink => Role::Sink,

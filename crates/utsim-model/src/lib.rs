@@ -3,6 +3,7 @@
 mod aisles;
 pub mod analysis;
 mod arrivals;
+mod crane;
 pub mod csv;
 pub mod dados;
 pub mod experiment;
@@ -538,6 +539,42 @@ pub enum ObjectKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         multitask: Option<Multitask>,
     },
+    /// Overhead crane (ponte rolante): a transporter that moves by three axes inside
+    /// the rectangle of its `size` (length = runway, width = span, height = room for
+    /// the hook), centred on its position and turned by `visual.yaw`. See `crane.rs`.
+    #[serde(alias = "PonteRolante")]
+    Crane {
+        /// The bridge, along the runway (local x).
+        #[serde(alias = "ponte")]
+        bridge: utsim_objects::Axis,
+        /// The trolley, along the girder (local y).
+        #[serde(alias = "carro")]
+        trolley: utsim_objects::Axis,
+        /// The hoist (vertical).
+        #[serde(alias = "talha")]
+        hoist: utsim_objects::Axis,
+        /// Height the hook travels at, above the floor (m).
+        #[serde(alias = "altura_gancho")]
+        hook_height: f64,
+        /// Time to hook an item (sling it).
+        #[serde(default = "zero", alias = "engate")]
+        attach: Dist,
+        /// Time to unhook it.
+        #[serde(default = "zero", alias = "desengate")]
+        detach: Dist,
+        /// Rated load, in tonnes.
+        #[serde(alias = "capacidade_t")]
+        capacity_t: f64,
+        /// Order of the axes: Safe (default), Sequential or Parallel.
+        #[serde(default, alias = "movimento")]
+        motion: utsim_objects::CraneMotion,
+        /// Label with the weight of an item, in kg.
+        #[serde(default = "weight_label", alias = "rotulo_peso")]
+        weight_label: String,
+        /// Go back to its own position when idle.
+        #[serde(default, alias = "volta")]
+        home: bool,
+    },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
         length: f64,
@@ -605,11 +642,15 @@ fn zero() -> Dist {
     Dist::Const(0.0)
 }
 
+fn weight_label() -> String {
+    "weight".into()
+}
+
 /// Mobile resources and dispatchers live outside the port graph.
 pub fn is_mobile(kind: &ObjectKind) -> bool {
     matches!(
         kind,
-        ObjectKind::Transporter { .. } | ObjectKind::Dispatcher { .. }
+        ObjectKind::Transporter { .. } | ObjectKind::Crane { .. } | ObjectKind::Dispatcher { .. }
     )
 }
 
@@ -767,9 +808,11 @@ impl Model {
             }
             let mut dists: Vec<(String, &Dist)> = Vec::new();
             if let Some(size) = obj.size {
-                if is_mobile(&obj.kind) {
+                if matches!(obj.kind, ObjectKind::Crane { .. }) {
+                    // The covered area of the crane: checked in `crane.rs`.
+                } else if is_mobile(&obj.kind) {
                     errors.push(format!(
-                        "{}: size vale só para objetos fixos (não para recursos móveis)",
+                        "{}: size vale só para objetos fixos (não para recursos móveis), e para a ponte rolante",
                         obj.name
                     ));
                 } else if matches!(
@@ -1123,6 +1166,11 @@ impl Model {
                     dists.push(("load_time".into(), load_time));
                     dists.push(("unload_time".into(), unload_time));
                 }
+                ObjectKind::Crane { attach, detach, .. } => {
+                    // The rest is checked with the geometry (`crane.rs`).
+                    dists.push(("attach".into(), attach));
+                    dists.push(("detach".into(), detach));
+                }
                 ObjectKind::Conveyor {
                     length,
                     speed,
@@ -1297,6 +1345,7 @@ impl Model {
         self.validate_spans(&mut errors);
         self.validate_maintenance(&mut errors);
         self.validate_people(&mut errors);
+        self.validate_cranes(&mut errors);
         self.validate_line(&mut errors);
         let mut outputs: HashMap<&str, usize> = HashMap::new();
         let mut seen = HashSet::new();
@@ -1409,16 +1458,24 @@ impl Model {
                         "{}: operators.team '{}' precisa ser um Transporter ou Dispatcher",
                         obj.name, op.team
                     ));
+                } else if matches!(
+                    kind_of.get(op.team.as_str()),
+                    Some(ObjectKind::Crane { .. })
+                ) {
+                    errors.push(format!(
+                        "{}: operators.team '{}' é uma ponte rolante, que só transporta",
+                        obj.name, op.team
+                    ));
                 }
             }
             if let ObjectKind::Dispatcher { team, .. } = &obj.kind {
                 for member in team {
                     if !matches!(
                         kind_of.get(member.as_str()),
-                        Some(ObjectKind::Transporter { .. })
+                        Some(ObjectKind::Transporter { .. } | ObjectKind::Crane { .. })
                     ) {
                         errors.push(format!(
-                            "{}: membro '{member}' da equipe precisa ser um Transporter",
+                            "{}: membro '{member}' da equipe precisa ser um Transporter ou Crane",
                             obj.name
                         ));
                     } else if let Some(other) = in_team.insert(member.as_str(), obj.name.as_str()) {
@@ -1723,6 +1780,19 @@ impl Model {
                         .handling(load_time.clone(), unload_time.clone())
                         .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
                 ),
+                ObjectKind::Crane {
+                    attach,
+                    detach,
+                    home,
+                    ..
+                } => Box::new(
+                    Transporter::new(self.crane_spec(obj).map_or(1.0, |c| c.bridge.speed))
+                        .crane(self.crane_spec(obj))
+                        .capacity(1)
+                        .home(*home)
+                        .handling(attach.clone(), detach.clone())
+                        .dispatcher(dispatcher_of.get(obj.name.as_str()).copied()),
+                ),
                 ObjectKind::Conveyor {
                     item_length,
                     accumulating,
@@ -1817,6 +1887,9 @@ impl Model {
             }
             if let Some(transfer) = self.effective_transfer(obj) {
                 sim.set_transfer(id, transfer);
+            } else if let Some(fall) = self.belt_drop(obj) {
+                // A drawn belt dropping its items onto a lower one: the fall takes time.
+                sim.set_transfer(id, fall);
             }
         }
         for (from, to) in &self.connections {

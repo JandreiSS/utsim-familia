@@ -2,6 +2,7 @@
 
 mod combiner;
 mod conveyor;
+pub mod crane;
 mod dispatcher;
 pub mod network;
 mod processor;
@@ -18,6 +19,7 @@ mod transporter;
 
 pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
+pub use crane::{Axis, CraneMotion, CraneSpec};
 pub use dispatcher::{DispatchRule, Dispatcher, Preempt, TaskPick};
 pub use processor::{
     Changeover, ChangeoverTime, Operation, OperatorUse, Processor, Recipe, RecipeTime,

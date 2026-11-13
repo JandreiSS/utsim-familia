@@ -69,6 +69,8 @@ pub fn role(model: &Model, pack: Option<&Pack>, index: usize) -> Option<Role> {
         | ObjectKind::Separator { .. } => Role::Work,
         ObjectKind::Sink => Role::Done,
         ObjectKind::Transporter { .. } => Role::Person,
+        // An overhead crane has no role in an office flow.
+        ObjectKind::Crane { .. } => return None,
         ObjectKind::Dispatcher { .. } => Role::Team,
     })
 }
