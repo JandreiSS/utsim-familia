@@ -263,6 +263,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         line: None,
         packs: Vec::new(),
         zones: Vec::new(),
+        product: None,
     })
 }
 
