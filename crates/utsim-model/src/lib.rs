@@ -1660,8 +1660,12 @@ impl Model {
             .enumerate()
             .map(|(i, o)| (o.name.as_str(), BlockId(i)))
             .collect();
-        // One router and one traffic state per simulation (AGV edge control).
-        let net_router = utsim_objects::network::network_router(self.network.as_ref());
+        // The network router is shared by the replications (it has no state); one
+        // traffic state per simulation (AGV edge control).
+        let net_router = match (&nav.network, &self.network) {
+            (Some(r), Some(_)) => Some(r.clone()),
+            _ => utsim_objects::network::network_router(self.network.as_ref()),
+        };
         let traffic = match (&self.network, &net_router) {
             (Some(def), Some(r)) => Some(Arc::new(Mutex::new(Traffic::new(def, r.clone())))),
             _ => None,
