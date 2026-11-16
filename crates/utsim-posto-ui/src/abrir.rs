@@ -255,6 +255,24 @@ pub struct Atendido {
     pub estudo: Option<String>,
 }
 
+/// Ao fechar a janela dos apps de unidade: grava o estudo pendente da tela Ferramentas e,
+/// se houve pedido de outro app, grava a resposta (`app` e `versao` dizem quem respondeu;
+/// uma falha vai para o stderr).
+pub fn ao_fechar(
+    ferramentas: &mut TelaFerramentas,
+    sessao: &mut Sessao,
+    pedido: Option<&Atendido>,
+    app: &str,
+    versao: &str,
+) {
+    ferramentas.gravar_pendente(sessao);
+    if let Some(p) = pedido
+        && let Some(Err(e)) = p.responder(ferramentas, sessao, app, versao)
+    {
+        eprintln!("resposta do pedido: {e}");
+    }
+}
+
 impl Atendido {
     /// Depois de [`atender`]: `None` quando não houve pedido de outro app.
     pub fn de(a: &Abrir, ferramentas: &TelaFerramentas) -> Option<Atendido> {

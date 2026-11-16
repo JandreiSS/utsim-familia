@@ -100,6 +100,30 @@ impl Sessao {
         self.gravar_config();
     }
 
+    /// Põe a língua guardada na configuração; sem ela, fica a de agora (a do sistema,
+    /// posta pelo `main`).
+    pub fn usar_idioma_guardado(&self) {
+        if let Some(i) = self
+            .config
+            .idioma
+            .as_deref()
+            .and_then(utsim_idiomas::Idioma::de_codigo)
+        {
+            utsim_idiomas::definir(i);
+        }
+    }
+
+    /// O seletor de língua (no pé da barra lateral): a escolhida vale na hora e fica
+    /// guardada na configuração.
+    pub fn seletor_de_idioma(&mut self, ui: &mut egui::Ui) {
+        let mut i = utsim_idiomas::atual();
+        if utsim_idiomas::seletor(ui, "idioma", &mut i) {
+            utsim_idiomas::definir(i);
+            self.config.idioma = Some(i.codigo().to_string());
+            self.gravar_config();
+        }
+    }
+
     /// Grava a configuração (avisa na barra se não der).
     pub fn gravar_config(&mut self) {
         if let Some(a) = self.arquivo.clone()
