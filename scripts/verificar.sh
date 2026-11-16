@@ -6,6 +6,21 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 1
 
+# Verificação é de uma vez só: os dados incrementais não servem para nada e ocupam disco.
+export CARGO_INCREMENTAL=0
+# Cache de compilação compartilhado entre os worktrees (sccache), quando instalado.
+if command -v sccache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=sccache
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-25G}"
+fi
+
+# Com UTSIM_GODOT=1, a ponte utsim-godot entra no clippy e nos testes do workspace: uma
+# chamada separada recompilaria várias dependências com outro conjunto de features.
+FORA="--exclude utsim-viewer --exclude utsim-godot"
+if [ "${UTSIM_GODOT:-}" = "1" ]; then
+    FORA="--exclude utsim-viewer"
+fi
+
 falha() {
     echo "FALHOU: $1" >&2
     exit 1
@@ -27,20 +42,31 @@ for toml in crates/*/Cargo.toml; do
 done
 
 passo "2/7 Lints (cargo clippy -D warnings)"
-cargo clippy --workspace --exclude utsim-viewer --exclude utsim-godot --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
+# shellcheck disable=SC2086
+cargo clippy --workspace $FORA --all-targets -- -D warnings || falha "clippy encontrou avisos ou erros"
 
-passo "3/7 Testes (cargo test --workspace --exclude utsim-viewer --exclude utsim-godot)"
-cargo test --workspace --exclude utsim-viewer --exclude utsim-godot || falha "testes falharam"
+# shellcheck disable=SC2086
+if cargo nextest --version >/dev/null 2>&1; then
+    passo "3/7 Testes (cargo nextest run --workspace $FORA, em paralelo, e os doctests)"
+    # --retries 1: um teste que só passa na segunda vez aparece como FLAKY no relatório.
+    cargo nextest run --workspace $FORA --retries 1 --no-fail-fast || falha "testes falharam"
+    cargo test --doc --workspace $FORA || falha "doctests falharam"
+else
+    passo "3/7 Testes (cargo test --workspace $FORA)"
+    cargo test --workspace $FORA || falha "testes falharam"
+fi
 
-passo "4/7 Build de release (utsim-cli)"
-cargo build --release -p utsim-cli || falha "build de release falhou"
+# A versão de distribuição (release) só é gerada na hora de empacotar: aqui basta o
+# binário de desenvolvimento, que reaproveita o passo 3 e ainda confere estouros.
+passo "4/7 Build do utsim-cli (dev)"
+cargo build -p utsim-cli || falha "build do utsim-cli falhou"
 
 passo "5/7 Validação dos modelos (utsim check)"
-BIN="target/release/utsim"
+BIN="target/debug/utsim"
 if [ ! -x "$BIN" ]; then
-    BIN="target/release/utsim.exe"
+    BIN="target/debug/utsim.exe"
 fi
-[ -x "$BIN" ] || falha "binário utsim não encontrado em target/release"
+[ -x "$BIN" ] || falha "binário utsim não encontrado em target/debug"
 for modelo in examples/*.ron; do
     case "$(basename "$modelo")" in
         experimento*|otimizacao*) continue ;;
@@ -67,8 +93,7 @@ fi
 
 passo "7/7 Interface Godot (opcional: UTSIM_GODOT=1)"
 if [ "${UTSIM_GODOT:-}" = "1" ]; then
-    cargo clippy -p utsim-godot --all-targets -- -D warnings || falha "clippy do utsim-godot encontrou avisos ou erros"
-    cargo test -p utsim-godot || falha "testes do utsim-godot falharam"
+    # O clippy e os testes da ponte já rodaram nos passos 2 e 3 (FORA sem utsim-godot).
     # O teste sem janela precisa do Godot 4.7 (GODOT, `godot` no PATH ou ~/Documents/Godot_v4.7*).
     bash scripts/godot_teste.sh || falha "teste sem janela do Godot falhou"
 else
