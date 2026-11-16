@@ -16,6 +16,7 @@ pub mod inicial;
 pub mod modelo;
 pub mod postos;
 pub mod sessao;
+pub mod texto;
 pub mod trabalho;
 pub mod util;
 

@@ -10,6 +10,7 @@
 //! - Ao lado dos campos, um resumo por nó vindo da simulação do mesmo modelo, calculado
 //!   por uma função que o app entrega (esta crate não depende dos `-core` dos apps).
 
+use crate::texto::{fx, tx, vx};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -46,24 +47,36 @@ pub fn resumo_manutencao(model: &Model) -> Result<Resumo, String> {
     let reps = m.run_replications().map_err(|e| e.to_string())?;
     let n = reps.len().max(1) as f64;
     let linhas: [(&str, &str, bool); 10] = [
-        ("Disponibilidade (%)", "oee.availability", true),
-        ("OEE (%)", "oee", true),
-        ("Falhas por replicação", "maintenance.failures", false),
-        ("MTBF simulado", "maintenance.mtbf", false),
-        ("MTTR simulado", "maintenance.mttr", false),
-        ("Tempo parado em corretiva", "maintenance.down_time", false),
-        ("Tempo em preventiva", "maintenance.preventive_time", false),
+        (tx("modelo-disponibilidade"), "oee.availability", true),
+        (tx("modelo-oee"), "oee", true),
         (
-            "Preventivas por replicação",
+            tx("modelo-falhas_por_replicacao"),
+            "maintenance.failures",
+            false,
+        ),
+        (tx("modelo-mtbf_simulado"), "maintenance.mtbf", false),
+        (tx("modelo-mttr_simulado"), "maintenance.mttr", false),
+        (
+            tx("modelo-tempo_parado_em_corretiva"),
+            "maintenance.down_time",
+            false,
+        ),
+        (
+            tx("modelo-tempo_em_preventiva"),
+            "maintenance.preventive_time",
+            false,
+        ),
+        (
+            tx("modelo-preventivas_por_replicacao"),
             "maintenance.preventives",
             false,
         ),
         (
-            "Espera média pelo técnico",
+            tx("modelo-espera_media_pelo_tecnico"),
             "maintenance.wait_technician",
             false,
         ),
-        ("Custo da manutenção", "maintenance.cost", false),
+        (tx("modelo-custo_da_manutencao"), "maintenance.cost", false),
     ];
     for o in model.objects.iter().filter(|o| o.downtime.is_some()) {
         let blocos: Vec<_> = reps
@@ -87,7 +100,7 @@ pub fn resumo_manutencao(model: &Model) -> Result<Resumo, String> {
                 (rot.to_string(), t)
             })
             .collect();
-        l.push(("Replicações".into(), format!("{}", reps.len())));
+        l.push((tx("modelo-replicacoes").into(), format!("{}", reps.len())));
         saida.insert(o.name.clone(), l);
     }
     Ok(saida)
@@ -232,11 +245,13 @@ impl TelaModelo {
     /// Aviso "Em edição por ..." quando outra pessoa ou app tem a trava.
     pub fn aviso_trava(&self) -> Option<String> {
         self.editor().map(|t| {
-            format!(
-                "Em edição por {} no {} desde {}",
-                t.pessoa,
-                t.app,
-                hora(t.desde_ms)
+            fx(
+                "modelo-em_edicao_por_no_desde",
+                &[
+                    ("pessoa", vx(&t.pessoa)),
+                    ("app", vx(&t.app)),
+                    ("desde_ms", vx(&hora(t.desde_ms))),
+                ],
             )
         })
     }
@@ -270,7 +285,7 @@ impl TelaModelo {
         if let Some(aviso) = self.aviso_trava() {
             self.avisar(aviso);
         } else {
-            self.avisar("Modelo aberto para edição.");
+            self.avisar(tx("modelo-modelo_aberto_para_edicao"));
         }
         self.calcular_resumo();
         Ok(())
@@ -296,7 +311,10 @@ impl TelaModelo {
             self.selecionar(no);
         } else {
             let antes = std::mem::take(&mut self.mensagem);
-            self.falhar(format!("{antes} O nó {no} não está no modelo."));
+            self.falhar(fx(
+                "modelo-o_no_nao_esta_no",
+                &[("antes", vx(&antes)), ("no", vx(&no))],
+            ));
         }
         Ok(())
     }
@@ -314,9 +332,7 @@ impl TelaModelo {
     ) -> Result<T, String> {
         let mesma = self.arquivo.as_deref() == Some(caminho);
         if mesma && self.pode_editar() && self.pendente() {
-            return Err(
-                "A tela Modelo tem mudança por gravar neste modelo. Grave ou desfaça antes.".into(),
-            );
+            return Err(tx("modelo-a_tela_modelo_tem_mudanca").into());
         }
         let ja_minha = mesma && self.pode_editar();
         match trava::travar(caminho, &self.app, pessoa, &self.maquina, agora_ms())
@@ -324,11 +340,13 @@ impl TelaModelo {
         {
             Estado::Minha => {}
             Estado::DeOutro(t) => {
-                return Err(format!(
-                    "Em edição por {} no {} desde {}",
-                    t.pessoa,
-                    t.app,
-                    hora(t.desde_ms)
+                return Err(fx(
+                    "modelo-em_edicao_por_no_desde",
+                    &[
+                        ("pessoa", vx(&t.pessoa)),
+                        ("app", vx(&t.app)),
+                        ("desde_ms", vx(&hora(t.desde_ms))),
+                    ],
                 ));
             }
         }
@@ -374,7 +392,7 @@ impl TelaModelo {
         }
         self.soltar_trava();
         self.estado = None;
-        self.avisar("Edição solta. O modelo segue aberto só para leitura.");
+        self.avisar(tx("modelo-edicao_solta_o_modelo_segue"));
     }
 
     /// Tenta tomar a trava de novo. Com sucesso, relê o arquivo para partir do que há
@@ -390,7 +408,7 @@ impl TelaModelo {
                 if !self.pendente() {
                     self.recarregar();
                 }
-                self.avisar("Modelo aberto para edição.");
+                self.avisar(tx("modelo-modelo_aberto_para_edicao"));
                 true
             }
             Ok(e) => {
@@ -432,7 +450,7 @@ impl TelaModelo {
             Ok(e) => {
                 self.estado = Some(e);
                 if let Some(av) = self.aviso_trava() {
-                    self.falhar(format!("Perdi a edição. {av}"));
+                    self.falhar(fx("modelo-perdi_a_edicao", &[("av", vx(&av))]));
                 }
             }
             Err(e) => self.falhar(e.to_string()),
@@ -453,7 +471,7 @@ impl TelaModelo {
                 self.mtime = modificado(&a);
                 self.mudou_no_disco = false;
                 self.limpar_edicao();
-                self.avisar("Modelo recarregado do disco.");
+                self.avisar(tx("modelo-modelo_recarregado_do_disco"));
                 self.calcular_resumo();
             }
             Err(e) => self.falhar(format!("{}: {e}", a.display())),
@@ -479,17 +497,17 @@ impl TelaModelo {
     /// Grava o modelo inteiro de uma vez, só com a trava nossa.
     pub fn gravar(&mut self) -> Result<(), String> {
         if !self.pode_editar() {
-            return Err("O modelo está só para leitura: outra pessoa edita.".into());
+            return Err(tx("modelo-o_modelo_esta_so_para").into());
         }
         let (Some(doc), Some(a)) = (self.doc.as_ref(), self.arquivo.clone()) else {
-            return Err("Nenhum modelo aberto.".into());
+            return Err(tx("modelo-nenhum_modelo_aberto").into());
         };
         utsim_pasta::write_replace(&a, doc.to_text().as_bytes()).map_err(|e| e.to_string())?;
         self.revisao_gravada = doc.revision();
         self.mtime = modificado(&a);
         self.mudou_no_disco = false;
         self.renovar_agora();
-        self.avisar("Gravado no modelo.");
+        self.avisar(tx("modelo-gravado_no_modelo"));
         self.calcular_resumo();
         Ok(())
     }
@@ -507,10 +525,10 @@ impl TelaModelo {
         f: impl FnOnce(&Model, &str) -> Result<Command, String>,
     ) -> Result<(), String> {
         if !self.pode_editar() {
-            return Err("O modelo está só para leitura.".into());
+            return Err(tx("modelo-o_modelo_esta_so_para-2").into());
         }
         let objeto = self.selecionado.clone();
-        let doc = self.doc.as_mut().ok_or("Nenhum modelo aberto.")?;
+        let doc = self.doc.as_mut().ok_or(tx("modelo-nenhum_modelo_aberto"))?;
         let r = f(doc.model(), &objeto).and_then(|c| doc.apply(c));
         match &r {
             Ok(()) => {
@@ -610,7 +628,7 @@ impl TelaModelo {
     pub fn ui(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
         // Sem unidade, só o modelo aberto pela linha de comando (o pedido do 3D).
         if s.unidade.is_none() && !self.aberto() {
-            ui.label("Abra uma unidade na tela inicial.");
+            ui.label(tx("modelo-abra_uma_unidade_na_tela"));
             return;
         }
         let pessoa = match s.unidade.as_ref() {
@@ -642,13 +660,13 @@ impl TelaModelo {
             && let Some(e) = self.trabalho.erro()
         {
             let e = e.to_string();
-            self.falhar(format!("Resumo da simulação: {e}"));
+            self.falhar(fx("modelo-resumo_da_simulacao", &[("e", vx(&e))]));
         }
         if self.manutencao.sondar(ui.ctx())
             && let Some(e) = self.manutencao.erro()
         {
             let e = e.to_string();
-            self.falhar(format!("Resumo de manutenção: {e}"));
+            self.falhar(fx("modelo-resumo_de_manutencao", &[("e", vx(&e))]));
         }
         self.atalhos(ui.ctx());
 
@@ -657,11 +675,11 @@ impl TelaModelo {
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
                 ui.label(
-                    egui::RichText::new("Nenhum modelo aberto")
+                    egui::RichText::new(tx("modelo-nenhum_modelo_aberto-2"))
                         .size(18.0)
                         .strong(),
                 );
-                ui.weak("Escolha o .ron do simulador acima e clique em Abrir.");
+                ui.weak(tx("modelo-escolha_o_ron_do_simulador"));
             });
             return;
         }
@@ -750,7 +768,7 @@ impl TelaModelo {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("MODELO")
+                        egui::RichText::new(tx("modelo-modelo"))
                             .size(11.0)
                             .strong()
                             .color(v.weak_text_color()),
@@ -759,7 +777,7 @@ impl TelaModelo {
                     crate::util::campo_modelo(ui, &mut self.caminho, s.unidade.as_ref(), largura);
                     if !modelos.is_empty() {
                         egui::ComboBox::from_id_salt("modelos_da_aba_modelo")
-                            .selected_text("dos postos")
+                            .selected_text(tx("modelo-dos_postos"))
                             .width(90.0)
                             .show_ui(ui, |ui| {
                                 for m in modelos {
@@ -768,7 +786,10 @@ impl TelaModelo {
                             });
                     }
                     if ui
-                        .add_enabled(!self.caminho.trim().is_empty(), egui::Button::new("Abrir"))
+                        .add_enabled(
+                            !self.caminho.trim().is_empty(),
+                            egui::Button::new(tx("modelo-abrir")),
+                        )
                         .clicked()
                     {
                         let c = match s.unidade.as_ref() {
@@ -779,7 +800,7 @@ impl TelaModelo {
                             self.falhar(e);
                         }
                     }
-                    if self.aberto() && ui.button("Fechar").clicked() {
+                    if self.aberto() && ui.button(tx("modelo-fechar")).clicked() {
                         self.fechar();
                     }
                     if self.aberto() {
@@ -792,14 +813,11 @@ impl TelaModelo {
         let laranja = egui::Color32::from_rgb(230, 160, 40);
         if self.mudou_no_disco {
             ui.horizontal(|ui| {
-                ui.colored_label(
-                    laranja,
-                    "O arquivo mudou no disco e há mudança sua sem gravar.",
-                );
-                if ui.button("Recarregar (perde a mudança)").clicked() {
+                ui.colored_label(laranja, tx("modelo-o_arquivo_mudou_no_disco"));
+                if ui.button(tx("modelo-recarregar_perde_a_mudanca")).clicked() {
                     self.recarregar();
                 }
-                if ui.button("Manter a minha").clicked() {
+                if ui.button(tx("modelo-manter_a_minha")).clicked() {
                     self.mtime = self.arquivo.as_deref().and_then(modificado);
                     self.mudou_no_disco = false;
                 }
@@ -826,7 +844,7 @@ impl TelaModelo {
             .doc
             .as_ref()
             .map_or((false, false), |d| (d.can_undo(), d.can_redo()));
-        let gravar = egui::Button::new(egui::RichText::new("Gravar").strong()).fill(
+        let gravar = egui::Button::new(egui::RichText::new(tx("modelo-gravar")).strong()).fill(
             if editavel && self.pendente() {
                 ui.visuals().selection.bg_fill
             } else {
@@ -835,49 +853,52 @@ impl TelaModelo {
         );
         if ui
             .add_enabled(editavel, gravar)
-            .on_hover_text("Grava no modelo (Ctrl+S)")
+            .on_hover_text(tx("modelo-grava_no_modelo_ctrl_s"))
             .clicked()
         {
             self.gravar_com_aviso();
         }
         if ui
-            .add_enabled(editavel && refaz, egui::Button::new("Refazer"))
-            .on_hover_text("Ctrl+Y")
+            .add_enabled(editavel && refaz, egui::Button::new(tx("modelo-refazer")))
+            .on_hover_text(tx("modelo-ctrl_y"))
             .clicked()
         {
             self.refazer();
         }
         if ui
-            .add_enabled(editavel && desf, egui::Button::new("Desfazer"))
-            .on_hover_text("Ctrl+Z")
+            .add_enabled(editavel && desf, egui::Button::new(tx("modelo-desfazer")))
+            .on_hover_text(tx("modelo-ctrl_z"))
             .clicked()
         {
             self.desfazer();
         }
         ui.add_space(6.0);
         if editavel {
-            let r = selo(ui, "EDITANDO", verde)
-                .on_hover_text("Você tem a trava do arquivo. Clique para soltar e ficar só lendo.");
+            let r = selo(ui, tx("modelo-editando"), verde)
+                .on_hover_text(tx("modelo-voce_tem_a_trava_do"));
             if r.clicked() {
                 self.soltar_edicao();
             }
         } else {
             let dica = self
                 .aviso_trava()
-                .unwrap_or_else(|| "Ninguém edita. Clique para editar.".to_string());
-            if selo(ui, "SÓ LEITURA", laranja)
-                .on_hover_text(format!("{dica} Clique para tentar editar."))
+                .unwrap_or_else(|| tx("modelo-ninguem_edita_clique_para_editar").to_string());
+            if selo(ui, tx("modelo-so_leitura"), laranja)
+                .on_hover_text(fx(
+                    "modelo-clique_para_tentar_editar",
+                    &[("dica", vx(&dica))],
+                ))
                 .clicked()
             {
                 self.tentar_editar();
             }
         }
         if self.pendente() {
-            ui.colored_label(laranja, "mudança sem gravar");
+            ui.colored_label(laranja, tx("modelo-mudanca_sem_gravar"));
         }
         if ui
             .small_button("⟳")
-            .on_hover_text("Recarregar do disco")
+            .on_hover_text(tx("modelo-recarregar_do_disco"))
             .clicked()
         {
             if self.pendente() {
@@ -926,10 +947,13 @@ impl TelaModelo {
 
     fn lista(&mut self, ui: &mut egui::Ui) {
         let nomes_todos = self.doc.as_ref().map_or(0, |d| d.model().objects.len());
-        titulo_zona(ui, &format!("Nós do modelo · {nomes_todos}"));
+        titulo_zona(
+            ui,
+            &fx("modelo-nos_do_modelo", &[("nomes_todos", vx(&nomes_todos))]),
+        );
         ui.add(
             egui::TextEdit::singleline(&mut self.filtro)
-                .hint_text("Filtrar por nome")
+                .hint_text(tx("modelo-filtrar_por_nome"))
                 .desired_width(f32::INFINITY),
         );
         ui.add_space(6.0);
@@ -947,7 +971,7 @@ impl TelaModelo {
                     }
                 }
                 if nomes.is_empty() {
-                    ui.weak("Nenhum nó com esse nome.");
+                    ui.weak(tx("modelo-nenhum_no_com_esse_nome"));
                 }
             });
         if let Some(n) = escolhido {
@@ -959,10 +983,10 @@ impl TelaModelo {
     /// num quadro com título.
     fn painel_no(&mut self, ui: &mut egui::Ui) {
         if self.selecionado.is_empty() {
-            titulo_zona(ui, "Nó");
+            titulo_zona(ui, tx("modelo-no"));
             ui.add_space(30.0);
             ui.vertical_centered(|ui| {
-                ui.weak("Escolha um nó na lista à esquerda.");
+                ui.weak(tx("modelo-escolha_um_no_na_lista"));
             });
             return;
         }
@@ -976,7 +1000,7 @@ impl TelaModelo {
                     .find(|o| o.name == self.selecionado)
             })
             .map(|o| tipo_do_no(&format!("{:?}", o.kind)));
-        titulo_zona(ui, tipo.unwrap_or("Nó"));
+        titulo_zona(ui, tipo.unwrap_or(tx("modelo-no")));
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(&self.selecionado)
@@ -985,15 +1009,15 @@ impl TelaModelo {
                     .color(ui.visuals().strong_text_color()),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Abrir em Ferramentas").clicked() {
+                if ui.button(tx("modelo-abrir_em_ferramentas")).clicked() {
                     self.pedido_ferramentas =
                         Some((self.modelo_rel.clone(), self.selecionado.clone()));
                 }
                 let n = self.estudos_do_selecionado();
                 ui.weak(match n {
-                    0 => "nenhum estudo".to_string(),
-                    1 => "1 estudo".to_string(),
-                    n => format!("{n} estudos"),
+                    0 => tx("modelo-nenhum_estudo").to_string(),
+                    1 => tx("modelo-1_estudo").to_string(),
+                    n => fx("modelo-estudos", &[("n", vx(&n))]),
                 });
             });
         });
@@ -1013,13 +1037,13 @@ impl TelaModelo {
         let aba = self.aba;
         let editavel = self.pode_editar() && aba == self.principal;
         if aba == Aba::Manutencao {
-            ui.weak("Manutenção: só leitura aqui. Edite no UTSim.");
+            ui.weak(tx("modelo-manutencao_so_leitura_aqui_edite"));
             ui.add_space(4.0);
             self.manutencao_simulada(ui);
         }
         let campos = self.campos(aba);
         if campos.is_empty() {
-            ui.weak("Nada para mostrar neste nó.");
+            ui.weak(tx("modelo-nada_para_mostrar_neste_no"));
         }
         // Cada campo de profundidade 0 abre um quadro; os de dentro vão nele.
         let mut grupos: Vec<Vec<&Campo>> = Vec::new();
@@ -1086,19 +1110,19 @@ impl TelaModelo {
     fn painel_resumo(&mut self, ui: &mut egui::Ui) {
         let laranja = egui::Color32::from_rgb(230, 160, 40);
         ui.horizontal(|ui| {
-            titulo_zona(ui, "Resultados");
+            titulo_zona(ui, tx("modelo-resultados"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                selo(ui, "SIMULADO", laranja)
-                    .on_hover_text("Resultado do modelo, não é medição da fábrica.");
+                selo(ui, tx("modelo-simulado"), laranja)
+                    .on_hover_text(tx("modelo-resultado_do_modelo_nao_e"));
             });
         });
-        ui.weak("Do modelo, não é medição da fábrica.");
+        ui.weak(tx("modelo-do_modelo_nao_e_medicao"));
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(
                     !self.trabalho.ocupado(),
-                    egui::Button::new("Simular de novo"),
+                    egui::Button::new(tx("modelo-simular_de_novo")),
                 )
                 .clicked()
             {
@@ -1121,17 +1145,20 @@ impl TelaModelo {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 if !self.selecionado.is_empty() {
-                    subtitulo(ui, &format!("Nó {}", self.selecionado));
+                    subtitulo(
+                        ui,
+                        &fx("modelo-no-2", &[("selecionado", vx(&self.selecionado))]),
+                    );
                     match r.get(&self.selecionado) {
                         Some(l) => blocos(ui, l),
                         None => {
-                            ui.weak("Sem resultado simulado para este nó.");
+                            ui.weak(tx("modelo-sem_resultado_simulado_para_este"));
                         }
                     }
                     ui.add_space(12.0);
                 }
                 if let Some(l) = r.get("") {
-                    subtitulo(ui, "Modelo inteiro");
+                    subtitulo(ui, tx("modelo-modelo_inteiro"));
                     blocos(ui, l);
                 }
             });
@@ -1155,21 +1182,21 @@ impl TelaModelo {
         }
         let laranja = egui::Color32::from_rgb(230, 160, 40);
         ui.horizontal(|ui| {
-            subtitulo(ui, "Manutenção simulada");
-            selo(ui, "SIMULADO", laranja)
-                .on_hover_text("Resultado do modelo, não é medição da fábrica.");
+            subtitulo(ui, tx("modelo-manutencao_simulada"));
+            selo(ui, tx("modelo-simulado"), laranja)
+                .on_hover_text(tx("modelo-resultado_do_modelo_nao_e"));
             if self.manutencao.ocupado() {
                 ui.spinner();
             }
         });
-        ui.weak("Média das replicações. Tempos na unidade do modelo.");
+        ui.weak(tx("modelo-media_das_replicacoes_tempos_na"));
         match self.manutencao.ok().and_then(|r| r.get(&self.selecionado)) {
             Some(l) => blocos(ui, &l.clone()),
             None if self.manutencao.ocupado() => {
-                ui.weak("Simulando...");
+                ui.weak(tx("modelo-simulando"));
             }
             None => {
-                ui.weak("Sem resultado de manutenção para este nó.");
+                ui.weak(tx("modelo-sem_resultado_de_manutencao_para"));
             }
         }
         ui.add_space(8.0);
@@ -1229,7 +1256,7 @@ impl TelaModelo {
                 Tipo::Lista => {
                     ui.strong(&c.rotulo);
                     if ui
-                        .add_enabled(editavel, egui::Button::new("Adicionar"))
+                        .add_enabled(editavel, egui::Button::new(tx("modelo-adicionar")))
                         .clicked()
                     {
                         nova_acao = Some(Acao::Adicionar(c.caminho.clone()));
@@ -1240,7 +1267,11 @@ impl TelaModelo {
                     let fechado = self.fechados.contains(&chave);
                     if ui
                         .small_button(if fechado { "+" } else { "−" })
-                        .on_hover_text(if fechado { "Mostrar" } else { "Esconder" })
+                        .on_hover_text(if fechado {
+                            tx("modelo-mostrar")
+                        } else {
+                            tx("modelo-esconder")
+                        })
                         .clicked()
                     {
                         if fechado {
@@ -1251,7 +1282,7 @@ impl TelaModelo {
                     }
                     ui.strong(&c.rotulo);
                     if ui
-                        .add_enabled(editavel, egui::Button::new("Remover"))
+                        .add_enabled(editavel, egui::Button::new(tx("modelo-remover")))
                         .clicked()
                         && let Some((lista, i)) = separar_item(&c.caminho)
                     {
@@ -1323,7 +1354,7 @@ impl TelaModelo {
                     let r = ui.add_enabled(
                         editavel,
                         egui::TextEdit::singleline(&mut livre)
-                            .hint_text("outro")
+                            .hint_text(tx("modelo-outro"))
                             .desired_width(80.0),
                     );
                     if r.lost_focus() && !livre.trim().is_empty() {
@@ -1391,17 +1422,17 @@ fn tipo_do_no(depurado: &str) -> &'static str {
         .next()
         .unwrap_or("");
     match nome {
-        "Source" => "Chegada",
-        "Processor" => "Processo",
-        "Queue" => "Fila",
-        "Sink" => "Saída",
-        "Conveyor" => "Transportador",
-        "Combiner" => "Montagem",
-        "Separator" => "Separação",
-        "Transporter" => "Transporte",
-        "Rack" => "Estante",
-        "Dispatcher" => "Despacho",
-        _ => "Nó",
+        "Source" => tx("modelo-chegada"),
+        "Processor" => tx("modelo-processo"),
+        "Queue" => tx("modelo-fila"),
+        "Sink" => tx("modelo-saida"),
+        "Conveyor" => tx("modelo-transportador"),
+        "Combiner" => tx("modelo-montagem"),
+        "Separator" => tx("modelo-separacao"),
+        "Transporter" => tx("modelo-transporte"),
+        "Rack" => tx("modelo-estante"),
+        "Dispatcher" => tx("modelo-despacho"),
+        _ => tx("modelo-no"),
     }
 }
 

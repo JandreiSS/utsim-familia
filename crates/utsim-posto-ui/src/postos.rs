@@ -1,5 +1,6 @@
 //! Tela de postos de trabalho: lista, criar, editar, remover e importar do modelo.
 
+use crate::texto::{fx, tx, vx};
 use utsim_posto::{Posto, sugerir_postos};
 
 use crate::sessao::Sessao;
@@ -67,7 +68,7 @@ impl TelaPostos {
                 self.sugestoes = sugerir_postos(&m, &u.postos(), &caminho);
                 self.escolhidas = vec![true; self.sugestoes.len()];
                 let n = self.sugestoes.len();
-                s.avisar(format!("{n} postos sugeridos pelo modelo."));
+                s.avisar(fx("postos-postos_sugeridos_pelo_modelo", &[("n", vx(&n))]));
             }
             Err(e) => s.falhar(e),
         }
@@ -75,18 +76,18 @@ impl TelaPostos {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
         if s.unidade.is_none() {
-            ui.label("Abra uma unidade na tela inicial.");
+            ui.label(tx("postos-abra_uma_unidade_na_tela"));
             return;
         }
-        ui.heading("Postos de trabalho");
+        ui.heading(tx("postos-postos_de_trabalho"));
         ui.horizontal(|ui| {
-            if ui.button("Atualizar").clicked() {
+            if ui.button(tx("postos-atualizar")).clicked() {
                 let n = s.atualizar();
                 if n == 0 {
-                    s.avisar("Nada novo na pasta.");
+                    s.avisar(tx("postos-nada_novo_na_pasta"));
                 }
             }
-            if ui.button("Novo posto").clicked() {
+            if ui.button(tx("postos-novo_posto")).clicked() {
                 self.abrir_posto(&Posto {
                     pessoas_expostas: 1,
                     ..Posto::default()
@@ -103,7 +104,7 @@ impl TelaPostos {
     }
 
     fn lista(&mut self, ui: &mut egui::Ui, s: &mut Sessao, postos: &[Posto]) {
-        ui.strong(format!("{} postos na unidade", postos.len()));
+        ui.strong(fx("postos-postos_na_unidade", &[("n", vx(&postos.len()))]));
         egui::ScrollArea::vertical()
             .id_salt("lista_postos")
             .max_height(320.0)
@@ -125,38 +126,38 @@ impl TelaPostos {
 
     fn formulario(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
         if !self.editando {
-            ui.weak("Escolha um posto ou crie um novo.");
+            ui.weak(tx("postos-escolha_um_posto_ou_crie"));
             return;
         }
         ui.strong(if self.selecionado.is_empty() {
-            "Novo posto"
+            tx("postos-novo_posto")
         } else {
-            "Editar posto"
+            tx("postos-editar_posto")
         });
         egui::Grid::new("form_posto").num_columns(2).show(ui, |ui| {
-            ui.label("Nome");
+            ui.label(tx("postos-nome"));
             ui.text_edit_singleline(&mut self.rascunho.nome);
             ui.end_row();
-            ui.label("Área");
+            ui.label(tx("postos-area"));
             ui.text_edit_singleline(&mut self.rascunho.area);
             ui.end_row();
-            ui.label("Descrição");
+            ui.label(tx("postos-descricao"));
             ui.text_edit_singleline(&mut self.rascunho.descricao);
             ui.end_row();
-            ui.label("Pessoas expostas por turno");
+            ui.label(tx("postos-pessoas_expostas_por_turno"));
             ui.add(egui::DragValue::new(&mut self.rascunho.pessoas_expostas).range(0..=999));
             ui.end_row();
-            ui.label("EPI (separados por vírgula)");
+            ui.label(tx("postos-epi_separados_por_virgula"));
             ui.text_edit_singleline(&mut self.epi);
             ui.end_row();
-            ui.label("Modelo (.ron)");
+            ui.label(tx("postos-modelo_ron"));
             crate::util::campo_modelo(ui, &mut self.modelo, s.unidade.as_ref(), 260.0);
             ui.end_row();
-            ui.label("Objeto do modelo");
+            ui.label(tx("postos-objeto_do_modelo"));
             ui.text_edit_singleline(&mut self.objeto);
             ui.end_row();
         });
-        ui.label("Atividades (uma por linha)");
+        ui.label(tx("postos-atividades_uma_por_linha"));
         ui.add(
             egui::TextEdit::multiline(&mut self.atividades)
                 .desired_rows(3)
@@ -164,41 +165,44 @@ impl TelaPostos {
         );
         ui.horizontal(|ui| {
             let ok = !self.rascunho.nome.trim().is_empty();
-            if ui.add_enabled(ok, egui::Button::new("Gravar")).clicked() {
+            if ui
+                .add_enabled(ok, egui::Button::new(tx("postos-gravar")))
+                .clicked()
+            {
                 let p = self.montar();
                 if let Some(u) = s.unidade.as_mut() {
                     let r = u.gravar_posto(&p);
-                    if let Some(id) = s.resultado(r, "Posto gravado.") {
+                    if let Some(id) = s.resultado(r, tx("postos-posto_gravado")) {
                         self.selecionado = id.clone();
                         self.rascunho.id = id;
                     }
                 }
             }
-            if !self.selecionado.is_empty() && ui.button("Remover").clicked() {
+            if !self.selecionado.is_empty() && ui.button(tx("postos-remover")).clicked() {
                 let id = self.selecionado.clone();
                 if let Some(u) = s.unidade.as_mut() {
                     let r = u.remover(utsim_posto::POSTOS, &id);
-                    if s.resultado(r, "Posto removido.").is_some() {
+                    if s.resultado(r, tx("postos-posto_removido")).is_some() {
                         self.editando = false;
                         self.selecionado.clear();
                     }
                 }
             }
-            if ui.button("Fechar").clicked() {
+            if ui.button(tx("postos-fechar")).clicked() {
                 self.editando = false;
             }
         });
     }
 
     fn importacao(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
-        ui.strong("Importar postos do modelo");
+        ui.strong(tx("postos-importar_postos_do_modelo"));
         ui.horizontal(|ui| {
-            ui.label("Modelo (.ron):");
+            ui.label(tx("postos-modelo_ron-2"));
             crate::util::campo_modelo(ui, &mut self.importar, s.unidade.as_ref(), 420.0);
             if ui
                 .add_enabled(
                     !self.importar.trim().is_empty(),
-                    egui::Button::new("Importar postos do modelo"),
+                    egui::Button::new(tx("postos-importar_postos_do_modelo")),
                 )
                 .clicked()
             {
@@ -211,19 +215,24 @@ impl TelaPostos {
         for (p, marcada) in self.sugestoes.iter().zip(self.escolhidas.iter_mut()) {
             ui.checkbox(
                 marcada,
-                format!(
-                    "{} (objeto {}, EPI: {})",
-                    p.nome,
-                    p.objeto.as_deref().unwrap_or("-"),
-                    if p.epi.is_empty() {
-                        "nenhum".to_string()
-                    } else {
-                        p.epi.join(", ")
-                    }
+                fx(
+                    "postos-objeto_epi",
+                    &[
+                        ("nome", vx(&p.nome)),
+                        ("objeto", vx(&p.objeto.as_deref().unwrap_or("-"))),
+                        (
+                            "epi",
+                            vx(&if p.epi.is_empty() {
+                                "nenhum".to_string()
+                            } else {
+                                p.epi.join(", ")
+                            }),
+                        ),
+                    ],
                 ),
             );
         }
-        if ui.button("Criar os postos marcados").clicked() {
+        if ui.button(tx("postos-criar_os_postos_marcados")).clicked() {
             let novos: Vec<Posto> = self
                 .sugestoes
                 .iter()
@@ -245,7 +254,7 @@ impl TelaPostos {
             }
             if n > 0 {
                 s.mudou();
-                s.avisar(format!("{n} postos criados."));
+                s.avisar(fx("postos-postos_criados", &[("n", vx(&n))]));
                 self.sugestoes.clear();
                 self.escolhidas.clear();
             }

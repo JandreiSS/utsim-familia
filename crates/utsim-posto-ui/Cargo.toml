@@ -17,6 +17,8 @@ utsim-ferramentas.workspace = true
 # Pedido e resposta entre os apps (`--utsim-pedido`).
 utsim-troca.workspace = true
 serde.workspace = true
+# Os textos em cinco línguas (idiomas/*/posto.ftl).
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
 serde_json.workspace = true
 # The workspace's single egui (the same eframe 0.36.2 of the apps).
 egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"] }

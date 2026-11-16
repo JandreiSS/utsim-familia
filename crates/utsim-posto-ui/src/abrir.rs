@@ -17,6 +17,7 @@
 //!
 //! Cada opção aceita `--opcao=valor` e `--opcao valor`. Um caminho solto também abre.
 
+use crate::texto::{fx, tx, vx};
 use std::path::{Path, PathBuf};
 
 use utsim_estudo::{Ferramenta, Origem, Parametros, Tabela, importar};
@@ -91,7 +92,8 @@ impl Abrir {
             }
             if !OPCOES.contains(&opcao.as_str()) {
                 if opcao.starts_with("--utsim-") {
-                    a.erros.push(format!("opção desconhecida: {opcao}"));
+                    a.erros
+                        .push(fx("abrir-opcao_desconhecida", &[("opcao", vx(&opcao))]));
                 }
                 continue;
             }
@@ -100,7 +102,8 @@ impl Abrir {
                 None => match it.next_if(|v| !v.starts_with("--")) {
                     Some(v) => v,
                     None => {
-                        a.erros.push(format!("{opcao} sem valor"));
+                        a.erros
+                            .push(fx("abrir-sem_valor", &[("opcao", vx(&opcao))]));
                         continue;
                     }
                 },
@@ -112,20 +115,29 @@ impl Abrir {
                 "--utsim-no" => a.no = Some(valor),
                 "--utsim-ferramenta" => match importar::de_chave(&valor) {
                     Some(f) => a.ferramenta = Some(f),
-                    None => a.erros.push(format!("ferramenta desconhecida: {valor}")),
+                    None => a.erros.push(fx(
+                        "abrir-ferramenta_desconhecida",
+                        &[("valor", vx(&valor))],
+                    )),
                 },
                 "--utsim-aba" => a.aba = Some(valor),
                 "--utsim-lie" => match numero(&valor) {
                     Some(v) => a.lie = Some(v),
-                    None => a.erros.push(format!("LIE não é número: {valor}")),
+                    None => a
+                        .erros
+                        .push(fx("abrir-lie_nao_e_numero", &[("valor", vx(&valor))])),
                 },
                 "--utsim-lse" => match numero(&valor) {
                     Some(v) => a.lse = Some(v),
-                    None => a.erros.push(format!("LSE não é número: {valor}")),
+                    None => a
+                        .erros
+                        .push(fx("abrir-lse_nao_e_numero", &[("valor", vx(&valor))])),
                 },
                 "--utsim-subgrupo" => match valor.trim().parse::<usize>() {
                     Ok(n) if n >= 1 => a.subgrupo = Some(n),
-                    _ => a.erros.push(format!("subgrupo inválido: {valor}")),
+                    _ => a
+                        .erros
+                        .push(fx("abrir-subgrupo_invalido", &[("valor", vx(&valor))])),
                 },
                 _ => {}
             }
@@ -137,7 +149,7 @@ impl Abrir {
         if eh_modelo(&p) {
             if self.modelo.is_some() {
                 self.erros
-                    .push("mais de um modelo pedido: fica o último".to_string());
+                    .push(tx("abrir-mais_de_um_modelo_pedido").to_string());
             }
             self.modelo = Some(p);
         } else {
@@ -151,7 +163,7 @@ impl Abrir {
         let p = match utsim_troca::Pedido::ler(caminho) {
             Ok(p) => p,
             Err(e) => {
-                self.erros.push(format!("pedido: {e}"));
+                self.erros.push(fx("abrir-pedido", &[("e", vx(&e))]));
                 return;
             }
         };
@@ -166,7 +178,7 @@ impl Abrir {
                     Ok(()) => self
                         .dados
                         .extend(p.entrada.arquivos.iter().map(|a| a.caminho.clone())),
-                    Err(e) => self.falhar_pedido(format!("pedido: {e}")),
+                    Err(e) => self.falhar_pedido(fx("abrir-pedido", &[("e", vx(&e))])),
                 }
                 if let Some(c) = p
                     .entrada
@@ -176,13 +188,14 @@ impl Abrir {
                 {
                     match gravar_conteudo(caminho, &p.id, c) {
                         Ok(c) => self.dados.push(c),
-                        Err(e) => self.falhar_pedido(format!("pedido: {e}")),
+                        Err(e) => self.falhar_pedido(fx("abrir-pedido", &[("e", vx(&e))])),
                     }
                 }
                 if let Some(k) = &p.ferramenta {
                     match importar::de_chave(k) {
                         Some(f) => self.ferramenta = Some(f),
-                        None => self.falhar_pedido(format!("ferramenta desconhecida: {k}")),
+                        None => self
+                            .falhar_pedido(fx("abrir-ferramenta_desconhecida-2", &[("k", vx(&k))])),
                     }
                 }
                 let e = &p.entrada;
@@ -194,10 +207,12 @@ impl Abrir {
             }
             acao::ABRIR_MODELO | acao::EDITAR_NO => {
                 if p.contexto.modelo.is_none() {
-                    self.falhar_pedido("pedido sem modelo para abrir".into());
+                    self.falhar_pedido(tx("abrir-pedido_sem_modelo_para_abrir").into());
                 }
             }
-            outra => self.falhar_pedido(format!("este app não atende a ação {outra}")),
+            outra => {
+                self.falhar_pedido(fx("abrir-este_app_nao_atende_a", &[("outra", vx(&outra))]))
+            }
         }
         self.pedido = Some(p);
     }
@@ -318,9 +333,7 @@ pub fn responder(
             match aberto {
                 Some(e) => r.resultado = Some(resultado_do_estudo(p, e)),
                 None if estudo.is_some() => {
-                    r.mensagem = Some(
-                        "O estudo do pedido não estava aberto ao fechar: veja na unidade.".into(),
-                    );
+                    r.mensagem = Some(tx("abrir-o_estudo_do_pedido_nao").into());
                 }
                 None => {}
             }
@@ -389,7 +402,7 @@ pub fn ler_dados(a: &Abrir) -> (Vec<Arquivo>, Vec<String>) {
         let r = r.and_then(|(t, o)| Ok((escolher_colunas(t, &a.colunas)?, o)));
         match r {
             Ok((t, o)) if !t.vazia() => ok.push((nome, t, o)),
-            Ok(_) => erros.push(format!("{nome}: o arquivo não tem dados")),
+            Ok(_) => erros.push(fx("abrir-o_arquivo_nao_tem_dados", &[("nome", vx(&nome))])),
             Err(e) => erros.push(format!("{nome}: {e}")),
         }
     }
@@ -412,7 +425,10 @@ fn escolher_colunas(t: Tabela, colunas: &[String]) -> Result<Tabela, String> {
         }
     }
     if !faltam.is_empty() {
-        return Err(format!("coluna que não existe: {}", faltam.join(", ")));
+        return Err(fx(
+            "abrir-coluna_que_nao_existe",
+            &[("faltam", vx(&faltam.join(", ")))],
+        ));
     }
     let pegar = |l: &[String]| {
         idx.iter()
@@ -461,7 +477,7 @@ fn reabrir_ultima(s: &mut Sessao) {
 /// Abre a unidade de análises avulsas (cria na primeira vez).
 fn abrir_avulsa(s: &mut Sessao) -> bool {
     let Some(p) = pasta_avulsa(s) else {
-        s.falhar("Sem pasta de configuração para a unidade de análises avulsas.");
+        s.falhar(tx("abrir-sem_pasta_de_configuracao_para"));
         return false;
     };
     let autor = pessoa(s);

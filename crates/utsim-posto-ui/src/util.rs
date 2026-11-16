@@ -1,5 +1,6 @@
 //! Pequenas ajudas: data de hoje, cor `#rrggbb` e leitura de modelo.
 
+use crate::texto::tx;
 use std::path::Path;
 
 use egui::Color32;
@@ -114,12 +115,12 @@ pub fn campo_modelo(
     ui.horizontal(|ui| {
         let mut r = ui.add(
             egui::TextEdit::singleline(texto)
-                .hint_text("arquivo .ron: escreva ou clique em Procurar…")
+                .hint_text(tx("util-arquivo_ron_escreva_ou_clique"))
                 .desired_width(largura),
         );
         if ui
             .button(arquivos::PROCURAR)
-            .on_hover_text("Abre o explorador de arquivos para escolher o modelo.")
+            .on_hover_text(tx("util-abre_o_explorador_de_arquivos"))
             .clicked()
         {
             let atual = match u {
@@ -131,7 +132,7 @@ pub fn campo_modelo(
             };
             if let Some(p) = arquivos::procurar(
                 Tipo::Abrir,
-                "Escolha o modelo do UTSim",
+                tx("util-escolha_o_modelo_do_utsim"),
                 &[arquivos::RON],
                 &atual,
             ) {

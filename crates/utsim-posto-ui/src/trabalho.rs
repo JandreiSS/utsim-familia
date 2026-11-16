@@ -1,6 +1,7 @@
 //! Uma tarefa pesada (simulação) num fio de trabalho. A tela chama [`Trabalho::sondar`] a
 //! cada quadro e recebe o resultado quando ele chega.
 
+use crate::texto::tx;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
@@ -58,7 +59,7 @@ impl<T> Trabalho<T> {
                 false
             }
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.resultado = Some(Err("a tarefa terminou sem resultado".into()));
+                self.resultado = Some(Err(tx("trabalho-a_tarefa_terminou_sem_resultado").into()));
                 self.rx = None;
                 true
             }

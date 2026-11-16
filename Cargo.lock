@@ -8457,6 +8457,7 @@ dependencies = [
  "utsim-ensino-store",
  "utsim-estudo",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-pasta",
  "utsim-posto",
