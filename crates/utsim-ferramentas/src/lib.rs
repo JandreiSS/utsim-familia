@@ -35,6 +35,7 @@ pub mod qfd;
 pub mod relatorios;
 pub mod selecao;
 pub mod smed;
+pub mod texto;
 pub mod trabalho_padrao;
 
 /// A number typed by a person: `1,5`, `1.5`, ` 2 `; `None` when empty or not a number.

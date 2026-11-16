@@ -9,6 +9,8 @@ rust-version.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# The on-screen names and findings in five languages (idiomas/*/ferramentas.ftl), without egui.
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
 
 [dev-dependencies]
 proptest = { version = "=1.11.0", default-features = false, features = ["std"] }

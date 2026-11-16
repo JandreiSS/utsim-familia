@@ -3,6 +3,7 @@
 //! percentage of each sense (for the radar) and of the audit, compared over time. The
 //! checklist is the company's; [`STARTER`] is only a starting point, in our own wording.
 
+use crate::texto::tx;
 use serde::{Deserialize, Serialize};
 
 /// The five senses, in order.
@@ -51,11 +52,11 @@ impl Sense {
     /// The name on screen.
     pub fn name(self) -> &'static str {
         match self {
-            Sense::Sort => "Utilização",
-            Sense::Order => "Organização",
-            Sense::Shine => "Limpeza",
-            Sense::Standardise => "Padronização",
-            Sense::Sustain => "Disciplina",
+            Sense::Sort => tx("cinco-s-utilizacao"),
+            Sense::Order => tx("cinco-s-organizacao"),
+            Sense::Shine => tx("cinco-s-limpeza"),
+            Sense::Standardise => tx("cinco-s-padronizacao"),
+            Sense::Sustain => tx("cinco-s-disciplina"),
         }
     }
 }

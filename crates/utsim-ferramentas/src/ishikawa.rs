@@ -30,12 +30,19 @@ pub const SIX_M: [(&str, &str); 6] = [
     ("meio_ambiente", "Meio ambiente"),
 ];
 
-/// Name on screen of a category key (the team's own categories are their own name).
+/// Name on screen of a category key, in the language of the moment (the team's own
+/// categories are their own name). The names in [`SIX_M`] are the Portuguese ones.
 pub fn category_name(key: &str) -> String {
-    SIX_M
-        .iter()
-        .find(|(k, _)| *k == key)
-        .map_or_else(|| key.to_string(), |(_, n)| n.to_string())
+    let chave = match key {
+        "mao_de_obra" => "ishikawa-mao_de_obra",
+        "maquina" => "ishikawa-maquina",
+        "metodo" => "ishikawa-metodo",
+        "material" => "ishikawa-material",
+        "medicao" => "ishikawa-medicao",
+        "meio_ambiente" => "ishikawa-meio_ambiente",
+        _ => return key.to_string(),
+    };
+    crate::texto::tx(chave).to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

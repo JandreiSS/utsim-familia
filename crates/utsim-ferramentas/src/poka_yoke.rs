@@ -8,6 +8,7 @@
 //! The types are the exchange format of the tool (serde, `Default`); the screens live in
 //! the quality app and draw the result. Dates are `AAAA-MM-DD`.
 
+use crate::texto::{fx, tx, vx};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -124,25 +125,17 @@ pub enum Finding {
 }
 
 impl Finding {
-    /// The text in Portuguese (the quality app may use its own catalogue).
+    /// The text in the language of the moment.
     pub fn text(&self) -> String {
         match self {
-            Finding::NoFailureMode => "Ligue o dispositivo a um modo de falha do FMEA.".into(),
-            Finding::ControlWithoutO => {
-                "Dispositivo de controle que não baixou a ocorrência: revise a nota O ou a função."
-                    .into()
-            }
-            Finding::WarningWithoutD => {
-                "Dispositivo de alerta que não baixou a detecção: revise a nota D ou a função."
-                    .into()
-            }
-            Finding::Worse => "Uma nota subiu depois do dispositivo.".into(),
-            Finding::NoFrequency => "Diga de quantos em quantos dias ele é verificado.".into(),
-            Finding::NeverChecked => "Ainda não foi verificado.".into(),
-            Finding::Late(d) => format!("Verificação atrasada desde {d}."),
-            Finding::LastFailed => {
-                "Na última verificação ele não funcionou: o modo de falha está desprotegido.".into()
-            }
+            Finding::NoFailureMode => tx("poka-yoke-ligue_o_dispositivo_a_um").into(),
+            Finding::ControlWithoutO => tx("poka-yoke-dispositivo_de_controle_que_nao").into(),
+            Finding::WarningWithoutD => tx("poka-yoke-dispositivo_de_alerta_que_nao").into(),
+            Finding::Worse => tx("poka-yoke-uma_nota_subiu_depois_do").into(),
+            Finding::NoFrequency => tx("poka-yoke-diga_de_quantos_em_quantos").into(),
+            Finding::NeverChecked => tx("poka-yoke-ainda_nao_foi_verificado").into(),
+            Finding::Late(d) => fx("poka-yoke-verificacao_atrasada_desde", &[("d", vx(&d))]),
+            Finding::LastFailed => tx("poka-yoke-na_ultima_verificacao_ele_nao").into(),
         }
     }
 }
