@@ -65,6 +65,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- Trajetos: aviso de alcance nas pontas de uma esteira desenhada servidas por pessoas (acima de 1,75 m ela não alcança; abaixo de 0,3 m trabalha agachada).
 - UTSim 3D, painéis ao vivo em janela própria: o botão **Janela** do painel ao vivo o leva para uma janela do sistema (`Window` do Godot não embutida), que pode ir para outro monitor e continua ao vivo. Vários podem ficar abertos ao mesmo tempo, fora do limite de três sobre a vista; **Voltar** devolve o painel à vista. Nó `UtsimPainelVivo` (`painel_janela.rs`, egui próprio), roteiro `g4_painel_janela.json`.
 - UTSim 3D, idioma em ⚙ Configurações: escolha entre as cinco línguas, gravada nas preferências (`idioma`) e aplicada ao abrir (`utsim_idiomas::definir`). Por ora mudam a janela Configurações e os painéis ao vivo.
 - UTSim Qualidade e UTSim Segurança do Trabalho: na tela Modelo, a aba Manutenção de um nó com quebras mostra a manutenção simulada (disponibilidade, OEE, falhas, MTBF e MTTR simulados, tempo parado, preventivas, espera pelo técnico e custo), na média de até 5 replicações (`utsim_posto_ui::modelo::resumo_manutencao`).
