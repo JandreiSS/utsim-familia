@@ -384,6 +384,53 @@ pub fn rodar(model: &Model, reps: Option<u32>) -> Result<RelatorioQualidade, Mod
     })
 }
 
+/// Most replications [`capacidade_para_troca`] runs.
+pub const REPLICACOES_TROCA: u32 = 30;
+
+/// The simulated capability of every characteristic of the model, as the `dados` of the
+/// `capacidade_simulada` result (format 1) other apps read from the response: model name,
+/// replications and, per characteristic, `nome`, `objeto`, `n`, `lie`, `lse`, `media`,
+/// `desvio`, `cp`, `cpk`, `cpk_lo`, `cpk_hi`, `ppk`, `ppm` and `erro` (absent values are
+/// null). `reps` absent: the model's own replications; capped at [`REPLICACOES_TROCA`].
+pub fn capacidade_para_troca(
+    model: &Model,
+    reps: Option<u32>,
+) -> Result<serde_json::Value, ModelError> {
+    use serde_json::json;
+    let n = reps
+        .unwrap_or(model.run.replications)
+        .clamp(1, REPLICACOES_TROCA);
+    let rel = rodar(model, Some(n))?;
+    let caracteristicas: Vec<_> = rel
+        .capacidades
+        .iter()
+        .map(|c| {
+            let k = c.capacidade.as_ref();
+            json!({
+                "nome": c.caracteristica,
+                "objeto": c.objeto,
+                "n": c.n,
+                "lie": k.and_then(|k| k.spec.lsl),
+                "lse": k.and_then(|k| k.spec.usl),
+                "media": k.map(|k| k.mean),
+                "desvio": k.map(|k| k.sigma_overall),
+                "cp": k.and_then(|k| k.cp.as_ref()).map(|i| i.value),
+                "cpk": k.map(|k| k.cpk.value),
+                "cpk_lo": k.map(|k| k.cpk.lo),
+                "cpk_hi": k.map(|k| k.cpk.hi),
+                "ppk": k.map(|k| k.ppk.value),
+                "ppm": k.map(|k| k.ppm_overall.total),
+                "erro": c.erro,
+            })
+        })
+        .collect();
+    Ok(json!({
+        "modelo": rel.modelo,
+        "replicacoes": n,
+        "caracteristicas": caracteristicas,
+    }))
+}
+
 /// The long output as CSV (`replicacao,item,objeto,caracteristica,instante,valor`), the
 /// format `utsim qualidade` reads.
 pub fn csv_medicoes(medicoes: &[Medicao]) -> String {

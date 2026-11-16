@@ -255,19 +255,25 @@ pub struct Atendido {
     pub estudo: Option<String>,
 }
 
+/// O que um app calcula sobre o modelo do pedido para a resposta (a Qualidade: a capacidade
+/// simulada de cada característica). Recebe o arquivo do modelo e as replicações pedidas.
+pub type ResultadoDoModelo = fn(&Path, Option<u32>) -> Result<utsim_troca::Resultado, String>;
+
 /// Ao fechar a janela dos apps de unidade: grava o estudo pendente da tela Ferramentas e,
-/// se houve pedido de outro app, grava a resposta (`app` e `versao` dizem quem respondeu;
-/// uma falha vai para o stderr).
+/// se houve pedido de outro app, grava a resposta (`app` e `versao` dizem quem respondeu,
+/// `do_modelo`, quando o app tem, calcula o resultado de um pedido com modelo e sem
+/// estudo, e uma falha vai para o stderr).
 pub fn ao_fechar(
     ferramentas: &mut TelaFerramentas,
     sessao: &mut Sessao,
     pedido: Option<&Atendido>,
     app: &str,
     versao: &str,
+    do_modelo: Option<ResultadoDoModelo>,
 ) {
     ferramentas.gravar_pendente(sessao);
     if let Some(p) = pedido
-        && let Some(Err(e)) = p.responder(ferramentas, sessao, app, versao)
+        && let Some(Err(e)) = p.responder(ferramentas, sessao, app, versao, do_modelo)
     {
         eprintln!("resposta do pedido: {e}");
     }
@@ -295,6 +301,7 @@ impl Atendido {
         s: &Sessao,
         app: &str,
         versao: &str,
+        do_modelo: Option<ResultadoDoModelo>,
     ) -> Option<Result<PathBuf, String>> {
         let origem = utsim_troca::Origem {
             app: app.into(),
@@ -302,7 +309,13 @@ impl Atendido {
             quem: pessoa(s),
             quando: crate::util::agora_iso(),
         };
-        responder(&self.abrir, self.estudo.as_deref(), ferramentas, origem)
+        responder(
+            &self.abrir,
+            self.estudo.as_deref(),
+            ferramentas,
+            origem,
+            do_modelo,
+        )
     }
 }
 
@@ -326,13 +339,15 @@ fn gravar_conteudo(pedido: &Path, id: &str, conteudo: &str) -> Result<PathBuf, S
 
 /// Grava a resposta do pedido, se houve pedido com caminho de resposta. `estudo` é o id do
 /// estudo aberto pelo pedido: com ele aberto na tela, a resposta leva os indicadores, os
-/// achados e os avisos de cada aplicação ([`resultado_do_estudo`]). Devolve o caminho
-/// gravado ou o erro.
+/// achados e os avisos de cada aplicação ([`resultado_do_estudo`]). Sem estudo, com o modelo
+/// no pedido e `do_modelo`, a resposta leva o que o app calcula sobre o modelo como está no
+/// disco ao fechar (uma falha vai na mensagem). Devolve o caminho gravado ou o erro.
 pub fn responder(
     a: &Abrir,
     estudo: Option<&str>,
     ferramentas: &TelaFerramentas,
     origem: utsim_troca::Origem,
+    do_modelo: Option<ResultadoDoModelo>,
 ) -> Option<Result<PathBuf, String>> {
     use utsim_troca::{Estado, Resposta};
     let p = a.pedido.as_ref()?;
@@ -353,7 +368,14 @@ pub fn responder(
                 None if estudo.is_some() => {
                     r.mensagem = Some(tx("abrir-o_estudo_do_pedido_nao").into());
                 }
-                None => {}
+                None => {
+                    if let (Some(m), Some(f)) = (&a.modelo, do_modelo) {
+                        match f(m, p.entrada.replicacoes) {
+                            Ok(res) => r.resultado = Some(res),
+                            Err(e) => r.mensagem = Some(e),
+                        }
+                    }
+                }
             }
             r
         }
@@ -785,7 +807,7 @@ mod tests {
             at.estudo.as_deref(),
             tf.estudo.as_ref().map(|e| e.id.as_str())
         );
-        let gravado = responder(&at.abrir, at.estudo.as_deref(), &tf, origem())
+        let gravado = responder(&at.abrir, at.estudo.as_deref(), &tf, origem(), None)
             .unwrap()
             .unwrap();
         assert_eq!(Some(gravado), p.resposta.clone());
@@ -808,7 +830,7 @@ mod tests {
         );
 
         // Sem pedido, nada a responder.
-        assert!(responder(&args(&[]), None, &tf, origem()).is_none());
+        assert!(responder(&args(&[]), None, &tf, origem(), None).is_none());
         assert!(Atendido::de(&args(&[]), &tf).is_none());
     }
 
@@ -828,7 +850,9 @@ mod tests {
         let (_, tf) = telas();
         let at = Atendido::de(&a, &tf).unwrap();
         assert_eq!(at.estudo, None);
-        responder(&at.abrir, None, &tf, origem()).unwrap().unwrap();
+        responder(&at.abrir, None, &tf, origem(), None)
+            .unwrap()
+            .unwrap();
         let r = Resposta::ler(&p).unwrap().unwrap();
         assert_eq!(r.estado, Estado::Erro);
         assert!(r.mensagem.unwrap().contains("hash"));

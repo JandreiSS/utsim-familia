@@ -8531,6 +8531,7 @@ dependencies = [
  "utsim-posto-ui",
  "utsim-qualidade-core",
  "utsim-quality",
+ "utsim-troca",
  "utsim-ui-tema",
  "winresource",
 ]
