@@ -8473,8 +8473,10 @@ dependencies = [
  "tempfile",
  "utsim-core",
  "utsim-idiomas",
+ "utsim-launcher-core",
  "utsim-model",
  "utsim-produto-core",
+ "utsim-troca",
  "utsim-ui-tema",
  "winresource",
 ]
