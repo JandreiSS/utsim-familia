@@ -134,6 +134,11 @@ opt-level = 2
 
 [profile.release]
 debug = "line-tables-only"
+# Whole-program inlining across the crates (engine, objects, model). Only code layout
+# changes: no target-cpu or float flags, so results stay bit-identical. The `web` and
+# `web-3d` profiles set their own `lto`/`codegen-units`.
+lto = "thin"
+codegen-units = 1
 
 # Size-optimised build of the browser module (`scripts/web.sh`).
 [profile.web]

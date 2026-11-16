@@ -119,6 +119,37 @@ pub struct Entrada {
     pub lse: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subgrupo: Option<usize>,
+    /// Os fatores de `planejar_experimento`: o campo do modelo e os níveis.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fatores: Vec<Fator>,
+    /// Os indicadores que respondem ao experimento (`planejar_experimento`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub respostas: Vec<String>,
+    /// O orçamento de corridas do plano (sem as replicações).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corridas: Option<usize>,
+    /// As replicações de cada corrida no modelo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replicacoes: Option<u32>,
+}
+
+/// Um fator de `planejar_experimento`: um campo do modelo variando entre dois níveis.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Fator {
+    /// O nome na planilha (vazio: a chave do campo).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub nome: String,
+    /// O campo do modelo, `objeto.campo` (como em `utsim_model::experiment::patch`).
+    pub campo: String,
+    /// O valor em RON com `{x}` no lugar do nível (vazio: `{x}`), para campos como
+    /// `Exp(mean: {x})`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub valor: String,
+    pub baixo: f64,
+    pub alto: f64,
+    /// O nível vai arredondado (campos inteiros, como `capacity`).
+    pub inteiro: bool,
 }
 
 /// Onde o resultado vai morar.
@@ -191,6 +222,20 @@ impl Pedido {
             .map(|c| Arquivo::de(c.clone()))
             .collect::<Result<_, _>>()?;
         Ok(p)
+    }
+
+    /// `planejar_experimento` sobre um modelo `.ron`: os fatores e as respostas.
+    pub fn planejar_experimento(
+        de: &str,
+        modelo: impl Into<PathBuf>,
+        fatores: Vec<Fator>,
+        respostas: Vec<String>,
+    ) -> Pedido {
+        let mut p = Pedido::novo(de, acao::PLANEJAR_EXPERIMENTO);
+        p.contexto.modelo = Some(modelo.into());
+        p.entrada.fatores = fatores;
+        p.entrada.respostas = respostas;
+        p
     }
 
     /// A ferramenta do estudo, quando a chave é conhecida.
@@ -635,6 +680,42 @@ mod tests {
                 "--utsim-no=Torno 1"
             ])
         );
+    }
+
+    #[test]
+    fn planejar_experimento_ida_e_volta() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = Pedido::planejar_experimento(
+            "utsim 0.5.0",
+            dir.path().join("linha.ron"),
+            vec![
+                Fator {
+                    campo: "maquina.process".into(),
+                    valor: "Exp(mean: {x})".into(),
+                    baixo: 2.0,
+                    alto: 4.0,
+                    ..Fator::default()
+                },
+                Fator {
+                    nome: "Buffer".into(),
+                    campo: "fila.capacity".into(),
+                    baixo: 2.0,
+                    alto: 8.0,
+                    inteiro: true,
+                    ..Fator::default()
+                },
+            ],
+            vec!["throughput".into()],
+        );
+        p.entrada.corridas = Some(14);
+        let c = p.gravar(dir.path()).unwrap();
+        let lido = Pedido::ler(&c).unwrap();
+        assert_eq!(lido, p);
+        assert_eq!(lido.acao, acao::PLANEJAR_EXPERIMENTO);
+        // Um pedido antigo, sem os campos novos, continua sendo lido.
+        let velho = r#"{"formato":1,"id":"a","de":"x","acao":"analisar"}"#;
+        let v: Pedido = serde_json::from_str(velho).unwrap();
+        assert!(v.entrada.fatores.is_empty() && v.entrada.corridas.is_none());
     }
 
     #[test]
