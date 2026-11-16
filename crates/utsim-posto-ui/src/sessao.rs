@@ -38,28 +38,17 @@ impl Config {
     }
 
     pub fn ler(arquivo: &Path) -> Config {
-        std::fs::read_to_string(arquivo)
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+        utsim_pasta::config::ler(arquivo)
     }
 
     pub fn gravar(&self, arquivo: &Path) -> Result<(), String> {
-        if let Some(pai) = arquivo.parent() {
-            std::fs::create_dir_all(pai).map_err(|e| e.to_string())?;
-        }
-        let t = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(arquivo, t).map_err(|e| e.to_string())
+        utsim_pasta::config::gravar(arquivo, self)
     }
 }
 
 /// Arquivo de configuração padrão dos dois apps (`.../UTSim/qualidade_seguranca.json`).
 pub fn arquivo_padrao() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")
-        .or_else(|| std::env::var_os("XDG_CONFIG_HOME"))
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("UTSim").join("qualidade_seguranca.json"))
+    utsim_pasta::config::arquivo("qualidade_seguranca.json")
 }
 
 pub struct Sessao {

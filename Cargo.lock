@@ -8477,6 +8477,7 @@ dependencies = [
  "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-model",
+ "utsim-pasta",
  "utsim-produto-core",
  "utsim-troca",
  "utsim-ui-tema",
