@@ -53,6 +53,9 @@ pub struct NavSet {
     pub(crate) crossing_stop: f64,
     /// Rampas da rede de corredores de cada recurso em `Aisles` (só quando há rampa).
     pub(crate) ramps: HashMap<String, Arc<utsim_objects::ramps::Ramps>>,
+    /// Roteador da rede de caminhos do modelo (sem estado), montado uma vez: é o caro de
+    /// montar (menor caminho de todo nó para todo nó).
+    pub(crate) network: Option<Arc<NetworkRouter>>,
 }
 
 impl NavSet {
@@ -442,7 +445,10 @@ impl Model {
             .network
             .as_ref()
             .map(|def| Arc::new(NetworkRouter::new(def)));
-        let mut set = NavSet::default();
+        let mut set = NavSet {
+            network: network.clone(),
+            ..NavSet::default()
+        };
         self.aisle_routers(&mut set);
         for o in &self.objects {
             let Some(mode) = self.routed_mode(o) else {

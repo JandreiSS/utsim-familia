@@ -217,6 +217,31 @@ pub enum Recipe {
         factors: Vec<usize>,
         response: usize,
     },
+    /// Desirability of several responses (Derringer and Suich): a second-order model per
+    /// response on the same factor columns and the setting with the best overall
+    /// desirability.
+    #[serde(rename = "desejabilidade")]
+    Desirability {
+        factors: Vec<usize>,
+        responses: Vec<ResponseGoal>,
+    },
+}
+
+pub use utsim_doe::Goal;
+
+/// One response of a desirability: its column, its goal and its importance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResponseGoal {
+    #[serde(rename = "coluna")]
+    pub col: usize,
+    #[serde(rename = "objetivo")]
+    pub goal: utsim_doe::Goal,
+    #[serde(rename = "importancia", default = "one")]
+    pub importance: f64,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 impl Recipe {
@@ -251,6 +276,7 @@ impl Recipe {
             Recipe::Ewma { .. } => tx("analises-carta_ewma"),
             Recipe::Cusum { .. } => tx("analises-carta_cusum"),
             Recipe::Surface { .. } => tx("analises-superficie_de_resposta"),
+            Recipe::Desirability { .. } => tx("analises-desejabilidade"),
         }
     }
 
@@ -414,8 +440,102 @@ fn verdict_p(p: f64, h1: &str) -> String {
     }
 }
 
-/// The response surface analysis (see [`Recipe::Surface`]).
-fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Result<(), String> {
+/// The desirability analysis (see [`Recipe::Desirability`]).
+fn desirability(
+    t: &Table,
+    factors: &[usize],
+    responses: &[ResponseGoal],
+    o: &mut Outcome,
+) -> Result<(), String> {
+    if responses.is_empty() {
+        return Err(tx("analises-desejabilidade_sem_resposta").into());
+    }
+    let k = factors.len();
+    let cols: Vec<usize> = responses.iter().map(|r| r.col).collect();
+    if cols.iter().any(|c| factors.contains(c)) {
+        return Err(tx("analises-desejabilidade_coluna_fator").into());
+    }
+    let data = surface_data(t, factors, &cols, o)?;
+    let terms = utsim_doe::quadratic_terms(k);
+    let models = data
+        .ys
+        .iter()
+        .map(|y| utsim_doe::Model::fit(&terms, &data.x, y, LEVEL))
+        .collect::<Result<Vec<_>, String>>()?;
+    let goals: Vec<utsim_doe::Desirability> = responses
+        .iter()
+        .map(|r| utsim_doe::Desirability {
+            importance: r.importance,
+            ..utsim_doe::Desirability::new(r.goal)
+        })
+        .collect();
+    // The search stays where the experiment ran: the sphere of the axial points of a
+    // rotatable composite, the cube otherwise.
+    let radius = data.x.iter().flatten().fold(0.0f64, |a, v| a.max(v.abs()));
+    let region = if radius > 1.0 + 1e-9 {
+        utsim_doe::Region::Sphere(radius)
+    } else {
+        utsim_doe::Region::Cube(1.0)
+    };
+    let best = utsim_doe::optimize(&models, &goals, region)?;
+    let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+    o.put("desejabilidade geral", best.overall);
+    for i in 0..k {
+        o.put(&format!("melhor ponto {}", doe::letter(i)), best.coded[i]);
+    }
+    for (i, map) in data.to_real.iter().enumerate() {
+        if let Some((a, b)) = map {
+            o.put(
+                &format!("melhor ponto {} (real)", data.names[i]),
+                a + b * best.coded[i],
+            );
+        }
+    }
+    for (j, r) in responses.iter().enumerate() {
+        let h = header(r.col);
+        o.put(&format!("prevista {h}"), best.responses[j]);
+        o.put(&format!("desejabilidade de {h}"), best.desirabilities[j]);
+        o.put(&format!("R² de {h}"), models[j].regression.r2);
+    }
+    o.verdict = if best.overall > 0.0 {
+        fx(
+            "analises-desejabilidade_achou",
+            &[("d", dx(format!("{:.3}", best.overall)))],
+        )
+    } else {
+        tx("analises-desejabilidade_nenhum").into()
+    };
+    o.notes.push(tx("analises-desejabilidade_nota").into());
+    let mut labels: Vec<String> = responses.iter().map(|r| header(r.col)).collect();
+    labels.push(tx("analises-desejabilidade_geral").into());
+    let mut values = best.desirabilities.clone();
+    values.push(best.overall);
+    o.plots.push(Plot {
+        title: tx("analises-desejabilidade_grafico").into(),
+        bars: true,
+        labels,
+        series: vec![("d".into(), values)],
+    });
+    Ok(())
+}
+
+/// The coded factor columns of a response surface and its responses (one list per
+/// response), with each factor's actual units (`real = a + b · coded`) and name.
+struct SurfaceData {
+    x: Vec<Vec<f64>>,
+    ys: Vec<Vec<f64>>,
+    to_real: Vec<Option<(f64, f64)>>,
+    names: Vec<String>,
+}
+
+/// Reads the rows with every factor and response filled, codes the factor columns that are
+/// not coded yet, and finds the actual levels next to the coded ones (a worksheet of the app).
+fn surface_data(
+    t: &Table,
+    factors: &[usize],
+    responses: &[usize],
+    o: &mut Outcome,
+) -> Result<SurfaceData, String> {
     let k = factors.len();
     if !(2..=utsim_doe::MAX_CCD_FACTORS).contains(&k) {
         return Err(fx(
@@ -432,17 +552,20 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
     let real_col = |i: usize| {
         let col = factors[k - 1] + 1 + i;
         (header(factors[i]) == doe::letter(i).to_string()
-            && col != response
+            && !responses.contains(&col)
             && !factors.contains(&col)
             && col < t.header.len())
         .then_some(col)
     };
     let mut x: Vec<Vec<f64>> = Vec::new();
-    let mut y = Vec::new();
+    let mut ys: Vec<Vec<f64>> = vec![Vec::new(); responses.len()];
     let mut real: Vec<Vec<Option<f64>>> = Vec::new();
     for r in &t.rows {
         let (Some(v), Some(xs)) = (
-            num(r, response),
+            responses
+                .iter()
+                .map(|c| num(r, *c))
+                .collect::<Option<Vec<f64>>>(),
             factors
                 .iter()
                 .map(|c| num(r, *c))
@@ -450,7 +573,9 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
         ) else {
             continue;
         };
-        y.push(v);
+        for (y, v) in ys.iter_mut().zip(v) {
+            y.push(v);
+        }
         x.push(xs);
         real.push(
             (0..k)
@@ -459,7 +584,7 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
         );
     }
     let terms = utsim_doe::quadratic_terms(k);
-    if y.len() < terms.len() + 2 {
+    if x.len() < terms.len() + 2 {
         return Err(fx(
             "analises-superficie_corridas",
             &[("k", vx(&k)), ("n", vx(&(terms.len() + 2)))],
@@ -505,6 +630,13 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
                 return None;
             }
             let b = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>() / sxx;
+            // Actual levels are an exact line of the coded ones (up to the rounding of the
+            // worksheet); any other column next to the factors is not.
+            let a0 = my - b * mx;
+            let span = pts.iter().map(|p| p.1.abs()).fold(0.0f64, f64::max) + 1.0;
+            if pts.iter().any(|p| (a0 + b * p.0 - p.1).abs() > 1e-4 * span) {
+                return None;
+            }
             Some((my - b * mx, b))
         })
         .collect();
@@ -520,7 +652,26 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
                 .join("; "),
         );
     }
-    let m = utsim_doe::Model::fit(&terms, &x, &y, LEVEL)?;
+    let names = (0..k).map(name).collect();
+    Ok(SurfaceData {
+        x,
+        ys,
+        to_real,
+        names,
+    })
+}
+
+/// The response surface analysis (see [`Recipe::Surface`]).
+fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Result<(), String> {
+    let k = factors.len();
+    let data = surface_data(t, factors, &[response], o)?;
+    let terms = utsim_doe::quadratic_terms(k);
+    let x = &data.x;
+    let y = &data.ys[0];
+    let to_real = &data.to_real;
+    let name = |i: usize| data.names[i].clone();
+
+    let m = utsim_doe::Model::fit(&terms, x, y, LEVEL)?;
     let reg = &m.regression;
     o.put("corridas", y.len() as f64);
     o.put("R²", reg.r2);
@@ -1446,6 +1597,9 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
         }
         Recipe::Surface { factors, response } => {
             surface(t, factors, *response, &mut o)?;
+        }
+        Recipe::Desirability { factors, responses } => {
+            desirability(t, factors, responses, &mut o)?;
         }
         Recipe::Ewma {
             col,

@@ -259,3 +259,19 @@ linha-constante = constante
 linha-coef = coef { $x }
 linha-ponto_estacionario = point stationnaire { $x }
 linha-ponto_estacionario_real = point stationnaire { $x } (réel)
+
+# Desejabilidade (Seis Sigma, P3)
+analises-desejabilidade = Désirabilité de plusieurs réponses
+analises-desejabilidade_sem_resposta = choisissez au moins une réponse avec son objectif
+analises-desejabilidade_coluna_fator = une colonne ne peut pas être à la fois facteur et réponse
+analises-desejabilidade_achou = meilleur réglage avec une désirabilité globale de { $d } (de 0 à 1)
+analises-desejabilidade_nenhum = aucun point de la région ne respecte les limites de toutes les réponses : le point affiché est celui qui sort le moins des plages
+analises-desejabilidade_nota = Chaque réponse reçoit une désirabilité de 0 (inacceptable) à 1 (idéale) selon son objectif et ses limites ; la globale est la moyenne géométrique pondérée par les importances (Derringer et Suich). La recherche reste dans la région de l'expérience, avec un modèle du second ordre par réponse.
+analises-desejabilidade_geral = globale
+analises-desejabilidade_grafico = Désirabilité au meilleur point
+linha-desejabilidade_geral = désirabilité globale
+linha-melhor_ponto = meilleur point { $x }
+linha-melhor_ponto_real = meilleur point { $x } (réel)
+linha-prevista = prévue { $x }
+linha-desejabilidade_de = désirabilité de { $x }
+linha-r2_de = R² de { $x }

@@ -2,7 +2,9 @@
 //! `docs/plano_qualidade_e_seguranca.md`, section 4.6): time each person spends inside
 //! each risk zone (`Model::zones`), entries without the protective equipment the zone
 //! asks for, **simulated near-conflicts** (a person and a vehicle closer than a threshold),
-//! a heat map of presence and layout warnings.
+//! a heat map of presence, layout warnings and the time of each person **under the
+//! suspended load of an overhead crane** (inside the crane's `load_zone` around the hook
+//! while an item hangs from it).
 //!
 //! The simulated near-conflicts compare layouts and traffic rules of the same model. They
 //! do not estimate the probability of a real accident.
@@ -13,7 +15,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::{Model, ModelError, ObjectKind, ZoneKind};
+use crate::{LoadZone, Model, ModelError, ObjectKind, ZoneKind};
 use serde::{Deserialize, Serialize};
 use utsim_core::TraceEvent;
 use utsim_nav::Role;
@@ -87,11 +89,7 @@ impl Track {
 
     /// Position at instant `t`.
     pub fn at(&self, t: f64) -> [f64; 2] {
-        let k = self.moves.partition_point(|m| m.t1 < t);
-        match self.moves.get(k).or(self.moves.last()) {
-            Some(m) => m.at(t),
-            None => [0.0, 0.0],
-        }
+        position_at(&self.moves, t)
     }
 
     /// Intervals of time spent inside `polygon`, within `[from, to]`, merged.
@@ -118,6 +116,14 @@ impl Track {
             }
         }
         out
+    }
+}
+
+fn position_at(moves: &[Move], t: f64) -> [f64; 2] {
+    let k = moves.partition_point(|m| m.t1 < t);
+    match moves.get(k).or(moves.last()) {
+        Some(m) => m.at(t),
+        None => [0.0, 0.0],
     }
 }
 
@@ -209,6 +215,38 @@ pub struct ZoneExposure {
     pub missing_ppe: Vec<String>,
 }
 
+/// Time of one person under the suspended load of one overhead crane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UnderLoad {
+    pub crane: String,
+    pub person: String,
+    /// Time under the load in the statistics window.
+    pub time: f64,
+    /// Times the person came under it.
+    pub entries: u32,
+}
+
+/// The hook of one overhead crane: where it was and when an item hung from it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LoadTrack {
+    /// Object index in the model.
+    pub object: usize,
+    pub name: String,
+    pub zone: LoadZone,
+    /// Floor position of the hook, in time order, without gaps.
+    pub moves: Vec<Move>,
+    /// Intervals with an item hanging: from the hooking to the touch down at the
+    /// destination (the end of the last move of the hook before the item is delivered).
+    pub hanging: Vec<(f64, f64)>,
+}
+
+impl LoadTrack {
+    /// Floor position of the hook at instant `t`.
+    pub fn at(&self, t: f64) -> [f64; 2] {
+        position_at(&self.moves, t)
+    }
+}
+
 /// A simulated near-conflict: a person and a vehicle closer than the threshold.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NearMiss {
@@ -259,9 +297,23 @@ pub struct Exposure {
     pub near_misses: Vec<NearMiss>,
     pub heat: HeatMap,
     pub warnings: Vec<String>,
+    /// Time of each person under each crane's suspended load (models with cranes; empty
+    /// when measured by [`measure`] alone, filled by [`analyze`]).
+    #[serde(default)]
+    pub under_load: Vec<UnderLoad>,
 }
 
 impl Exposure {
+    /// Total time of all people under suspended loads.
+    pub fn under_load_time(&self) -> f64 {
+        self.under_load.iter().map(|u| u.time).sum()
+    }
+
+    /// Times people came under a suspended load.
+    pub fn under_load_entries(&self) -> u32 {
+        self.under_load.iter().map(|u| u.entries).sum()
+    }
+
     pub fn near_miss_count(&self) -> usize {
         self.near_misses.len()
     }
@@ -312,62 +364,7 @@ pub fn tracks(model: &Model, records: &[utsim_core::TraceRecord], stop: f64) -> 
             continue;
         };
         let start = home_at.unwrap_or(obj.position);
-        let mut pos = [start[0], start[1]];
-        let mut t = 0.0;
-        let mut moves = Vec::new();
-        for r in records {
-            let TraceEvent::Travel {
-                carrier,
-                path,
-                duration,
-            } = &r.event
-            else {
-                continue;
-            };
-            if *carrier != i || path.is_empty() {
-                continue;
-            }
-            if r.t > t {
-                moves.push(Move {
-                    t0: t,
-                    t1: r.t,
-                    p0: pos,
-                    p1: pos,
-                });
-            }
-            let pts: Vec<[f64; 2]> = path.iter().map(|p| [p[0], p[1]]).collect();
-            let total: f64 = pts.windows(2).map(|w| dist(w[0], w[1])).sum();
-            let mut tt = r.t;
-            if pts.len() < 2 || total <= 0.0 {
-                moves.push(Move {
-                    t0: tt,
-                    t1: tt + duration,
-                    p0: pts[0],
-                    p1: pts[pts.len() - 1],
-                });
-            } else {
-                for w in pts.windows(2) {
-                    let d = duration * dist(w[0], w[1]) / total;
-                    moves.push(Move {
-                        t0: tt,
-                        t1: tt + d,
-                        p0: w[0],
-                        p1: w[1],
-                    });
-                    tt += d;
-                }
-            }
-            t = r.t + duration;
-            pos = pts[pts.len() - 1];
-        }
-        if t < stop {
-            moves.push(Move {
-                t0: t,
-                t1: stop,
-                p0: pos,
-                p1: pos,
-            });
-        }
+        let moves = moves_of(i, start, records, stop);
         let ppe = model.worn_ppe(obj);
         out.push(Track {
             object: i,
@@ -380,7 +377,204 @@ pub fn tracks(model: &Model, records: &[utsim_core::TraceRecord], stop: f64) -> 
     out
 }
 
+/// Moves of mobile resource `i` (block index) from its `start`, rebuilt from its
+/// `Travel` events.
+fn moves_of(
+    i: usize,
+    start: [f64; 3],
+    records: &[utsim_core::TraceRecord],
+    stop: f64,
+) -> Vec<Move> {
+    let mut pos = [start[0], start[1]];
+    let mut t = 0.0;
+    let mut moves = Vec::new();
+    for r in records {
+        let TraceEvent::Travel {
+            carrier,
+            path,
+            duration,
+        } = &r.event
+        else {
+            continue;
+        };
+        if *carrier != i || path.is_empty() {
+            continue;
+        }
+        if r.t > t {
+            moves.push(Move {
+                t0: t,
+                t1: r.t,
+                p0: pos,
+                p1: pos,
+            });
+        }
+        let pts: Vec<[f64; 2]> = path.iter().map(|p| [p[0], p[1]]).collect();
+        let total: f64 = pts.windows(2).map(|w| dist(w[0], w[1])).sum();
+        let mut tt = r.t;
+        if pts.len() < 2 || total <= 0.0 {
+            moves.push(Move {
+                t0: tt,
+                t1: tt + duration,
+                p0: pts[0],
+                p1: pts[pts.len() - 1],
+            });
+        } else {
+            for w in pts.windows(2) {
+                let d = duration * dist(w[0], w[1]) / total;
+                moves.push(Move {
+                    t0: tt,
+                    t1: tt + d,
+                    p0: w[0],
+                    p1: w[1],
+                });
+                tt += d;
+            }
+        }
+        t = r.t + duration;
+        pos = pts[pts.len() - 1];
+    }
+    if t < stop {
+        moves.push(Move {
+            t0: t,
+            t1: stop,
+            p0: pos,
+            p1: pos,
+        });
+    }
+    moves
+}
+
+/// Hooks of every overhead crane of the model, from the trace of a replay.
+pub fn load_tracks(
+    model: &Model,
+    records: &[utsim_core::TraceRecord],
+    stop: f64,
+) -> Vec<LoadTrack> {
+    let mut out = Vec::new();
+    for (i, obj) in model.objects.iter().enumerate() {
+        let Some(zone) = model.crane_load_zone(obj) else {
+            continue;
+        };
+        let mut hanging = Vec::new();
+        // Moves of the hook (start, end): the travels and the hoisting.
+        let mut motions: Vec<(f64, f64)> = Vec::new();
+        let mut held = 0u32;
+        let mut since = 0.0;
+        for r in records {
+            match &r.event {
+                TraceEvent::Travel {
+                    carrier, duration, ..
+                }
+                | TraceEvent::Hoist {
+                    carrier, duration, ..
+                } if *carrier == i => motions.push((r.t, r.t + duration)),
+                TraceEvent::Moved { to, .. } if *to == i => {
+                    if held == 0 {
+                        since = r.t;
+                    }
+                    held += 1;
+                }
+                TraceEvent::Moved { from, .. } if *from == i && held > 0 => {
+                    held -= 1;
+                    if held == 0 {
+                        // The load touched down at the end of the last move started
+                        // before the delivery (the raise afterwards does not count).
+                        let end = motions
+                            .iter()
+                            .filter(|(s, _)| *s >= since && *s < r.t)
+                            .map(|m| m.1)
+                            .fold(since, f64::max)
+                            .min(r.t);
+                        if end > since {
+                            hanging.push((since, end));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if held > 0 && stop > since {
+            hanging.push((since, stop));
+        }
+        out.push(LoadTrack {
+            object: i,
+            name: obj.name.clone(),
+            zone,
+            moves: moves_of(i, obj.position, records, stop),
+            hanging,
+        });
+    }
+    out
+}
+
+/// Time of each person under each crane's suspended load in `[from, to]`, sampled every
+/// `step` (at most [`MAX_SAMPLES`] instants per pair).
+pub fn under_loads(
+    people: &[&Track],
+    loads: &[LoadTrack],
+    from: f64,
+    to: f64,
+    step: f64,
+) -> Vec<UnderLoad> {
+    let mut out = Vec::new();
+    for load in loads {
+        let spans: Vec<(f64, f64)> = load
+            .hanging
+            .iter()
+            .map(|&(a, b)| (a.max(from), b.min(to)))
+            .filter(|(a, b)| b > a)
+            .collect();
+        let total: f64 = spans.iter().map(|(a, b)| b - a).sum();
+        let mut step = if step.is_finite() {
+            step.max(1e-9)
+        } else {
+            1.0
+        };
+        if total.is_finite() && total / step > MAX_SAMPLES as f64 {
+            step = total / MAX_SAMPLES as f64;
+        }
+        for p in people {
+            let mut time = 0.0;
+            let mut entries = 0;
+            for &(a, b) in &spans {
+                let n = ((b - a) / step).ceil().clamp(1.0, MAX_SAMPLES as f64) as usize;
+                let dt = (b - a) / n as f64;
+                let mut was_in = false;
+                for k in 0..n {
+                    let t = a + (k as f64 + 0.5) * dt;
+                    let inside = load.zone.contains(load.at(t), p.at(t));
+                    if inside {
+                        time += dt;
+                        if !was_in {
+                            entries += 1;
+                        }
+                    }
+                    was_in = inside;
+                }
+            }
+            out.push(UnderLoad {
+                crane: load.name.clone(),
+                person: p.name.clone(),
+                time,
+                entries,
+            });
+        }
+    }
+    out
+}
+
 impl Model {
+    /// Whether the model has an overhead crane and people moving on the floor: the run
+    /// then measures the time of the people under the suspended loads.
+    pub fn has_people_under_cranes(&self) -> bool {
+        self.objects
+            .iter()
+            .any(|o| matches!(o.kind, ObjectKind::Crane { .. }))
+            && self.objects.iter().any(|o| {
+                matches!(o.kind, ObjectKind::Transporter { .. }) && self.role_of(o) == Role::Person
+            })
+    }
+
     /// Protective equipment a mobile resource wears: its own `ppe` and that of the objects
     /// it serves (the exposure analysis and the people of the 3D view read the same set).
     pub fn worn_ppe(&self, obj: &crate::ObjectDef) -> BTreeSet<String> {
@@ -398,7 +592,11 @@ pub fn analyze(model: &Model, replication: u32, options: Options) -> Result<Expo
     let stop = replay.report.end_time;
     let from = replay.report.stats_from;
     let tracks = tracks(model, &replay.records, stop);
-    Ok(measure(model, &tracks, replication, from, stop, options))
+    let mut e = measure(model, &tracks, replication, from, stop, options);
+    let people: Vec<&Track> = tracks.iter().filter(|t| t.is_person()).collect();
+    let loads = load_tracks(model, &replay.records, stop);
+    e.under_load = under_loads(&people, &loads, from, stop, options.step);
+    Ok(e)
 }
 
 /// Exposure of every replication of the model (`run.replications`).
@@ -507,6 +705,7 @@ pub fn measure(
         near_misses,
         heat,
         warnings: layout_warnings(model),
+        under_load: Vec::new(),
     }
 }
 
@@ -617,7 +816,54 @@ pub fn metricas(e: &Exposure) -> std::collections::BTreeMap<String, f64> {
         *out.entry(format!("exposicao.entradas.{}", z.zone))
             .or_insert(0.0) += f64::from(z.entries);
     }
+    if !e.under_load.is_empty() {
+        out.insert("exposicao.sob_carga.tempo".into(), e.under_load_time());
+        out.insert(
+            "exposicao.sob_carga.entradas".into(),
+            f64::from(e.under_load_entries()),
+        );
+    }
     out
+}
+
+/// Puts the time of the people under suspended loads into the report: for each person
+/// `<pessoa>.tempo_sob_carga` and `<pessoa>.entradas_sob_carga`, for each crane
+/// `<ponte>.tempo_sob_carga` and `<ponte>.entradas_sob_carga` (all its people), with
+/// the default [`Options`]. Called by `Model::drive` for models with cranes and people.
+pub fn add_under_load_to_report(
+    model: &Model,
+    report: &mut utsim_core::RunReport,
+    records: &[utsim_core::TraceRecord],
+) {
+    let stop = report.end_time;
+    let tracks = tracks(model, records, stop);
+    let people: Vec<&Track> = tracks.iter().filter(|t| t.is_person()).collect();
+    let loads = load_tracks(model, records, stop);
+    let under = under_loads(
+        &people,
+        &loads,
+        report.stats_from,
+        stop,
+        Options::default().step,
+    );
+    let mut sums: std::collections::BTreeMap<&str, (f64, u32)> = Default::default();
+    for u in &under {
+        for name in [u.person.as_str(), u.crane.as_str()] {
+            let s = sums.entry(name).or_default();
+            s.0 += u.time;
+            s.1 += u.entries;
+        }
+    }
+    for (i, obj) in model.objects.iter().enumerate() {
+        let (Some(&(time, entries)), Some(b)) =
+            (sums.get(obj.name.as_str()), report.blocks.get_mut(i))
+        else {
+            continue;
+        };
+        b.custom.insert("tempo_sob_carga".into(), time);
+        b.custom
+            .insert("entradas_sob_carga".into(), f64::from(entries));
+    }
 }
 
 /// Puts the exposure of one replication into its report, as custom metrics of each mobile
