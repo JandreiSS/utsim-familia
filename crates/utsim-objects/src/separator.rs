@@ -100,6 +100,10 @@ impl Behavior for Separator {
         cx.set_state(State::Idle);
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        true
+    }
+
     fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {
         self.item.is_none()
     }
