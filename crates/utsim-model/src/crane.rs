@@ -6,7 +6,29 @@
 
 use utsim_objects::CraneSpec;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{Model, ObjectDef, ObjectKind};
+
+/// The area under a crane's suspended load ([`Model::crane_load_zone`]): a rectangle
+/// centred under the hook, of half sizes `half` (m, along the runway and across it),
+/// turned by `yaw` (radians, counter-clockwise from the global `x`).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LoadZone {
+    pub half: [f64; 2],
+    pub yaw: f64,
+}
+
+impl LoadZone {
+    /// Whether floor point `p` is inside the zone when the hook is above `hook`.
+    pub fn contains(&self, hook: [f64; 2], p: [f64; 2]) -> bool {
+        let (dx, dy) = (p[0] - hook[0], p[1] - hook[1]);
+        let (s, c) = self.yaw.sin_cos();
+        let u = c * dx + s * dy;
+        let v = -s * dx + c * dy;
+        u.abs() <= self.half[0] && v.abs() <= self.half[1]
+    }
+}
 
 /// Corners of the covered rectangle, on the floor.
 fn corners(c: &CraneSpec) -> [[f64; 2]; 4] {
@@ -110,12 +132,18 @@ impl Model {
                 hook_height,
                 capacity_t,
                 weight_label,
+                load_zone,
                 ..
             } = &obj.kind
             else {
                 continue;
             };
             let name = &obj.name;
+            if !(load_zone.is_finite() && *load_zone >= 0.0) {
+                errors.push(format!(
+                    "{name}: load_zone deve ser finita e >= 0 (metade do lado da área sob a carga, em metros)"
+                ));
+            }
             for (what, axis) in [("bridge", bridge), ("trolley", trolley), ("hoist", hoist)] {
                 if let Err(e) = axis.validate(what) {
                     errors.push(format!("{name}: {e}"));
@@ -169,6 +197,20 @@ impl Model {
     }
 
     /// One line per crane, for `utsim check`.
+    /// The area under a crane's suspended load: a square centred under the hook, of half
+    /// side `half` (m), turned by `yaw` (radians) with the runway. `None` for objects that
+    /// are not cranes.
+    pub fn crane_load_zone(&self, obj: &ObjectDef) -> Option<LoadZone> {
+        let ObjectKind::Crane { load_zone, .. } = &obj.kind else {
+            return None;
+        };
+        let yaw = obj.visual.as_ref().and_then(|v| v.yaw).unwrap_or(0.0);
+        Some(LoadZone {
+            half: [*load_zone, *load_zone],
+            yaw: yaw.to_radians(),
+        })
+    }
+
     pub fn crane_lines(&self) -> Vec<String> {
         self.objects
             .iter()

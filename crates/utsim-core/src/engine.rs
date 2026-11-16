@@ -831,6 +831,18 @@ impl Ctx<'_> {
         });
     }
 
+    /// An overhead crane's hook moves from height `from` to `to` during `duration`
+    /// ([`TraceEvent::Hoist`]).
+    pub fn trace_hoist(&mut self, from: f64, to: f64, duration: Time) {
+        let carrier = self.me.0;
+        self.core.emit(TraceEvent::Hoist {
+            carrier,
+            from,
+            to,
+            duration,
+        });
+    }
+
     /// Asks block `to` (a mobile resource or dispatcher) to do some work for this block.
     pub fn request_task(&mut self, to: BlockId, kind: TaskKind, priority: i32) -> RequestId {
         self.core.next_request += 1;

@@ -65,6 +65,16 @@ pub enum TraceEvent {
         path: Vec<[f64; 3]>,
         duration: f64,
     },
+    /// The hook of an overhead crane goes from height `from` to `to` (world `z`, metres)
+    /// during `duration`. Only cranes emit it: one with no duration when the crane starts
+    /// (the hook up, at its travel height), then one per hoist move. The hook moves in
+    /// the plane with the crane's `Travel`.
+    Hoist {
+        carrier: usize,
+        from: f64,
+        to: f64,
+        duration: f64,
+    },
     /// The item was given item type `item_type` (1-based index in the model's
     /// `item_types`, also its `type` label), right after `Created`. Only models that
     /// declare item types emit it.
