@@ -291,6 +291,16 @@ impl Catalogo {
         self.formatar(chave, Some(&a))
     }
 
+    /// The text of `chave` in each of the five languages (without arguments), in the order of
+    /// [`Idioma::TODOS`]: for reading back a name the program wrote in any language, such as
+    /// a column of a sheet saved under another language.
+    pub fn em_todas(&self, chave: &str) -> Vec<String> {
+        Idioma::TODOS
+            .iter()
+            .filter_map(|&i| self.formatar_em(i, chave, None))
+            .collect()
+    }
+
     /// Whether the source language (pt-BR) has `chave`.
     pub fn tem(&self, chave: &str) -> bool {
         self.pacote(Idioma::PtBr).has_message(chave)
