@@ -57,7 +57,10 @@ fn as_mensagens_do_experimento_e_da_simulacao_nas_cinco_linguas() {
             SimError::NoMetric("lead_time".into()).to_string(),
             GainError::Worse.to_string(),
         ] {
-            assert!(!m.contains("experimentos-") && !m.contains("simulacao-"), "{m}");
+            assert!(
+                !m.contains("experimentos-") && !m.contains("simulacao-"),
+                "{m}"
+            );
         }
     }
     vistos.dedup();
