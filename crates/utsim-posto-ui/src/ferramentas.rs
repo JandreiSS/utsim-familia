@@ -1670,16 +1670,7 @@ const REGRAS: [(&str, &str); 3] = [
 ];
 
 fn opcional(ui: &mut egui::Ui, rotulo: &str, v: &mut Option<f64>) {
-    let mut ligado = v.is_some();
-    ui.checkbox(&mut ligado, rotulo);
-    match (ligado, v.is_some()) {
-        (true, false) => *v = Some(0.0),
-        (false, true) => *v = None,
-        _ => {}
-    }
-    if let Some(x) = v {
-        ui.add(egui::DragValue::new(x).speed(0.01).max_decimals(4));
-    }
+    utsim_ui_tema::campos::numero_opcional(ui, rotulo, v, Some(4));
 }
 
 fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {

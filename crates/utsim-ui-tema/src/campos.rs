@@ -232,6 +232,39 @@ impl<'a> CampoData<'a> {
     }
 }
 
+/// Campo de texto de uma linha com o rótulo à esquerda, ocupando o resto da largura.
+pub fn texto_com_rotulo(ui: &mut Ui, rotulo: &str, texto: &mut String) {
+    ui.horizontal(|ui| {
+        ui.label(rotulo);
+        ui.add(egui::TextEdit::singleline(texto).desired_width(f32::INFINITY));
+    });
+}
+
+/// Número opcional: caixa para ligar (com o rótulo) e o valor ao lado quando ligada.
+/// Ligar começa em 0; desligar apaga o valor. `max_decimais` limita as casas mostradas
+/// (`None`: o padrão do egui).
+pub fn numero_opcional(
+    ui: &mut Ui,
+    rotulo: &str,
+    v: &mut Option<f64>,
+    max_decimais: Option<usize>,
+) {
+    let mut ligado = v.is_some();
+    ui.checkbox(&mut ligado, rotulo);
+    match (ligado, v.is_some()) {
+        (true, false) => *v = Some(0.0),
+        (false, true) => *v = None,
+        _ => {}
+    }
+    if let Some(x) = v {
+        let mut d = egui::DragValue::new(x).speed(0.01);
+        if let Some(n) = max_decimais {
+            d = d.max_decimals(n);
+        }
+        ui.add(d);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
