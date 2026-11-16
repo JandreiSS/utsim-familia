@@ -28,6 +28,7 @@ pub fn quadro_balanceamento(
 ) {
     let atrib = b.atribuicao(d);
     let resumo = b.resumo(&atrib);
+    let por_modelo = b.cargas_modelos(&atrib);
     ui.label(
         RichText::new(texto::f(
             texto::vista_balanc_resumo(),
@@ -84,6 +85,15 @@ pub fn quadro_balanceamento(
                                         &[&fmt_num(carga, 0), &fmt_num(b.takt, 0)],
                                     ),
                                 );
+                                for (mm, c) in b.mix.iter().zip(&por_modelo) {
+                                    let c = c[s as usize - 1];
+                                    let cor = if c > b.takt + 1e-9 {
+                                        VERMELHO
+                                    } else {
+                                        ui.visuals().weak_text_color()
+                                    };
+                                    ui.colored_label(cor, format!("{} {}", mm.nome, fmt_num(c, 0)));
+                                }
                                 let (r, p) = ui.allocate_painter(vec2(106.0, 6.0), Sense::hover());
                                 p.rect_filled(
                                     r.rect,
@@ -106,9 +116,28 @@ pub fn quadro_balanceamento(
                                                 &[&t.id, &fmt_num(t.tempo, 0)],
                                             );
                                             let r = ui.add(egui::Button::new(txt).selected(sel));
+                                            let modelos: Vec<String> = b
+                                                .mix
+                                                .iter()
+                                                .map(|mm| {
+                                                    format!(
+                                                        "{} {}",
+                                                        mm.nome,
+                                                        fmt_num(
+                                                            Balanceamento::tempo_modelo(t, &mm.id),
+                                                            0
+                                                        )
+                                                    )
+                                                })
+                                                .collect();
                                             r.on_hover_text(format!(
-                                                "{}{}",
+                                                "{}{}{}",
                                                 t.nome,
+                                                if modelos.is_empty() {
+                                                    String::new()
+                                                } else {
+                                                    format!(" ({})", modelos.join(", "))
+                                                },
                                                 if t.depois_de.is_empty() {
                                                     String::new()
                                                 } else {

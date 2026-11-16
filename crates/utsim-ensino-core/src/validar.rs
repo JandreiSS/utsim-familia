@@ -106,12 +106,6 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
             erros.push(format!("arranjo: {e}"));
         }
     }
-    if missao.tem_pecas() && !missao.alavancas.is_empty() {
-        erros.push(
-            "uma missão com tarefas ou máquinas para posicionar não pode ter outras alavancas"
-                .into(),
-        );
-    }
 
     // Reference: valid decisions inside the budget and the limits.
     let iniciais = missao.decisoes_iniciais();
