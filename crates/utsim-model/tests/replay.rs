@@ -88,6 +88,7 @@ fn item_of(event: &TraceEvent) -> Option<u64> {
         TraceEvent::Slot { item, .. } | TraceEvent::ItemType { item, .. } => Some(item),
         TraceEvent::State { .. }
         | TraceEvent::Travel { .. }
+        | TraceEvent::Hoist { .. }
         | TraceEvent::Tokens { .. }
         | TraceEvent::Fluid { .. } => None,
     }
@@ -181,7 +182,9 @@ impl Ledger {
                 self.items.insert(item, Loc::Flying(from));
                 self.content[from] -= 1;
             }
-            TraceEvent::Travel { carrier, .. } => check_block(carrier)?,
+            TraceEvent::Travel { carrier, .. } | TraceEvent::Hoist { carrier, .. } => {
+                check_block(carrier)?
+            }
             TraceEvent::Slot { block, .. } => check_block(block)?,
             TraceEvent::Tokens { flow, .. } => check_block(flow)?,
             TraceEvent::Fluid { net, .. } => check_block(net)?,

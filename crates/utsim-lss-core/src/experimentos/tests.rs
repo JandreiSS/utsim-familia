@@ -352,3 +352,115 @@ fn central_composite_surface_finds_the_maximum() {
     c.factors[0].center = "Z".into();
     assert_eq!(c.plan(), Err(ExpError::Axial("Temperatura".into())));
 }
+
+#[test]
+fn desirability_of_two_responses() {
+    use utsim_doe::Goal;
+    let s = ExperimentSpec {
+        factors: vec![
+            FactorSpec {
+                name: "Temperatura".into(),
+                low: "100".into(),
+                high: "120".into(),
+                ..FactorSpec::default()
+            },
+            FactorSpec {
+                name: "Tempo".into(),
+                low: "10".into(),
+                high: "20".into(),
+                ..FactorSpec::default()
+            },
+        ],
+        surface: Some(Surface::CentralComposite),
+        center_points: 5,
+        seed: 8,
+        ..ExperimentSpec::default()
+    };
+    let plan = s.plan().unwrap();
+    // y1 = 80 + 4A + 2B − 2A² − B² (yield, maximum 83 at A = B = 1); y2 = 10 + 2A + B (cost).
+    let mut csv = String::from("A;B;rendimento;custo\n");
+    for r in &plan.runs {
+        let (a, b) = (r.coded[0], r.coded[1]);
+        let y1 = 80.0 + 4.0 * a + 2.0 * b - 2.0 * a * a - b * b;
+        let y2 = 10.0 + 2.0 * a + b;
+        csv.push_str(&format!("{a};{b};{y1};{y2}\n").replace('.', ","));
+    }
+    let t = Table::parse(&csv);
+    // Only the yield: the best point is its maximum.
+    let only = Recipe::Desirability {
+        factors: vec![0, 1],
+        responses: vec![analises::ResponseGoal {
+            col: 2,
+            goal: Goal::Maximize {
+                low: 70.0,
+                high: 83.0,
+            },
+            importance: 1.0,
+        }],
+    };
+    let o = analises::run(&only, &t).unwrap();
+    assert!((o.value("desejabilidade geral").unwrap() - 1.0).abs() < 1e-6);
+    assert!(
+        (o.value("melhor ponto A").unwrap() - 1.0).abs() < 1e-3,
+        "{:?}",
+        o.lines
+    );
+    assert!((o.value("prevista rendimento").unwrap() - 83.0).abs() < 1e-3);
+    assert_eq!(only.key(), "desejabilidade");
+    // With the cost to keep low, the best point gives up some yield.
+    let both = Recipe::Desirability {
+        factors: vec![0, 1],
+        responses: vec![
+            analises::ResponseGoal {
+                col: 2,
+                goal: Goal::Maximize {
+                    low: 70.0,
+                    high: 83.0,
+                },
+                importance: 1.0,
+            },
+            analises::ResponseGoal {
+                col: 3,
+                goal: Goal::Minimize {
+                    low: 8.0,
+                    high: 14.0,
+                },
+                importance: 1.0,
+            },
+        ],
+    };
+    let o = analises::run(&both, &t).unwrap();
+    let d = o.value("desejabilidade geral").unwrap();
+    assert!(d > 0.0 && d < 1.0, "{d}");
+    assert!(o.value("prevista rendimento").unwrap() < 83.0);
+    assert!(o.value("prevista custo").unwrap() < 13.0);
+    assert_eq!(o.plots[0].labels.len(), 3);
+    // A response that cannot be met.
+    let never = Recipe::Desirability {
+        factors: vec![0, 1],
+        responses: vec![analises::ResponseGoal {
+            col: 2,
+            goal: Goal::Maximize {
+                low: 90.0,
+                high: 95.0,
+            },
+            importance: 1.0,
+        }],
+    };
+    let o = analises::run(&never, &t).unwrap();
+    assert_eq!(o.value("desejabilidade geral"), Some(0.0));
+    assert!(o.verdict.starts_with("nenhum ponto"), "{}", o.verdict);
+    // A factor column cannot also be a response.
+    let bad = Recipe::Desirability {
+        factors: vec![0, 1],
+        responses: vec![analises::ResponseGoal {
+            col: 1,
+            goal: Goal::Minimize {
+                low: 0.0,
+                high: 1.0,
+            },
+            importance: 1.0,
+        }],
+    };
+    assert!(analises::run(&bad, &t).is_err());
+}

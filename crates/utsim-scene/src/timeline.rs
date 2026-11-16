@@ -629,6 +629,8 @@ impl Timeline {
                         legs.entry(*carrier).or_default().push(leg);
                     }
                 }
+                // The hook height of overhead cranes: not in the timeline yet.
+                TraceEvent::Hoist { .. } => {}
                 TraceEvent::Tokens {
                     flow,
                     activity,

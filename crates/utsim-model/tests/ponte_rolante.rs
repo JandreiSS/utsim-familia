@@ -8,7 +8,8 @@ use std::path::Path;
 use utsim_model::Model;
 
 fn metrics(m: &Model) -> BTreeMap<String, f64> {
-    m.build(0).run().expect("a rodada termina").metrics()
+    let mut sim = m.build(0);
+    m.drive(&mut sim).expect("a rodada termina").metrics()
 }
 
 fn close(got: f64, want: f64, what: &str) {
@@ -193,4 +194,114 @@ fn the_example_runs() {
     assert!(x["ponte.crane.trips"] > 10.0, "{}", x["ponte.crane.trips"]);
     assert!(x["ponte.crane.loaded_time"] > 0.0);
     assert_eq!(x["ponte.crane.refused"], 0.0);
+}
+
+/// O rastro leva a altura do gancho: um `Hoist` sem duração no início (gancho em cima) e um
+/// por descida e subida, na altura do mundo.
+#[test]
+fn the_trace_carries_the_hook_height() {
+    use utsim_core::TraceEvent;
+    let m = model(&bay("Safe", 5000.0, ""));
+    let replay = m.replay(0).expect("o replay roda");
+    let hoists: Vec<(f64, f64, f64, f64)> = replay
+        .records
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::Hoist {
+                from, to, duration, ..
+            } => Some((r.t, from, to, duration)),
+            _ => None,
+        })
+        .collect();
+    // Início em cima; desce 6 m em 30 s; sobe depois do engate (120 s); na saída
+    // (z = 1) desce 5 m às 240 s e sobe depois do desengate (310 s).
+    assert_eq!(
+        hoists,
+        vec![
+            (0.0, 6.0, 6.0, 0.0),
+            (30.0, 6.0, 0.0, 60.0),
+            (120.0, 0.0, 6.0, 60.0),
+            (240.0, 6.0, 1.0, 50.0),
+            (310.0, 1.0, 6.0, 50.0),
+        ]
+    );
+    // Em paralelo, o gancho anda durante a viagem.
+    let replay = model(&bay("Parallel", 5000.0, "")).replay(0).unwrap();
+    let hoists: Vec<(f64, f64, f64, f64)> = replay
+        .records
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::Hoist {
+                from, to, duration, ..
+            } => Some((r.t, from, to, duration)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        hoists,
+        vec![
+            (0.0, 6.0, 6.0, 0.0),
+            (0.0, 6.0, 0.0, 60.0),
+            (90.0, 0.0, 1.0, 10.0)
+        ]
+    );
+}
+
+/// Uma pessoa parada a meio metro do recebimento fica sob a carga enquanto ela sobe (60 s)
+/// e nos primeiros 4 s da viagem (a ponte anda 30 m em 60 s: em 4 s o gancho já está a
+/// 2 m dela). Outra, longe do caminho, não fica.
+#[test]
+fn people_under_the_suspended_load_are_counted() {
+    let people = r#"(name: "inspetor", kind: Transporter(speed: 1.0), position: (5.0, 9.5, 0.0),
+            visual: Some((asset: Some("pessoa")))),
+        (name: "soldador", kind: Transporter(speed: 1.0), position: (20.0, 2.0, 0.0),
+            visual: Some((asset: Some("pessoa")))),"#;
+    let m = model(&bay("Safe", 5000.0, people));
+    assert!(m.has_people_under_cranes());
+    let x = metrics(&m);
+    // Amostras a cada 0,1 s: o tempo sai com erro de até uma amostra.
+    assert!(
+        (x["inspetor.tempo_sob_carga"] - 64.0).abs() <= 0.1,
+        "{}",
+        x["inspetor.tempo_sob_carga"]
+    );
+    close(
+        x["inspetor.entradas_sob_carga"],
+        1.0,
+        "entradas do inspetor",
+    );
+    close(x["soldador.tempo_sob_carga"], 0.0, "soldador longe");
+    close(x["soldador.entradas_sob_carga"], 0.0, "soldador longe");
+    assert!((x["ponte.tempo_sob_carga"] - 64.0).abs() <= 0.1);
+    close(x["ponte.entradas_sob_carga"], 1.0, "entradas sob a ponte");
+    // A análise de exposição dá o mesmo, por pessoa e ponte.
+    let e = utsim_model::exposure::analyze(&m, 0, Default::default()).unwrap();
+    assert_eq!(e.under_load.len(), 2);
+    assert!((e.under_load_time() - 64.0).abs() <= 0.1);
+    assert_eq!(e.under_load_entries(), 1);
+    let flat = utsim_model::exposure::metricas(&e);
+    assert_eq!(flat["exposicao.sob_carga.entradas"], 1.0);
+    // Uma área menor sob a carga: só a subida (a pessoa a 0,5 m, metade do lado 1 m).
+    let m = model(
+        &bay("Safe", 5000.0, people)
+            .replace("capacity_t: 10.0,", "capacity_t: 10.0, load_zone: 1.0,"),
+    );
+    let x = metrics(&m);
+    assert!(
+        (x["inspetor.tempo_sob_carga"] - 62.0).abs() <= 0.1,
+        "{}",
+        x["inspetor.tempo_sob_carga"]
+    );
+    // Sem pessoas, nada disso entra no relatório.
+    let x = metrics(&model(&bay("Safe", 5000.0, "")));
+    assert!(!x.contains_key("ponte.tempo_sob_carga"));
+    // A área sob a carga é validada.
+    let e = Model::parse(
+        &bay("Safe", 1.0, "").replace("capacity_t: 10.0,", "capacity_t: 10.0, zona_carga: -1.0,"),
+    )
+    .unwrap()
+    .validate()
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("ponte: load_zone deve ser finita e >= 0"), "{e}");
 }
