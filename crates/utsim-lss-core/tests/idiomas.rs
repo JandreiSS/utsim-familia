@@ -39,3 +39,34 @@ fn as_receitas_nas_cinco_linguas() {
     assert_eq!(rotulo("média de turno A"), "média de turno A");
     utsim_idiomas::definir_nesta_thread(None);
 }
+
+#[test]
+fn as_mensagens_do_experimento_e_da_simulacao_nas_cinco_linguas() {
+    use utsim_lss_core::experimentos::ExpError;
+    use utsim_lss_core::simulacao::{GainError, SimError};
+    let mut vistos = Vec::new();
+    for i in Idioma::TODOS {
+        utsim_idiomas::definir_nesta_thread(Some(i));
+        let e = ExpError::Levels("Temperatura".into()).to_string();
+        assert!(e.contains("Temperatura"), "{e}");
+        vistos.push(e);
+        for m in [
+            ExpError::Factors.to_string(),
+            ExpError::Fraction(5, 1).to_string(),
+            SimError::NoScenario.to_string(),
+            SimError::NoMetric("lead_time".into()).to_string(),
+            GainError::Worse.to_string(),
+        ] {
+            assert!(!m.contains("experimentos-") && !m.contains("simulacao-"), "{m}");
+        }
+    }
+    vistos.dedup();
+    assert_eq!(vistos.len(), Idioma::TODOS.len(), "{vistos:?}");
+    utsim_idiomas::definir_nesta_thread(Some(Idioma::PtBr));
+    assert_eq!(
+        ExpError::Levels("A".into()).to_string(),
+        "o fator A precisa de dois níveis diferentes"
+    );
+    utsim_idiomas::definir_nesta_thread(None);
+    assert!(TEXTOS.faltas().is_empty(), "{:?}", TEXTOS.faltas());
+}

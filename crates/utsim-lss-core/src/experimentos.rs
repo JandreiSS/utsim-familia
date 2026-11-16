@@ -25,6 +25,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use utsim_model::experiment::{Scenario, ScenarioResult};
+
+use crate::texto::{dx, fx, tx, vx};
 use utsim_stats::doe::{self, Design, Generator};
 
 /// One factor of the experiment.
@@ -121,7 +123,7 @@ impl Surface {
             ),
             Surface::BoxBehnken => {
                 if centers == 0 {
-                    return Err("o Box-Behnken precisa de ao menos um ponto central".into());
+                    return Err(tx("experimentos-bb_precisa_centro").into());
                 }
                 utsim_doe::box_behnken(k, centers, seed)
             }
@@ -156,19 +158,19 @@ pub struct Plan {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ExpError {
-    #[error("o experimento precisa de 2 a 8 fatores (a triagem de Plackett-Burman vai até 15)")]
+    #[error("{}", tx("experimentos-erro_fatores"))]
     Factors,
-    #[error("dê um nome a cada fator")]
+    #[error("{}", tx("experimentos-erro_sem_nome"))]
     NoName,
-    #[error("o fator {0} precisa de dois níveis diferentes")]
+    #[error("{}", fx("experimentos-erro_niveis", &[("fator", vx(.0))]))]
     Levels(String),
-    #[error("a fração 2^({0}−{1}) não está na tabela do app")]
+    #[error("{}", fx("experimentos-erro_fracao", &[("k", vx(.0)), ("p", vx(.1))]))]
     Fraction(usize, usize),
-    #[error("o fator {0} precisa do nível central (os níveis não são números)")]
+    #[error("{}", fx("experimentos-erro_centro", &[("fator", vx(.0))]))]
     Center(String),
-    #[error("o fator {0} não diz qual parâmetro do modelo ele muda (objeto.campo)")]
+    #[error("{}", fx("experimentos-erro_sem_chave", &[("fator", vx(.0))]))]
     NoKey(String),
-    #[error("o fator {0} precisa de níveis numéricos para os pontos axiais")]
+    #[error("{}", fx("experimentos-erro_axial", &[("fator", vx(.0))]))]
     Axial(String),
     #[error("{0}")]
     Design(String),
@@ -290,7 +292,7 @@ impl ExperimentSpec {
         if self.screening {
             let n = Self::screening_runs(k).ok_or(ExpError::Factors)?;
             let m = utsim_doe::pb_matrix(n)
-                .ok_or_else(|| ExpError::Design(format!("sem Plackett-Burman de {n} corridas")))?;
+                .ok_or_else(|| ExpError::Design(fx("experimentos-sem_pb", &[("n", vx(&n))])))?;
             let rows: Vec<Vec<i8>> = m.into_iter().map(|r| r[..k].to_vec()).collect();
             return Ok(doe::from_rows(
                 k,
@@ -336,10 +338,10 @@ impl ExperimentSpec {
         let k = self.k();
         if !surface.fits(k) {
             return Err(ExpError::Design(match surface {
-                Surface::BoxBehnken => "o Box-Behnken vai de 3 a 5 fatores".into(),
-                _ => format!(
-                    "o composto central vai de 2 a {} fatores",
-                    utsim_doe::MAX_CCD_FACTORS
+                Surface::BoxBehnken => tx("experimentos-bb_faixa").into(),
+                _ => fx(
+                    "experimentos-ccd_faixa",
+                    &[("max", vx(&utsim_doe::MAX_CCD_FACTORS))],
                 ),
             }));
         }
@@ -364,29 +366,40 @@ impl ExperimentSpec {
             .design(k, self.center_points, self.seed)
             .map_err(ExpError::Design)?;
         let terms = utsim_doe::quadratic_terms(k).len() + 1;
-        let alpha = d.alpha.map(show).unwrap_or_default();
+        let alpha = d
+            .alpha
+            .map(|a| show(a).replace(',', "."))
+            .unwrap_or_default();
         let nc = self.center_points;
         let mut lines = vec![match surface {
-            Surface::CentralComposite => format!(
-                "composto central rotacionável: {} pontos fatoriais, {} axiais em ±α = {alpha} e {nc} centros",
-                1 << k,
-                2 * k
+            Surface::CentralComposite => fx(
+                "experimentos-linha_ccd",
+                &[
+                    ("fatoriais", vx(&(1 << k))),
+                    ("axiais", vx(&(2 * k))),
+                    ("alfa", dx(alpha)),
+                    ("centros", vx(&nc)),
+                ],
             ),
-            Surface::FaceCentered => format!(
-                "composto de face centrada: {} pontos fatoriais, {} axiais nas faces (α = 1) e {nc} centros; três níveis por fator",
-                1 << k,
-                2 * k
+            Surface::FaceCentered => fx(
+                "experimentos-linha_face",
+                &[
+                    ("fatoriais", vx(&(1 << k))),
+                    ("axiais", vx(&(2 * k))),
+                    ("centros", vx(&nc)),
+                ],
             ),
-            Surface::BoxBehnken => format!(
-                "Box-Behnken: {} pontos no meio das arestas do cubo e {nc} centros; nenhuma corrida com todos os fatores nos extremos",
-                d.points.len() - nc
+            Surface::BoxBehnken => fx(
+                "experimentos-linha_bb",
+                &[("pontos", vx(&(d.points.len() - nc))), ("centros", vx(&nc))],
             ),
         }];
-        lines.push(format!(
-            "estima o modelo de segunda ordem completo ({terms} coeficientes: a constante, os efeitos principais, as interações de dois fatores e os quadrados)"
+        lines.push(fx(
+            "experimentos-linha_segunda_ordem",
+            &[("termos", vx(&terms))],
         ));
         if d.points.len() <= terms {
-            lines.push("sem graus de liberdade para o erro: acrescente pontos centrais".into());
+            lines.push(tx("experimentos-sem_gl_erro").into());
         }
         let mut runs: Vec<PlanRun> = d
             .points
@@ -489,21 +502,21 @@ pub fn alias_lines(spec: &ExperimentSpec, d: &Design) -> Vec<String> {
     if spec.screening {
         let n = d.runs.iter().filter(|r| !r.center).count() / d.replicates.max(1);
         let mut v = vec![
-            format!("Plackett-Burman de {n} corridas para {} fatores (triagem)", d.k),
-            "efeitos principais livres entre si (resolução III)".to_string(),
-            "cada interação de dois fatores fica parcialmente confundida com os efeitos principais: use a triagem para achar os poucos fatores que importam e estude-os depois num fatorial".to_string(),
+            fx("experimentos-pb_titulo", &[("n", vx(&n)), ("k", vx(&d.k))]),
+            tx("experimentos-pb_livres").to_string(),
+            tx("experimentos-pb_confundida").to_string(),
         ];
         if n > d.k + 1 {
-            v.push(format!(
-                "{} coluna(s) da matriz sem fator dão graus de liberdade ao erro",
-                n - 1 - d.k
+            v.push(fx(
+                "experimentos-pb_colunas_livres",
+                &[("n", vx(&(n - 1 - d.k)))],
             ));
         }
         return v;
     }
     let words = d.words();
     if words.is_empty() {
-        return vec!["fatorial completo: nenhum efeito confundido".to_string()];
+        return vec![tx("experimentos-fatorial_completo").to_string()];
     }
     let roman = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
     let mut v = vec![format!(
@@ -515,10 +528,10 @@ pub fn alias_lines(spec: &ExperimentSpec, d: &Design) -> Vec<String> {
             .join(" = ")
     )];
     if let Some(r) = d.resolution() {
-        v.push(format!(
-            "resolução {}",
-            roman.get(r).copied().unwrap_or("alta")
-        ));
+        v.push(match roman.get(r) {
+            Some(x) => fx("experimentos-resolucao", &[("r", vx(x))]),
+            None => tx("experimentos-resolucao_alta").to_string(),
+        });
     }
     let k = d.k;
     let mut seen: Vec<u32> = Vec::new();

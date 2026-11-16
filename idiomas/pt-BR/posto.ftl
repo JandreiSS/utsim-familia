@@ -368,3 +368,9 @@ carta-u = u (defeitos por unidade)
 regras-basicas = básicas
 regras-western = Western Electric
 regras-nelson = Nelson
+
+## Os limites opcionais da especificação (ferramentas.rs)
+ferramentas-rotulo_lie = LIE
+ferramentas-rotulo_lse = LSE
+ferramentas-rotulo_alvo = Alvo
+ferramentas-rotulo_usar = usar

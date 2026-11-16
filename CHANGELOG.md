@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- Tradução, rodada 7: a abertura comum, o campo de caminho com "Procurar…", o seletor de arquivos e o campo de data seguem a língua escolhida (`tema.ftl`), assim como os limites LIE/LSE/Alvo da tela Ferramentas de Qualidade e Segurança e as mensagens do experimento e do estudo de simulação do Seis Sigma (erros, descrição do plano, conclusão e justificativa do ganho estimado).
 - Tradução, rodada 6 (parte 2): as telas comuns de Qualidade e Segurança (Início, Postos, Modelo e Ferramentas), os nomes do 5S e do 6M, os avisos do poka-yoke e do QFD, as disciplinas do 8D e as colunas do plano do DOE no Estatística passam a seguir a língua escolhida, nas cinco línguas (fr e it em tradução automática, aguardando revisão). Um plano do DOE criado numa língua continua sendo lido como plano quando aberto em outra.
 - UTSim 3D: no Simular, a tecla `F` passou a ligar a câmera livre em primeira pessoa (abaixo). Para enquadrar o modelo use `Home`, nos dois modos; no Editar, `F` continua enquadrando.
 - Esteira atendida por operador ou veículo: nos modos `Free`, `Network` e `Aisles` ele deixa a peça na ponta de entrada e a pega na ponta de saída (ao lado da esteira, meio metro para dentro da ponta), não mais no meio dela. **Os tempos de deslocamento mudam** nos modelos com esteiras servidas por recursos móveis; o modo `Legacy` continua de centro a centro.

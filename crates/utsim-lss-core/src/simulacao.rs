@@ -25,6 +25,7 @@ use crate::domain::enum_value;
 use crate::id::Id;
 use crate::op::{Edit, EntityRef, Kind};
 use crate::state::{Entity, State};
+use crate::texto::{dx, fx, tx, vx};
 use crate::tools::{self, Deliverable, Tool, sipoc};
 
 pub mod fields {
@@ -105,13 +106,13 @@ pub fn link(state: &State, project: Id) -> Option<ModelLink> {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum SimError {
-    #[error("modelo inválido: {0}")]
+    #[error("{}", fx("simulacao-erro_modelo", &[("e", vx(.0))]))]
     Model(String),
-    #[error("o modelo não tem o indicador {0}")]
+    #[error("{}", fx("simulacao-erro_sem_indicador", &[("k", vx(.0))]))]
     NoMetric(String),
-    #[error("dê um nome")]
+    #[error("{}", tx("simulacao-erro_sem_nome"))]
     NoName,
-    #[error("o estudo precisa de ao menos um cenário além da linha de base")]
+    #[error("{}", tx("simulacao-erro_sem_cenario"))]
     NoScenario,
 }
 
@@ -318,7 +319,7 @@ pub fn sipoc_edits(
         phase,
         Tool::Sipoc,
         deliverable,
-        "SIPOC gerado do modelo",
+        tx("simulacao-sipoc_gerado"),
     );
     let r = Deliverable::entity_ref(deliverable);
     e.push(Edit::new(r, fields::GENERATED, "modelo"));
@@ -405,7 +406,7 @@ pub fn simulated_dataset(
         replications: Some(model.run.replications),
         seed: Some(model.run.seed),
         date: Some(date),
-        note: "KPIs por replicação de um modelo; dado simulado, não é coleta".into(),
+        note: tx("simulacao-nota_kpis").into(),
     }
 }
 
@@ -669,7 +670,7 @@ pub fn record_study(
         .differences
         .iter()
         .filter(|d| d.relevant)
-        .map(|d| format!("{} em {}", d.scenario, d.metric))
+        .map(|d| diferenca(&d.scenario, &d.metric))
         .collect();
     vec![
         Edit::new(r, fields::PROJECT, project.to_string()),
@@ -682,9 +683,12 @@ pub fn record_study(
             r,
             fields::CONCLUSION,
             if relevant.is_empty() {
-                "nenhuma diferença significativa e relevante".to_string()
+                tx("simulacao-conclusao_nenhuma").to_string()
             } else {
-                format!("significativa e relevante: {}", relevant.join("; "))
+                fx(
+                    "simulacao-conclusao_relevantes",
+                    &[("lista", relevant.join("; ").into())],
+                )
             },
         ),
     ]
@@ -711,13 +715,13 @@ pub struct GainInput {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum GainError {
-    #[error("dê uma descrição ao ganho")]
+    #[error("{}", tx("simulacao-ganho_sem_descricao"))]
     NoDescription,
-    #[error("o valor por unidade e os períodos por ano devem ser positivos")]
+    #[error("{}", tx("simulacao-ganho_fator"))]
     BadFactor,
-    #[error("a diferença não é significativa: o intervalo contém zero")]
+    #[error("{}", tx("simulacao-ganho_nao_significativa"))]
     NotSignificant,
-    #[error("o cenário piora o indicador no sentido escolhido")]
+    #[error("{}", tx("simulacao-ganho_piora"))]
     Worse,
 }
 
@@ -754,47 +758,69 @@ pub fn gain_value(
         return Err(GainError::Worse);
     }
     let value = improvement * g.value_per_unit * g.periods_per_year;
-    let n = num;
-    let rationale = format!(
-        "Estimado por simulação no estudo \"{}\" (arquivo {}, hash {}; modelo {}, hash {}; {} replicações, semente {}). \
-         Cenário \"{}\" contra a linha de base, indicador {}: diferença pareada {} [{}; {}] a {} %{}. \
-         Base usada: {} ({}). Conta: {} × {} por unidade × {} períodos por ano = {} por ano. \
-         {} Um ganho estimado por simulação só é validado com lançamentos reais.",
-        file.name,
-        study.file,
-        short(&study.hash),
-        file.model,
-        short(&file.model_hash),
-        file.replications,
-        file.seed,
-        d.scenario,
-        d.metric,
-        n(d.mean),
-        n(d.lo()),
-        n(d.hi()),
-        (file.level * 100.0).round(),
-        if d.relevant {
-            ", significativa e relevante"
-        } else {
-            ", significativa"
-        },
-        n(basis),
-        if g.conservative {
-            "ponta do intervalo mais próxima de zero"
-        } else {
-            "média"
-        },
-        n(improvement),
-        n(g.value_per_unit),
-        n(g.periods_per_year),
-        n(value),
-        if g.higher_is_better {
-            "Aumento do indicador é melhora."
-        } else {
-            "Redução do indicador é melhora."
-        },
+    let n = |x: f64| dx(num(x).replace(',', "."));
+    let rationale = fx(
+        "simulacao-justificativa",
+        &[
+            ("estudo", file.name.clone().into()),
+            ("arquivo", study.file.clone().into()),
+            ("hash", short(&study.hash).to_string().into()),
+            ("modelo", file.model.clone().into()),
+            ("hash_modelo", short(&file.model_hash).to_string().into()),
+            ("replicacoes", vx(&file.replications)),
+            ("semente", vx(&file.seed)),
+            ("cenario", d.scenario.clone().into()),
+            ("indicador", d.metric.clone().into()),
+            ("media", n(d.mean)),
+            ("baixo", n(d.lo())),
+            ("alto", n(d.hi())),
+            ("nivel", vx(&(file.level * 100.0).round())),
+            (
+                "relevancia",
+                tx(if d.relevant {
+                    "simulacao-relevancia_relevante"
+                } else {
+                    "simulacao-relevancia_significativa"
+                })
+                .into(),
+            ),
+            ("base", n(basis)),
+            (
+                "tipo_base",
+                tx(if g.conservative {
+                    "simulacao-base_ponta"
+                } else {
+                    "simulacao-base_media"
+                })
+                .into(),
+            ),
+            ("melhora", n(improvement)),
+            ("por_unidade", n(g.value_per_unit)),
+            ("periodos", n(g.periods_per_year)),
+            ("valor", n(value)),
+            (
+                "sentido",
+                tx(if g.higher_is_better {
+                    "simulacao-sentido_aumento"
+                } else {
+                    "simulacao-sentido_reducao"
+                })
+                .into(),
+            ),
+        ],
     );
     Ok((value, rationale))
+}
+
+/// "Cenário em indicador", na língua de agora (gravado no projeto como texto).
+fn diferenca(cenario: &str, indicador: &str) -> String {
+    fx(
+        "simulacao-diferenca",
+        &[
+            ("cenario", cenario.to_string().into()),
+            ("indicador", indicador.to_string().into()),
+        ],
+    )
 }
 
 fn short(h: &str) -> &str {
@@ -834,7 +860,7 @@ pub fn gain_edits(
     e.push(Edit::new(
         r,
         crate::savings::fields::STUDY_DIFFERENCE,
-        format!("{} em {}", d.scenario, d.metric),
+        diferenca(&d.scenario, &d.metric),
     ));
     Ok(e)
 }
