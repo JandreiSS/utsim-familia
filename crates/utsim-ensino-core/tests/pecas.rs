@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use utsim_ensino_core::campanha::carregar_campanha;
 use utsim_ensino_core::motor::modelo_da_tentativa;
 use utsim_ensino_core::nota::portao;
-use utsim_ensino_core::pecas::{Arranjo, Balanceamento, Fluxo, MaquinaArranjo, Tarefa};
+use utsim_ensino_core::pecas::{Arranjo, Balanceamento, Fluxo, MaquinaArranjo, ModeloMix, Tarefa};
 
 fn pequeno() -> Balanceamento {
     let t = |id: &str, tempo: f64, dep: &[&str]| Tarefa {
@@ -16,6 +16,7 @@ fn pequeno() -> Balanceamento {
         nome: id.into(),
         tempo,
         depois_de: dep.iter().map(|s| s.to_string()).collect(),
+        tempos: BTreeMap::new(),
     };
     Balanceamento {
         tarefas: vec![
@@ -34,6 +35,8 @@ fn pequeno() -> Balanceamento {
             .map(|(k, v)| (k.to_string(), *v))
             .collect(),
         prefixo: "est".into(),
+        mix: Vec::new(),
+        rotulo: "modelo".into(),
     }
 }
 
@@ -267,4 +270,110 @@ fn distancias_da_grade_batem_com_a_matriz_de_para() {
         }
         assert!(conferidos >= de_para.len());
     }
+}
+
+/// `pequeno` with two models, mesa (weight 1) and coluna (weight 3); `tempo` is the
+/// weighted average of the model times.
+fn com_mix() -> Balanceamento {
+    let mut b = pequeno();
+    b.mix = vec![
+        ModeloMix {
+            id: "mesa".into(),
+            nome: "Mesa".into(),
+            parcela: 1.0,
+        },
+        ModeloMix {
+            id: "coluna".into(),
+            nome: "Coluna".into(),
+            parcela: 3.0,
+        },
+    ];
+    for (t, (m, c)) in b
+        .tarefas
+        .iter_mut()
+        .zip([(8.0, 2.0), (3.0, 3.0), (1.0, 6.0), (2.0, 2.0)])
+    {
+        t.tempos = [("mesa".to_string(), m), ("coluna".to_string(), c)].into();
+        t.tempo = (m + 3.0 * c) / 4.0;
+    }
+    b
+}
+
+#[test]
+fn mix_cargas_por_modelo_receita_e_pico() {
+    let b = com_mix();
+    assert!(b.validar().is_empty(), "{:?}", b.validar());
+    let a = atrib(&[("a", 1), ("b", 1), ("c", 2), ("d", 2)]);
+    // Mesa: 8 + 3 and 1 + 2; coluna: 2 + 3 and 6 + 2.
+    assert_eq!(
+        b.cargas_modelos(&a),
+        vec![vec![11.0, 3.0, 0.0, 0.0], vec![5.0, 8.0, 0.0, 0.0]]
+    );
+    // The average load is what the takt is checked against: (11 + 3 × 5) / 4 and (3 + 3 × 8) / 4.
+    assert_eq!(b.resumo(&a).cargas, vec![6.5, 6.75, 0.0, 0.0]);
+    assert_eq!(b.violacao(&a), None);
+    assert_eq!(b.pico(&a), 11.0);
+    let aj = b.ajustes(&a);
+    assert_eq!(aj["est1.process"], "Const(11.0)");
+    assert_eq!(
+        aj["est1.recipe"],
+        "Some((label: \"modelo\", times: [(value: 1.0, time: Const(11.0)), (value: 2.0, time: Const(5.0))]))"
+    );
+    assert_eq!(
+        aj["est4.recipe"],
+        "Some((label: \"modelo\", times: [(value: 1.0, time: Const(0.0)), (value: 2.0, time: Const(0.0))]))"
+    );
+    // Without a mix the pico is the cycle and there is no recipe.
+    let p = pequeno();
+    assert_eq!(p.pico(&a), p.resumo(&a).ciclo);
+    assert!(!p.ajustes(&a).keys().any(|k| k.ends_with(".recipe")));
+}
+
+#[test]
+fn mix_invalido_recusado() {
+    let mut b = com_mix();
+    b.tarefas[0].tempo = 5.0;
+    b.tarefas[1].tempos.remove("coluna");
+    b.tarefas[2].tempos.insert("piso".into(), 1.0);
+    b.mix.push(ModeloMix {
+        id: "mesa".into(),
+        nome: "Outra".into(),
+        parcela: 0.0,
+    });
+    let e = b.validar().join("\n");
+    for trecho in [
+        "o tempo de 'a' (5.0) precisa ser a média ponderada pelo mix",
+        "'b' sem tempo do modelo 'coluna'",
+        "'c' tem tempo do modelo 'piso'",
+        "modelo repetido no mix",
+        "parcela do mix precisa ser positiva",
+    ] {
+        assert!(e.contains(trecho), "falta \"{trecho}\" em:\n{e}");
+    }
+    let mut p = pequeno();
+    p.tarefas[0].tempos.insert("mesa".into(), 4.0);
+    assert!(
+        p.validar()
+            .join("\n")
+            .contains("tem tempos por modelo, mas não há mix")
+    );
+}
+
+#[test]
+fn mix_do_ventilador_no_modelo() {
+    let p = carregar_campanha().unwrap_or_else(|e| panic!("{}", e.join("\n")));
+    let m = p
+        .missoes
+        .iter()
+        .find(|m| m.missao.id == "ato4/mix")
+        .unwrap();
+    let b = m.missao.balanceamento.as_ref().unwrap();
+    // No assignment in 8 stations keeps both models inside the takt of 60 s.
+    let r = m.missao.completar(&m.missao.referencia);
+    assert_eq!(b.pico(&b.atribuicao(&r)), 65.0);
+    assert_eq!(b.resumo(&b.atribuicao(&r)).estacoes_usadas, 8);
+    let modelo = modelo_da_tentativa(m, "", &r).unwrap();
+    let est1 = modelo.objects.iter().find(|o| o.name == "est1").unwrap();
+    let txt = format!("{:?}", est1.kind);
+    assert!(txt.contains("recipe: Some"), "{txt}");
 }

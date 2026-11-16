@@ -76,10 +76,17 @@ pub fn conferir(m: &MissaoCarregada) -> Result<Conferencia, ErroMotor> {
     }
     let todas = if missao.tem_pecas() {
         // Assignments and layouts are too many to enumerate: the candidates are the
-        // stored reference and the optimum of the exact search of the piece.
+        // stored reference and the optimum of the exact search of the piece, with every
+        // combination of the other levers (the sequence of a mixed-model line).
         let mut v = vec![missao.completar(&missao.referencia)];
         match otimo_das_pecas(missao) {
-            Some(o) => v.push(o),
+            Some(o) => {
+                for c in missao.combinacoes() {
+                    let mut d = o.clone();
+                    d.extend(c);
+                    v.push(d);
+                }
+            }
             None => {
                 return Ok(Conferencia {
                     missao: missao.id.clone(),
