@@ -144,6 +144,10 @@ impl Behavior for Combiner {
         matches!(self.phase, Phase::Setup | Phase::Processing)
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        true
+    }
+
     fn accepts(&self, _item: &Item, _content: usize, port: usize) -> bool {
         if port == 0 {
             self.container.is_none()

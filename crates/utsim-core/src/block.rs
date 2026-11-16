@@ -224,6 +224,14 @@ pub trait Behavior: Send {
     /// given the current content.
     fn accepts(&self, item: &Item, content: usize, port: usize) -> bool;
 
+    /// True when [`Behavior::accepts`] never looks at the item: its answer depends only
+    /// on the block's own state, the content and the port. The kernel then takes one
+    /// refusal as valid for every item waiting to come in until something moves, instead
+    /// of asking again per item. Return true only when that is certain.
+    fn accepts_is_item_independent(&self) -> bool {
+        false
+    }
+
     /// The item has just been placed in this block through input `port`.
     fn on_entry(&mut self, cx: &mut Ctx, item: ItemId, port: usize) {
         let _ = (cx, item, port);

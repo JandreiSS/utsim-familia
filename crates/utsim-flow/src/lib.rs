@@ -1112,6 +1112,10 @@ impl Behavior for Flow {
         }
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        true
+    }
+
     fn accepts(&self, _item: &Item, _content: usize, _port: usize) -> bool {
         false
     }
