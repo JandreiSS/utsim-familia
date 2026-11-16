@@ -333,12 +333,20 @@ impl Core {
     }
 
     fn take_item_from(&mut self, b: BlockId, item: ItemId) {
+        self.take_item(b, item, true);
+    }
+
+    /// `in_outbox` false: the item is known not to be waiting in the outbox (the send
+    /// that moves it already took it out), so the outbox is not scanned again.
+    fn take_item(&mut self, b: BlockId, item: ItemId, in_outbox: bool) {
         self.log_leave(b, item);
         let rt = &mut self.blocks[b.0];
         if let Some(pos) = rt.contents.iter().position(|&x| x == item) {
             rt.contents.remove(pos);
         }
-        rt.outbox.retain(|p| p.item != item);
+        if in_outbox {
+            rt.outbox.retain(|p| p.item != item);
+        }
         rt.withheld.retain(|p| p.item != item);
         rt.pickups.retain(|p| p.0 != item);
         self.update_content(b);
@@ -1129,6 +1137,9 @@ pub struct Simulation {
     started: bool,
     /// Applied when the run starts (see [`Simulation::set_start_state`]).
     start_state: Option<StartState>,
+    /// Scratch memo of one [`Simulation::try_send`] pass: which outputs refused for a
+    /// reason that holds for every item (kept here to avoid an allocation per pass).
+    closed_outputs: Vec<bool>,
 }
 
 impl Simulation {
@@ -1169,6 +1180,7 @@ impl Simulation {
             config,
             started: false,
             start_state: None,
+            closed_outputs: Vec::new(),
         }
     }
 
@@ -2253,12 +2265,38 @@ impl Simulation {
         if self.core.blocks[from.0].stops != 0 {
             return;
         }
+        // Outputs that refused, in this pass, for a reason that holds for any item (the
+        // destination is stopped, closing, draining, or its `accepts` ignores the item).
+        // Nothing changes between two refusals, so they stay closed until something moves;
+        // skipping them (and stopping when all are closed) gives the same moves in the
+        // same order, without one `accepts` call per waiting item.
+        let mut closed = std::mem::take(&mut self.closed_outputs);
+        closed.clear();
+        let mut n_closed = 0;
         let mut i = 0;
         while i < self.core.blocks[from.0].outbox.len() {
+            let n_out = self.core.blocks[from.0].outputs.len();
+            if closed.len() != n_out {
+                closed.clear();
+                closed.resize(n_out, false);
+                n_closed = 0;
+            }
+            if n_closed == n_out {
+                break;
+            }
             let pending = self.core.blocks[from.0].outbox[i];
-            match self.find_destination(from, pending) {
+            match self.find_destination(from, pending, &mut closed, &mut n_closed) {
                 Some(to) => {
+                    closed.fill(false);
+                    n_closed = 0;
                     self.core.blocks[from.0].outbox.remove(i);
+                    debug_assert!(
+                        !self.core.blocks[from.0]
+                            .outbox
+                            .iter()
+                            .any(|p| p.item == pending.item),
+                        "item liberado duas vezes"
+                    );
                     if let Some(m) = self.core.blocks[from.0].maint.as_deref_mut() {
                         m.count_output(to.0, &self.core.items[pending.item].labels);
                     }
@@ -2274,27 +2312,50 @@ impl Simulation {
                 None => i += 1,
             }
         }
+        self.closed_outputs = closed;
     }
 
-    fn find_destination(&self, from: BlockId, pending: Pending) -> Option<(BlockId, usize)> {
+    /// First output (or the drawn one) open for the pending item. Outputs marked in
+    /// `closed` are skipped; refusals that hold for any item are marked there.
+    fn find_destination(
+        &self,
+        from: BlockId,
+        pending: Pending,
+        closed: &mut [bool],
+        n_closed: &mut usize,
+    ) -> Option<(BlockId, usize)> {
         let outputs = &self.core.blocks[from.0].outputs;
         let item = &self.core.items[pending.item];
-        let open = |&(to, in_port): &(BlockId, usize)| {
+        let mut open = |k: usize| {
+            if closed[k] {
+                return false;
+            }
+            let (to, in_port) = outputs[k];
             let rt = &self.core.blocks[to.0];
             let content = rt.contents.len() + rt.incoming;
-            rt.stops == 0
-                && !rt.closing
-                && !rt.draining
-                && self.behaviors[to.0].accepts(item, content, in_port)
+            let behavior = &self.behaviors[to.0];
+            let any_item = if rt.stops != 0 || rt.closing || rt.draining {
+                true
+            } else if behavior.accepts(item, content, in_port) {
+                return true;
+            } else {
+                behavior.accepts_is_item_independent()
+            };
+            if any_item {
+                closed[k] = true;
+                *n_closed += 1;
+            }
+            false
         };
-        match pending.port {
-            Some(port) => outputs.get(port).copied().filter(open),
-            None => outputs.iter().copied().find(open),
-        }
+        let k = match pending.port {
+            Some(port) => Some(port).filter(|&p| p < outputs.len() && open(p)),
+            None => (0..outputs.len()).find(|&k| open(k)),
+        }?;
+        Some(outputs[k])
     }
 
     fn transfer(&mut self, item: ItemId, from: BlockId, (to, in_port): (BlockId, usize)) {
-        self.leave(item, from);
+        self.leave_from(item, from, false);
         self.arrive(item, to, in_port);
     }
 
@@ -2320,7 +2381,7 @@ impl Simulation {
             return;
         }
         self.core.blocks[to.0].incoming += 1;
-        self.leave(item, from);
+        self.leave_from(item, from, false);
         self.core.pending_move_from = None;
         self.core.items[item].location = None;
         self.core.emit(TraceEvent::Transit {
@@ -2375,9 +2436,15 @@ impl Simulation {
 
     /// First half of a move: the item leaves `from` (stats, `on_exit`, upstream retry).
     fn leave(&mut self, item: ItemId, from: BlockId) {
+        self.leave_from(item, from, true);
+    }
+
+    /// [`Simulation::leave`] for an item that [`Simulation::try_send`] already took out
+    /// of the outbox (`in_outbox` false skips scanning it again).
+    fn leave_from(&mut self, item: ItemId, from: BlockId, in_outbox: bool) {
         let now = self.core.now;
         let entered = self.core.items[item].entered_at;
-        self.core.take_item_from(from, item);
+        self.core.take_item(from, item, in_outbox);
         for k in 0..self.core.meters.len() {
             if self.core.meters[k].from == from {
                 let marks = &mut self.core.items[item].marks;

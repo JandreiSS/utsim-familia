@@ -697,6 +697,10 @@ impl utsim_core::Behavior for QualitySink {
         self.inner.accepts(item, content, port)
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        self.inner.accepts_is_item_independent()
+    }
+
     fn on_entry(&mut self, cx: &mut utsim_core::Ctx, item: utsim_core::ItemId, port: usize) {
         let it = cx.item(item);
         self.entradas += 1;

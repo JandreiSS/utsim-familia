@@ -283,6 +283,10 @@ impl Behavior for Rack {
         false
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        true
+    }
+
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
         content < self.bays * self.levels
     }

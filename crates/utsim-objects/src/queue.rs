@@ -474,6 +474,10 @@ impl Behavior for Queue {
         false
     }
 
+    fn accepts_is_item_independent(&self) -> bool {
+        true
+    }
+
     fn accepts(&self, _item: &Item, content: usize, _port: usize) -> bool {
         if self.batch.is_some_and(|b| b.flush) && self.outstanding > 0 {
             return false;
