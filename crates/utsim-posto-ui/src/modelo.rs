@@ -28,6 +28,71 @@ use crate::trabalho::Trabalho;
 pub type Resumo = BTreeMap<String, Vec<(String, String)>>;
 /// Rótulo da linha do resumo de um nó que vai ao lado do nome na lista.
 pub const DESTAQUE: &str = "Em destaque";
+/// Replicações do resumo de manutenção (as quebras são raras: poucas replicações já
+/// mostram a ordem de grandeza, sem pesar a tela).
+pub const REPLICACOES_MANUTENCAO: u32 = 5;
+
+/// Resumo de manutenção simulado por nó com quebras (`downtime`): disponibilidade, OEE,
+/// falhas, MTBF e MTTR simulados, tempos parados, espera pelo técnico e custo, na média
+/// das replicações. Os tempos estão na unidade de tempo do modelo. Modelo sem nenhum nó
+/// com quebras: resumo vazio, sem simular.
+pub fn resumo_manutencao(model: &Model) -> Result<Resumo, String> {
+    let mut saida = Resumo::new();
+    if model.objects.iter().all(|o| o.downtime.is_none()) {
+        return Ok(saida);
+    }
+    let mut m = model.clone();
+    m.run.replications = m.run.replications.clamp(1, REPLICACOES_MANUTENCAO);
+    let reps = m.run_replications().map_err(|e| e.to_string())?;
+    let n = reps.len().max(1) as f64;
+    let linhas: [(&str, &str, bool); 10] = [
+        ("Disponibilidade (%)", "oee.availability", true),
+        ("OEE (%)", "oee", true),
+        ("Falhas por replicação", "maintenance.failures", false),
+        ("MTBF simulado", "maintenance.mtbf", false),
+        ("MTTR simulado", "maintenance.mttr", false),
+        ("Tempo parado em corretiva", "maintenance.down_time", false),
+        ("Tempo em preventiva", "maintenance.preventive_time", false),
+        (
+            "Preventivas por replicação",
+            "maintenance.preventives",
+            false,
+        ),
+        (
+            "Espera média pelo técnico",
+            "maintenance.wait_technician",
+            false,
+        ),
+        ("Custo da manutenção", "maintenance.cost", false),
+    ];
+    for o in model.objects.iter().filter(|o| o.downtime.is_some()) {
+        let blocos: Vec<_> = reps
+            .iter()
+            .filter_map(|r| r.blocks.iter().find(|b| b.name == o.name))
+            .collect();
+        if blocos.is_empty() {
+            continue;
+        }
+        let media = |k: &str| blocos.iter().filter_map(|b| b.custom.get(k)).sum::<f64>() / n;
+        let mut l: Vec<(String, String)> = linhas
+            .iter()
+            .filter(|(_, k, _)| blocos.iter().any(|b| b.custom.contains_key(*k)))
+            .map(|(rot, k, pct)| {
+                let v = media(k);
+                let t = if *pct {
+                    format!("{:.1}", 100.0 * v)
+                } else {
+                    format!("{v:.1}")
+                };
+                (rot.to_string(), t)
+            })
+            .collect();
+        l.push(("Replicações".into(), format!("{}", reps.len())));
+        saida.insert(o.name.clone(), l);
+    }
+    Ok(saida)
+}
+
 /// Função de resumo entregue pelo app (roda num fio de trabalho).
 pub type FnResumo = Arc<dyn Fn(&Model) -> Result<Resumo, String> + Send + Sync>;
 
@@ -80,6 +145,8 @@ pub struct TelaModelo {
     ultima_renovacao: Option<f64>,
     ultima_checagem: f64,
     pub trabalho: Trabalho<Resumo>,
+    /// O resumo de manutenção simulado ([`resumo_manutencao`]), mostrado na aba Manutenção.
+    pub manutencao: Trabalho<Resumo>,
     pub mensagem: String,
     pub erro: bool,
     /// Pedido de abrir o nó na tela Ferramentas: (modelo, objeto). O app o atende.
@@ -116,6 +183,7 @@ impl TelaModelo {
             ultima_renovacao: None,
             ultima_checagem: 0.0,
             trabalho: Trabalho::default(),
+            manutencao: Trabalho::default(),
             mensagem: String::new(),
             erro: false,
             pedido_ferramentas: None,
@@ -532,7 +600,9 @@ impl TelaModelo {
         };
         let modelo = d.model().clone();
         let f = Arc::clone(&self.resumir);
+        let m2 = modelo.clone();
         self.trabalho.iniciar(move || f(&modelo));
+        self.manutencao.iniciar(move || resumo_manutencao(&m2));
     }
 
     // ---- tela ------------------------------------------------------------------
@@ -573,6 +643,12 @@ impl TelaModelo {
         {
             let e = e.to_string();
             self.falhar(format!("Resumo da simulação: {e}"));
+        }
+        if self.manutencao.sondar(ui.ctx())
+            && let Some(e) = self.manutencao.erro()
+        {
+            let e = e.to_string();
+            self.falhar(format!("Resumo de manutenção: {e}"));
         }
         self.atalhos(ui.ctx());
 
@@ -939,6 +1015,7 @@ impl TelaModelo {
         if aba == Aba::Manutencao {
             ui.weak("Manutenção: só leitura aqui. Edite no UTSim.");
             ui.add_space(4.0);
+            self.manutencao_simulada(ui);
         }
         let campos = self.campos(aba);
         if campos.is_empty() {
@@ -1058,6 +1135,44 @@ impl TelaModelo {
                     blocos(ui, l);
                 }
             });
+    }
+
+    /// Mostra a aba `a` do nó (a principal do app ou a Manutenção).
+    pub fn mostrar_aba(&mut self, a: Aba) {
+        self.aba = a;
+    }
+
+    /// O resultado simulado da manutenção do nó escolhido, no alto da aba Manutenção.
+    fn manutencao_simulada(&mut self, ui: &mut egui::Ui) {
+        let tem_quebras = self.doc.as_ref().is_some_and(|d| {
+            d.model()
+                .objects
+                .iter()
+                .any(|o| o.name == self.selecionado && o.downtime.is_some())
+        });
+        if !tem_quebras {
+            return;
+        }
+        let laranja = egui::Color32::from_rgb(230, 160, 40);
+        ui.horizontal(|ui| {
+            subtitulo(ui, "Manutenção simulada");
+            selo(ui, "SIMULADO", laranja)
+                .on_hover_text("Resultado do modelo, não é medição da fábrica.");
+            if self.manutencao.ocupado() {
+                ui.spinner();
+            }
+        });
+        ui.weak("Média das replicações. Tempos na unidade do modelo.");
+        match self.manutencao.ok().and_then(|r| r.get(&self.selecionado)) {
+            Some(l) => blocos(ui, &l.clone()),
+            None if self.manutencao.ocupado() => {
+                ui.weak("Simulando...");
+            }
+            None => {
+                ui.weak("Sem resultado de manutenção para este nó.");
+            }
+        }
+        ui.add_space(8.0);
     }
 
     /// O que o nó tem: qualidade, inspeção, retrabalho, EPI, perigos, quebras.
