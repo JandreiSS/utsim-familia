@@ -4,6 +4,7 @@ mod aisles;
 pub mod analysis;
 mod arrivals;
 mod crane;
+pub use crane::LoadZone;
 pub mod csv;
 pub mod dados;
 pub mod espera;
@@ -587,6 +588,10 @@ pub enum ObjectKind {
         /// Go back to its own position when idle.
         #[serde(default, alias = "volta")]
         home: bool,
+        /// Half side (m) of the square under the hook, turned with the runway, where
+        /// nobody should be while a load hangs (exposure analysis).
+        #[serde(default = "load_zone", alias = "zona_carga")]
+        load_zone: f64,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -657,6 +662,10 @@ fn zero() -> Dist {
 
 fn weight_label() -> String {
     "weight".into()
+}
+
+fn load_zone() -> f64 {
+    2.0
 }
 
 /// Mobile resources and dispatchers live outside the port graph.
@@ -1649,8 +1658,9 @@ impl Model {
             sample_interval: self.run.sample_interval,
             histogram_bins: self.run.histogram_bins,
         });
-        // The exposure of a model with risk zones is measured on the trace.
-        if !self.zones.is_empty() {
+        // The exposure of a model with risk zones, and the people under the cranes'
+        // suspended loads, are measured on the trace.
+        if !self.zones.is_empty() || self.has_people_under_cranes() {
             sim.enable_trace();
         }
         // Block ids follow object order, so references can be resolved up front.
@@ -2034,6 +2044,12 @@ impl Model {
         if !self.zones.is_empty() {
             if let Some(records) = sim.trace() {
                 exposure::add_to_report(self, &mut report, records);
+            }
+        }
+        // A model with cranes and people: the time of each person under the loads.
+        if self.has_people_under_cranes() {
+            if let Some(records) = sim.trace() {
+                exposure::add_under_load_to_report(self, &mut report, records);
             }
         }
         Ok(report)

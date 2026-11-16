@@ -286,6 +286,8 @@ struct CraneState {
     loaded_since: Option<Time>,
     /// Raise still to do after the current hooking or unhooking.
     raise: Time,
+    /// Height the raise starts from (the work height of the last hoist).
+    raise_from: f64,
     trips: u64,
     refused: u64,
     loaded_time: f64,
@@ -363,6 +365,7 @@ impl Transporter {
                 spec,
                 loaded_since: None,
                 raise: 0.0,
+                raise_from: 0.0,
                 trips: 0,
                 refused: 0,
                 loaded_time: 0.0,
@@ -391,8 +394,13 @@ impl Transporter {
         c.axes += axes;
         c.hook_z = end.z;
         let to = c.spec.global(end.u, end.v, 0.0);
+        let floor = c.spec.centre[2];
         let path = vec![self.position, to];
         cx.set_state(state);
+        // `Parallel`: the hook goes to the next height while the crane travels.
+        if axes.hoist > 0.0 {
+            cx.trace_hoist(floor + hook.z, floor + end.z, axes.hoist);
+        }
         if t > 0.0 {
             cx.trace_travel(path.clone(), t);
         }
@@ -405,16 +413,22 @@ impl Transporter {
     }
 
     /// Hoist time around hooking or unhooking at `block` (before, after), counted.
-    fn crane_hoist(&mut self, cx: &Ctx, block: BlockId) -> (Time, Time) {
+    fn crane_hoist(&mut self, cx: &mut Ctx, block: BlockId) -> (Time, Time) {
         let at = cx.position(block);
         let Some(c) = self.crane.as_mut() else {
             return (0.0, 0.0);
         };
         let hook = c.hook(self.position);
         let (down, up, end) = c.spec.hoist_around(hook, at);
+        let floor = c.spec.centre[2];
+        let work = c.spec.work_height(at);
         c.hook_z = end.z;
         c.axes.hoist += down + up;
         c.raise = up;
+        c.raise_from = work;
+        if down > 0.0 {
+            cx.trace_hoist(floor + hook.z, floor + work, down);
+        }
         (down, up)
     }
 
@@ -427,6 +441,8 @@ impl Transporter {
         if up <= 0.0 {
             return false;
         }
+        let floor = c.spec.centre[2];
+        cx.trace_hoist(floor + c.raise_from, floor + c.hook_z, up);
         self.arm(cx, up, tag, None);
         true
     }
@@ -1275,6 +1291,8 @@ impl Behavior for Transporter {
             c.loaded_since = None;
             c.raise = 0.0;
             c.reset_stats(0.0);
+            let z = c.spec.centre[2] + c.hook_z;
+            cx.trace_hoist(z, z, 0.0);
         }
         cx.set_state(State::Idle);
     }
