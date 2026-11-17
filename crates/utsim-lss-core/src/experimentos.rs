@@ -16,6 +16,11 @@
 //! analysed by the recipe [`crate::analises::Recipe::Surface`] (the second-order model and
 //! its stationary point).
 //!
+//! When a factor has more than two levels (three suppliers, four machines), the plan is a
+//! general factorial: every combination of the levels each factor lists, with replicates,
+//! analysed by the recipe [`crate::analises::Recipe::GeneralFactorial`] (the analysis of
+//! variance of the main effects and the two-factor interactions).
+//!
 //! Runs that cannot all be made in the same conditions (days, batches, shifts) go in
 //! blocks: a factorial or a fraction in 2 or 4 blocks, confounding the blocks with the
 //! highest-order interactions it can, and the central composite in two blocks (the
@@ -52,6 +57,10 @@ pub struct FactorSpec {
     /// The parameter of the model, `objeto.campo`, when the simulator runs the experiment.
     #[serde(rename = "parametro", default)]
     pub key: String,
+    /// The levels of a general factorial, separated by `;` (the two-level plans use `low`
+    /// and `high`).
+    #[serde(rename = "niveis", default, skip_serializing_if = "String::is_empty")]
+    pub levels: String,
 }
 
 /// The experiment as the belt describes it.
@@ -67,6 +76,10 @@ pub struct ExperimentSpec {
     /// A Plackett-Burman screening design instead of a fraction (`fraction` is ignored).
     #[serde(rename = "triagem", default)]
     pub screening: bool,
+    /// A general factorial with the levels each factor lists (`fraction` and `screening`
+    /// are ignored).
+    #[serde(rename = "geral", default, skip_serializing_if = "is_false")]
+    pub general: bool,
     /// A response surface plan instead of a two-level one (`fraction` and `screening` are
     /// ignored, and so are the replicates).
     #[serde(
@@ -88,6 +101,10 @@ pub struct ExperimentSpec {
     /// Name of the response column of the worksheet.
     #[serde(rename = "resposta")]
     pub response: String,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn one_block(b: &usize) -> bool {
@@ -213,6 +230,8 @@ pub enum ExpError {
     Axial(String),
     #[error("{}", fx("experimentos-erro_blocos", &[("n", vx(.0)), ("opcoes", vx(.1))]))]
     Blocks(usize, String),
+    #[error("{}", fx("experimentos-erro_niveis_geral", &[("fator", vx(.0)), ("max", vx(&MAX_LEVELS))]))]
+    GeneralLevels(String),
     #[error("{0}")]
     Design(String),
 }
@@ -222,6 +241,12 @@ pub const MAX_FACTORS: usize = 8;
 
 /// Most factors of a Plackett-Burman screening (16 runs).
 pub const MAX_SCREENING: usize = 15;
+
+/// Most levels of a factor of a general factorial.
+pub const MAX_LEVELS: usize = 10;
+
+/// Most runs of a general factorial, replicates included.
+pub const MAX_GENERAL_RUNS: usize = 1000;
 
 fn number(s: &str) -> Option<f64> {
     let t = s.trim();
@@ -265,6 +290,15 @@ impl FactorSpec {
 }
 
 impl FactorSpec {
+    /// The levels of a general factorial, in the order written.
+    pub fn level_list(&self) -> Vec<String> {
+        self.levels
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+
     /// The level written for any coded value: the written levels at `−1`, `0` and `+1`,
     /// and in between or beyond (the axial points) by the numeric levels; empty when the
     /// levels are not numbers.
@@ -284,6 +318,99 @@ impl FactorSpec {
 impl ExperimentSpec {
     pub fn k(&self) -> usize {
         self.factors.len()
+    }
+
+    /// The level of factor `i` at the coded value of a run: in a general factorial the
+    /// coded value is the position of the level in the list, from 1.
+    pub fn level_text(&self, i: usize, coded: f64) -> String {
+        let f = &self.factors[i];
+        if self.general && self.surface.is_none() {
+            let j = coded.round() as usize;
+            f.level_list()
+                .get(j.wrapping_sub(1))
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            f.level_at(coded)
+        }
+    }
+
+    /// The general factorial: every combination of the listed levels (the first factor
+    /// changing fastest), replicated, in an order drawn from the seed.
+    fn general_plan(&self) -> Result<Plan, ExpError> {
+        let k = self.k();
+        if !(2..=MAX_FACTORS).contains(&k) {
+            return Err(ExpError::Factors);
+        }
+        let mut counts = Vec::new();
+        for f in &self.factors {
+            if f.name.trim().is_empty() {
+                return Err(ExpError::NoName);
+            }
+            let l = f.level_list();
+            let mut d = l.clone();
+            d.sort();
+            d.dedup();
+            if !(2..=MAX_LEVELS).contains(&l.len()) || d.len() != l.len() {
+                return Err(ExpError::GeneralLevels(f.name.clone()));
+            }
+            counts.push(l.len());
+        }
+        if self.center_points > 0 {
+            return Err(ExpError::Design(tx("experimentos-geral_sem_centro").into()));
+        }
+        let points: usize = counts.iter().product();
+        let reps = self.replicates.max(1);
+        if points * reps > MAX_GENERAL_RUNS {
+            return Err(ExpError::Design(fx(
+                "experimentos-geral_grande",
+                &[("n", vx(&(points * reps))), ("max", vx(&MAX_GENERAL_RUNS))],
+            )));
+        }
+        let rows: Vec<Vec<i8>> = (0..points)
+            .map(|mut p| {
+                counts
+                    .iter()
+                    .map(|c| {
+                        let v = p % c;
+                        p /= c;
+                        (v + 1) as i8
+                    })
+                    .collect()
+            })
+            .collect();
+        let d = doe::from_rows(k, &[], &rows, reps, 0, self.seed);
+        let mut runs: Vec<PlanRun> = d
+            .runs
+            .iter()
+            .map(|r| PlanRun {
+                run_order: r.run_order,
+                std_order: r.std_order,
+                kind: RunKind::Factorial,
+                block: 1,
+                coded: r.levels.iter().map(|l| f64::from(*l)).collect(),
+            })
+            .collect();
+        runs.sort_by_key(|r| r.run_order);
+        let mut lines = vec![fx(
+            "experimentos-linha_geral",
+            &[
+                (
+                    "niveis",
+                    vx(&counts
+                        .iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" × ")),
+                ),
+                ("pontos", vx(&points)),
+                ("replicas", vx(&reps)),
+            ],
+        )];
+        if reps == 1 {
+            lines.push(tx("experimentos-geral_sem_replica").into());
+        }
+        Ok(Plan { runs, lines })
     }
 
     /// The fractions offered for this number of factors: `p` from 0 up.
@@ -359,6 +486,9 @@ impl ExperimentSpec {
     pub fn block_options(&self) -> Vec<usize> {
         let k = self.k();
         let mut v = vec![1];
+        if self.general && self.surface.is_none() {
+            return v;
+        }
         match self.surface {
             Some(Surface::BoxBehnken) => {}
             Some(_) => v.push(2),
@@ -390,6 +520,10 @@ impl ExperimentSpec {
 
     /// The plan of any kind: the runs in run order and what it estimates.
     pub fn plan(&self) -> Result<Plan, ExpError> {
+        if self.general && self.surface.is_none() {
+            self.check_blocks()?;
+            return self.general_plan();
+        }
         let Some(surface) = self.surface else {
             let d = self.design()?;
             let nb = self.check_blocks()?;
@@ -580,10 +714,10 @@ fn coded_cell(x: f64) -> String {
 fn factor_cells(spec: &ExperimentSpec, levels: &[f64]) -> Vec<String> {
     let mut c: Vec<String> = levels.iter().map(|l| coded_cell(*l)).collect();
     c.extend(
-        spec.factors
+        levels
             .iter()
-            .zip(levels)
-            .map(|(f, l)| cell(&f.level_at(*l))),
+            .enumerate()
+            .map(|(i, l)| cell(&spec.level_text(i, *l))),
     );
     c
 }
@@ -793,7 +927,8 @@ pub fn scenarios(
                 .factors
                 .iter()
                 .zip(&levels)
-                .map(|(f, l)| (f.key.trim().to_string(), f.level_at(*l)))
+                .enumerate()
+                .map(|(i, (f, l))| (f.key.trim().to_string(), spec.level_text(i, *l)))
                 .collect();
             (
                 levels,
