@@ -8156,6 +8156,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "utsim-idiomas",
 ]
 
 [[package]]
@@ -8456,9 +8457,11 @@ dependencies = [
  "utsim-ensino-store",
  "utsim-estudo",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-pasta",
  "utsim-posto",
+ "utsim-quality",
  "utsim-troca",
  "utsim-ui-tema",
 ]
@@ -8475,6 +8478,7 @@ dependencies = [
  "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-model",
+ "utsim-pasta",
  "utsim-produto-core",
  "utsim-troca",
  "utsim-ui-tema",

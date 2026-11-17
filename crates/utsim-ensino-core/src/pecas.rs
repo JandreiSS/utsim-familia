@@ -37,10 +37,31 @@ pub struct Balanceamento {
     /// Name prefix of the station objects (`est` gives `est1`...).
     #[serde(default = "prefixo_estacao")]
     pub prefixo: String,
+    /// Models of a mixed-model line, in the order of their label value (1, 2...). Empty:
+    /// a single model. With models, `Tarefa::tempo` is the average weighted by the mix
+    /// (what the balancing uses) and `Tarefa::tempos` has the time of each model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mix: Vec<ModeloMix>,
+    /// Item label holding the model number (1-based, the order of `mix`).
+    #[serde(default = "rotulo_modelo")]
+    pub rotulo: String,
 }
 
 fn prefixo_estacao() -> String {
     "est".into()
+}
+
+fn rotulo_modelo() -> String {
+    "modelo".into()
+}
+
+/// One model of a mixed-model line.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ModeloMix {
+    pub id: String,
+    pub nome: String,
+    /// Share of the demand (relative weight).
+    pub parcela: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -51,6 +72,9 @@ pub struct Tarefa {
     /// Tasks that must be done before this one.
     #[serde(default)]
     pub depois_de: Vec<String>,
+    /// Time of the task for each model of a mixed-model line (model id to time).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tempos: BTreeMap<String, f64>,
 }
 
 /// The station load and the indicators of an assignment.
@@ -75,6 +99,70 @@ impl Balanceamento {
 
     pub fn soma(&self) -> f64 {
         self.tarefas.iter().map(|t| t.tempo).sum()
+    }
+
+    /// The time of a task for one model (its average `tempo` when the model is missing).
+    pub fn tempo_modelo(t: &Tarefa, modelo: &str) -> f64 {
+        t.tempos.get(modelo).copied().unwrap_or(t.tempo)
+    }
+
+    /// The average of the model times weighted by the mix (`tempo` without a mix).
+    pub fn tempo_ponderado(&self, t: &Tarefa) -> f64 {
+        let total: f64 = self.mix.iter().map(|m| m.parcela).sum();
+        if self.mix.is_empty() || total <= 0.0 {
+            return t.tempo;
+        }
+        self.mix
+            .iter()
+            .map(|m| m.parcela * Self::tempo_modelo(t, &m.id))
+            .sum::<f64>()
+            / total
+    }
+
+    /// The load of each station for each model: `[modelo][estação - 1]`, in the order of
+    /// `mix` (empty without a mix).
+    pub fn cargas_modelos(&self, a: &BTreeMap<String, u32>) -> Vec<Vec<f64>> {
+        self.mix
+            .iter()
+            .map(|m| {
+                let mut c = vec![0.0; self.estacoes as usize];
+                for t in &self.tarefas {
+                    if let Some(&s) = a.get(&t.id)
+                        && s >= 1
+                        && (s as usize) <= c.len()
+                    {
+                        c[s as usize - 1] += Self::tempo_modelo(t, &m.id);
+                    }
+                }
+                c
+            })
+            .collect()
+    }
+
+    /// The largest station load of any single model (the station cycle without a mix).
+    pub fn pico(&self, a: &BTreeMap<String, u32>) -> f64 {
+        if self.mix.is_empty() {
+            return self.resumo(a).ciclo;
+        }
+        self.cargas_modelos(a)
+            .iter()
+            .flatten()
+            .copied()
+            .fold(0.0, f64::max)
+    }
+
+    /// The process time text of a station load (Gamma with the coefficient of variation).
+    fn tempo_ron(&self, c: f64) -> String {
+        if c <= 0.0 || self.cv <= 0.0 {
+            format!("Const({})", numero_ron(c))
+        } else {
+            let shape = 1.0 / (self.cv * self.cv);
+            format!(
+                "Gamma(shape: {}, scale: {})",
+                numero_ron(shape),
+                numero_ron(c / shape)
+            )
+        }
     }
 
     /// The station of every task in `d` (initial value where missing).
@@ -166,26 +254,44 @@ impl Balanceamento {
         None
     }
 
-    /// The model keys: the process time of each station (`Const(0.0)` when empty).
+    /// The model keys: the process time of each station (`Const(0.0)` when empty). With
+    /// a mix, each station also gets a recipe with the time of each model (label value
+    /// 1, 2... in the order of `mix`), and `process` is the time of the first model.
     pub fn ajustes(&self, a: &BTreeMap<String, u32>) -> BTreeMap<String, String> {
-        let r = self.resumo(a);
-        r.cargas
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let txt = if *c <= 0.0 || self.cv <= 0.0 {
-                    format!("Const({})", numero_ron(*c))
-                } else {
-                    let shape = 1.0 / (self.cv * self.cv);
-                    format!(
-                        "Gamma(shape: {}, scale: {})",
-                        numero_ron(shape),
-                        numero_ron(c / shape)
+        if self.mix.is_empty() {
+            return self
+                .resumo(a)
+                .cargas
+                .iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    (
+                        format!("{}{}.process", self.prefixo, i + 1),
+                        self.tempo_ron(*c),
                     )
-                };
-                (format!("{}{}.process", self.prefixo, i + 1), txt)
-            })
-            .collect()
+                })
+                .collect();
+        }
+        let cm = self.cargas_modelos(a);
+        let mut out = BTreeMap::new();
+        for i in 0..self.estacoes as usize {
+            let est = format!("{}{}", self.prefixo, i + 1);
+            out.insert(format!("{est}.process"), self.tempo_ron(cm[0][i]));
+            let tempos: Vec<String> = cm
+                .iter()
+                .enumerate()
+                .map(|(k, c)| format!("(value: {}.0, time: {})", k + 1, self.tempo_ron(c[i])))
+                .collect();
+            out.insert(
+                format!("{est}.recipe"),
+                format!(
+                    "Some((label: \"{}\", times: [{}]))",
+                    self.rotulo,
+                    tempos.join(", ")
+                ),
+            );
+        }
+        out
     }
 
     /// Problems of the definition itself (unknown predecessors, cycles).
@@ -216,6 +322,66 @@ impl Balanceamento {
         }
         if self.takt <= 0.0 || self.estacoes == 0 {
             erros.push("balanceamento: takt e número de estações precisam ser positivos".into());
+        }
+        erros.extend(self.validar_mix());
+        erros
+    }
+
+    /// Problems of the mix: repeated or empty models, missing model times, a `tempo` that
+    /// is not the weighted average of the model times.
+    fn validar_mix(&self) -> Vec<String> {
+        let mut erros = Vec::new();
+        let modelos: BTreeSet<&str> = self.mix.iter().map(|m| m.id.as_str()).collect();
+        if modelos.len() != self.mix.len() {
+            erros.push("balanceamento: modelo repetido no mix".into());
+        }
+        if self
+            .mix
+            .iter()
+            .any(|m| m.parcela.is_nan() || m.parcela <= 0.0)
+        {
+            erros.push("balanceamento: parcela do mix precisa ser positiva".into());
+        }
+        for t in &self.tarefas {
+            if self.mix.is_empty() {
+                if !t.tempos.is_empty() {
+                    erros.push(format!(
+                        "balanceamento: '{}' tem tempos por modelo, mas não há mix",
+                        t.id
+                    ));
+                }
+                continue;
+            }
+            for k in t.tempos.keys() {
+                if !modelos.contains(k.as_str()) {
+                    erros.push(format!(
+                        "balanceamento: '{}' tem tempo do modelo '{k}', que não está no mix",
+                        t.id
+                    ));
+                }
+            }
+            for m in &self.mix {
+                match t.tempos.get(&m.id) {
+                    None => erros.push(format!(
+                        "balanceamento: '{}' sem tempo do modelo '{}'",
+                        t.id, m.id
+                    )),
+                    Some(v) if *v < 0.0 => erros.push(format!(
+                        "balanceamento: '{}' com tempo negativo no modelo '{}'",
+                        t.id, m.id
+                    )),
+                    _ => {}
+                }
+            }
+            let media = self.tempo_ponderado(t);
+            if (media - t.tempo).abs() > 0.05 {
+                erros.push(format!(
+                    "balanceamento: o tempo de '{}' ({}) precisa ser a média ponderada pelo mix ({})",
+                    t.id,
+                    numero_ron(t.tempo),
+                    numero_ron((media * 100.0).round() / 100.0)
+                ));
+            }
         }
         erros
     }
@@ -666,7 +832,8 @@ impl Busca<'_> {
 
 /// Terms of the pieces usable in measures and limits: `balanceamento.estacoes`,
 /// `balanceamento.ciclo`, `balanceamento.eficiencia`, `balanceamento.atraso`,
-/// `balanceamento.minimo` (the theoretical minimum of stations) and
+/// `balanceamento.minimo` (the theoretical minimum of stations),
+/// `balanceamento.pico` (the largest station load of any single model of a mix) and
 /// `arranjo.momento`. `None` for any other key.
 pub fn termo(missao: &crate::missao::Missao, chave: &str, d: &Decisoes) -> Option<f64> {
     match chave {
@@ -684,6 +851,7 @@ pub fn termo(missao: &crate::missao::Missao, chave: &str, d: &Decisoes) -> Optio
                 "atraso" => Some(r.atraso),
                 // Theoretical minimum number of stations: ceil(sum of times / takt).
                 "minimo" => Some((b.soma() / b.takt - 1e-9).ceil()),
+                "pico" => Some(b.pico(&b.atribuicao(d))),
                 _ => None,
             }
         }
@@ -701,5 +869,6 @@ pub fn e_termo(chave: &str) -> bool {
                 | "balanceamento.eficiencia"
                 | "balanceamento.atraso"
                 | "balanceamento.minimo"
+                | "balanceamento.pico"
         )
 }

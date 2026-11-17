@@ -9,6 +9,7 @@
 //! - cada mudança grava o estudo inteiro na pasta de unidade, no máximo uma vez por
 //!   segundo enquanto a pessoa digita e na hora em que o campo perde o foco.
 
+use crate::texto::{fx, tx, vx};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -103,7 +104,12 @@ pub fn gravar_limites(
             .filter(|o| o.name == p.objeto)
             .chain(objs.iter().filter(|o| o.name != p.objeto))
             .find_map(achar)
-            .ok_or_else(|| format!("A característica {} não está no modelo.", p.caracteristica))?;
+            .ok_or_else(|| {
+                fx(
+                    "ferramentas-a_caracteristica_nao_esta_no",
+                    &[("caracteristica", vx(&p.caracteristica))],
+                )
+            })?;
         for (campo, v) in [("lsl", p.lie), ("usl", p.lse)] {
             let valor = v.map(|x| x.to_string()).unwrap_or_default();
             let c = utsim_edit::abas::editar(
@@ -296,7 +302,10 @@ impl TelaFerramentas {
         }
         let nomes: Vec<&str> = arquivos.iter().map(|(n, _, _)| n.as_str()).collect();
         let n = NovoEstudo {
-            titulo: format!("Análise de {}", nomes.join(", ")),
+            titulo: fx(
+                "ferramentas-analise_de",
+                &[("nomes", vx(&nomes.join(", ")))],
+            ),
             ..NovoEstudo::default()
         };
         let id = self.criar(s, &n)?;
@@ -331,9 +340,9 @@ impl TelaFerramentas {
         let mut descartar = false;
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.label(
-                RichText::new(format!(
-                    "Dados de {}: escolha a ferramenta.",
-                    nomes.join(", ")
+                RichText::new(fx(
+                    "ferramentas-dados_de_escolha_a_ferramenta",
+                    &[("nomes", vx(&nomes.join(", ")))],
                 ))
                 .strong(),
             );
@@ -343,7 +352,7 @@ impl TelaFerramentas {
                         escolhida = Some(f);
                     }
                 }
-                if ui.button("Descartar").clicked() {
+                if ui.button(tx("ferramentas-descartar")).clicked() {
                     descartar = true;
                 }
             });
@@ -406,7 +415,10 @@ impl TelaFerramentas {
                 }
                 s.mudou();
             }
-            Err(err) => s.falhar(format!("não consegui gravar o estudo: {err}")),
+            Err(err) => s.falhar(fx(
+                "ferramentas-nao_consegui_gravar_o_estudo",
+                &[("err", vx(&err))],
+            )),
         }
     }
 
@@ -424,7 +436,7 @@ impl TelaFerramentas {
         let e = Estudo {
             id: utsim_posto::pasta::novo_id(),
             titulo: if n.titulo.trim().is_empty() {
-                "Estudo sem título".into()
+                tx("ferramentas-estudo_sem_titulo").into()
             } else {
                 n.titulo.trim().into()
             },
@@ -442,7 +454,10 @@ impl TelaFerramentas {
         match u.gravar(ESTUDOS, &e.id, &e) {
             Ok(id) => {
                 s.mudou();
-                s.avisar(format!("Estudo '{}' criado.", e.titulo));
+                s.avisar(fx(
+                    "ferramentas-estudo_criado",
+                    &[("titulo", vx(&e.titulo))],
+                ));
                 self.sincronizar(s);
                 self.abrir_estudo(s, &id);
                 Some(id)
@@ -494,11 +509,14 @@ impl TelaFerramentas {
             return;
         };
         match gravar_limites(&p, s, modelo) {
-            Ok(no) => s.avisar(format!(
-                "LIE e LSE gravados na característica {} do nó {no}.",
-                p.caracteristica
+            Ok(no) => s.avisar(fx(
+                "ferramentas-lie_e_lse_gravados_na",
+                &[("caracteristica", vx(&p.caracteristica)), ("no", vx(&no))],
             )),
-            Err(e) => s.falhar(format!("Os limites não foram para o nó: {e}")),
+            Err(e) => s.falhar(fx(
+                "ferramentas-os_limites_nao_foram_para",
+                &[("e", vx(&e))],
+            )),
         }
     }
 
@@ -522,7 +540,7 @@ impl TelaFerramentas {
             .collect();
         if do_no.is_empty() {
             self.novo = Some(NovoEstudo {
-                titulo: format!("Estudo do nó {objeto}"),
+                titulo: fx("ferramentas-estudo_do_no", &[("objeto", vx(&objeto))]),
                 modelo,
                 objeto,
                 ..NovoEstudo::default()
@@ -563,7 +581,10 @@ impl TelaFerramentas {
         aplicacao: Option<&str>,
     ) -> Result<Vec<PathBuf>, String> {
         let posto = Self::nome_do_posto(s, &e.assunto.posto);
-        let u = s.unidade.as_ref().ok_or("Nenhuma unidade aberta.")?;
+        let u = s
+            .unidade
+            .as_ref()
+            .ok_or(tx("ferramentas-nenhuma_unidade_aberta"))?;
         let data = utsim_estudo::hoje();
         let ctx = Contexto {
             identidade: &self.identidade,
@@ -573,7 +594,9 @@ impl TelaFerramentas {
         };
         let (doc, nome) = match aplicacao {
             Some(id) => {
-                let a = e.aplicacao(id).ok_or("Ferramenta não encontrada.")?;
+                let a = e
+                    .aplicacao(id)
+                    .ok_or(tx("ferramentas-ferramenta_nao_encontrada"))?;
                 (
                     relatorio::documento_ferramenta(e, a, &ctx),
                     format!("{}_{}", slug(&e.titulo), slug(&a.titulo)),
@@ -639,20 +662,20 @@ impl TelaFerramentas {
                     aplicar(a);
                     self.marcar_sujo(agora);
                     self.nota.clear();
-                    s.avisar("Dados puxados da simulação.");
+                    s.avisar(tx("ferramentas-dados_puxados_da_simulacao"));
                 } else if let Some(mut e) = self.estudos.iter().find(|e| e.id == eid).cloned()
                     && let Some(a) = e.aplicacao_mut(&aid)
                 {
                     aplicar(a);
                     if let Some(u) = s.unidade.as_mut() {
                         let r = u.gravar(ESTUDOS, &e.id, &e);
-                        s.resultado(r, "Dados puxados da simulação e gravados no estudo.");
+                        s.resultado(r, tx("ferramentas-dados_puxados_da_simulacao_e"));
                     }
                 }
             }
             Some(Err(err)) => {
                 self.puxar.erro = err.clone();
-                s.falhar(format!("Simulação: {err}"));
+                s.falhar(fx("ferramentas-simulacao", &[("err", vx(&err))]));
             }
             None => {}
         }
@@ -662,7 +685,7 @@ impl TelaFerramentas {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
         if s.unidade.is_none() {
-            ui.label("Abra uma unidade na tela inicial.");
+            ui.label(tx("ferramentas-abra_uma_unidade_na_tela"));
             return;
         }
         let agora = ui.ctx().input(|i| i.time);
@@ -698,21 +721,24 @@ impl TelaFerramentas {
     }
 
     fn lista(&mut self, ui: &mut egui::Ui, s: &mut Sessao) {
-        ui.heading("Estudos");
+        ui.heading(tx("ferramentas-estudos"));
         ui.add(
             egui::TextEdit::singleline(&mut self.filtro)
-                .hint_text("filtrar por título ou assunto")
+                .hint_text(tx("ferramentas-filtrar_por_titulo_ou_assunto"))
                 .desired_width(f32::INFINITY),
         );
         if let Some((_, objeto)) = self.filtro_no.clone() {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("Só do nó {objeto}")).color(AMBAR));
-                if ui.small_button("Mostrar todos").clicked() {
+                ui.label(
+                    RichText::new(fx("ferramentas-so_do_no", &[("objeto", vx(&objeto))]))
+                        .color(AMBAR),
+                );
+                if ui.small_button(tx("ferramentas-mostrar_todos")).clicked() {
                     self.filtro_no = None;
                 }
             });
         }
-        if self.novo.is_none() && ui.button("Novo estudo").clicked() {
+        if self.novo.is_none() && ui.button(tx("ferramentas-novo_estudo")).clicked() {
             self.novo = Some(NovoEstudo::default());
         }
         if self.novo.is_some() {
@@ -740,9 +766,9 @@ impl TelaFerramentas {
             .collect();
         if visiveis.is_empty() {
             ui.weak(if self.estudos.is_empty() {
-                "A unidade ainda não tem estudos."
+                tx("ferramentas-a_unidade_ainda_nao_tem")
             } else {
-                "Nenhum estudo passa pelo filtro."
+                tx("ferramentas-nenhum_estudo_passa_pelo_filtro")
             });
         }
         let mut abrir: Option<String> = None;
@@ -828,13 +854,13 @@ impl TelaFerramentas {
         let mut cancelar = false;
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.strong("Novo estudo");
-            ui.label("Título");
+            ui.strong(tx("ferramentas-novo_estudo"));
+            ui.label(tx("ferramentas-titulo"));
             ui.add(egui::TextEdit::singleline(&mut n.titulo).desired_width(f32::INFINITY));
-            ui.label("Problema em uma frase");
+            ui.label(tx("ferramentas-problema_em_uma_frase"));
             ui.add(egui::TextEdit::singleline(&mut n.problema).desired_width(f32::INFINITY));
             ui.horizontal(|ui| {
-                ui.label("Posto");
+                ui.label(tx("ferramentas-posto"));
                 let atual = postos
                     .iter()
                     .find(|p| p.id == n.posto)
@@ -843,7 +869,7 @@ impl TelaFerramentas {
                     .selected_text(atual)
                     .width(180.0)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut n.posto, String::new(), "nenhum");
+                        ui.selectable_value(&mut n.posto, String::new(), tx("ferramentas-nenhum"));
                         for p in &postos {
                             if ui
                                 .selectable_value(&mut n.posto, p.id.clone(), &p.nome)
@@ -858,11 +884,11 @@ impl TelaFerramentas {
                     });
             });
             ui.horizontal(|ui| {
-                ui.label("Modelo");
+                ui.label(tx("ferramentas-modelo"));
                 crate::util::campo_modelo(ui, &mut n.modelo, s.unidade.as_ref(), 130.0);
                 if !modelos.is_empty() {
                     egui::ComboBox::from_id_salt("novo_modelo")
-                        .selected_text("dos postos")
+                        .selected_text(tx("ferramentas-dos_postos"))
                         .width(70.0)
                         .show_ui(ui, |ui| {
                             for m in &modelos {
@@ -872,14 +898,14 @@ impl TelaFerramentas {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("Nó");
+                ui.label(tx("ferramentas-no"));
                 ui.add(egui::TextEdit::singleline(&mut n.objeto).desired_width(130.0));
                 if let Some((m, Ok(objs))) = &self.objetos_cache
                     && *m == n.modelo.trim()
                     && !objs.is_empty()
                 {
                     egui::ComboBox::from_id_salt("novo_objeto")
-                        .selected_text("do modelo")
+                        .selected_text(tx("ferramentas-do_modelo"))
                         .width(70.0)
                         .show_ui(ui, |ui| {
                             for o in objs {
@@ -894,10 +920,10 @@ impl TelaFerramentas {
                 ui.label(RichText::new(e).small().color(VERMELHO));
             }
             ui.horizontal(|ui| {
-                if ui.button("Criar estudo").clicked() {
+                if ui.button(tx("ferramentas-criar_estudo")).clicked() {
                     criar = true;
                 }
-                if ui.button("Cancelar").clicked() {
+                if ui.button(tx("ferramentas-cancelar")).clicked() {
                     cancelar = true;
                 }
             });
@@ -912,12 +938,9 @@ impl TelaFerramentas {
     fn corpo(&mut self, ui: &mut egui::Ui, s: &mut Sessao, agora: f64) {
         let Some(mut e) = self.estudo.take() else {
             ui.add_space(24.0);
-            ui.heading("Ferramentas da qualidade em estudos");
-            ui.label(
-                "Um estudo aplica as ferramentas a um assunto: um nó do modelo, um posto ou um \
-                 problema. Os dados vêm da simulação, de um CSV ou são digitados.",
-            );
-            ui.label("Escolha um estudo na lista ou crie um novo.");
+            ui.heading(tx("ferramentas-ferramentas_da_qualidade_em_estudos"));
+            ui.label(tx("ferramentas-um_estudo_aplica_as_ferramentas"));
+            ui.label(tx("ferramentas-escolha_um_estudo_na_lista"));
             return;
         };
         let antes = e.clone();
@@ -932,14 +955,14 @@ impl TelaFerramentas {
                 .auto_shrink([false, false])
                 .show(ui, |ui| self.aplicacao_ui(ui, s, &mut e, i));
         } else if e.aplicacoes.is_empty() {
-            ui.weak("O estudo ainda não tem ferramentas. Use \"Adicionar ferramenta\".");
+            ui.weak(tx("ferramentas-o_estudo_ainda_nao_tem"));
         } else {
-            ui.weak("Escolha uma ferramenta do estudo.");
+            ui.weak(tx("ferramentas-escolha_uma_ferramenta_do_estudo"));
         }
         if remover_estudo {
             if let Some(u) = s.unidade.as_mut() {
                 let r = u.remover(ESTUDOS, &e.id);
-                s.resultado(r, "Estudo removido.");
+                s.resultado(r, tx("ferramentas-estudo_removido"));
             }
             self.sujo = false;
             self.selecionado.clear();
@@ -957,23 +980,23 @@ impl TelaFerramentas {
             ui.add(
                 egui::TextEdit::singleline(&mut e.titulo)
                     .font(egui::TextStyle::Heading)
-                    .hint_text("título do estudo")
+                    .hint_text(tx("ferramentas-titulo_do_estudo"))
                     .desired_width((ui.available_width() - 330.0).max(200.0)),
             );
-            if ui.button("Relatório do estudo").clicked() {
+            if ui.button(tx("ferramentas-relatorio_do_estudo")).clicked() {
                 self.relatorio_estudo = !self.relatorio_estudo;
             }
             if self.confirmar.as_deref() == Some("estudo") {
                 if ui
-                    .button(RichText::new("Confirmar remoção").color(VERMELHO))
+                    .button(RichText::new(tx("ferramentas-confirmar_remocao")).color(VERMELHO))
                     .clicked()
                 {
                     *remover = true;
                 }
-                if ui.button("Não").clicked() {
+                if ui.button(tx("ferramentas-nao")).clicked() {
                     self.confirmar = None;
                 }
-            } else if ui.button("Remover estudo").clicked() {
+            } else if ui.button(tx("ferramentas-remover_estudo")).clicked() {
                 self.confirmar = Some("estudo".into());
             }
         });
@@ -982,35 +1005,35 @@ impl TelaFerramentas {
             ui.label(RichText::new(e.assunto.resumo(posto.as_deref())).color(AZUL));
             let mut info = Vec::new();
             if !e.autor.is_empty() {
-                info.push(format!("responsável {}", e.autor));
+                info.push(fx("ferramentas-responsavel", &[("autor", vx(&e.autor))]));
             }
             if !e.criado.is_empty() {
-                info.push(format!("aberto em {}", e.criado));
+                info.push(fx("ferramentas-aberto_em", &[("criado", vx(&e.criado))]));
             }
             if e.app != self.app {
-                info.push(format!("criado no {}", e.app.nome()));
+                info.push(fx("ferramentas-criado_no", &[("nome", vx(&e.app.nome()))]));
             }
             if !info.is_empty() {
                 ui.weak(info.join(" · "));
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Problema");
+            ui.label(tx("ferramentas-problema"));
             ui.add(
                 egui::TextEdit::singleline(&mut e.assunto.problema)
-                    .hint_text("o problema em uma frase")
+                    .hint_text(tx("ferramentas-o_problema_em_uma_frase"))
                     .desired_width(f32::INFINITY),
             );
         });
         ui.horizontal_top(|ui| {
-            egui::CollapsingHeader::new("Assunto")
+            egui::CollapsingHeader::new(tx("ferramentas-assunto"))
                 .id_salt(("assunto", e.id.clone()))
                 .show(ui, |ui| {
                     let postos = s.unidade.as_ref().map(|u| u.postos()).unwrap_or_default();
                     egui::Grid::new(("grade_assunto", e.id.clone()))
                         .num_columns(2)
                         .show(ui, |ui| {
-                            ui.label("Posto");
+                            ui.label(tx("ferramentas-posto"));
                             let atual = postos
                                 .iter()
                                 .find(|p| p.id == e.assunto.posto)
@@ -1021,7 +1044,7 @@ impl TelaFerramentas {
                                     ui.selectable_value(
                                         &mut e.assunto.posto,
                                         String::new(),
-                                        "nenhum",
+                                        tx("ferramentas-nenhum"),
                                     );
                                     for p in &postos {
                                         ui.selectable_value(
@@ -1032,7 +1055,7 @@ impl TelaFerramentas {
                                     }
                                 });
                             ui.end_row();
-                            ui.label("Modelo");
+                            ui.label(tx("ferramentas-modelo"));
                             crate::util::campo_modelo(
                                 ui,
                                 &mut e.assunto.modelo,
@@ -1040,7 +1063,7 @@ impl TelaFerramentas {
                                 260.0,
                             );
                             ui.end_row();
-                            ui.label("Nó");
+                            ui.label(tx("ferramentas-no"));
                             ui.add(
                                 egui::TextEdit::singleline(&mut e.assunto.objeto)
                                     .desired_width(160.0),
@@ -1048,12 +1071,12 @@ impl TelaFerramentas {
                             ui.end_row();
                         });
                 });
-            egui::CollapsingHeader::new("Conclusão do estudo")
+            egui::CollapsingHeader::new(tx("ferramentas-conclusao_do_estudo"))
                 .id_salt(("conclusao_estudo", e.id.clone()))
                 .show(ui, |ui| {
                     ui.add(
                         egui::TextEdit::multiline(&mut e.conclusao)
-                            .hint_text("o que o estudo concluiu e o que será feito")
+                            .hint_text(tx("ferramentas-o_que_o_estudo_concluiu"))
                             .desired_rows(3)
                             .desired_width(420.0),
                     );
@@ -1061,7 +1084,7 @@ impl TelaFerramentas {
         });
         if self.relatorio_estudo {
             egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.strong("Ferramentas no relatório do estudo");
+                ui.strong(tx("ferramentas-ferramentas_no_relatorio_do_estudo"));
                 ui.horizontal_wrapped(|ui| {
                     for a in &e.aplicacoes {
                         let mut marcado = !self.desmarcadas.contains(&a.id);
@@ -1079,12 +1102,15 @@ impl TelaFerramentas {
                     .iter()
                     .any(|a| !self.desmarcadas.contains(&a.id));
                 if ui
-                    .add_enabled(algum, egui::Button::new("Gravar PDF e HTML do estudo"))
+                    .add_enabled(
+                        algum,
+                        egui::Button::new(tx("ferramentas-gravar_pdf_e_html_do")),
+                    )
                     .clicked()
                 {
                     match self.gravar_relatorio(s, e, None) {
                         Ok(p) => {
-                            s.avisar("Relatório do estudo gravado.");
+                            s.avisar(tx("ferramentas-relatorio_do_estudo_gravado"));
                             self.relatorios = p;
                         }
                         Err(err) => s.falhar(err),
@@ -1100,7 +1126,7 @@ impl TelaFerramentas {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            ui.label("Gravado:");
+            ui.label(tx("ferramentas-gravado"));
             for p in &self.relatorios {
                 ui.label(RichText::new(p.display().to_string()).small().weak());
             }
@@ -1108,10 +1134,13 @@ impl TelaFerramentas {
                 .relatorios
                 .iter()
                 .find(|p| p.extension().is_some_and(|x| x == "html"))
-                && ui.button("Abrir").clicked()
+                && ui.button(tx("ferramentas-abrir")).clicked()
                 && let Err(err) = util::abrir_com_sistema(h)
             {
-                s.falhar(format!("não consegui abrir {}: {err}", h.display()));
+                s.falhar(fx(
+                    "ferramentas-nao_consegui_abrir",
+                    &[("h", vx(&h.display())), ("err", vx(&err))],
+                ));
             }
         });
     }
@@ -1119,7 +1148,7 @@ impl TelaFerramentas {
     fn chips(&mut self, ui: &mut egui::Ui, e: &mut Estudo) {
         let mut escolher: Option<String> = None;
         ui.horizontal_wrapped(|ui| {
-            ui.strong("Ferramentas do estudo:");
+            ui.strong(tx("ferramentas-ferramentas_do_estudo"));
             for a in &e.aplicacoes {
                 if ui
                     .selectable_label(a.id == self.aplicacao, &a.titulo)
@@ -1129,7 +1158,7 @@ impl TelaFerramentas {
                     escolher = Some(a.id.clone());
                 }
             }
-            ui.menu_button("+ Adicionar ferramenta", |ui| {
+            ui.menu_button(tx("ferramentas-adicionar_ferramenta"), |ui| {
                 ui.set_min_width(360.0);
                 for f in Ferramenta::do_app(self.app) {
                     if ui.button(RichText::new(f.nome()).strong()).clicked() {
@@ -1159,14 +1188,14 @@ impl TelaFerramentas {
                     .desired_width((ui.available_width() - 330.0).max(200.0)),
             );
             if ui
-                .add_enabled(i > 0, egui::Button::new("Subir"))
-                .on_hover_text("Antes na ordem do estudo e do relatório")
+                .add_enabled(i > 0, egui::Button::new(tx("ferramentas-subir")))
+                .on_hover_text(tx("ferramentas-antes_na_ordem_do_estudo"))
                 .clicked()
             {
                 mover = Some(i - 1);
             }
             if ui
-                .add_enabled(i + 1 < n, egui::Button::new("Descer"))
+                .add_enabled(i + 1 < n, egui::Button::new(tx("ferramentas-descer")))
                 .clicked()
             {
                 mover = Some(i + 1);
@@ -1174,15 +1203,15 @@ impl TelaFerramentas {
             let id = e.aplicacoes[i].id.clone();
             if self.confirmar.as_deref() == Some(id.as_str()) {
                 if ui
-                    .button(RichText::new("Confirmar remoção").color(VERMELHO))
+                    .button(RichText::new(tx("ferramentas-confirmar_remocao")).color(VERMELHO))
                     .clicked()
                 {
                     remover = true;
                 }
-                if ui.button("Não").clicked() {
+                if ui.button(tx("ferramentas-nao")).clicked() {
                     self.confirmar = None;
                 }
-            } else if ui.button("Remover").clicked() {
+            } else if ui.button(tx("ferramentas-remover")).clicked() {
                 self.confirmar = Some(id);
             }
         });
@@ -1209,13 +1238,13 @@ impl TelaFerramentas {
         }
         ui.horizontal(|ui| {
             if ui
-                .button("Relatório desta ferramenta (PDF e HTML)")
+                .button(tx("ferramentas-relatorio_desta_ferramenta_pdf_e"))
                 .clicked()
             {
                 let id = e.aplicacoes[i].id.clone();
                 match self.gravar_relatorio(s, e, Some(&id)) {
                     Ok(p) => {
-                        s.avisar("Relatório da ferramenta gravado.");
+                        s.avisar(tx("ferramentas-relatorio_da_ferramenta_gravado"));
                         self.relatorios = p;
                     }
                     Err(err) => s.falhar(err),
@@ -1228,17 +1257,17 @@ impl TelaFerramentas {
         let eid = e.id.clone();
         let a = &mut e.aplicacoes[i];
         ui.columns(2, |cols| {
-            cols[0].strong("Dados");
+            cols[0].strong(tx("ferramentas-dados"));
             self.dados_ui(&mut cols[0], s, a, &assunto, &eid);
             cols[0].add_space(6.0);
-            cols[0].strong("Leitura da equipe");
+            cols[0].strong(tx("ferramentas-leitura_da_equipe"));
             cols[0].add(
                 egui::TextEdit::multiline(&mut a.conclusao)
-                    .hint_text("o que o resultado mostra e o que fazer")
+                    .hint_text(tx("ferramentas-o_que_o_resultado_mostra"))
                     .desired_rows(3)
                     .desired_width(f32::INFINITY),
             );
-            cols[1].strong("Resultado");
+            cols[1].strong(tx("ferramentas-resultado"));
             self.resultado_ui(&mut cols[1], a, &problema);
         });
         if let Some(j) = mover {
@@ -1274,11 +1303,13 @@ impl TelaFerramentas {
                 parametros_ui(ui, a);
                 if let Some(p) = limites_da_aplicacao(a)
                     && ui
-                        .button("Gravar LIE e LSE no nó")
-                        .on_hover_text(format!(
-                            "Grava estes limites na característica {} do modelo (aba \
-                             Qualidade do nó {}), com a trava do modelo.",
-                            p.caracteristica, p.objeto
+                        .button(tx("ferramentas-gravar_lie_e_lse_no"))
+                        .on_hover_text(fx(
+                            "ferramentas-grava_estes_limites_na_caracteristica",
+                            &[
+                                ("caracteristica", vx(&p.caracteristica)),
+                                ("objeto", vx(&p.objeto)),
+                            ],
                         ))
                         .clicked()
                 {
@@ -1302,7 +1333,7 @@ impl TelaFerramentas {
                 if (&a.tabela, &a.auxiliares) != (&antes.0, &antes.1) && a.origem != Origem::Manual
                 {
                     a.origem = Origem::Manual;
-                    self.nota = "Dados editados à mão: a origem passou a Manual.".into();
+                    self.nota = tx("ferramentas-dados_editados_a_mao_a").into();
                 }
                 ui.add_space(4.0);
                 self.origem_ui(ui, s, a, assunto, eid);
@@ -1318,7 +1349,7 @@ impl TelaFerramentas {
         assunto: &Assunto,
         eid: &str,
     ) {
-        egui::CollapsingHeader::new("Importar e exportar dados")
+        egui::CollapsingHeader::new(tx("ferramentas-importar_e_exportar_dados"))
             .id_salt(("csv", a.id.clone()))
             .show(ui, |ui| {
                 let largura = (ui.available_width() - 110.0).max(160.0);
@@ -1326,9 +1357,9 @@ impl TelaFerramentas {
                     ui,
                     &mut self.csv,
                     utsim_ui_tema::arquivos::Tipo::Abrir,
-                    "Importar dados",
+                    tx("ferramentas-importar_dados"),
                     &[utsim_ui_tema::arquivos::Filtro {
-                        nome: "Planilha (.csv, .xlsx)",
+                        nome: tx("ferramentas-planilha_csv_xlsx"),
                         extensoes: &["csv", "xlsx"],
                     }],
                     largura,
@@ -1351,7 +1382,7 @@ impl TelaFerramentas {
                     if xlsx && let Some((_, r)) = &self.abas {
                         match r {
                             Ok(abas) => {
-                                ui.label("Aba");
+                                ui.label(tx("ferramentas-aba"));
                                 egui::ComboBox::from_id_salt(("aba", a.id.clone()))
                                     .selected_text(self.aba.clone())
                                     .width(140.0)
@@ -1369,7 +1400,7 @@ impl TelaFerramentas {
                     if ui
                         .add_enabled(
                             !caminho.is_empty(),
-                            egui::Button::new("Importar CSV ou xlsx"),
+                            egui::Button::new(tx("ferramentas-importar_csv_ou_xlsx")),
                         )
                         .clicked()
                     {
@@ -1388,18 +1419,21 @@ impl TelaFerramentas {
                                 a.origem = o;
                                 a.parametros.colunas.clear();
                                 self.nota.clear();
-                                s.avisar(format!("{nome} importado."));
+                                s.avisar(fx("ferramentas-importado", &[("nome", vx(&nome))]));
                             }
                             Err(err) => s.falhar(err),
                         }
                     }
                 });
-                if ui.button("Exportar CSV").clicked()
+                if ui.button(tx("ferramentas-exportar_csv")).clicked()
                     && let Some(u) = s.unidade.as_ref()
                 {
                     let nome = format!("{}.csv", slug(&a.titulo));
                     match u.gravar_relatorio(&nome, a.tabela.csv().as_bytes()) {
-                        Ok(p) => s.avisar(format!("Tabela gravada em {}", p.display())),
+                        Ok(p) => s.avisar(fx(
+                            "ferramentas-tabela_gravada_em",
+                            &[("p", vx(&p.display()))],
+                        )),
                         Err(err) => s.falhar(err.to_string()),
                     }
                 }
@@ -1410,11 +1444,11 @@ impl TelaFerramentas {
         if !a.ferramenta.simulavel() {
             return;
         }
-        egui::CollapsingHeader::new("Puxar da simulação")
+        egui::CollapsingHeader::new(tx("ferramentas-puxar_da_simulacao"))
             .id_salt(("puxar", a.id.clone()))
             .show(ui, |ui| {
                 if assunto.objeto.is_empty() || assunto.modelo.is_empty() {
-                    ui.weak("O estudo não tem nó do modelo. Escolha um em \"Assunto\".");
+                    ui.weak(tx("ferramentas-o_estudo_nao_tem_no"));
                     return;
                 }
                 let chave = (assunto.modelo.clone(), assunto.objeto.clone(), a.ferramenta);
@@ -1445,11 +1479,11 @@ impl TelaFerramentas {
                     return;
                 }
                 if self.puxar.leituras.is_empty() {
-                    ui.weak("A simulação não oferece leituras desta ferramenta para o nó.");
+                    ui.weak(tx("ferramentas-a_simulacao_nao_oferece_leituras"));
                     return;
                 }
                 ui.horizontal(|ui| {
-                    ui.label("Leitura");
+                    ui.label(tx("ferramentas-leitura"));
                     egui::ComboBox::from_id_salt(("leitura", a.id.clone()))
                         .selected_text(self.puxar.leitura.clone())
                         .width(220.0)
@@ -1460,11 +1494,14 @@ impl TelaFerramentas {
                         });
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Replicações");
+                    ui.label(tx("ferramentas-replicacoes"));
                     ui.add(egui::DragValue::new(&mut self.puxar.replicacoes).range(1..=200));
                     let ocupado = self.puxar.trabalho.ocupado();
                     if ui
-                        .add_enabled(!ocupado, egui::Button::new("Rodar e preencher a tabela"))
+                        .add_enabled(
+                            !ocupado,
+                            egui::Button::new(tx("ferramentas-rodar_e_preencher_a_tabela")),
+                        )
                         .clicked()
                         && let Some(m) = self.puxar.modelo.clone()
                     {
@@ -1495,10 +1532,10 @@ impl TelaFerramentas {
                     }
                     if ocupado {
                         ui.spinner();
-                        ui.weak("simulando...");
+                        ui.weak(tx("ferramentas-simulando"));
                     }
                 });
-                ui.weak("A tabela atual é trocada pelo resultado simulado.");
+                ui.weak(tx("ferramentas-a_tabela_atual_e_trocada"));
             });
     }
 
@@ -1573,81 +1610,67 @@ fn selo(ui: &mut egui::Ui, texto: &str, cor: Color32) {
 /// Como preencher a tabela principal das ferramentas que não se explicam pelas colunas.
 fn dica_da_tabela(f: Ferramenta) -> Option<&'static str> {
     match f {
-        Ferramenta::Qfd => Some(
-            "Uma linha por necessidade do cliente, importância de 1 a 5. Cada coluna depois de \"Ponto de venda\" é um requisito técnico (+ coluna), com a relação 0, 1, 3 ou 9. Atual, concorrente e meta vão de 1 a 5, o ponto de venda é 1, 1,2 ou 1,5.",
-        ),
-        Ferramenta::Tolerancias => Some(
-            "Uma linha por cota. O coeficiente é 1 para a cota que soma e -1 para a que subtrai. Sem a tolerância superior, a cota é simétrica. Distribuição: normal (±3σ), normal 4 (±4σ), uniforme ou triangular. São 100 mil montagens simuladas, com a mesma semente.",
-        ),
-        Ferramenta::PokaYoke => Some(
-            "Uma linha por dispositivo. Tipo: contato, valor fixo ou sequência. Função: controle (baixa a ocorrência) ou alerta (baixa a detecção). Etapa e modo de falha como estão no FMEA, notas O e D de 1 a 10 antes e depois.",
-        ),
+        Ferramenta::Qfd => Some(tx("ferramentas-uma_linha_por_necessidade_do")),
+        Ferramenta::Tolerancias => Some(tx("ferramentas-uma_linha_por_cota_o")),
+        Ferramenta::PokaYoke => Some(tx("ferramentas-uma_linha_por_dispositivo_tipo")),
         _ => None,
     }
 }
 
 fn dica_da_auxiliar(f: Ferramenta, i: usize) -> Option<&'static str> {
     match (f, i) {
-        (Ferramenta::Qfd, 0) => {
-            Some("Pelo nome da coluna: unidade, sentido (maior, menor ou alvo) e valor-alvo.")
-        }
-        (Ferramenta::Qfd, 1) => Some(
-            "Dois requisitos e a correlação: ++ e + quando um ajuda o outro, - e -- quando um atrapalha o outro.",
-        ),
-        (Ferramenta::PokaYoke, 0) => Some(
-            "Cada teste do dispositivo: data (DD/MM/AAAA), se funcionou (sim ou não), quem testou e uma nota.",
-        ),
+        (Ferramenta::Qfd, 0) => Some(tx("ferramentas-pelo_nome_da_coluna_unidade")),
+        (Ferramenta::Qfd, 1) => Some(tx("ferramentas-dois_requisitos_e_a_correlacao")),
+        (Ferramenta::PokaYoke, 0) => Some(tx("ferramentas-cada_teste_do_dispositivo_data")),
         _ => None,
     }
 }
 
+/// As chaves dos papéis das colunas de cada ferramenta (`papel-*`), traduzidas na tela.
 fn papeis(a: &Aplicacao) -> &'static [&'static str] {
     match a.ferramenta {
-        Ferramenta::FolhaVerificacao => &["Categoria"],
-        Ferramenta::Estratificacao => &["Estrato", "Valor"],
-        Ferramenta::Pareto => &["Categoria", "Quantidade", "Custo unitário"],
-        Ferramenta::Histograma | Ferramenta::Capacidade => &["Valor"],
-        Ferramenta::Dispersao => &["X", "Y"],
+        Ferramenta::FolhaVerificacao => &["papel-categoria"],
+        Ferramenta::Estratificacao => &["papel-estrato", "papel-valor"],
+        Ferramenta::Pareto => &[
+            "papel-categoria",
+            "papel-quantidade",
+            "papel-custo_unitario",
+        ],
+        Ferramenta::Histograma | Ferramenta::Capacidade => &["papel-valor"],
+        Ferramenta::Dispersao => &["papel-x", "papel-y"],
         Ferramenta::CartaControle => {
             if calculo::tipo_carta(a).is_attribute() {
-                &["Amostra", "Contagem", "Tamanho"]
+                &["papel-amostra", "papel-contagem", "papel-tamanho"]
             } else {
-                &["Subgrupo", "Valor"]
+                &["papel-subgrupo", "papel-valor"]
             }
         }
-        Ferramenta::Msa => &["Peça", "Operador", "Valor"],
+        Ferramenta::Msa => &["papel-peca", "papel-operador", "papel-valor"],
         _ => &[],
     }
 }
 
+/// Os tipos de carta: o valor gravado e a chave do nome na tela.
 const CARTAS: [(&str, &str); 8] = [
-    ("", "automática pelo subgrupo"),
-    ("imr", "I-MR (individuais)"),
-    ("xbarr", "X̄-R"),
-    ("xbars", "X̄-S"),
-    ("p", "p (proporção)"),
-    ("np", "np (defeituosos)"),
-    ("c", "c (defeitos)"),
-    ("u", "u (defeitos por unidade)"),
+    ("", "carta-automatica"),
+    ("imr", "carta-imr"),
+    ("xbarr", "carta-xbarr"),
+    ("xbars", "carta-xbars"),
+    ("p", "carta-p"),
+    ("np", "carta-np"),
+    ("c", "carta-c"),
+    ("u", "carta-u"),
 ];
 
+/// As regras de sinal: o valor gravado e a chave do nome na tela.
 const REGRAS: [(&str, &str); 3] = [
-    ("", "básicas"),
-    ("western", "Western Electric"),
-    ("nelson", "Nelson"),
+    ("", "regras-basicas"),
+    ("western", "regras-western"),
+    ("nelson", "regras-nelson"),
 ];
 
 fn opcional(ui: &mut egui::Ui, rotulo: &str, v: &mut Option<f64>) {
-    let mut ligado = v.is_some();
-    ui.checkbox(&mut ligado, rotulo);
-    match (ligado, v.is_some()) {
-        (true, false) => *v = Some(0.0),
-        (false, true) => *v = None,
-        _ => {}
-    }
-    if let Some(x) = v {
-        ui.add(egui::DragValue::new(x).speed(0.01).max_decimals(4));
-    }
+    utsim_ui_tema::campos::numero_opcional(ui, rotulo, v, Some(4));
 }
 
 fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
@@ -1663,7 +1686,10 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                 if colunas.is_empty() {
                     break;
                 }
-                ui.label(format!("Coluna {}", papel.to_lowercase()));
+                ui.label(fx(
+                    "ferramentas-coluna_do_papel",
+                    &[("papel", vx(&tx(papel)))],
+                ));
                 let mut sel = p.colunas.get(i).copied().unwrap_or(i);
                 let texto = colunas
                     .get(sel)
@@ -1678,7 +1704,7 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                         }
                         // O custo unitário do Pareto é opcional.
                         if f == Ferramenta::Pareto && i == 2 {
-                            ui.selectable_value(&mut sel, usize::MAX, "nenhuma");
+                            ui.selectable_value(&mut sel, usize::MAX, tx("ferramentas-nenhuma"));
                         }
                     });
                 if sel != p.colunas.get(i).copied().unwrap_or(i) {
@@ -1690,7 +1716,7 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                 ui.end_row();
             }
             if matches!(f, Ferramenta::Histograma | Ferramenta::Capacidade) {
-                ui.label("Especificação");
+                ui.label(tx("ferramentas-especificacao"));
                 ui.horizontal(|ui| {
                     opcional(ui, "LIE", &mut p.lie);
                     opcional(ui, "LSE", &mut p.lse);
@@ -1699,7 +1725,7 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                 ui.end_row();
             }
             if f == Ferramenta::Tolerancias {
-                ui.label("Limites do resultado");
+                ui.label(tx("ferramentas-limites_do_resultado"));
                 ui.horizontal(|ui| {
                     opcional(ui, "LIE", &mut p.lie);
                     opcional(ui, "LSE", &mut p.lse);
@@ -1707,47 +1733,47 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                 ui.end_row();
             }
             if matches!(f, Ferramenta::CartaControle | Ferramenta::Capacidade) {
-                ui.label("Tamanho do subgrupo");
+                ui.label(tx("ferramentas-tamanho_do_subgrupo"));
                 ui.add(egui::DragValue::new(&mut p.subgrupo).range(1..=25));
                 ui.end_row();
             }
             if f == Ferramenta::CartaControle {
-                ui.label("Tipo de carta");
+                ui.label(tx("ferramentas-tipo_de_carta"));
                 let atual = CARTAS
                     .iter()
                     .find(|(k, _)| *k == p.carta)
-                    .map_or(p.carta.clone(), |(_, n)| n.to_string());
+                    .map_or(p.carta.clone(), |(_, n)| tx(n).to_string());
                 egui::ComboBox::from_id_salt(("carta", a.id.clone()))
                     .selected_text(atual)
                     .width(180.0)
                     .show_ui(ui, |ui| {
                         for (k, n) in CARTAS {
-                            ui.selectable_value(&mut p.carta, k.to_string(), n);
+                            ui.selectable_value(&mut p.carta, k.to_string(), tx(n));
                         }
                     });
                 ui.end_row();
-                ui.label("Regras de sinal");
+                ui.label(tx("ferramentas-regras_de_sinal"));
                 let atual = REGRAS
                     .iter()
                     .find(|(k, _)| *k == p.regras || (k.is_empty() && p.regras == "basicas"))
-                    .map_or(p.regras.clone(), |(_, n)| n.to_string());
+                    .map_or(p.regras.clone(), |(_, n)| tx(n).to_string());
                 egui::ComboBox::from_id_salt(("regras", a.id.clone()))
                     .selected_text(atual)
                     .width(180.0)
                     .show_ui(ui, |ui| {
                         for (k, n) in REGRAS {
-                            ui.selectable_value(&mut p.regras, k.to_string(), n);
+                            ui.selectable_value(&mut p.regras, k.to_string(), tx(n));
                         }
                     });
                 ui.end_row();
             }
             if f == Ferramenta::Msa {
-                ui.label("Tolerância (LSE − LIE)");
+                ui.label(tx("ferramentas-tolerancia_lse_lie"));
                 ui.horizontal(|ui| opcional(ui, "usar", &mut p.tolerancia));
                 ui.end_row();
             }
             if f == Ferramenta::Pareto {
-                ui.label("Outros abaixo de");
+                ui.label(tx("ferramentas-outros_abaixo_de"));
                 ui.add(
                     egui::DragValue::new(&mut p.outros_abaixo)
                         .range(0.0..=50.0)
@@ -1757,7 +1783,7 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
                 ui.end_row();
             }
             if f == Ferramenta::Fmea {
-                ui.label("Severidade crítica a partir de");
+                ui.label(tx("ferramentas-severidade_critica_a_partir_de"));
                 ui.add(egui::DragValue::new(&mut p.severidade_critica).range(1..=10));
                 ui.end_row();
             }
@@ -1779,20 +1805,17 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
     let mut remover_coluna: Option<usize> = None;
     let mut remover_linha: Option<usize> = None;
     ui.horizontal(|ui| {
-        ui.weak(format!(
-            "{} {} · {} colunas",
-            t.linhas.len(),
-            if t.linhas.len() == 1 {
-                "linha"
-            } else {
-                "linhas"
-            },
-            t.colunas.len()
+        ui.weak(fx(
+            "ferramentas-colunas",
+            &[
+                ("linhas", vx(&t.linhas.len())),
+                ("colunas", vx(&t.colunas.len())),
+            ],
         ));
-        if ui.small_button("+ linha").clicked() {
+        if ui.small_button(tx("ferramentas-linha")).clicked() {
             t.adicionar_linha();
         }
-        if ui.small_button("+ coluna").clicked() {
+        if ui.small_button(tx("ferramentas-coluna")).clicked() {
             let n = t.colunas.len() + 1;
             t.adicionar_coluna(&format!("Coluna {n}"));
         }
@@ -1815,7 +1838,7 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
                     );
                     if ui
                         .small_button("×")
-                        .on_hover_text("Remover a coluna")
+                        .on_hover_text(tx("ferramentas-remover_a_coluna"))
                         .clicked()
                     {
                         remover_coluna = Some(c);
@@ -1836,7 +1859,7 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
                     }
                     if ui
                         .small_button("×")
-                        .on_hover_text("Remover a linha")
+                        .on_hover_text(tx("ferramentas-remover_a_linha"))
                         .clicked()
                     {
                         remover_linha = Some(r);
@@ -1854,11 +1877,11 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
 
 fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
     ui.horizontal(|ui| {
-        ui.label("Efeito");
+        ui.label(tx("ferramentas-efeito"));
         ui.add(
             egui::TextEdit::singleline(&mut a.efeito)
                 .hint_text(if problema.is_empty() {
-                    "o efeito"
+                    tx("ferramentas-o_efeito")
                 } else {
                     problema
                 })
@@ -1875,10 +1898,13 @@ fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
                         .desired_width(180.0)
                         .text_color(AZUL),
                 );
-                if ui.small_button("+ causa").clicked() {
+                if ui.small_button(tx("ferramentas-causa")).clicked() {
                     c.causas.push(String::new());
                 }
-                if ui.small_button("Remover categoria").clicked() {
+                if ui
+                    .small_button(tx("ferramentas-remover_categoria"))
+                    .clicked()
+                {
                     remover_cat = Some(k);
                 }
             });
@@ -1888,7 +1914,7 @@ fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
                     ui.add_space(12.0);
                     ui.add(
                         egui::TextEdit::singleline(causa)
-                            .hint_text("causa")
+                            .hint_text(tx("ferramentas-causa-2"))
                             .desired_width((ui.available_width() - 30.0).max(80.0)),
                     );
                     if ui.small_button("×").clicked() {
@@ -1904,9 +1930,9 @@ fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
     if let Some(k) = remover_cat {
         a.categorias.remove(k);
     }
-    if ui.button("+ categoria").clicked() {
+    if ui.button(tx("ferramentas-categoria")).clicked() {
         a.categorias.push(Categoria {
-            nome: "Nova categoria".into(),
+            nome: tx("ferramentas-nova_categoria").into(),
             causas: Vec::new(),
         });
     }
@@ -1914,11 +1940,11 @@ fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
 
 fn porques_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
     ui.horizontal(|ui| {
-        ui.label("Problema");
+        ui.label(tx("ferramentas-problema"));
         ui.add(
             egui::TextEdit::singleline(&mut a.efeito)
                 .hint_text(if problema.is_empty() {
-                    "o problema"
+                    tx("ferramentas-o_problema")
                 } else {
                     problema
                 })
@@ -1930,18 +1956,18 @@ fn porques_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.strong(format!("Cadeia {}", k + 1));
-                if ui.small_button("+ por quê").clicked() {
+                ui.strong(fx("ferramentas-cadeia", &[("k", vx(&(k + 1)))]));
+                if ui.small_button(tx("ferramentas-por_que")).clicked() {
                     c.porques.push(String::new());
                 }
-                if ui.small_button("Remover cadeia").clicked() {
+                if ui.small_button(tx("ferramentas-remover_cadeia")).clicked() {
                     remover_cadeia = Some(k);
                 }
             });
             let mut remover: Option<usize> = None;
             for (j, p) in c.porques.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.label(format!("Por quê {}", j + 1));
+                    ui.label(fx("ferramentas-por_que-2", &[("j", vx(&(j + 1)))]));
                     ui.add(
                         egui::TextEdit::singleline(p)
                             .desired_width((ui.available_width() - 30.0).max(80.0)),
@@ -1955,10 +1981,10 @@ fn porques_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
                 c.porques.remove(j);
             }
             ui.horizontal(|ui| {
-                ui.label("Ação");
+                ui.label(tx("ferramentas-acao"));
                 ui.add(
                     egui::TextEdit::singleline(&mut c.acao)
-                        .hint_text("a ação sobre a causa raiz")
+                        .hint_text(tx("ferramentas-a_acao_sobre_a_causa"))
                         .desired_width(f32::INFINITY),
                 );
             });
@@ -1967,7 +1993,7 @@ fn porques_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
     if let Some(k) = remover_cadeia {
         a.cadeias.remove(k);
     }
-    if ui.button("+ cadeia").clicked() {
+    if ui.button(tx("ferramentas-cadeia-2")).clicked() {
         a.cadeias.push(Cadeia::default());
     }
 }
@@ -2055,7 +2081,7 @@ pub fn mostrar_resultado(ui: &mut egui::Ui, r: &Resultado, id: &str) {
     }
     if let Some((efeito, categorias)) = &r.ishikawa {
         ui.add_space(4.0);
-        ui.label(RichText::new(format!("Efeito: {efeito}")).strong());
+        ui.label(RichText::new(fx("ferramentas-efeito-2", &[("efeito", vx(&efeito))])).strong());
         egui::Grid::new(("ishikawa", id.to_string()))
             .striped(true)
             .num_columns(2)
@@ -2063,7 +2089,7 @@ pub fn mostrar_resultado(ui: &mut egui::Ui, r: &Resultado, id: &str) {
                 for (cat, causas) in categorias {
                     ui.label(RichText::new(cat).color(AZUL).strong());
                     if causas.is_empty() {
-                        ui.weak("sem causas");
+                        ui.weak(tx("ferramentas-sem_causas"));
                     } else {
                         ui.vertical(|ui| {
                             for c in causas {
@@ -2111,7 +2137,7 @@ pub fn mostrar_resultado(ui: &mut egui::Ui, r: &Resultado, id: &str) {
     }
     if !r.avisos.is_empty() {
         ui.add_space(4.0);
-        caixa(ui, AMBAR, "Avisos", &r.avisos.join(" "));
+        caixa(ui, AMBAR, tx("ferramentas-avisos"), &r.avisos.join(" "));
     }
 }
 
@@ -2194,13 +2220,21 @@ fn entradas_da_legenda(g: &Chart) -> Vec<(String, Color32, bool)> {
             if let Some((n, _)) = g.series.first() {
                 v.push((n.clone(), AZUL, false));
             }
-            v.push(("% acumulado (eixo da direita)".into(), AMBAR, false));
+            v.push((
+                tx("ferramentas-acumulado_eixo_da_direita").into(),
+                AMBAR,
+                false,
+            ));
             v.push(("80 %".into(), CINZA, true));
         }
         ChartKind::Histogram => linhas_ref(&mut v),
         ChartKind::Scatter => {
             v.push(("pontos".into(), AZUL, false));
-            v.push(("reta de mínimos quadrados".into(), AMBAR, false));
+            v.push((
+                tx("ferramentas-reta_de_minimos_quadrados").into(),
+                AMBAR,
+                false,
+            ));
         }
     }
     v.retain(|(n, _, _)| !n.is_empty());
@@ -2382,15 +2416,18 @@ fn pareto(ui: &mut egui::Ui, id: &str, g: &Chart) {
             AxisHints::new_y(),
             AxisHints::new_y()
                 .placement(HPlacement::Right)
-                .label("acumulado")
+                .label(tx("ferramentas-acumulado"))
                 .formatter(move |m, _| format!("{:.0} %", m.value / maior * 100.0)),
         ])
         .show(ui, move |p| {
             p.bar_chart(BarChart::new(nome, bars).color(AZUL));
             p.line(
-                Line::new("% acumulado", PlotPoints::new(acumulado.clone()))
-                    .color(AMBAR)
-                    .width(2.0),
+                Line::new(
+                    tx("ferramentas-acumulado-2"),
+                    PlotPoints::new(acumulado.clone()),
+                )
+                .color(AMBAR)
+                .width(2.0),
             );
             p.points(
                 Points::new("", PlotPoints::new(acumulado))
@@ -2491,7 +2528,7 @@ fn dispersao(ui: &mut egui::Ui, id: &str, g: &Chart) {
             );
             if let Some(r) = reta {
                 p.line(
-                    Line::new("mínimos quadrados", PlotPoints::new(r))
+                    Line::new(tx("ferramentas-minimos_quadrados"), PlotPoints::new(r))
                         .color(AMBAR)
                         .width(2.0),
                 );

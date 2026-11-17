@@ -1,6 +1,7 @@
 //! A unidade aberta por uma pessoa, o autor lembrado em arquivo e a atualização periódica
 //! (a pasta é compartilhada pelo Drive, outras pessoas gravam operações nela).
 
+use crate::texto::{fx, tx, vx};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -37,28 +38,17 @@ impl Config {
     }
 
     pub fn ler(arquivo: &Path) -> Config {
-        std::fs::read_to_string(arquivo)
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+        utsim_pasta::config::ler(arquivo)
     }
 
     pub fn gravar(&self, arquivo: &Path) -> Result<(), String> {
-        if let Some(pai) = arquivo.parent() {
-            std::fs::create_dir_all(pai).map_err(|e| e.to_string())?;
-        }
-        let t = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(arquivo, t).map_err(|e| e.to_string())
+        utsim_pasta::config::gravar(arquivo, self)
     }
 }
 
 /// Arquivo de configuração padrão dos dois apps (`.../UTSim/qualidade_seguranca.json`).
 pub fn arquivo_padrao() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")
-        .or_else(|| std::env::var_os("XDG_CONFIG_HOME"))
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("UTSim").join("qualidade_seguranca.json"))
+    utsim_pasta::config::arquivo("qualidade_seguranca.json")
 }
 
 pub struct Sessao {
@@ -110,12 +100,39 @@ impl Sessao {
         self.gravar_config();
     }
 
+    /// Põe a língua guardada na configuração; sem ela, fica a de agora (a do sistema,
+    /// posta pelo `main`).
+    pub fn usar_idioma_guardado(&self) {
+        if let Some(i) = self
+            .config
+            .idioma
+            .as_deref()
+            .and_then(utsim_idiomas::Idioma::de_codigo)
+        {
+            utsim_idiomas::definir(i);
+        }
+    }
+
+    /// O seletor de língua (no pé da barra lateral): a escolhida vale na hora e fica
+    /// guardada na configuração.
+    pub fn seletor_de_idioma(&mut self, ui: &mut egui::Ui) {
+        let mut i = utsim_idiomas::atual();
+        if utsim_idiomas::seletor(ui, "idioma", &mut i) {
+            utsim_idiomas::definir(i);
+            self.config.idioma = Some(i.codigo().to_string());
+            self.gravar_config();
+        }
+    }
+
     /// Grava a configuração (avisa na barra se não der).
     pub fn gravar_config(&mut self) {
         if let Some(a) = self.arquivo.clone()
             && let Err(e) = self.config.gravar(&a)
         {
-            self.falhar(format!("não consegui lembrar a configuração: {e}"));
+            self.falhar(fx(
+                "sessao-nao_consegui_lembrar_a_configuracao",
+                &[("e", vx(&e))],
+            ));
         }
     }
 
@@ -150,7 +167,7 @@ impl Sessao {
     pub fn abrir(&mut self, caminho: &Path, autor: &str) -> bool {
         match Unidade::abrir(caminho, autor.trim()) {
             Ok(u) => {
-                let msg = format!("Unidade '{}' aberta.", u.manifesto.nome);
+                let msg = fx("sessao-unidade_aberta", &[("nome", vx(&u.manifesto.nome))]);
                 self.unidade = Some(u);
                 self.versao += 1;
                 // Um erro antigo (outra pasta, nome faltando) não vale mais.
@@ -168,7 +185,7 @@ impl Sessao {
     pub fn criar(&mut self, caminho: &Path, nome: &str, autor: &str) -> bool {
         match Unidade::criar(caminho, nome.trim(), autor.trim()) {
             Ok(u) => {
-                let msg = format!("Unidade '{}' criada.", u.manifesto.nome);
+                let msg = fx("sessao-unidade_criada", &[("nome", vx(&u.manifesto.nome))]);
                 self.unidade = Some(u);
                 self.versao += 1;
                 // Um erro antigo (outra pasta, nome faltando) não vale mais.
@@ -206,7 +223,10 @@ impl Sessao {
             Ok(n) => {
                 if n > 0 {
                     self.versao += 1;
-                    self.avisar(format!("{n} operações novas de outras pessoas."));
+                    self.avisar(fx(
+                        "sessao-operacoes_novas_de_outras_pessoas",
+                        &[("n", vx(&n))],
+                    ));
                 }
                 n
             }
@@ -253,15 +273,17 @@ impl Sessao {
         ui.horizontal_wrapped(|ui| {
             match &self.unidade {
                 Some(u) => {
-                    ui.label(format!(
-                        "Unidade: {} · autor: {} · {} operações",
-                        u.manifesto.nome,
-                        u.autor(),
-                        u.total_operacoes()
+                    ui.label(fx(
+                        "sessao-unidade_autor_operacoes",
+                        &[
+                            ("nome", vx(&u.manifesto.nome)),
+                            ("autor", vx(&u.autor())),
+                            ("total_operacoes", vx(&u.total_operacoes())),
+                        ],
                     ));
                 }
                 None => {
-                    ui.label("Nenhuma unidade aberta");
+                    ui.label(tx("sessao-nenhuma_unidade_aberta"));
                 }
             }
             if !self.mensagem.is_empty() {
@@ -281,13 +303,16 @@ impl Sessao {
 /// aberto sem unidade (o pedido do 3D).
 pub fn linhas_da_barra(s: &Sessao, modelo: &crate::TelaModelo) -> Vec<String> {
     if let Some(u) = &s.unidade {
-        return vec![u.manifesto.nome.clone(), format!("autor: {}", u.autor())];
+        return vec![
+            u.manifesto.nome.clone(),
+            fx("sessao-autor", &[("autor", vx(&u.autor()))]),
+        ];
     }
     match modelo.arquivo().and_then(|a| a.file_name()) {
         Some(n) => vec![
-            "Sem unidade".to_string(),
-            format!("modelo: {}", n.to_string_lossy()),
+            tx("sessao-sem_unidade").to_string(),
+            fx("sessao-modelo", &[("nome", vx(&n.to_string_lossy()))]),
         ],
-        None => vec!["Nenhuma unidade aberta".to_string()],
+        None => vec![tx("sessao-nenhuma_unidade_aberta").to_string()],
     }
 }

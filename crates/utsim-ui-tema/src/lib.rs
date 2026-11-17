@@ -274,6 +274,9 @@ pub fn install_style(ctx: &Context) {
 #[cfg(feature = "familia")]
 pub mod familia;
 
+#[cfg(feature = "familia")]
+pub mod janela;
+
 #[cfg(feature = "captura")]
 pub mod captura;
 

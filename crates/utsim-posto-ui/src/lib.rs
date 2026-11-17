@@ -2,6 +2,7 @@
 //! QS9 de `docs/plano_qualidade_e_seguranca.md`). Os apps abrem a MESMA pasta de
 //! unidade ([`utsim_posto::Unidade`]).
 //!
+//! - [`carta`]: o desenho de uma carta de controle (CEP e incidentes);
 //! - [`ferramentas`]: os estudos com as ferramentas da qualidade e da segurança.
 //! - [`sessao`]: a unidade aberta, o autor lembrado em arquivo e a atualização periódica;
 //! - [`inicial`]: criar ou abrir a pasta de unidade;
@@ -11,11 +12,13 @@
 //! - [`util`]: data de hoje, cores e leitura de modelos.
 
 pub mod abrir;
+pub mod carta;
 pub mod ferramentas;
 pub mod inicial;
 pub mod modelo;
 pub mod postos;
 pub mod sessao;
+pub mod texto;
 pub mod trabalho;
 pub mod util;
 

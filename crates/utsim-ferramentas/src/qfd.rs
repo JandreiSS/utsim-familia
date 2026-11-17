@@ -11,6 +11,7 @@
 //! The types are the exchange format of the tool (serde, `Default`); the screens live in
 //! the quality app and draw the numbers.
 
+use crate::texto::{fx, sx};
 use serde::{Deserialize, Serialize};
 
 /// The strengths allowed in a relationship cell.
@@ -159,27 +160,30 @@ pub enum Finding {
 }
 
 impl Finding {
-    /// The text in Portuguese (the quality app may use its own catalogue).
+    /// The text in the language of the moment.
     pub fn text(&self, h: &House) -> String {
         let need = |i: &usize| h.needs.get(*i).map_or("?", |n| n.text.as_str());
         let req = |i: &usize| h.requirements.get(*i).map_or("?", |r| r.text.as_str());
         match self {
-            Finding::NeedUncovered(i) => {
-                format!("Nenhum requisito atende à necessidade \"{}\".", need(i))
-            }
-            Finding::NeedWeak(i) => format!(
-                "A necessidade \"{}\" só tem relações fracas: falta um requisito que a meça bem.",
-                need(i)
+            Finding::NeedUncovered(i) => fx(
+                "qfd-nenhum_requisito_atende_a_necessidade",
+                &[("nome", sx(need(i).to_string()))],
             ),
-            Finding::RequirementUnused(i) => format!(
-                "O requisito \"{}\" não se relaciona com nenhuma necessidade.",
-                req(i)
+            Finding::NeedWeak(i) => fx(
+                "qfd-a_necessidade_so_tem_relacoes",
+                &[("nome", sx(need(i).to_string()))],
             ),
-            Finding::NoTarget(i) => format!("O requisito \"{}\" está sem valor-alvo.", req(i)),
-            Finding::Conflict(a, b) => format!(
-                "\"{}\" e \"{}\" estão entre os mais importantes e trabalham um contra o outro: resolva o conflito no projeto.",
-                req(a),
-                req(b)
+            Finding::RequirementUnused(i) => fx(
+                "qfd-o_requisito_nao_se_relaciona",
+                &[("nome", sx(req(i).to_string()))],
+            ),
+            Finding::NoTarget(i) => fx(
+                "qfd-o_requisito_esta_sem_valor",
+                &[("nome", sx(req(i).to_string()))],
+            ),
+            Finding::Conflict(a, b) => fx(
+                "qfd-e_estao_entre_os_mais",
+                &[("a", sx(req(a).to_string())), ("b", sx(req(b).to_string()))],
             ),
         }
     }

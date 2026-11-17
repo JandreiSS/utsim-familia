@@ -187,7 +187,7 @@ Os números abaixo são de partida e serão calibrados no construtor de casos (s
 |---|---|---|---|---|
 | 4.1 Montagem do ventilador | 14 tarefas com precedência, demanda que dá takt de 60 s | arrastar tarefas para estações, respeitando a precedência | menor número de estações que cumpre o takt. Eficiência e atraso de balanceamento calculados | takt, precedência, eficiência |
 | 4.2 O balanceamento no papel e no chão | o balanceamento da 4.1 com tempos variáveis (CV de 0,3) | estoques entre estações, rebalancear | vazão simulada contra a de projeto | variabilidade na linha balanceada |
-| 4.3 Mudou o mix | dois modelos do produto na mesma linha | sequência e atribuição | vazão dos dois modelos | linha de modelos mistos |
+| 4.3 Mudou o mix (**feita**, `ato4/mix`) | dois modelos do ventilador (mesa e coluna) na mesma linha, em lotes de 40 | sequência e atribuição | vazão dos dois modelos | linha de modelos mistos |
 
 **Ato 5. Arranjo físico e movimentação**
 

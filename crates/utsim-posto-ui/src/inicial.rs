@@ -2,6 +2,7 @@
 //! o autor, abrir ou criar a pasta de unidade, as unidades recentes e onde tudo fica salvo.
 //! O desenho é a abertura comum da família ([`utsim_ui_tema::abertura`]).
 
+use crate::texto::{fx, tx, vx};
 use std::path::{Path, PathBuf};
 
 use egui::{Color32, RichText};
@@ -50,11 +51,6 @@ pub struct TelaInicial {
     iniciada: bool,
 }
 
-const EXPLICACAO: &str = "A unidade é uma pasta comum do computador (uma fábrica, um setor ou \
-    um laboratório). Tudo o que você grava aqui fica dentro dela. Para trabalhar em equipe, \
-    deixe a pasta numa pasta sincronizada do Google Drive: o Qualidade, o Segurança do Trabalho \
-    e o Estatística abrem a mesma unidade, e cada um vê o que os outros gravaram.";
-
 impl TelaInicial {
     /// Desenha a abertura. Devolve o que o app deve fazer em seguida, se algo.
     pub fn ui(&mut self, ui: &mut egui::Ui, s: &mut Sessao, marca: &Marca) -> Option<Saida> {
@@ -79,13 +75,13 @@ impl TelaInicial {
             self.editando_autor = self.autor.trim().is_empty();
         }
         let sem_autor = self.autor.trim().is_empty();
-        let precisa_nome = "Escreva seu nome acima primeiro: ele assina o que você grava.";
-        let sem_unidade = "Abra ou crie uma unidade primeiro: o modelo fica ligado a ela.";
+        let precisa_nome = tx("inicial-escreva_seu_nome_acima_primeiro");
+        let sem_unidade = tx("inicial-abra_ou_crie_uma_unidade");
         let aberta = s.unidade.as_ref().map(|u| u.manifesto.nome.clone());
         let raiz = s.unidade.as_ref().map(|u| u.raiz().to_path_buf());
         let continuar = aberta
             .as_ref()
-            .map(|n| format!("Continuar em \"{n}\""))
+            .map(|n| fx("inicial-continuar_em", &[("n", vx(&n))]))
             .unwrap_or_default();
         let mut acoes = Vec::new();
         if aberta.is_some() {
@@ -94,7 +90,7 @@ impl TelaInicial {
                     "continuar",
                     Simbolo::Continuar,
                     &continuar,
-                    "Volte ao trabalho na unidade aberta.",
+                    tx("inicial-volte_ao_trabalho_na_unidade"),
                 )
                 .principal(),
             );
@@ -105,11 +101,11 @@ impl TelaInicial {
                 "abrir",
                 Simbolo::Abrir,
                 if aberta.is_some() {
-                    "Abrir outra unidade"
+                    tx("inicial-abrir_outra_unidade")
                 } else {
-                    "Abrir unidade"
+                    tx("inicial-abrir_unidade")
                 },
-                "Escolha a pasta de uma unidade que já existe, por exemplo a da equipe no Drive.",
+                tx("inicial-escolha_a_pasta_de_uma"),
             )
             .bloqueada_se(sem_autor, precisa_nome),
         );
@@ -117,8 +113,8 @@ impl TelaInicial {
             Acao::nova(
                 "criar",
                 Simbolo::Novo,
-                "Criar unidade",
-                "Comece uma unidade nova: você dá o nome e escolhe onde fica a pasta.",
+                tx("inicial-criar_unidade"),
+                tx("inicial-comece_uma_unidade_nova_voce"),
             )
             .bloqueada_se(sem_autor, precisa_nome),
         );
@@ -126,7 +122,7 @@ impl TelaInicial {
             Acao::nova(
                 "modelo",
                 Simbolo::Modelo,
-                "Abrir modelo do UTSim",
+                tx("inicial-abrir_modelo_do_utsim"),
                 marca.modelo,
             )
             .bloqueada_se(aberta.is_none(), sem_unidade),
@@ -143,11 +139,11 @@ impl TelaInicial {
             cor: marca.cor,
             icone: marca.icone,
             acoes: &acoes,
-            titulo_recentes: "Unidades recentes",
+            titulo_recentes: tx("inicial-unidades_recentes"),
             recentes: &recentes,
             onde: Onde {
                 caminho: raiz.as_deref(),
-                explicacao: EXPLICACAO,
+                explicacao: tx("inicial-a_unidade_e_uma_pasta"),
             },
             rotulos: Rotulos::PT,
         };
@@ -172,9 +168,12 @@ impl TelaInicial {
                     .and_then(|r| r.parent())
                     .map(|p| p.display().to_string())
                     .unwrap_or_default();
-                if let Some(p) =
-                    arquivos::procurar(Tipo::Pasta, "Escolha a pasta da unidade", &[], &inicio)
-                {
+                if let Some(p) = arquivos::procurar(
+                    Tipo::Pasta,
+                    tx("inicial-escolha_a_pasta_da_unidade"),
+                    &[],
+                    &inicio,
+                ) {
                     saida = self.abrir(s, &p);
                 }
             }
@@ -193,7 +192,7 @@ impl TelaInicial {
                     .unwrap_or_default();
                 if let Some(p) = arquivos::procurar(
                     Tipo::Abrir,
-                    "Abrir modelo do UTSim",
+                    tx("inicial-abrir_modelo_do_utsim"),
                     &[arquivos::RON],
                     &inicio,
                 ) {
@@ -212,7 +211,10 @@ impl TelaInicial {
             Some(Escolha::Esquecer(i)) => s.esquecer_recente(i),
             Some(Escolha::MostrarPasta(p)) => {
                 if let Err(e) = arquivos::mostrar_no_explorador(&p) {
-                    s.falhar(format!("não consegui abrir o explorador: {e}"));
+                    s.falhar(fx(
+                        "inicial-nao_consegui_abrir_o_explorador",
+                        &[("e", vx(&e))],
+                    ));
                 }
             }
             Some(Escolha::Acao(id)) => saida = Some(Saida::Acao(id)),
@@ -226,11 +228,7 @@ impl TelaInicial {
 
     fn abrir(&mut self, s: &mut Sessao, p: &Path) -> Option<Saida> {
         if !Unidade::eh_unidade(p) {
-            s.falhar(format!(
-                "A pasta {} não é uma unidade. Escolha a pasta que tem o arquivo unidade.json, \
-                 ou use \"Criar unidade\".",
-                p.display()
-            ));
+            s.falhar(fx("inicial-a_pasta_nao_e_uma", &[("p", vx(&p.display()))]));
             return None;
         }
         s.abrir(p, &self.autor).then_some(Saida::Aberta)
@@ -242,27 +240,22 @@ impl TelaInicial {
             utsim_ui_tema::abertura::quadro_destaque(cor).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(
-                    RichText::new("Antes de começar, diga seu nome")
+                    RichText::new(tx("inicial-antes_de_comecar_diga_seu"))
                         .strong()
                         .size(16.0),
                 );
-                ui.label(
-                    RichText::new(
-                        "Ele vai em tudo o que você gravar, para a equipe saber quem mudou o quê.",
-                    )
-                    .color(fraco),
-                );
+                ui.label(RichText::new(tx("inicial-ele_vai_em_tudo_o")).color(fraco));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut self.autor)
-                            .hint_text("seu nome")
+                            .hint_text(tx("inicial-seu_nome"))
                             .desired_width(300.0),
                     );
                     let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     let ok = !self.autor.trim().is_empty();
                     if (ui
-                        .add_enabled(ok, utsim_ui_tema::widgets::primary("Pronto"))
+                        .add_enabled(ok, utsim_ui_tema::widgets::primary(tx("inicial-pronto")))
                         .clicked()
                         || enter)
                         && ok
@@ -274,9 +267,9 @@ impl TelaInicial {
             });
         } else {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Você está como").color(fraco));
+                ui.label(RichText::new(tx("inicial-voce_esta_como")).color(fraco));
                 ui.label(RichText::new(self.autor.trim()).strong());
-                if ui.small_button("Trocar").clicked() {
+                if ui.small_button(tx("inicial-trocar")).clicked() {
                     self.editando_autor = true;
                 }
             });
@@ -295,21 +288,21 @@ impl TelaInicial {
         };
         egui::Modal::new(egui::Id::new("criar_unidade")).show(ctx, |ui| {
             ui.set_width(560.0);
-            ui.heading("Criar unidade");
+            ui.heading(tx("inicial-criar_unidade"));
             ui.add_space(8.0);
-            ui.label("Nome da unidade (a fábrica, o setor ou o laboratório):");
+            ui.label(tx("inicial-nome_da_unidade_a_fabrica"));
             ui.add(
                 egui::TextEdit::singleline(&mut c.nome)
-                    .hint_text("por exemplo: Fábrica Norte")
+                    .hint_text(tx("inicial-por_exemplo_fabrica_norte"))
                     .desired_width(f32::INFINITY),
             );
             ui.add_space(8.0);
-            ui.label("Onde criar a pasta (para a equipe, escolha uma pasta do Google Drive):");
+            ui.label(tx("inicial-onde_criar_a_pasta_para"));
             arquivos::campo(
                 ui,
                 &mut c.pasta,
                 Tipo::Pasta,
-                "Onde criar a pasta da unidade",
+                tx("inicial-onde_criar_a_pasta_da"),
                 &[],
                 420.0,
             );
@@ -317,13 +310,16 @@ impl TelaInicial {
             match &pasta_final {
                 Some(p) => {
                     ui.label(
-                        RichText::new(format!("Será criada a pasta: {}", p.display()))
-                            .color(ui.visuals().weak_text_color()),
+                        RichText::new(fx(
+                            "inicial-sera_criada_a_pasta",
+                            &[("p", vx(&p.display()))],
+                        ))
+                        .color(ui.visuals().weak_text_color()),
                     );
                 }
                 None => {
                     ui.label(
-                        RichText::new("Escreva o nome e escolha onde fica.")
+                        RichText::new(tx("inicial-escreva_o_nome_e_escolha"))
                             .color(ui.visuals().weak_text_color()),
                     );
                 }
@@ -333,7 +329,7 @@ impl TelaInicial {
                 if ui
                     .add_enabled(
                         pasta_final.is_some(),
-                        utsim_ui_tema::widgets::primary("Criar unidade"),
+                        utsim_ui_tema::widgets::primary(tx("inicial-criar_unidade")),
                     )
                     .clicked()
                     && let Some(p) = &pasta_final
@@ -342,7 +338,7 @@ impl TelaInicial {
                     saida = Some(Saida::Aberta);
                     fechar = true;
                 }
-                if ui.button("Cancelar").clicked() {
+                if ui.button(tx("inicial-cancelar")).clicked() {
                     fechar = true;
                 }
             });
@@ -371,7 +367,11 @@ pub fn nome_de_pasta(nome: &str) -> String {
         })
         .collect();
     let n = n.trim_end_matches(['.', ' ']).to_string();
-    if n.is_empty() { "Unidade".into() } else { n }
+    if n.is_empty() {
+        tx("inicial-unidade").into()
+    } else {
+        n
+    }
 }
 
 #[cfg(test)]

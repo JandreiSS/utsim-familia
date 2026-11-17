@@ -1,0 +1,62 @@
+// Linha de montagem do ventilador com dois modelos (linha de modelos mistos)
+// A mesma linha de 10 estações (est1 a est10) monta o ventilador de mesa (rótulo modelo = 1)
+// e o de coluna (modelo = 2). A chegada segue uma sequência que se repete, escolhida pelo
+// aluno. O tempo de cada estação depende do modelo (campo recipe) e vem da atribuição das
+// tarefas; estação sem tarefa tem tempo zero. A última estação manda cada modelo para a sua
+// saída. Tempo em segundos.
+Model(
+    name: "Linha de montagem do ventilador, dois modelos",
+    run: (stop_time: 30600.0, warmup: 1800.0, seed: 43, replications: 10),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Const(60.0), table: (mode: Sequence, repeat: Loop, rows: [
+            (labels: {"modelo": 1.0}),
+            (labels: {"modelo": 2.0}),
+        ])), position: (0.0, 0.0, 0.0)),
+        (name: "fila1", kind: Queue(capacity: 2), position: (3.0, 0.0, 0.0)),
+        (name: "est1", kind: Processor(process: Const(0.0)), position: (6.0, 0.0, 0.0)),
+        (name: "fila2", kind: Queue(capacity: 2), position: (9.0, 0.0, 0.0)),
+        (name: "est2", kind: Processor(process: Const(0.0)), position: (12.0, 0.0, 0.0)),
+        (name: "fila3", kind: Queue(capacity: 2), position: (15.0, 0.0, 0.0)),
+        (name: "est3", kind: Processor(process: Const(0.0)), position: (18.0, 0.0, 0.0)),
+        (name: "fila4", kind: Queue(capacity: 2), position: (21.0, 0.0, 0.0)),
+        (name: "est4", kind: Processor(process: Const(0.0)), position: (24.0, 0.0, 0.0)),
+        (name: "fila5", kind: Queue(capacity: 2), position: (27.0, 0.0, 0.0)),
+        (name: "est5", kind: Processor(process: Const(0.0)), position: (30.0, 0.0, 0.0)),
+        (name: "fila6", kind: Queue(capacity: 2), position: (33.0, 0.0, 0.0)),
+        (name: "est6", kind: Processor(process: Const(0.0)), position: (36.0, 0.0, 0.0)),
+        (name: "fila7", kind: Queue(capacity: 2), position: (39.0, 0.0, 0.0)),
+        (name: "est7", kind: Processor(process: Const(0.0)), position: (42.0, 0.0, 0.0)),
+        (name: "fila8", kind: Queue(capacity: 2), position: (45.0, 0.0, 0.0)),
+        (name: "est8", kind: Processor(process: Const(0.0)), position: (48.0, 0.0, 0.0)),
+        (name: "fila9", kind: Queue(capacity: 2), position: (51.0, 0.0, 0.0)),
+        (name: "est9", kind: Processor(process: Const(0.0)), position: (54.0, 0.0, 0.0)),
+        (name: "fila10", kind: Queue(capacity: 2), position: (57.0, 0.0, 0.0)),
+        (name: "est10", kind: Processor(process: Const(0.0)), output: ByLabel("modelo"), position: (60.0, 0.0, 0.0)),
+        (name: "saida_mesa", kind: Sink, position: (66.0, -2.0, 0.0)),
+        (name: "saida_coluna", kind: Sink, position: (66.0, 2.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "fila1"),
+        ("fila1", "est1"),
+        ("est1", "fila2"),
+        ("fila2", "est2"),
+        ("est2", "fila3"),
+        ("fila3", "est3"),
+        ("est3", "fila4"),
+        ("fila4", "est4"),
+        ("est4", "fila5"),
+        ("fila5", "est5"),
+        ("est5", "fila6"),
+        ("fila6", "est6"),
+        ("est6", "fila7"),
+        ("fila7", "est7"),
+        ("est7", "fila8"),
+        ("fila8", "est8"),
+        ("est8", "fila9"),
+        ("fila9", "est9"),
+        ("est9", "fila10"),
+        ("fila10", "est10"),
+        ("est10", "saida_mesa"),
+        ("est10", "saida_coluna"),
+    ],
+)

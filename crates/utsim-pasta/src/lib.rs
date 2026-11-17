@@ -396,3 +396,65 @@ pub mod trava {
         }
     }
 }
+
+/// The user's own settings of the family apps: one JSON file per app in the configuration
+/// folder of the system (`%APPDATA%\UTSim`, else `$XDG_CONFIG_HOME/UTSim`, else
+/// `~/.config/UTSim`). A missing or unreadable file reads as the default (first run).
+pub mod config {
+    use serde::Serialize;
+    use serde::de::DeserializeOwned;
+    use std::path::{Path, PathBuf};
+
+    /// `<configuration folder>/UTSim/<nome>`, or `None` without any of the variables.
+    pub fn arquivo(nome: &str) -> Option<PathBuf> {
+        let base = std::env::var_os("APPDATA")
+            .or_else(|| std::env::var_os("XDG_CONFIG_HOME"))
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+        Some(base.join("UTSim").join(nome))
+    }
+
+    /// The settings in `arquivo`, or the default ones (no file, or one that does not read).
+    pub fn ler<T: DeserializeOwned + Default>(arquivo: &Path) -> T {
+        std::fs::read_to_string(arquivo)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+
+    /// Writes the settings as indented JSON, creating the folder.
+    pub fn gravar<T: Serialize>(arquivo: &Path, valor: &T) -> Result<(), String> {
+        if let Some(pai) = arquivo.parent() {
+            std::fs::create_dir_all(pai).map_err(|e| e.to_string())?;
+        }
+        let t = serde_json::to_string_pretty(valor).map_err(|e| e.to_string())?;
+        std::fs::write(arquivo, t).map_err(|e| e.to_string())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+        struct C {
+            #[serde(default)]
+            autor: String,
+        }
+
+        #[test]
+        fn ida_e_volta_e_padrao() {
+            let d = tempfile::tempdir().unwrap();
+            let a = d.path().join("sub").join("c.json");
+            assert_eq!(ler::<C>(&a), C::default());
+            let c = C {
+                autor: "Ana".into(),
+            };
+            gravar(&a, &c).unwrap();
+            assert_eq!(ler::<C>(&a), c);
+            let t = std::fs::read_to_string(&a).unwrap();
+            assert_eq!(t, "{\n  \"autor\": \"Ana\"\n}");
+            std::fs::write(&a, "{ quebrado").unwrap();
+            assert_eq!(ler::<C>(&a), C::default());
+        }
+    }
+}

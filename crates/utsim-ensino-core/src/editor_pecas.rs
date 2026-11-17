@@ -122,6 +122,7 @@ pub fn balanceamento_sugerido(modelo: &Model) -> Balanceamento {
             } else {
                 vec![id_tarefa(i - 1)]
             },
+            tempos: BTreeMap::new(),
         })
         .collect();
     if tarefas.is_empty() {
@@ -131,12 +132,14 @@ pub fn balanceamento_sugerido(modelo: &Model) -> Balanceamento {
                 nome: "Tarefa A".into(),
                 tempo: arredonda(takt / 2.0),
                 depois_de: Vec::new(),
+                tempos: BTreeMap::new(),
             },
             Tarefa {
                 id: "B".into(),
                 nome: "Tarefa B".into(),
                 tempo: arredonda(takt / 2.0),
                 depois_de: vec!["A".into()],
+                tempos: BTreeMap::new(),
             },
         ];
     }
@@ -155,6 +158,8 @@ pub fn balanceamento_sugerido(modelo: &Model) -> Balanceamento {
         editavel: true,
         inicial,
         prefixo: PREFIXO_ESTACAO.into(),
+        mix: Vec::new(),
+        rotulo: "modelo".into(),
     }
 }
 
@@ -361,6 +366,7 @@ impl Edicao {
             id,
             tempo: 10.0,
             depois_de: Vec::new(),
+            tempos: BTreeMap::new(),
         });
     }
 
