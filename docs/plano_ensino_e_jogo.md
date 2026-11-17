@@ -280,6 +280,37 @@ Uma empresa fictícia, com setores que o aluno visita ao longo dos atos (usinage
 
 ---
 
+### 3.9 Enunciados desenhados
+
+O enunciado de cada missão começa com a cena do processo: a imagem 3D, feita com os mesmos
+elementos do simulador (`assets/modelos3d`: postos com pessoas de uniforme, esperas, paletes e
+o produto, como os ventiladores de mesa e de coluna), e cartões presos aos objetos com os
+números do problema. O aluno lê o problema olhando o desenho. A decisão do dono (2026-11-16)
+foi imagem pronta com números vivos, pessoas de uniforme, o piso cinza do simulador e o
+produto desenhado.
+
+- **A imagem é gerada antes.** O bloco `cena` da missão diz como o modelo vira cena
+  (`cena::Cena::planta`): cada objeto vira o elemento do seu tipo (fonte e fila em
+  `espera_chao`, processador em `posto` com operador, saída em `palete`), na posição do modelo
+  vezes `escala`. `elementos` troca o elemento de um objeto, `ocultar` tira objetos e `pecas`
+  põe produtos sobre os objetos. `bash scripts/enunciados.sh` gera a planta (exemplo
+  `plantas` do `utsim-ensino-core`), renderiza no Blender (`tools/blender/enunciado.py`) e
+  grava, ao lado da missão, a imagem (2040 × 700, reduzida a 256 cores) e as âncoras
+  (`<imagem>.ancoras.json`: o ponto da imagem acima de cada objeto, `nome`, e no pé dele,
+  `nome@pe`). Missões da mesma linha podem usar a mesma imagem.
+- **Os números são desenhados pelo app.** Os `cartoes` prendem um conteúdo a uma âncora:
+  `Estacao(n)` (tarefas e carga por modelo, vermelha acima do takt), `Alavanca(id)` (a opção
+  escolhida), `Metrica(nome)` (a meta antes de simular, o valor simulado depois),
+  `Previsao(id)` (a pergunta), `Valor` (uma conta só com decisões, termos das peças, custo e
+  constantes, que muda ao vivo) e `Texto`. Um cartão no pé (`@pe`) fica abaixo do objeto. Os
+  que não cabem lado a lado sobem em degraus, presos por hastes, e o desenho cresce para cima.
+- **Conferência.** O pacote recusa a cena com imagem ou âncoras faltando, de tamanhos
+  diferentes, cartão sem âncora, estação fora do balanceamento, alavanca, métrica ou previsão
+  que não existem, e `Valor` com métrica do modelo (que só existe depois de simular). O teste
+  `elementos_das_cenas_existem_em_3d` confere que todo elemento da campanha tem o `.glb`.
+- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3; C, atos 5 e 6 (no arranjo,
+  uma miniatura por máquina na grade); D, atos 7 e 8 e o editor do professor.
+
 ## 4. Recursos do professor
 
 ### 4.1 Pacotes de exercícios

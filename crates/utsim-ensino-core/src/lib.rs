@@ -20,6 +20,7 @@
 //! - [`competencias`]: the solved missions as practice in the Seis Sigma curriculum.
 
 pub mod campanha;
+pub mod cena;
 pub mod competencias;
 pub mod conferir;
 pub mod construtor;

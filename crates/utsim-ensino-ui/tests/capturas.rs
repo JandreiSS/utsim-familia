@@ -121,6 +121,7 @@ fn telas_das_pecas() {
     for (id, nome) in [
         ("ato4/ventilador", "6_balanceamento"),
         ("ato5/oficina", "7_arranjo"),
+        ("ato4/mix", "8_mix"),
     ] {
         let p = app.pacote.clone().unwrap();
         let i = p.indice(id).unwrap();

@@ -714,3 +714,15 @@ ed_momento_inicial = Momento de transporte en el estado inicial: { $momento }
 ed_conferir_pecas = Comprobar las piezas
 ed_conferir_pecas_dica = Busca el óptimo por búsqueda exacta y avisa cuando no existe o cuando el estado inicial ya es el óptimo.
 ed_pecas_sem_avisos = Las piezas no tienen avisos.
+
+# Enunciado desenhado (cena da missão)
+cena_sem_tarefas = sin tareas
+cena_simule = simule para ver
+cena_previsao = Previsión
+cena_passa_takt = rojo: pasa del takt
+cena_estacao = Estación { $n }
+cena_carga = carga { $carga }
+cena_meta_maior = meta ≥ { $meta }
+cena_meta_menor = meta ≤ { $meta }
+cena_takt = takt { $takt }
+cena_parcela = { $parcela } % { $modelo }

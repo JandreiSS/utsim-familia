@@ -714,3 +714,15 @@ ed_momento_inicial = Transport moment in the starting state: { $momento }
 ed_conferir_pecas = Check the pieces
 ed_conferir_pecas_dica = Looks for the optimum by exact search and warns when there is none or when the starting state already is the optimum.
 ed_pecas_sem_avisos = The pieces have no warnings.
+
+# Enunciado desenhado (cena da missão)
+cena_sem_tarefas = no tasks
+cena_simule = simulate to see
+cena_previsao = Prediction
+cena_passa_takt = red: over the takt
+cena_estacao = Station { $n }
+cena_carga = load { $carga }
+cena_meta_maior = goal ≥ { $meta }
+cena_meta_menor = goal ≤ { $meta }
+cena_takt = takt { $takt }
+cena_parcela = { $parcela } % { $modelo }

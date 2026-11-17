@@ -89,6 +89,9 @@ pub struct Missao {
     /// writes the data as CSV and opens the installed app.
     #[serde(default)]
     pub analisar_em: Vec<String>,
+    /// The drawn statement: the 3D picture of the process and the cards pinned to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cena: Option<crate::cena::Cena>,
 }
 
 /// The apps a mission can send its data to (launcher product ids).

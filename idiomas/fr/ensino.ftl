@@ -720,3 +720,15 @@ ed_momento_inicial = Moment de transport dans l'état initial : { $momento }
 ed_conferir_pecas = Vérifier les pièces
 ed_conferir_pecas_dica = Cherche l'optimum par recherche exacte et prévient quand il n'existe pas ou quand l'état initial est déjà l'optimum.
 ed_pecas_sem_avisos = Les pièces n'ont pas d'avertissement.
+
+# Enunciado desenhado (cena da missão)
+cena_sem_tarefas = sans tâches
+cena_simule = simulez pour voir
+cena_previsao = Prévision
+cena_passa_takt = rouge : dépasse le takt
+cena_estacao = Poste { $n }
+cena_carga = charge { $carga }
+cena_meta_maior = objectif ≥ { $meta }
+cena_meta_menor = objectif ≤ { $meta }
+cena_takt = takt { $takt }
+cena_parcela = { $parcela } % { $modelo }
