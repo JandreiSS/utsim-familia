@@ -16,6 +16,12 @@
 //! analysed by the recipe [`crate::analises::Recipe::Surface`] (the second-order model and
 //! its stationary point).
 //!
+//! Runs that cannot all be made in the same conditions (days, batches, shifts) go in
+//! blocks: a factorial or a fraction in 2 or 4 blocks, confounding the blocks with the
+//! highest-order interactions it can, and the central composite in two blocks (the
+//! factorial part and the axial part, with the axial distance that keeps the blocks
+//! orthogonal to the model). The worksheet gets a `bloco` column, and the analyses read it.
+//!
 //! When every factor names a model parameter (`objeto.campo`), the UTSim model runs the
 //! experiment: one scenario per point of the design with common random numbers, the
 //! replications as the replicates, and the results saved as a data set of origin
@@ -69,6 +75,10 @@ pub struct ExperimentSpec {
         skip_serializing_if = "Option::is_none"
     )]
     pub surface: Option<Surface>,
+    /// Blocks of the plan: 1, 2 or 4 for a factorial or a fraction ([`block_words`]), 1 or
+    /// 2 for a central composite; 0 is read as 1. A screening and a Box-Behnken have one.
+    #[serde(rename = "blocos", default, skip_serializing_if = "one_block")]
+    pub blocks: usize,
     #[serde(rename = "replicas")]
     pub replicates: usize,
     #[serde(rename = "pontos_centrais")]
@@ -78,6 +88,10 @@ pub struct ExperimentSpec {
     /// Name of the response column of the worksheet.
     #[serde(rename = "resposta")]
     pub response: String,
+}
+
+fn one_block(b: &usize) -> bool {
+    *b <= 1
 }
 
 /// A response surface plan.
@@ -108,19 +122,37 @@ impl Surface {
         }
     }
 
-    /// The design for `k` factors.
-    pub fn design(self, k: usize, centers: usize, seed: u64) -> Result<utsim_doe::Design, String> {
+    /// The design for `k` factors. In two blocks (central composite only) the centers are
+    /// split between the factorial block and the axial block, and the rotatable plan takes
+    /// the `α` of orthogonal blocks.
+    pub fn design(
+        self,
+        k: usize,
+        centers: usize,
+        blocks: usize,
+        seed: u64,
+    ) -> Result<utsim_doe::Design, String> {
+        let b = if blocks == 2 { 2 } else { 1 };
+        let split = if b == 2 {
+            centers_split(centers)
+        } else {
+            (centers, 0)
+        };
         match self {
-            Surface::CentralComposite => {
-                utsim_doe::central_composite(k, utsim_doe::Alpha::Rotatable, (centers, 0), 1, seed)
-            }
-            Surface::FaceCentered => utsim_doe::central_composite(
+            Surface::CentralComposite => utsim_doe::central_composite(
                 k,
-                utsim_doe::Alpha::FaceCentered,
-                (centers, 0),
-                1,
+                if b == 2 {
+                    utsim_doe::Alpha::OrthogonalBlocks
+                } else {
+                    utsim_doe::Alpha::Rotatable
+                },
+                split,
+                b,
                 seed,
             ),
+            Surface::FaceCentered => {
+                utsim_doe::central_composite(k, utsim_doe::Alpha::FaceCentered, split, b, seed)
+            }
             Surface::BoxBehnken => {
                 if centers == 0 {
                     return Err(tx("experimentos-bb_precisa_centro").into());
@@ -129,6 +161,11 @@ impl Surface {
             }
         }
     }
+}
+
+/// The centers of a central composite in two blocks: the extra one in the factorial block.
+fn centers_split(centers: usize) -> (usize, usize) {
+    (centers.div_ceil(2), centers / 2)
 }
 
 /// What a run of a plan is.
@@ -145,6 +182,8 @@ pub struct PlanRun {
     pub run_order: usize,
     pub std_order: usize,
     pub kind: RunKind,
+    /// The block, from 1.
+    pub block: usize,
     pub coded: Vec<f64>,
 }
 
@@ -172,6 +211,8 @@ pub enum ExpError {
     NoKey(String),
     #[error("{}", fx("experimentos-erro_axial", &[("fator", vx(.0))]))]
     Axial(String),
+    #[error("{}", fx("experimentos-erro_blocos", &[("n", vx(.0)), ("opcoes", vx(.1))]))]
+    Blocks(usize, String),
     #[error("{0}")]
     Design(String),
 }
@@ -313,15 +354,63 @@ impl ExperimentSpec {
         .map_err(ExpError::Design)
     }
 
+    /// The numbers of blocks this plan accepts: 2 and 4 for a factorial or a fraction
+    /// when no main effect would be confounded with them, 2 for a central composite.
+    pub fn block_options(&self) -> Vec<usize> {
+        let k = self.k();
+        let mut v = vec![1];
+        match self.surface {
+            Some(Surface::BoxBehnken) => {}
+            Some(_) => v.push(2),
+            None if self.screening || !(2..=MAX_FACTORS).contains(&k) => {}
+            None => {
+                if let Ok(g) = self.generators() {
+                    let words = doe::defining_relation(&g);
+                    v.extend(
+                        [2, 4]
+                            .into_iter()
+                            .filter(|n| block_words(k, &words, *n).is_some()),
+                    );
+                }
+            }
+        }
+        v
+    }
+
+    fn check_blocks(&self) -> Result<usize, ExpError> {
+        let n = self.blocks.max(1);
+        let options = self.block_options();
+        if options.contains(&n) {
+            Ok(n)
+        } else {
+            let list: Vec<String> = options.iter().map(|o| o.to_string()).collect();
+            Err(ExpError::Blocks(n, list.join(", ")))
+        }
+    }
+
     /// The plan of any kind: the runs in run order and what it estimates.
     pub fn plan(&self) -> Result<Plan, ExpError> {
         let Some(surface) = self.surface else {
             let d = self.design()?;
-            return Ok(Plan {
-                runs: d
-                    .runs
-                    .iter()
-                    .map(|r| PlanRun {
+            let nb = self.check_blocks()?;
+            let gens = if nb > 1 {
+                block_words(d.k, &d.words(), nb).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let mut std: Vec<&doe::Run> = d.runs.iter().collect();
+            std.sort_by_key(|r| r.std_order);
+            let mut center = 0;
+            let mut runs: Vec<PlanRun> = std
+                .into_iter()
+                .map(|r| {
+                    let block = if r.center {
+                        center += 1;
+                        (center - 1) % nb + 1
+                    } else {
+                        block_of(&r.levels, &gens)
+                    };
+                    PlanRun {
                         run_order: r.run_order,
                         std_order: r.std_order,
                         kind: if r.center {
@@ -329,11 +418,38 @@ impl ExperimentSpec {
                         } else {
                             RunKind::Factorial
                         },
+                        block,
                         coded: r.levels.iter().map(|l| f64::from(*l)).collect(),
-                    })
-                    .collect(),
-                lines: alias_lines(self, &d),
-            });
+                    }
+                })
+                .collect();
+            // The drawn order is kept inside each block, one block after the other.
+            runs.sort_by_key(|r| (r.block, r.run_order));
+            for (i, r) in runs.iter_mut().enumerate() {
+                r.run_order = i + 1;
+            }
+            let mut lines = alias_lines(self, &d);
+            if nb > 1 {
+                let mut group = gens.clone();
+                if let [a, b] = gens[..] {
+                    group.push(a ^ b);
+                }
+                lines.push(fx(
+                    "experimentos-linha_blocos",
+                    &[
+                        ("n", vx(&nb)),
+                        (
+                            "termos",
+                            vx(&group
+                                .iter()
+                                .map(|w| doe::term_name(*w))
+                                .collect::<Vec<_>>()
+                                .join(", ")),
+                        ),
+                    ],
+                ));
+            }
+            return Ok(Plan { runs, lines });
         };
         let k = self.k();
         if !surface.fits(k) {
@@ -362,8 +478,9 @@ impl ExperimentSpec {
                 return Err(ExpError::Axial(f.name.clone()));
             }
         }
+        let nb = self.check_blocks()?;
         let d = surface
-            .design(k, self.center_points, self.seed)
+            .design(k, self.center_points, nb, self.seed)
             .map_err(ExpError::Design)?;
         let terms = utsim_doe::quadratic_terms(k).len() + 1;
         let alpha = d
@@ -394,6 +511,13 @@ impl ExperimentSpec {
                 &[("pontos", vx(&(d.points.len() - nc))), ("centros", vx(&nc))],
             ),
         }];
+        if nb == 2 {
+            let (c1, c2) = centers_split(nc);
+            lines.push(fx(
+                "experimentos-linha_blocos_ccd",
+                &[("c1", vx(&c1)), ("c2", vx(&c2))],
+            ));
+        }
         lines.push(fx(
             "experimentos-linha_segunda_ordem",
             &[("termos", vx(&terms))],
@@ -412,6 +536,7 @@ impl ExperimentSpec {
                     utsim_doe::Kind::Axial => RunKind::Axial,
                     utsim_doe::Kind::Center => RunKind::Center,
                 },
+                block: p.block,
                 coded: p.coded.clone(),
             })
             .collect();
@@ -465,13 +590,18 @@ fn factor_cells(spec: &ExperimentSpec, levels: &[f64]) -> Vec<String> {
 
 /// The collection worksheet in run order: `ordem;ordem_padrao;centro;A;B;...;<fatores>;
 /// <resposta>` with the response empty, to be filled and imported as a data set. The
-/// column `centro` says `sim`, `não` or, for the axial points of a surface, `axial`.
+/// column `centro` says `sim`, `não` or, for the axial points of a surface, `axial`; a
+/// plan in blocks has a `bloco` column right after it.
 pub fn worksheet(spec: &ExperimentSpec, plan: &Plan) -> String {
+    let blocked = plan.runs.iter().any(|r| r.block > 1);
     let mut h = vec![
         "ordem".to_string(),
         "ordem_padrao".to_string(),
         "centro".to_string(),
     ];
+    if blocked {
+        h.push(BLOCK_COLUMN.to_string());
+    }
     h.extend(factor_header(spec));
     h.push(spec.response_name());
     let mut out = h.join(";");
@@ -487,12 +617,91 @@ pub fn worksheet(spec: &ExperimentSpec, plan: &Plan) -> String {
             }
             .to_string(),
         ];
+        if blocked {
+            c.push(r.block.to_string());
+        }
         c.extend(factor_cells(spec, &r.coded));
         c.push(String::new());
         out.push_str(&c.join(";"));
         out.push('\n');
     }
     out
+}
+
+/// The name of the block column of a worksheet (the analyses look for it).
+pub const BLOCK_COLUMN: &str = "bloco";
+
+/// The lowest order among a term and its aliases in a fraction (0 when the term is in the
+/// defining relation).
+fn lowest_alias(term: u32, words: &[u32]) -> usize {
+    std::iter::once(term)
+        .chain(words.iter().map(|w| term ^ w))
+        .map(doe::order)
+        .min()
+        .unwrap_or(0)
+}
+
+/// The block generators of a two-level plan in `n` blocks (2 or 4), for `k` factors and the
+/// `words` of the fraction's defining relation (none for a full factorial). The blocks are
+/// confounded with the generators (and, in 4 blocks, with their product too); the choice
+/// makes the lowest-order effect confounded with a block, aliases included, as high as
+/// possible, then the fewest of them at that order. `None` when a main effect would be
+/// confounded with the blocks.
+pub fn block_words(k: usize, words: &[u32], n: usize) -> Option<Vec<u32>> {
+    let all: Vec<u32> = (1u32..(1 << k)).collect();
+    // The key: the lowest order confounded, how many of the group are above it, and the
+    // generators' own order (high first).
+    let key = |group: &[u32]| {
+        let lows: Vec<usize> = group.iter().map(|b| lowest_alias(*b, words)).collect();
+        let min = lows.iter().copied().min().unwrap_or(0);
+        let above = lows.iter().filter(|l| **l > min).count();
+        let own: usize = group.iter().map(|b| doe::order(*b)).sum();
+        (min, above, own)
+    };
+    let mut best: Option<((usize, usize, usize), Vec<u32>)> = None;
+    match n {
+        2 => {
+            for b in &all {
+                let kk = key(&[*b]);
+                if best.as_ref().is_none_or(|(bk, _)| kk > *bk) {
+                    best = Some((kk, vec![*b]));
+                }
+            }
+        }
+        4 => {
+            for (i, b1) in all.iter().enumerate() {
+                for b2 in &all[i + 1..] {
+                    let b3 = b1 ^ b2;
+                    if b3 < *b2 {
+                        continue;
+                    }
+                    let kk = key(&[*b1, *b2, b3]);
+                    if best.as_ref().is_none_or(|(bk, _)| kk > *bk) {
+                        best = Some((kk, vec![*b1, *b2]));
+                    }
+                }
+            }
+        }
+        _ => return None,
+    }
+    best.filter(|(kk, _)| kk.0 >= 2).map(|(_, g)| g)
+}
+
+/// The block of a factorial run, from 1: one bit per generator whose sign differs from its
+/// sign at the run with every factor low, so that run is in block 1.
+fn block_of(levels: &[i8], gens: &[u32]) -> usize {
+    1 + gens
+        .iter()
+        .enumerate()
+        .map(|(j, g)| {
+            let s: i32 = (0..levels.len())
+                .filter(|i| g & (1 << i) != 0)
+                .map(|i| i32::from(levels[i]))
+                .product();
+            let low = if doe::order(*g) % 2 == 0 { 1 } else { -1 };
+            if s == low { 0 } else { 1 << j }
+        })
+        .sum::<usize>()
 }
 
 /// The defining relation, the resolution and the aliases of the main effects and the

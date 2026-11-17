@@ -460,7 +460,7 @@ fn desirability(
     let models = data
         .ys
         .iter()
-        .map(|y| utsim_doe::Model::fit(&terms, &data.x, y, LEVEL))
+        .map(|y| fit_surface(&data, &terms, y).map(|(_, m)| m))
         .collect::<Result<Vec<_>, String>>()?;
     let goals: Vec<utsim_doe::Desirability> = responses
         .iter()
@@ -526,6 +526,94 @@ struct SurfaceData {
     ys: Vec<Vec<f64>>,
     to_real: Vec<Option<(f64, f64)>>,
     names: Vec<String>,
+    /// The block of each row, effect coded (one column less than the blocks; empty with a
+    /// single block).
+    blocks: Vec<Vec<f64>>,
+}
+
+/// The column `bloco` of a worksheet of the app, when it is not a factor or a response.
+fn block_column(t: &Table, used: &[usize]) -> Option<usize> {
+    t.header
+        .iter()
+        .position(|h| h.trim() == crate::experimentos::BLOCK_COLUMN)
+        .filter(|c| !used.contains(c))
+}
+
+/// The blocks of the rows, effect coded: with `b` blocks, `b − 1` columns, block `j` with
+/// `1` in column `j`, the last block with `−1` in all. The constant of a model is then the
+/// mean over the blocks.
+fn block_codes(labels: &[String]) -> (usize, Vec<Vec<f64>>) {
+    let mut names: Vec<&str> = labels.iter().map(String::as_str).collect();
+    names.sort_by(|a, b| match (a.parse::<f64>(), b.parse::<f64>()) {
+        (Ok(x), Ok(y)) => x.total_cmp(&y),
+        _ => a.cmp(b),
+    });
+    names.dedup();
+    let nb = names.len();
+    if nb < 2 {
+        return (nb, vec![Vec::new(); labels.len()]);
+    }
+    let codes = labels
+        .iter()
+        .map(|l| {
+            let j = names.iter().position(|n| n == l).unwrap_or(0);
+            (0..nb - 1)
+                .map(|c| {
+                    if j == nb - 1 {
+                        -1.0
+                    } else if c == j {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    (nb, codes)
+}
+
+/// Fits the second-order `terms` to `y`, with one term per block beyond the first (`Bl1`,
+/// `Bl2`...) when the data has blocks. Gives the model with the block terms (for the table
+/// of coefficients) and the model of the factors alone, for the mean of the blocks (for
+/// the stationary point, the predictions and the optimum).
+fn fit_surface(
+    data: &SurfaceData,
+    terms: &[utsim_doe::Term],
+    y: &[f64],
+) -> Result<(utsim_doe::Model, utsim_doe::Model), String> {
+    let k = data.names.len();
+    let nb = data.blocks.first().map_or(0, Vec::len);
+    if nb == 0 {
+        let m = utsim_doe::Model::fit(terms, &data.x, y, LEVEL)?;
+        return Ok((m.clone(), m));
+    }
+    let x: Vec<Vec<f64>> = data
+        .x
+        .iter()
+        .zip(&data.blocks)
+        .map(|(a, b)| a.iter().chain(b).copied().collect())
+        .collect();
+    let mut all = terms.to_vec();
+    all.extend((0..nb).map(|j| utsim_doe::Term::Linear(k + j)));
+    let mut full = utsim_doe::Model::fit(&all, &x, y, LEVEL)?;
+    for (j, c) in full
+        .regression
+        .coefs
+        .iter_mut()
+        .skip(1 + terms.len())
+        .enumerate()
+    {
+        c.name = format!("Bl{}", j + 1);
+    }
+    let factors = utsim_doe::Model {
+        k,
+        terms: terms.to_vec(),
+        intercept: full.intercept,
+        coefs: full.coefs[..terms.len()].to_vec(),
+        regression: full.regression.clone(),
+    };
+    Ok((full, factors))
 }
 
 /// Reads the rows with every factor and response filled, codes the factor columns that are
@@ -557,10 +645,20 @@ fn surface_data(
             && col < t.header.len())
         .then_some(col)
     };
+    let used: Vec<usize> = factors.iter().chain(responses).copied().collect();
+    let block_col = block_column(t, &used);
     let mut x: Vec<Vec<f64>> = Vec::new();
     let mut ys: Vec<Vec<f64>> = vec![Vec::new(); responses.len()];
     let mut real: Vec<Vec<Option<f64>>> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
     for r in &t.rows {
+        let label = match block_col {
+            Some(c) => match r.get(c).map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            },
+            None => String::new(),
+        };
         let (Some(v), Some(xs)) = (
             responses
                 .iter()
@@ -576,6 +674,7 @@ fn surface_data(
         for (y, v) in ys.iter_mut().zip(v) {
             y.push(v);
         }
+        labels.push(label);
         x.push(xs);
         real.push(
             (0..k)
@@ -653,11 +752,17 @@ fn surface_data(
         );
     }
     let names = (0..k).map(name).collect();
+    let (nb, blocks) = block_codes(&labels);
+    if nb > 1 {
+        o.notes
+            .push(fx("analises-superficie_blocos", &[("n", vx(&nb))]));
+    }
     Ok(SurfaceData {
         x,
         ys,
         to_real,
         names,
+        blocks,
     })
 }
 
@@ -671,8 +776,8 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
     let to_real = &data.to_real;
     let name = |i: usize| data.names[i].clone();
 
-    let m = utsim_doe::Model::fit(&terms, x, y, LEVEL)?;
-    let reg = &m.regression;
+    let (full, m) = fit_surface(&data, &terms, y)?;
+    let reg = &full.regression;
     o.put("corridas", y.len() as f64);
     o.put("R²", reg.r2);
     o.put("R² ajustado", reg.r2_adj);
@@ -772,6 +877,34 @@ fn surface(t: &Table, factors: &[usize], response: usize, o: &mut Outcome) -> Re
             .collect(),
     });
     Ok(())
+}
+
+/// The interactions of a two-level plan that the blocks are confounded with: the sign of
+/// the term is the same inside each block (center runs aside) and not the same in all.
+fn block_confounded(x: &[Vec<f64>], blocks: &[String]) -> Vec<u32> {
+    let k = x.first().map_or(0, Vec::len);
+    if k > crate::experimentos::MAX_FACTORS {
+        return Vec::new();
+    }
+    (1u32..(1 << k))
+        .filter(|m| {
+            let mut sign: std::collections::BTreeMap<&str, bool> = Default::default();
+            for (r, b) in x.iter().zip(blocks) {
+                if r.contains(&0.0) {
+                    continue;
+                }
+                let s = (0..k)
+                    .filter(|i| m & (1 << i) != 0)
+                    .map(|i| r[i])
+                    .product::<f64>()
+                    > 0.0;
+                if *sign.entry(b.as_str()).or_insert(s) != s {
+                    return false;
+                }
+            }
+            sign.len() > 1 && sign.values().any(|v| *v) && sign.values().any(|v| !*v)
+        })
+        .collect()
 }
 
 /// The note when the target or σ of a chart with memory came from the data.
@@ -1745,6 +1878,9 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
             };
             let mut cols: Vec<Vec<f64>> = vec![Vec::new(); factors.len()];
             let mut y = Vec::new();
+            let used: Vec<usize> = factors.iter().copied().chain([*response]).collect();
+            let block_col = block_column(t, &used);
+            let mut labels: Vec<String> = Vec::new();
             for r in &t.rows {
                 let (Some(v), Some(xs)) = (
                     num(r, *response),
@@ -1755,6 +1891,12 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 ) else {
                     continue;
                 };
+                labels.push(
+                    block_col
+                        .and_then(|c| r.get(c))
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_default(),
+                );
                 y.push(v);
                 for (c, x) in cols.iter_mut().zip(xs) {
                     c.push(x);
@@ -1788,6 +1930,22 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
                 Err(e) => return Err(e),
             };
             let k = factors.len();
+            if block_col.is_some() {
+                let confounded = block_confounded(&x, &labels);
+                if !confounded.is_empty() {
+                    o.notes.push(fx(
+                        "analises-fatorial_blocos",
+                        &[(
+                            "termos",
+                            vx(&confounded
+                                .iter()
+                                .map(|m| doe::term_name(*m))
+                                .collect::<Vec<_>>()
+                                .join(", ")),
+                        )],
+                    ));
+                }
+            }
             let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
             // In a worksheet of the app the coded A, B... are followed by the actual levels
             // under the factors' names; elsewhere the column's own name is the name.

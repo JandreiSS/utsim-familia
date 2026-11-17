@@ -22,6 +22,7 @@ fn spec(k: usize, fraction: usize) -> ExperimentSpec {
         fraction,
         screening: false,
         surface: None,
+        blocks: 1,
         replicates: 1,
         center_points: 0,
         seed: 2026,
@@ -463,4 +464,187 @@ fn desirability_of_two_responses() {
         }],
     };
     assert!(analises::run(&bad, &t).is_err());
+}
+
+/// Fills the response of a worksheet that may have a `bloco` column, from the coded levels
+/// and the block.
+fn fill_blocked(csv: &str, k: usize, f: impl Fn(&[f64], usize) -> f64) -> String {
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(';').collect();
+    let a = head.iter().position(|h| *h == "A").unwrap();
+    let b = head.iter().position(|h| *h == BLOCK_COLUMN);
+    let mut out = head.join(";");
+    out.push('\n');
+    for line in lines {
+        let mut c: Vec<String> = line.split(';').map(str::to_string).collect();
+        let x: Vec<f64> = c[a..a + k]
+            .iter()
+            .map(|v| v.replace(',', ".").parse().unwrap())
+            .collect();
+        let block = b.map_or(1, |b| c[b].parse().unwrap());
+        let last = c.len() - 1;
+        c[last] = f(&x, block).to_string().replace('.', ",");
+        out.push_str(&c.join(";"));
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn block_generators_confound_the_highest_interactions() {
+    let abc = 0b111;
+    assert_eq!(block_words(3, &[], 2), Some(vec![abc]));
+    // 2³ in four blocks: AB, AC and their product BC (Montgomery, 7.4).
+    let g = block_words(3, &[], 4).unwrap();
+    let mut group = vec![g[0], g[1], g[0] ^ g[1]];
+    group.sort();
+    assert_eq!(group, vec![0b011, 0b101, 0b110]);
+    // 2⁴ in four blocks: two three-factor interactions and one of two factors.
+    let g = block_words(4, &[], 4).unwrap();
+    let mut orders: Vec<usize> = [g[0], g[1], g[0] ^ g[1]]
+        .iter()
+        .map(|w| doe::order(*w))
+        .collect();
+    orders.sort();
+    assert_eq!(orders, vec![2, 3, 3]);
+    // Two factors cannot go in four blocks without confounding a main effect.
+    assert_eq!(block_words(2, &[], 4), None);
+    // In the half fraction 2⁵⁻¹ (I = ABCDE) the block is not confounded with a main effect
+    // or with the identity.
+    let words = doe::defining_relation(&doe::standard_generators(5, 1).unwrap());
+    let g = block_words(5, &words, 2).unwrap();
+    assert!(lowest_alias(g[0], &words) >= 2);
+}
+
+#[test]
+fn factorial_in_two_blocks() {
+    let mut s = spec(3, 0);
+    s.center_points = 2;
+    assert_eq!(s.block_options(), vec![1, 2, 4]);
+    s.blocks = 2;
+    let plan = s.plan().unwrap();
+    assert_eq!(plan.runs.len(), 10);
+    // Block 1 runs first, with the run with every factor low and ABC = −1.
+    let first: Vec<&PlanRun> = plan.runs.iter().take(5).collect();
+    assert!(first.iter().all(|r| r.block == 1));
+    assert!(first.iter().any(|r| r.coded == vec![-1.0, -1.0, -1.0]));
+    for r in plan.runs.iter().filter(|r| r.kind == RunKind::Factorial) {
+        let abc: f64 = r.coded.iter().product();
+        assert_eq!(r.block == 1, abc < 0.0);
+    }
+    assert_eq!(
+        plan.runs
+            .iter()
+            .filter(|r| r.kind == RunKind::Center && r.block == 2)
+            .count(),
+        1
+    );
+    assert!(
+        plan.lines
+            .iter()
+            .any(|l| l.contains("2 blocos") && l.contains("ABC")),
+        "{:?}",
+        plan.lines
+    );
+    let ws = worksheet(&s, &plan);
+    assert!(ws.starts_with("ordem;ordem_padrao;centro;bloco;A;"), "{ws}");
+    // A block shift of 6 shows up in the analysis as ABC, and the note says so.
+    let filled = fill_blocked(&ws, 3, |x, b| {
+        50.0 + 3.0 * x[0] + if b == 2 { 6.0 } else { 0.0 }
+    });
+    let t = Table::parse(&filled);
+    let (f, resp) = columns(&t.header);
+    let o = analises::run(
+        &Recipe::Factorial {
+            factors: f,
+            response: resp.unwrap(),
+            order: 3,
+        },
+        &t,
+    )
+    .unwrap();
+    assert!((o.value("efeito A").unwrap() - 6.0).abs() < 1e-9);
+    assert!(
+        o.notes.iter().any(|n| n.contains("confundidos com ABC")),
+        "{:?}",
+        o.notes
+    );
+    // Screening and Box-Behnken take one block only.
+    let mut p = s.clone();
+    p.screening = true;
+    assert_eq!(p.block_options(), vec![1]);
+    assert!(matches!(p.plan(), Err(ExpError::Blocks(2, _))));
+}
+
+#[test]
+fn central_composite_in_two_blocks() {
+    let s = ExperimentSpec {
+        name: "Superfície em blocos".into(),
+        factors: vec![
+            FactorSpec {
+                name: "Temperatura".into(),
+                low: "100".into(),
+                high: "120".into(),
+                ..FactorSpec::default()
+            },
+            FactorSpec {
+                name: "Tempo".into(),
+                low: "10".into(),
+                high: "20".into(),
+                ..FactorSpec::default()
+            },
+        ],
+        surface: Some(Surface::CentralComposite),
+        blocks: 2,
+        center_points: 4,
+        seed: 6,
+        response: "y".into(),
+        ..ExperimentSpec::default()
+    };
+    let plan = s.plan().unwrap();
+    assert_eq!(plan.runs.len(), 4 + 4 + 4);
+    // Orthogonal blocks with two centers in each: α = √(4·(4 + 2) / (2·(4 + 2))) = √2.
+    assert!(plan.lines[0].contains("α = 1,414214"), "{:?}", plan.lines);
+    assert!(
+        plan.runs
+            .iter()
+            .take(6)
+            .all(|r| r.block == 1 && r.kind != RunKind::Axial)
+    );
+    assert!(
+        plan.runs
+            .iter()
+            .skip(6)
+            .all(|r| r.block == 2 && r.kind != RunKind::Factorial)
+    );
+    let ws = worksheet(&s, &plan);
+    // The axial block reads 5 higher; the block term takes it, and the maximum stays at
+    // A = B = 1 with y = 83 for the mean of the blocks (83 + 2,5).
+    let filled = fill_blocked(&ws, 2, |x, b| {
+        80.0 + 4.0 * x[0] + 2.0 * x[1] - 2.0 * x[0] * x[0] - x[1] * x[1]
+            + if b == 2 { 5.0 } else { 0.0 }
+    });
+    let t = Table::parse(&filled);
+    let (f, resp) = columns(&t.header);
+    let o = analises::run(
+        &Recipe::Surface {
+            factors: f,
+            response: resp.unwrap(),
+        },
+        &t,
+    )
+    .unwrap();
+    assert!((o.value("coef Bl1").unwrap() + 2.5).abs() < 1e-6);
+    assert!((o.value("ponto estacionário A").unwrap() - 1.0).abs() < 1e-6);
+    assert!((o.value("ponto estacionário B").unwrap() - 1.0).abs() < 1e-6);
+    assert!((o.value("resposta prevista no ponto estacionário").unwrap() - 85.5).abs() < 1e-6);
+    assert!(
+        o.notes.iter().any(|n| n.contains("2 blocos")),
+        "{:?}",
+        o.notes
+    );
+    // Box-Behnken has one block.
+    let mut b = s.clone();
+    b.surface = Some(Surface::BoxBehnken);
+    assert_eq!(b.block_options(), vec![1]);
 }
