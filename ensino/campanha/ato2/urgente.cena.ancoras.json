@@ -1,0 +1,54 @@
+{
+ "altura": 700,
+ "largura": 1547,
+ "nos": {
+  "entrega_normal": [
+   1350.3,
+   212.1
+  ],
+  "entrega_normal@pe": [
+   1350.3,
+   236.6
+  ],
+  "entrega_urgente": [
+   1414.9,
+   462.3
+  ],
+  "entrega_urgente@pe": [
+   1414.9,
+   486.8
+  ],
+  "fila": [
+   575.3,
+   431.3
+  ],
+  "fila@pe": [
+   575.3,
+   441.7
+  ],
+  "normais": [
+   139.4,
+   346.2
+  ],
+  "normais@pe": [
+   139.4,
+   356.7
+  ],
+  "retifica": [
+   979.0,
+   161.1
+  ],
+  "retifica@pe": [
+   979.0,
+   401.7
+  ],
+  "urgentes": [
+   204.0,
+   596.4
+  ],
+  "urgentes@pe": [
+   204.0,
+   606.9
+  ]
+ }
+}

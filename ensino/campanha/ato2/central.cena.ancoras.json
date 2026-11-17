@@ -1,0 +1,38 @@
+{
+ "altura": 699,
+ "largura": 900,
+ "nos": {
+  "atendentes": [
+   600.0,
+   285.3
+  ],
+  "atendentes#1": [
+   642.0,
+   448.0
+  ],
+  "atendentes#1@pe": [
+   642.0,
+   623.5
+  ],
+  "atendentes#3": [
+   558.0,
+   122.6
+  ],
+  "atendentes#3@pe": [
+   558.0,
+   298.1
+  ],
+  "atendentes@pe": [
+   600.0,
+   460.8
+  ],
+  "espera": [
+   250.1,
+   486.5
+  ],
+  "espera@pe": [
+   250.1,
+   495.5
+  ]
+ }
+}

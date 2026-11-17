@@ -214,3 +214,38 @@ fn campanha_carrega_imagem_e_ancoras() {
         assert_eq!(m.missao.cena.is_some(), m.cena.is_some(), "{}", m.missao.id);
     }
 }
+
+#[test]
+fn capacidade_vira_postos_lado_a_lado() {
+    let (m, modelo) = com_cena()
+        .into_iter()
+        .find(|(m, _)| m.id == "ato2/central")
+        .unwrap();
+    let p = m.cena.as_ref().unwrap().planta(&modelo);
+    // Three attendants: three stations across the flow, the middle one keeps the name.
+    let nomes: Vec<&str> = p
+        .objetos
+        .iter()
+        .filter(|o| o.nome.starts_with("atendentes"))
+        .map(|o| o.nome.as_str())
+        .collect();
+    assert_eq!(nomes, ["atendentes#1", "atendentes", "atendentes#3"]);
+    let ys: Vec<f64> = p
+        .objetos
+        .iter()
+        .filter(|o| o.nome.starts_with("atendentes"))
+        .map(|o| o.y)
+        .collect();
+    assert_eq!(ys, [-2.4, 0.0, 2.4]);
+    assert!(
+        p.objetos.iter().all(|o| o.nome != "chamadas"),
+        "a fonte está oculta"
+    );
+    // The urgent orders are drawn in red.
+    let (u, mu) = com_cena()
+        .into_iter()
+        .find(|(m, _)| m.id == "ato2/urgente")
+        .unwrap();
+    let pu = u.cena.as_ref().unwrap().planta(&mu);
+    assert!(pu.pecas.iter().any(|x| x.cor.as_deref() == Some("#d63031")));
+}

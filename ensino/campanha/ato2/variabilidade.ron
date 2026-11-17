@@ -43,4 +43,21 @@ Missao(
     ],
     referencia: {"metodo": 1, "chegadas": 1},
     animacao: (duracao: 480, unidade: "min"),
+    cena: (
+        imagem: "variabilidade.cena.png",
+        escala: 0.8,
+        pecas: [
+            (no: "fila_a", elemento: "caixa"),
+            (no: "fila_b", elemento: "caixa", dx: -0.7),
+            (no: "fila_b", elemento: "caixa"),
+            (no: "fila_b", elemento: "caixa", dx: 0.7),
+        ],
+        cartoes: [
+            (no: "bancada_a", tipo: Texto("Bancada A: de 3,5 a 4,5 min")),
+            (no: "bancada_b", tipo: Alavanca("metodo")),
+            (no: "chegada_b@pe", tipo: Alavanca("chegadas")),
+            (no: "fila_a", tipo: Previsao("maior_fila")),
+            (no: "saida_b@pe", tipo: Metrica("espera_b")),
+        ],
+    ),
 )

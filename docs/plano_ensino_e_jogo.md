@@ -292,8 +292,10 @@ produto desenhado.
 - **A imagem é gerada antes.** O bloco `cena` da missão diz como o modelo vira cena
   (`cena::Cena::planta`): cada objeto vira o elemento do seu tipo (fonte e fila em
   `espera_chao`, processador em `posto` com operador, saída em `palete`), na posição do modelo
-  vezes `escala`. `elementos` troca o elemento de um objeto, `ocultar` tira objetos e `pecas`
-  põe produtos sobre os objetos. `bash scripts/enunciados.sh` gera a planta (exemplo
+  vezes `escala`. `elementos` troca o elemento de um objeto (`cnc`, `prensa`, `celula`), `ocultar` tira
+  objetos (a fonte e a saída de um atendimento) e `pecas` põe produtos sobre os objetos, com
+  cor opcional. Um processador com capacidade n vira n postos lado a lado, e o do meio leva o
+  nome (`atendentes`); os outros são `atendentes#1`, `atendentes#3`. `bash scripts/enunciados.sh` gera a planta (exemplo
   `plantas` do `utsim-ensino-core`), renderiza no Blender (`tools/blender/enunciado.py`) e
   grava, ao lado da missão, a imagem (2040 × 700, reduzida a 256 cores) e as âncoras
   (`<imagem>.ancoras.json`: o ponto da imagem acima de cada objeto, `nome`, e no pé dele,
@@ -308,7 +310,7 @@ produto desenhado.
   diferentes, cartão sem âncora, estação fora do balanceamento, alavanca, métrica ou previsão
   que não existem, e `Valor` com métrica do modelo (que só existe depois de simular). O teste
   `elementos_das_cenas_existem_em_3d` confere que todo elemento da campanha tem o `.glb`.
-- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3; C, atos 5 e 6 (no arranjo,
+- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6 (no arranjo,
   uma miniatura por máquina na grade); D, atos 7 e 8 e o editor do professor.
 
 ## 4. Recursos do professor

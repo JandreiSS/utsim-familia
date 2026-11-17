@@ -43,4 +43,23 @@ Missao(
     ],
     referencia: {"investimento": 2},
     animacao: (duracao: 600, unidade: "min"),
+    cena: (
+        imagem: "gargalo_que_muda.cena.png",
+        escala: 0.8,
+        elementos: {"prensa": "prensa", "dobradeira": "prensa"},
+        pecas: [
+            (no: "chegada", elemento: "caixa", dx: -0.35),
+            (no: "chegada", elemento: "caixa", dx: 0.35),
+            (no: "fila_prensa", elemento: "caixa", dx: -0.35),
+            (no: "fila_prensa", elemento: "caixa", dx: 0.35),
+            (no: "fila_dobradeira", elemento: "caixa", dx: -0.35),
+            (no: "fila_dobradeira", elemento: "caixa", dx: 0.35),
+            (no: "saida", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "chegada@pe", tipo: Alavanca("investimento")),
+            (no: "fila_dobradeira@pe", tipo: Previsao("gargalo")),
+            (no: "saida", tipo: Metrica("lead_time")),
+        ],
+    ),
 )

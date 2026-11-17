@@ -43,4 +43,24 @@ Missao(
     ],
     referencia: {"turnos": 1, "cortes": 2},
     animacao: (duracao: 1440, unidade: "min"),
+    cena: (
+        imagem: "turnos.cena.png",
+        escala: 0.8,
+        elementos: {"corte": "cnc"},
+        pecas: [
+            (no: "carteira", elemento: "caixa", dx: -0.7),
+            (no: "carteira", elemento: "caixa"),
+            (no: "carteira", elemento: "caixa", dx: 0.7),
+            (no: "fila_montagem", elemento: "caixa", dx: -0.35),
+            (no: "fila_montagem", elemento: "caixa", dx: 0.35),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "pedidos@pe", tipo: Alavanca("turnos")),
+            (no: "corte", tipo: Alavanca("cortes")),
+            (no: "montagem@pe", tipo: Previsao("capacidade")),
+            (no: "expedicao", tipo: Metrica("entregas")),
+            (no: "expedicao@pe", tipo: Metrica("custo")),
+        ],
+    ),
 )

@@ -39,4 +39,14 @@ Missao(
     ],
     referencia: {"atendentes": 2},
     animacao: (duracao: 240, unidade: "min"),
+    cena: (
+        imagem: "ferramentaria.cena.png",
+        escala: 0.8,
+        ocultar: ["mecanicos", "oficina"],
+        cartoes: [
+            (no: "balcao", tipo: Alavanca("atendentes")),
+            (no: "fila@pe", tipo: Previsao("utilizacao")),
+            (no: "balcao@pe", tipo: Metrica("custo")),
+        ],
+    ),
 )

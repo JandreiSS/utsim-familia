@@ -44,4 +44,25 @@ Missao(
     ],
     referencia: {"estoque": 5},
     animacao: (duracao: 300, unidade: "min"),
+    cena: (
+        imagem: "little.cena.png",
+        escala: 0.8,
+        elementos: {"solda": "celula"},
+        pecas: [
+            (no: "chegada", elemento: "caixa", dx: -0.35),
+            (no: "chegada", elemento: "caixa", dx: 0.35),
+            (no: "fila_solda", elemento: "caixa", dx: -0.35),
+            (no: "fila_solda", elemento: "caixa", dx: 0.35),
+            (no: "estoque", elemento: "caixa", dx: -0.7),
+            (no: "estoque", elemento: "caixa"),
+            (no: "estoque", elemento: "caixa", dx: 0.7),
+            (no: "saida", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "estoque", tipo: Alavanca("estoque")),
+            (no: "chegada@pe", tipo: Previsao("wip")),
+            (no: "saida", tipo: Metrica("lead_time")),
+            (no: "saida@pe", tipo: Metrica("vazao")),
+        ],
+    ),
 )

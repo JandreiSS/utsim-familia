@@ -71,6 +71,10 @@ pub struct PecaCena {
     /// Turn around the vertical axis, in degrees.
     #[serde(default)]
     pub giro: f64,
+    /// Colour of the whole product, `"#rrggbb"` (urgent orders in red, one model per
+    /// colour); absent: its own materials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
 }
 
 /// A card pinned to an object of the picture.
@@ -157,6 +161,7 @@ pub struct PecaPlanta {
     pub y: f64,
     pub giro: f64,
     pub escala: f64,
+    pub cor: Option<String>,
 }
 
 /// The default 3D element of an object, by its kind (the mission picks another in
@@ -178,6 +183,11 @@ pub fn elemento_padrao(o: &utsim_model::ObjectDef) -> Option<String> {
 /// The size of the pictures: under the 2048 pixels a side that every graphics card takes.
 pub const LARGURA: u32 = 2040;
 pub const ALTURA: u32 = 700;
+
+/// Stations drawn for a processor with capacity n (at most), and the distance between
+/// them, in metres of the scene.
+const MAX_COPIAS: usize = 6;
+const PASSO_COPIAS: f64 = 2.4;
 
 /// The elements that come with an operator at their `ponto_operador`.
 const COM_OPERADOR: &[&str] = &["posto", "cnc", "prensa", "injetora", "celula"];
@@ -202,24 +212,39 @@ impl Cena {
                 continue;
             };
             let trabalho = COM_OPERADOR.contains(&elemento.as_str());
-            let pessoa = (trabalho && !self.sem_pessoa.contains(&o.name)).then(|| {
-                vez += 1;
-                if vez % 2 == 1 { "homem" } else { "mulher" }.to_string()
-            });
             let fases = if trabalho {
                 BTreeMap::from([("ciclo".to_string(), 0.5)])
             } else {
                 BTreeMap::new()
             };
-            objetos.push(ObjetoPlanta {
-                nome: o.name.clone(),
-                elemento,
-                x: o.position[0] * self.escala,
-                y: o.position[1] * self.escala,
-                giro: o.visual.as_ref().and_then(|v| v.yaw).unwrap_or(0.0),
-                fases,
-                pessoa,
-            });
+            // A processor with capacity n is n stations side by side (across the flow);
+            // the one in the middle keeps the name (the anchor of the cards), the others are
+            // `nome#2`, `nome#3`...
+            let copias = match &o.kind {
+                ObjectKind::Processor { capacity, .. } => (*capacity).clamp(1, MAX_COPIAS),
+                _ => 1,
+            };
+            let meio = (copias - 1) / 2;
+            for k in 0..copias {
+                let pessoa = (trabalho && !self.sem_pessoa.contains(&o.name)).then(|| {
+                    vez += 1;
+                    if vez % 2 == 1 { "homem" } else { "mulher" }.to_string()
+                });
+                let desvio = (k as f64 - (copias - 1) as f64 / 2.0) * PASSO_COPIAS;
+                objetos.push(ObjetoPlanta {
+                    nome: if k == meio {
+                        o.name.clone()
+                    } else {
+                        format!("{}#{}", o.name, k + 1)
+                    },
+                    elemento: elemento.clone(),
+                    x: o.position[0] * self.escala,
+                    y: o.position[1] * self.escala + desvio,
+                    giro: o.visual.as_ref().and_then(|v| v.yaw).unwrap_or(0.0),
+                    fases: fases.clone(),
+                    pessoa,
+                });
+            }
         }
         let pecas = self
             .pecas
@@ -232,6 +257,7 @@ impl Cena {
                     y: o.y + p.dy,
                     giro: p.giro,
                     escala: p.escala,
+                    cor: p.cor.clone(),
                 })
             })
             .collect();
@@ -271,8 +297,21 @@ impl Cena {
                 e.push(format!("cena: o objeto '{n}' não está no modelo"));
             }
         }
+        for p in &self.pecas {
+            let ok = p.cor.as_deref().is_none_or(|c| {
+                c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|x| x.is_ascii_hexdigit())
+            });
+            if !ok {
+                e.push(format!(
+                    "cena: cor '{}' da peça: use #rrggbb",
+                    p.cor.as_deref().unwrap_or("")
+                ));
+            }
+        }
         for c in &self.cartoes {
+            // `nome@pe` is the foot of the object, `nome#k` a copy of a processor.
             let no = c.no.strip_suffix("@pe").unwrap_or(&c.no);
+            let no = no.split_once('#').map_or(no, |(n, _)| n);
             if !existe(no) || self.ocultar.iter().any(|x| x == no) {
                 e.push(format!(
                     "cena: o cartão de '{}' não tem objeto na imagem",

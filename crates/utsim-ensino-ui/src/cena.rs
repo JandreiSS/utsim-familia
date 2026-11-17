@@ -212,7 +212,8 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
         });
     }
     let a = &cc.ancoras;
-    let largura = ui.available_width().min(1600.0);
+    // At most 80 % of the size of the picture in pixels: a narrow scene is not blown up.
+    let largura = ui.available_width().min(a.largura as f32 * 0.8);
     let s = largura / a.largura as f32;
     // The cards are laid out first, in the coordinates of the picture (0, 0 at its corner);
     // the drawing then grows above and below the picture as far as they go.

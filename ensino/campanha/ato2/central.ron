@@ -44,4 +44,17 @@ Missao(
     ],
     referencia: {"atendentes": 4, "linhas": 8},
     animacao: (duracao: 120, unidade: "min"),
+    cena: (
+        imagem: "central.cena.png",
+        escala: 0.8,
+        ocultar: ["chamadas", "encerradas"],
+        cartoes: [
+            (no: "atendentes", tipo: Alavanca("atendentes")),
+            (no: "espera", tipo: Alavanca("linhas")),
+            (no: "atendentes@pe", tipo: Previsao("utilizacao")),
+            (no: "espera@pe", tipo: Metrica("espera")),
+            (no: "atendentes#3", tipo: Metrica("perda")),
+            (no: "atendentes#3@pe", tipo: Metrica("custo")),
+        ],
+    ),
 )
