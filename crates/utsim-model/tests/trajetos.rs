@@ -406,3 +406,50 @@ fn a_high_drop_a_gap_and_a_climb_are_warned() {
     let w = two_belts(0.6, 1.0, 0.0).warnings();
     assert!(w.iter().any(|m| m.contains("não sobe")), "{w:?}");
 }
+
+/// Uma pessoa pega a peça na ponta de saída de uma esteira desenhada, na altura `z`.
+fn picked_at(z: f64, asset: &str) -> Vec<String> {
+    model(&format!(
+        r#"Model(
+            format: 2,
+            name: "alcance",
+            run: (stop_time: 100.0, movement: Free),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(10.0)), position: (-2.0, 0.0, 0.0)),
+                (name: "esteira", kind: Conveyor(length: 4.0, speed: 1.0, item_length: 0.5,
+                    route: Some((nodes: [(at: (0.0, 0.0, 0.8)), (at: (4.0, 0.0, {z}))]))),
+                 transport: "op", position: (0.0, 0.0, 0.0)),
+                (name: "out", kind: Sink, position: (8.0, 0.0, 0.0)),
+                (name: "op", kind: Transporter(speed: 1.0), position: (6.0, -2.0, 0.0),
+                 visual: (asset: "{asset}")),
+            ],
+            connections: [("src", "esteira"), ("esteira", "out")],
+        )"#
+    ))
+    .warnings()
+}
+
+#[test]
+fn a_person_cannot_reach_a_high_belt_end() {
+    assert!(
+        picked_at(2.4, "operador")
+            .iter()
+            .any(|w| w.contains("não alcança"))
+    );
+    assert!(
+        !picked_at(1.0, "operador")
+            .iter()
+            .any(|w| w.contains("alcança"))
+    );
+    // A forklift reaches it.
+    assert!(
+        !picked_at(2.4, "empilhadeira")
+            .iter()
+            .any(|w| w.contains("alcança"))
+    );
+    assert!(
+        picked_at(0.2, "operador")
+            .iter()
+            .any(|w| w.contains("agachado"))
+    );
+}
