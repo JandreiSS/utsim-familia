@@ -195,9 +195,6 @@ impl Edicao {
             m.alavancas.clear();
             m.metricas.clear();
         }
-        if self.e_pecas() {
-            m.alavancas.clear();
-        }
         let pecas = m.decisoes_iniciais();
         let ids: BTreeSet<&str> = m.alavancas.iter().map(|a| a.id()).collect();
         if m.referencia
@@ -227,7 +224,7 @@ impl Edicao {
         }
         let modelagem = self.e_modelagem();
         let pecas = self.e_pecas();
-        let usadas: Vec<&ItemAlavanca> = if modelagem || pecas {
+        let usadas: Vec<&ItemAlavanca> = if modelagem {
             Vec::new()
         } else {
             self.alavancas.iter().filter(|a| a.usar).collect()
@@ -455,7 +452,7 @@ impl Edicao {
     pub fn chaves_de_decisao(&self) -> Vec<String> {
         let mut v = vec!["custo".to_string()];
         if self.e_pecas() {
-            if self.base.balanceamento.is_some() {
+            if let Some(b) = &self.base.balanceamento {
                 v.extend(
                     [
                         "balanceamento.estacoes",
@@ -466,11 +463,13 @@ impl Edicao {
                     ]
                     .map(String::from),
                 );
+                if !b.mix.is_empty() {
+                    v.push("balanceamento.pico".into());
+                }
             }
             if self.base.arranjo.is_some() {
                 v.push("arranjo.momento".into());
             }
-            return v;
         }
         v.extend(
             self.alavancas
@@ -481,11 +480,9 @@ impl Edicao {
         v
     }
 
-    /// The number of combinations of the levers in use (what the calibration simulates).
+    /// The number of combinations of the levers in use (what the calibration simulates;
+    /// with pieces, the optimum of the pieces with each combination).
     pub fn combinacoes(&self) -> u64 {
-        if self.e_pecas() {
-            return 1;
-        }
         self.alavancas
             .iter()
             .filter(|a| a.usar)

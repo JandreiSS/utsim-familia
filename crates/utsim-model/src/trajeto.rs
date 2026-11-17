@@ -256,6 +256,12 @@ pub const DROP_WARN: f64 = 0.5;
 /// Vão horizontal (m) acima do qual a peça cai fora entre as duas pontas.
 pub const GAP_WARN: f64 = 0.3;
 
+/// Faixa de alcance da mão de uma pessoa em pé (m do piso) para pegar ou deixar uma peça
+/// na ponta de uma esteira: abaixo, ela se agacha; acima, não alcança sem escada ou
+/// plataforma.
+pub const REACH_LOW: f64 = 0.3;
+pub const REACH_HIGH: f64 = 1.75;
+
 /// Tempo de queda livre de uma altura `h` (m): `√(2h/g)`.
 pub fn fall_time(h: f64) -> f64 {
     (2.0 * h.max(0.0) / GRAVITY).sqrt()
@@ -391,6 +397,42 @@ impl Model {
                         "{}: as pontas com '{to}' estão a {:.2} m uma da outra; a peça cai fora",
                         o.name, gap
                     ));
+                }
+            }
+            // Who picks at the output end (the belt's own `transport`) and who drops at the
+            // input end (the `transport` of what feeds it): a person must reach the end.
+            if let Some((inp, outp)) = r.ends(o.position) {
+                let person = |t: &str| {
+                    self.objects
+                        .iter()
+                        .find(|x| x.name == t)
+                        .is_some_and(|x| self.role_of(x) == utsim_nav::Role::Person)
+                };
+                let mut ends: Vec<(&str, f64, String)> = Vec::new();
+                if let Some(t) = o.transport.as_deref().filter(|t| person(t)) {
+                    ends.push(("saída", outp[2], t.to_string()));
+                }
+                for (from, _) in self.connections.iter().filter(|(_, to)| *to == o.name) {
+                    let feeder = self.objects.iter().find(|x| x.name == *from);
+                    if let Some(t) = feeder
+                        .and_then(|x| x.transport.as_deref())
+                        .filter(|t| person(t))
+                    {
+                        ends.push(("entrada", inp[2], t.to_string()));
+                    }
+                }
+                for (end, z, who) in ends {
+                    if z > REACH_HIGH {
+                        out.push(format!(
+                            "{}: a ponta de {end} está a {:.2} m do piso; '{who}' não alcança acima de {:.2} m (ponha uma plataforma ou desça a ponta)",
+                            o.name, z, REACH_HIGH
+                        ));
+                    } else if z < REACH_LOW {
+                        out.push(format!(
+                            "{}: a ponta de {end} está a {:.2} m do piso; '{who}' trabalha agachado abaixo de {:.2} m",
+                            o.name, z, REACH_LOW
+                        ));
+                    }
                 }
             }
             if line.iter().any(|p| p[2] + o.position[2] < -1e-9) {
