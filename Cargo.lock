@@ -8475,6 +8475,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "utsim-core",
+ "utsim-diario",
  "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-model",
@@ -8495,6 +8496,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "utsim-core",
+ "utsim-diario",
  "utsim-model",
  "utsim-pasta",
 ]
