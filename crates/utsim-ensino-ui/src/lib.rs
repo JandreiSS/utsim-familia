@@ -10,6 +10,7 @@
 //! - [`texto`]: the text catalogue.
 
 mod abertura;
+pub mod cena;
 pub mod editor;
 mod mapa;
 pub mod missao;

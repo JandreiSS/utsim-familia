@@ -122,10 +122,92 @@ pub struct MissaoCarregada {
     pub missao: Missao,
     pub modelo: Model,
     pub texto: String,
+    /// The drawn statement, when the mission has one.
+    pub cena: Option<CenaCarregada>,
     /// Act number.
     pub ato: u32,
     /// The reference model of a modelling mission.
     pub gabarito: Option<Model>,
+}
+
+/// The scene of a mission with its picture (PNG) and anchors, read from the package.
+#[derive(Clone)]
+pub struct CenaCarregada {
+    pub cena: crate::cena::Cena,
+    pub png: std::sync::Arc<[u8]>,
+    pub ancoras: crate::cena::Ancoras,
+}
+
+impl std::fmt::Debug for CenaCarregada {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CenaCarregada")
+            .field("imagem", &self.cena.imagem)
+            .field("bytes", &self.png.len())
+            .field("ancoras", &self.ancoras.nos.len())
+            .finish()
+    }
+}
+
+/// The width and height of a PNG, from its header.
+fn tamanho_png(b: &[u8]) -> Option<(u32, u32)> {
+    if b.len() < 24 || b[..8] != [0x89, b'P', b'N', b'G', 13, 10, 26, 10] || &b[12..16] != b"IHDR" {
+        return None;
+    }
+    let n = |i: usize| u32::from_be_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+    Some((n(16), n(20)))
+}
+
+/// Reads the picture and the anchors of a scene and checks that every card has its anchor.
+fn carregar_cena(
+    arquivos: &Arquivos,
+    cena: &crate::cena::Cena,
+    junta: &dyn Fn(&str) -> String,
+) -> Result<CenaCarregada, Vec<String>> {
+    let img = junta(&cena.imagem);
+    let png = arquivos
+        .get(&img)
+        .ok_or_else(|| vec![format!("cena: a imagem '{img}' não está no pacote")])?;
+    let (w, h) = tamanho_png(png).ok_or_else(|| vec![format!("cena: '{img}' não é PNG")])?;
+    let anc = junta(&cena.caminho_ancoras());
+    let ancoras = crate::cena::Ancoras::parse(
+        arquivos
+            .get(&anc)
+            .ok_or_else(|| vec![format!("cena: as âncoras '{anc}' não estão no pacote")])?,
+    )
+    .map_err(|e| vec![format!("{anc}: {e}")])?;
+    let mut erros = Vec::new();
+    if (ancoras.largura, ancoras.altura) != (w as f64, h as f64) {
+        erros.push(format!(
+            "cena: as âncoras são de {}×{}, a imagem tem {w}×{h}: gere as duas de novo",
+            ancoras.largura, ancoras.altura
+        ));
+    }
+    for c in &cena.cartoes {
+        if !ancoras.nos.contains_key(&c.no) {
+            erros.push(format!(
+                "cena: o cartão de '{}' não tem âncora na imagem",
+                c.no
+            ));
+        }
+    }
+    if !erros.is_empty() {
+        return Err(erros);
+    }
+    Ok(CenaCarregada {
+        cena: cena.clone(),
+        png: png.as_slice().into(),
+        ancoras,
+    })
+}
+
+/// `p` relative to the folder `dir` of a package file (absolute when it starts with `/`),
+/// with `..` resolved.
+pub fn junta(dir: &str, p: &str) -> String {
+    if dir.is_empty() || p.starts_with('/') {
+        p.trim_start_matches('/').to_string()
+    } else {
+        normalizar(&format!("{dir}/{p}"))
+    }
 }
 
 /// A package read and validated.
@@ -265,13 +347,7 @@ fn carregar_missao(
     let missao =
         Missao::parse(&texto(arquivos, path).map_err(|e| vec![e])?).map_err(|e| vec![e])?;
     let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
-    let junta = |p: &str| {
-        if dir.is_empty() || p.starts_with('/') {
-            p.trim_start_matches('/').to_string()
-        } else {
-            normalizar(&format!("{dir}/{p}"))
-        }
-    };
+    let junta = |p: &str| junta(dir, p);
     let modelo_txt = texto(arquivos, &junta(&missao.modelo)).map_err(|e| vec![e])?;
     let modelo =
         Model::parse(&modelo_txt).map_err(|e| vec![format!("modelo '{}': {e}", missao.modelo)])?;
@@ -285,10 +361,15 @@ fn carregar_missao(
     };
     // A modelling mission asks about the reference model (the starting one is incomplete).
     validar_missao(&missao, gabarito.as_ref().unwrap_or(&modelo))?;
+    let cena = match &missao.cena {
+        Some(c) => Some(carregar_cena(arquivos, c, &junta)?),
+        None => None,
+    };
     Ok(MissaoCarregada {
         missao,
         modelo,
         texto: texto_md,
+        cena,
         ato,
         gabarito,
     })

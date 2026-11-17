@@ -234,6 +234,9 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
         }
         termos.extend(r.valor.iter().map(|t| (r.rotulo.as_str(), t)));
     }
+    if let Some(c) = &missao.cena {
+        erros.extend(c.validar(missao, modelo));
+    }
     let mut do_modelo = BTreeSet::new();
     for (onde, t) in &termos {
         if let Some(id) = t.chave.strip_prefix("decisao.") {

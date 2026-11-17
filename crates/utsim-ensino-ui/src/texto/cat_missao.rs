@@ -1,6 +1,10 @@
 //! Catalogue of the mission screen (missao.rs). Entries start with `missao_`.
 
 textos! {
+    cena_sem_tarefas;
+    cena_simule;
+    cena_previsao;
+    cena_passa_takt;
     missao_meta_atingida;
     missao_dentro_tolerancia;
     missao_meta_nao_atingida;
@@ -62,6 +66,12 @@ textos! {
 }
 
 modelos! {
+    cena_estacao(n);
+    cena_carga(carga);
+    cena_meta_maior(meta);
+    cena_meta_menor(meta);
+    cena_takt(takt);
+    cena_parcela(parcela, modelo);
     missao_erro_salvar_progresso(e);
     missao_competencias_erros(erros);
     missao_competencias_nao_registradas(e);

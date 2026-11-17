@@ -425,6 +425,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         );
     });
     let Some(m) = app.missao.as_mut() else { return };
+    crate::cena::desenhar(ui, &mc, &m.tentativa.decisoes, m.resultado.as_ref());
     texto::markdown(ui, &mc.texto);
     if !missao.conceitos.is_empty() {
         let nomes: Vec<String> = missao
