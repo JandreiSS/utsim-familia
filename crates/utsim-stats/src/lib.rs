@@ -23,7 +23,8 @@
 //!   center points, Lenth's method and the data of the effects plots;
 //! - [`equivalence`]: two one-sided tests (TOST) for a mean, two means or paired data;
 //! - [`nonparametric`]: Mann-Whitney and Wilcoxon signed-rank tests, exact for small
-//!   samples without ties.
+//!   samples without ties;
+//! - [`tolerance`]: normal (exact factors) and nonparametric tolerance intervals.
 //!
 //! - [`variances`], [`ranks`], [`anova2`], [`regression`], [`power`]: the extended
 //!   statistics (Levene, Bartlett, Kruskal-Wallis, Mood, Friedman, two-way ANOVA, linear
@@ -47,6 +48,7 @@ pub mod range;
 pub mod ranks;
 pub mod regression;
 pub mod special;
+pub mod tolerance;
 pub mod variances;
 pub mod warmup;
 

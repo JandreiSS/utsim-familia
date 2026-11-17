@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
-use utsim_core::task::{MAINTENANCE_TAG, MSG_IDLE, distance};
+use utsim_core::task::{MSG_IDLE, distance, is_case_tag};
 use utsim_core::{Behavior, BlockId, Ctx, Dist, Item, State, TaskKind, TaskRequest, Time};
 
 use crate::transporter::{
@@ -204,7 +204,7 @@ impl Dispatcher {
 
     /// Whether `request` is an operator job a multitasking member may interleave.
     fn is_case(request: &TaskRequest) -> bool {
-        matches!(request.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
+        matches!(request.kind, TaskKind::Operate { tag, .. } if is_case_tag(tag))
     }
 
     /// Busy member `m` has room for one more case.
@@ -382,7 +382,7 @@ impl Dispatcher {
             TaskKind::Transport { from, item, .. } => cx
                 .pickup_point(from, item)
                 .unwrap_or_else(|| cx.output_end(from)),
-            TaskKind::Operate { station, .. } => cx.position(station),
+            TaskKind::Operate { station, .. } => cx.meeting_point(station, request.id),
         }
     }
 

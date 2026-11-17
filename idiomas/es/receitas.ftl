@@ -273,3 +273,53 @@ linha-melhor_ponto_real = mejor punto { $x } (real)
 linha-prevista = prevista { $x }
 linha-desejabilidade_de = deseabilidad de { $x }
 linha-r2_de = R² de { $x }
+
+## experimentos.rs: o plano do experimento no modelo (mensagens e linhas que o descrevem)
+experimentos-erro_fatores = el experimento necesita de 2 a 8 factores (el tamizaje de Plackett-Burman llega hasta 15)
+experimentos-erro_sem_nome = dé un nombre a cada factor
+experimentos-erro_niveis = el factor { $fator } necesita dos niveles diferentes
+experimentos-erro_fracao = la fracción 2^({ $k }−{ $p }) no está en la tabla de la aplicación
+experimentos-erro_centro = el factor { $fator } necesita el nivel central (los niveles no son números)
+experimentos-erro_sem_chave = el factor { $fator } no dice qué parámetro del modelo cambia (objeto.campo)
+experimentos-erro_axial = el factor { $fator } necesita niveles numéricos para los puntos axiales
+experimentos-bb_precisa_centro = el Box-Behnken necesita al menos un punto central
+experimentos-sem_pb = no hay Plackett-Burman de { $n } corridas
+experimentos-bb_faixa = el Box-Behnken va de 3 a 5 factores
+experimentos-ccd_faixa = el compuesto central va de 2 a { $max } factores
+experimentos-linha_ccd = compuesto central rotable: { $fatoriais } puntos factoriales, { $axiais } axiales en ±α = { $alfa } y { $centros } centros
+experimentos-linha_face = compuesto de cara centrada: { $fatoriais } puntos factoriales, { $axiais } axiales en las caras (α = 1) y { $centros } centros; tres niveles por factor
+experimentos-linha_bb = Box-Behnken: { $pontos } puntos en el medio de las aristas del cubo y { $centros } centros; ninguna corrida con todos los factores en los extremos
+experimentos-linha_segunda_ordem = estima el modelo de segundo orden completo ({ $termos } coeficientes: la constante, los efectos principales, las interacciones de dos factores y los cuadrados)
+experimentos-sem_gl_erro = sin grados de libertad para el error: agregue puntos centrales
+experimentos-pb_titulo = Plackett-Burman de { $n } corridas para { $k } factores (tamizaje)
+experimentos-pb_livres = efectos principales libres entre sí (resolución III)
+experimentos-pb_confundida = cada interacción de dos factores queda parcialmente confundida con los efectos principales: use el tamizaje para encontrar los pocos factores que importan y estúdielos después en un factorial
+experimentos-pb_colunas_livres = { $n ->
+    [one] { $n } columna de la matriz sin factor da grados de libertad al error
+   *[other] { $n } columnas de la matriz sin factor dan grados de libertad al error
+}
+experimentos-fatorial_completo = factorial completo: ningún efecto confundido
+experimentos-resolucao = resolución { $r }
+experimentos-resolucao_alta = resolución alta
+
+## simulacao.rs: o estudo de simulação e o ganho estimado
+simulacao-erro_modelo = modelo inválido: { $e }
+simulacao-erro_sem_indicador = el modelo no tiene el indicador { $k }
+simulacao-erro_sem_nome = dé un nombre
+simulacao-erro_sem_cenario = el estudio necesita al menos un escenario además de la línea base
+simulacao-sipoc_gerado = SIPOC generado a partir del modelo
+simulacao-nota_kpis = KPI por réplica de un modelo; dato simulado, no es recolección
+simulacao-diferenca = { $cenario } en { $indicador }
+simulacao-conclusao_nenhuma = ninguna diferencia significativa y relevante
+simulacao-conclusao_relevantes = significativa y relevante: { $lista }
+simulacao-ganho_sem_descricao = dé una descripción a la ganancia
+simulacao-ganho_fator = el valor por unidad y los períodos por año deben ser positivos
+simulacao-ganho_nao_significativa = la diferencia no es significativa: el intervalo contiene cero
+simulacao-ganho_piora = el escenario empeora el indicador en el sentido elegido
+simulacao-relevancia_relevante = , significativa y relevante
+simulacao-relevancia_significativa = , significativa
+simulacao-base_ponta = extremo del intervalo más cercano a cero
+simulacao-base_media = media
+simulacao-sentido_aumento = El aumento del indicador es mejora.
+simulacao-sentido_reducao = La reducción del indicador es mejora.
+simulacao-justificativa = Estimado por simulación en el estudio "{ $estudo }" (archivo { $arquivo }, hash { $hash }; modelo { $modelo }, hash { $hash_modelo }; { $replicacoes } réplicas, semilla { $semente }). Escenario "{ $cenario }" frente a la línea base, indicador { $indicador }: diferencia pareada { $media } [{ $baixo }; { $alto }] al { $nivel } %{ $relevancia }. Base usada: { $base } ({ $tipo_base }). Cuenta: { $melhora } × { $por_unidade } por unidad × { $periodos } períodos por año = { $valor } por año. { $sentido } Una ganancia estimada por simulación solo se valida con registros contables reales.

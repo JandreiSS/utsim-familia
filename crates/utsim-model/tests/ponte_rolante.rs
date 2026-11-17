@@ -305,3 +305,94 @@ fn people_under_the_suspended_load_are_counted() {
     .to_string();
     assert!(e.contains("ponte: load_zone deve ser finita e >= 0"), "{e}");
 }
+
+/// Trecho carregado com botoeira: do recebimento (5, 9) à saída (35, 15), 30,594 m no
+/// piso, a 0,4 m/s (o passo do operador): 76,485 s em vez dos 60 s da ponte.
+fn pendant_leg() -> f64 {
+    (30.0f64 * 30.0 + 6.0 * 6.0).sqrt() / 0.4
+}
+
+fn with_operator(control: &str, person: &str) -> String {
+    bay("Safe", 5000.0, person).replace(
+        "capacity_t: 10.0,",
+        &format!("capacity_t: 10.0, operator: {control},"),
+    )
+}
+
+#[test]
+fn the_pendant_operator_walks_with_the_load() {
+    // O operador sai de (5, 2) e para a 3 m do gancho, fora da área sob a carga (metade
+    // do lado 2 m + 1 m): (5, 6), 4 m a 0,4 m/s, antes de a ponte chegar (30 s).
+    let op = r#"(name: "op", kind: Transporter(speed: 0.4), position: (5.0, 2.0, 0.0),
+            visual: Some((asset: Some("pessoa")))),"#;
+    let m = model(&with_operator(r#"Pendant(team: "op")"#, op));
+    let x = metrics(&m);
+    // 120 s até a subida acabar em 180 s; o trecho carregado; desce 5 m (50 s) e solta.
+    close(
+        x["saida.time_in_system.mean"],
+        180.0 + pendant_leg() + 70.0,
+        "tempo da peça com botoeira",
+    );
+    close(x["ponte.crane.operator_wait"], 0.0, "a ponte não esperou");
+    // Ao lado da carga o tempo todo: nunca sob ela.
+    close(x["op.tempo_sob_carga"], 0.0, "operador fora da área");
+    // O operador anda junto: o mesmo tempo da ponte, até 3 m do gancho na saída.
+    let replay = m.replay(0).expect("o replay roda");
+    let walk = replay.records.iter().find_map(|r| match &r.event {
+        utsim_core::TraceEvent::Travel { path, duration, .. }
+            if path.last() == Some(&[35.0, 12.0, 1.0]) =>
+        {
+            Some((r.t, *duration))
+        }
+        _ => None,
+    });
+    let (t, d) = walk.expect("o operador acompanha a carga");
+    close(t, 180.0, "início junto com a ponte");
+    close(d, pendant_leg(), "mesmo tempo da ponte");
+    // Ocupado da chegada (10 s) até a ponte o soltar, com o gancho em cima de novo.
+    let busy = 180.0 + pendant_leg() + 70.0 + 50.0 - 10.0;
+    close(x["op.state.utilize"] * 2000.0, busy, "operador ocupado");
+}
+
+#[test]
+fn the_crane_waits_for_its_operator_and_radio_keeps_the_speed() {
+    // Longe: 36 m até (5, 6), 90 s; a ponte chegou em 30 s e espera 60 s.
+    let far = r#"(name: "op", kind: Transporter(speed: 0.4), position: (5.0, -30.0, 0.0)),"#;
+    let x = metrics(&model(&with_operator(r#"Botoeira(equipe: "op")"#, far)));
+    close(x["ponte.crane.operator_wait"], 60.0, "espera pelo operador");
+    close(
+        x["saida.time_in_system.mean"],
+        60.0 + 180.0 + pendant_leg() + 70.0,
+        "tempo da peça",
+    );
+    // Rádio: a mesma espera, e a ponte anda na sua velocidade (os 310 s de sempre + 60).
+    let x = metrics(&model(&with_operator(r#"Radio(team: "op")"#, far)));
+    close(x["ponte.crane.operator_wait"], 60.0, "espera, rádio");
+    close(x["saida.time_in_system.mean"], 370.0, "rádio");
+    // Uma equipe: a ponte vai no passo do mais lento.
+    let team = r#"(name: "lento", kind: Transporter(speed: 0.4), position: (5.0, 2.0, 0.0)),
+        (name: "rapido", kind: Transporter(speed: 1.0), position: (30.0, 2.0, 0.0)),
+        (name: "operadores", kind: Dispatcher(team: ["lento", "rapido"])),"#;
+    let x = metrics(&model(&with_operator(
+        r#"Pendant(team: "operadores")"#,
+        team,
+    )));
+    close(
+        x["saida.time_in_system.mean"],
+        180.0 + pendant_leg() + 70.0,
+        "equipe",
+    );
+    // Sem operador (cabine), nada muda e a métrica não aparece.
+    let x = metrics(&model(&bay("Safe", 5000.0, "")));
+    assert!(!x.contains_key("ponte.crane.operator_wait"));
+    // O operador precisa ser uma pessoa ou uma equipe de pessoas.
+    let e = Model::parse(&with_operator(r#"Pendant(team: "recebimento")"#, ""))
+        .unwrap()
+        .validate()
+        .unwrap_err()
+        .to_string();
+    assert!(
+        e.contains("ponte: operator.team 'recebimento' precisa ser uma pessoa"),
+        "{e}"
+    );
+}

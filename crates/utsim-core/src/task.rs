@@ -16,6 +16,18 @@ use crate::item::{Item, ItemId};
 /// technicians (never interleaved with other work by a multitasking person).
 pub const MAINTENANCE_TAG: u32 = u32::MAX;
 
+/// `tag` of the [`TaskKind::Operate`] requests of an overhead crane for the person at its
+/// pendant or radio control. Like maintenance, never interleaved with other work nor left
+/// for a more urgent request: the person stays with the crane until it releases them.
+pub const CRANE_TAG: u32 = u32::MAX - 1;
+
+/// Whether an operator job with this `tag` is an ordinary station case, which a
+/// multitasking person may interleave and a `Full` preemption may take away (not
+/// maintenance, not a crane).
+pub fn is_case_tag(tag: u32) -> bool {
+    tag != MAINTENANCE_TAG && tag != CRANE_TAG
+}
+
 /// Identifies one task request for its whole life.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);

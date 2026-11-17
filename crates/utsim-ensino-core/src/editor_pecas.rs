@@ -11,7 +11,7 @@ use utsim_model::{Model, ObjectKind};
 
 use crate::editor::{Edicao, ItemMetrica};
 use crate::missao::{Decisoes, Metrica, Objetivo, Termo, Tolerancia};
-use crate::pecas::{Arranjo, Balanceamento, Fluxo, MaquinaArranjo, Tarefa};
+use crate::pecas::{Arranjo, Balanceamento, Fluxo, MaquinaArranjo, ModeloMix, Tarefa};
 
 /// What the student decides in a mission.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -309,8 +309,9 @@ impl Edicao {
         self.tipo_decisao() != TipoDecisao::Alavancas
     }
 
-    /// Changes what the student decides. Pieces drop the levers out of the mission and
-    /// bring their measure (marked, with weight); going back to levers drops the pieces and
+    /// Changes what the student decides. Pieces uncheck the levers (one can be checked
+    /// again, the sequence of a mixed-model line for example) and bring their measure
+    /// (marked, with weight); going back to levers drops the pieces and
     /// their measures. The reference is cleared either way (calibrate again).
     pub fn trocar_tipo_decisao(&mut self, t: TipoDecisao) {
         if t == self.tipo_decisao() {
@@ -361,13 +362,61 @@ impl Edicao {
             .expect("some id is free");
         let estacao = b.inicial.values().copied().max().unwrap_or(1).max(1);
         b.inicial.insert(id.clone(), estacao);
+        let tempos = b.mix.iter().map(|m| (m.id.clone(), 10.0)).collect();
         b.tarefas.push(Tarefa {
             nome: format!("Tarefa {id}"),
             id,
             tempo: 10.0,
             depois_de: Vec::new(),
-            tempos: BTreeMap::new(),
+            tempos,
         });
+    }
+
+    /// Adds a model to the mix of a mixed-model line, with weight 1. Every task starts
+    /// with its current `tempo` for the new model, so the averages do not change at once.
+    /// The first model also gets a name for the single model the line had.
+    pub fn novo_modelo_mix(&mut self) {
+        let Some(b) = &mut self.base.balanceamento else {
+            return;
+        };
+        let livre = |b: &Balanceamento, n: usize| {
+            (n..)
+                .map(|i| format!("modelo{i}"))
+                .find(|id| !b.mix.iter().any(|m| &m.id == id))
+                .expect("some id is free")
+        };
+        let quantos = if b.mix.is_empty() { 2 } else { 1 };
+        for _ in 0..quantos {
+            let id = livre(b, b.mix.len() + 1);
+            for t in &mut b.tarefas {
+                t.tempos.insert(id.clone(), t.tempo);
+            }
+            b.mix.push(ModeloMix {
+                nome: format!("Modelo {}", b.mix.len() + 1),
+                id,
+                parcela: 1.0,
+            });
+        }
+        b.acertar_medias();
+    }
+
+    /// Removes a model from the mix and its times from the tasks. Without models left,
+    /// the line has a single model again, with the last averages as the task times.
+    pub fn remover_modelo_mix(&mut self, id: &str) {
+        let Some(b) = &mut self.base.balanceamento else {
+            return;
+        };
+        b.mix.retain(|m| m.id != id);
+        for t in &mut b.tarefas {
+            t.tempos.remove(id);
+        }
+        if b.mix.len() < 2 {
+            b.mix.clear();
+            for t in &mut b.tarefas {
+                t.tempos.clear();
+            }
+        }
+        b.acertar_medias();
     }
 
     /// Removes a task, and it from the precedences of the others.
@@ -523,14 +572,42 @@ impl Edicao {
         e
     }
 
+    /// Whether some source of the model (its labels or the rows of its arrival table), or
+    /// a lever in use, sets the item label `rotulo`.
+    fn modelo_marca(&self, rotulo: &str) -> bool {
+        let fonte = self.modelo.objects.iter().any(|o| match &o.kind {
+            ObjectKind::Source { labels, table, .. } => {
+                labels.contains_key(rotulo)
+                    || table
+                        .as_ref()
+                        .is_some_and(|t| t.rows.iter().any(|r| r.labels.contains_key(rotulo)))
+            }
+            _ => false,
+        });
+        let aspas = format!("\"{rotulo}\"");
+        fonte
+            || self.alavancas.iter().filter(|a| a.usar).any(|a| {
+                a.alavanca
+                    .valores()
+                    .into_iter()
+                    .any(|x| a.alavanca.ajustes(x).values().any(|v| v.contains(&aspas)))
+            })
+    }
+
     /// Warnings of the pieces: the initial state that already is the optimum, a search too
-    /// big for the exact optimum.
+    /// big for the exact optimum, a mix whose model label no source sets.
     pub fn avisos_das_pecas(&self) -> Vec<String> {
         let mut v = Vec::new();
         if !self.erros_das_pecas().is_empty() {
             return v;
         }
         if let Some(b) = self.base.balanceamento.as_ref().filter(|b| b.editavel) {
+            if !b.mix.is_empty() && !self.modelo_marca(&b.rotulo) {
+                v.push(format!(
+                    "balanceamento: nenhuma fonte do modelo marca o rótulo \"{}\" (1, 2... na ordem dos modelos), então toda peça leva o tempo do primeiro modelo",
+                    b.rotulo
+                ));
+            }
             match b.otimo() {
                 None => v.push(
                     "balanceamento: a busca exata não achou atribuição dentro do takt".into(),

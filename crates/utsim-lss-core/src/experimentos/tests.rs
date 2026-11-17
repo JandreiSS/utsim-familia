@@ -178,7 +178,7 @@ fn plackett_burman_screening() {
     }
     let lines = alias_lines(&s, &d);
     assert!(lines[0].contains("12 corridas para 9 fatores"), "{lines:?}");
-    assert!(lines[3].starts_with("2 coluna(s)"), "{lines:?}");
+    assert!(lines[3].starts_with("2 colunas"), "{lines:?}");
     // y = 50 + 4A − 3E + 2I: effects 8, −6 and 4; asking for interactions falls back to
     // the main effects.
     let ws = worksheet(&s, &s.plan().unwrap());

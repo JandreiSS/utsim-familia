@@ -142,6 +142,22 @@ impl Rotulos<'static> {
         nao_encontrada: "não encontrada",
         tirar_da_lista: "Tirar da lista",
     };
+
+    /// Na língua de agora (`idiomas/*/tema.ftl`).
+    pub fn atual() -> Rotulos<'static> {
+        use crate::texto::tx;
+        Rotulos {
+            o_que_fazer: tx("abertura-o_que_fazer"),
+            onde_salvo: tx("abertura-onde_salvo"),
+            nada_aberto: tx("abertura-nada_aberto"),
+            nada_aberto_texto: tx("abertura-nada_aberto_texto"),
+            aberto_agora: tx("abertura-aberto_agora"),
+            mostrar_no_explorador: tx("abertura-mostrar_no_explorador"),
+            abrir: tx("abertura-abrir"),
+            nao_encontrada: tx("abertura-nao_encontrada"),
+            tirar_da_lista: tx("abertura-tirar_da_lista"),
+        }
+    }
 }
 
 /// A abertura de um app.

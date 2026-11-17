@@ -341,6 +341,9 @@ trabalho-a_tarefa_terminou_sem_resultado = the task ended without a result
 util-arquivo_ron_escreva_ou_clique = .ron file: type or click Browse…
 util-abre_o_explorador_de_arquivos = Opens the file explorer to choose the model.
 util-escolha_o_modelo_do_utsim = Choose the UTSim model
+util-data_dica = YYYY-MM-DD
+util-data_invalida = Invalid date. Use YYYY-MM-DD (or DD/MM/YYYY).
+util-data_antes = This date is before {"{"}limite{"}"}.
 
 ## Os papéis das colunas, os tipos de carta e as regras de sinal (ferramentas.rs)
 ferramentas-coluna_do_papel = Column { $papel }
@@ -368,3 +371,9 @@ carta-u = u (defects per unit)
 regras-basicas = basic
 regras-western = Western Electric
 regras-nelson = Nelson
+
+## Os limites opcionais da especificação (ferramentas.rs)
+ferramentas-rotulo_lie = LSL
+ferramentas-rotulo_lse = USL
+ferramentas-rotulo_alvo = Target
+ferramentas-rotulo_usar = use
