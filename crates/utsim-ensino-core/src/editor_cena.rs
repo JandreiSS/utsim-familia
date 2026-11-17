@@ -58,7 +58,7 @@ impl Edicao {
     /// (under the first queue) and the measures in use (on the object they read, else on
     /// the exit).
     pub fn sugerir_cena(&self) -> Cena {
-        let m = &self.modelo;
+        let m = &self.modelo_da_cena();
         let visiveis: Vec<&utsim_model::ObjectDef> = m
             .objects
             .iter()
@@ -199,6 +199,7 @@ impl Edicao {
             elementos: BTreeMap::new(),
             ocultar: Vec::new(),
             sem_pessoa: Vec::new(),
+            sem_copias: Vec::new(),
             pessoas: BTreeMap::new(),
             pecas: Vec::new(),
             cartoes,
@@ -228,7 +229,7 @@ impl Edicao {
         let script = pasta.join("enunciado.py");
         std::fs::write(&script, SCRIPT_BLENDER).map_err(|e| e.to_string())?;
         let planta = pasta.join("planta.json");
-        let p = cena.planta(&self.modelo, self.base.arranjo.as_ref());
+        let p = cena.planta(&self.modelo_da_cena(), self.base.arranjo.as_ref());
         std::fs::write(
             &planta,
             serde_json::to_string_pretty(&p).map_err(|e| e.to_string())?,
@@ -273,13 +274,20 @@ impl Edicao {
         Ok(out)
     }
 
+    /// The model the scene draws: in a modelling mission the reference model (the process
+    /// the statement describes; the student starts from almost nothing), else the model of
+    /// the mission.
+    pub fn modelo_da_cena(&self) -> utsim_model::Model {
+        self.gabarito().unwrap_or_else(|| self.modelo.clone())
+    }
+
     /// Problems of the scene before writing: what the scene itself checks and the picture
     /// still to be generated.
     pub fn erros_da_cena(&self) -> Vec<String> {
         let Some(c) = &self.base.cena else {
             return Vec::new();
         };
-        let mut e = c.validar(&self.missao(), &self.modelo);
+        let mut e = c.validar(&self.missao(), &self.modelo_da_cena());
         if caminhos_cena(c, &self.maquinas_da_cena())
             .iter()
             .any(|p| !self.cena_arquivos.contains_key(p))

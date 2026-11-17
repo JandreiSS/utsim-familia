@@ -46,6 +46,10 @@ pub struct Cena {
     /// Stations drawn without an operator.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sem_pessoa: Vec<String>,
+    /// Processors drawn as one element whatever their capacity (an oven that bakes two
+    /// at a time is one oven).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sem_copias: Vec<String>,
     /// The person of an object, `"homem"` or `"mulher"`, when the mission names its people
     /// (Ana, Bruno); the others take turns.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -337,7 +341,9 @@ impl Cena {
             // the one in the middle keeps the name (the anchor of the cards), the others are
             // `nome#2`, `nome#3`...
             let copias = match &o.kind {
-                ObjectKind::Processor { capacity, .. } => (*capacity).clamp(1, MAX_COPIAS),
+                ObjectKind::Processor { capacity, .. } if !self.sem_copias.contains(&o.name) => {
+                    (*capacity).clamp(1, MAX_COPIAS)
+                }
                 _ => 1,
             };
             let meio = (copias - 1) / 2;
@@ -454,6 +460,7 @@ impl Cena {
             .keys()
             .chain(&self.ocultar)
             .chain(&self.sem_pessoa)
+            .chain(&self.sem_copias)
             .chain(self.pessoas.keys())
             .chain(self.pecas.iter().map(|p| &p.no))
         {
