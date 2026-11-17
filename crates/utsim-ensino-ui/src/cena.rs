@@ -64,6 +64,8 @@ type LinhaPronta = (Arc<Galley>, Option<(Color32, bool)>);
 struct Bloco {
     ancora: Pos2,
     abaixo: bool,
+    /// A label on the floor (a machine of a layout): right over its anchor, without a stem.
+    rente: bool,
     fundo: Color32,
     borda: Option<Color32>,
     linhas: Vec<LinhaPronta>,
@@ -174,6 +176,15 @@ fn linhas_de(c: &Conteudo, unidade: &str) -> (Vec<Linha>, Color32, Option<Color3
             None,
         ),
         Conteudo::Texto(t) => (vec![Linha::Forte(t.clone())], PAPEL, None),
+        Conteudo::Maquina { nome, fixa } => (
+            vec![if *fixa {
+                Linha::Fraca(nome.clone())
+            } else {
+                Linha::Forte(nome.clone())
+            }],
+            PAPEL,
+            None,
+        ),
     }
 }
 
@@ -224,7 +235,8 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
     let largura_max = 260.0;
     let mut blocos: Vec<Bloco> = Vec::new();
     for c in &cc.cena.cartoes {
-        let Some(p) = a.nos.get(&c.no) else { continue };
+        let no = utsim_ensino_core::cena::Cena::ancora(missao, c, d);
+        let Some(p) = a.nos.get(&no) else { continue };
         let Some(ct) = conteudo(missao, c, d, resultado) else {
             continue;
         };
@@ -251,7 +263,8 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
         }
         blocos.push(Bloco {
             ancora: r.min + vec2(p[0] as f32 * s, p[1] as f32 * s),
-            abaixo: c.abaixo(),
+            abaixo: c.abaixo() && !matches!(ct, Conteudo::Maquina { .. }),
+            rente: matches!(ct, Conteudo::Maquina { .. }),
             fundo,
             borda,
             linhas: gs,
@@ -271,9 +284,9 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
             (r.right() - b.tamanho.x - 4.0).max(r.left()),
         );
         let mut y = if b.abaixo {
-            b.ancora.y + 16.0
+            b.ancora.y + if b.rente { 2.0 } else { 16.0 }
         } else {
-            b.ancora.y - 16.0 - b.tamanho.y
+            b.ancora.y - if b.rente { 2.0 } else { 16.0 } - b.tamanho.y
         };
         let mut caixa = Rect::from_min_size(pos2(x, y), b.tamanho);
         for _ in 0..blocos.len() {
@@ -293,12 +306,33 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
     let limites = lugares.iter().fold(r, |acc, c| acc.union(*c)).expand(4.0);
     let (resp, painter) = ui.allocate_painter(limites.size(), Sense::hover());
     let desloca = resp.rect.min - limites.min;
-    painter.image(
-        tex.id(),
-        r.translate(desloca),
-        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-        Color32::WHITE,
-    );
+    let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+    painter.image(tex.id(), r.translate(desloca), uv, Color32::WHITE);
+    // The machines of a layout, each moved from the reference cell to its cell, from the back
+    // of the grid to the front (the cells higher in the picture are farther).
+    if let Some(ar) = &missao.arranjo {
+        let pos = ar.posicoes(&missao.completar(d));
+        let ref_ = a.nos.get(&utsim_ensino_core::cena::ancora_celula(0));
+        let mut pecas: Vec<(f32, Rect, TextureHandle)> = Vec::new();
+        for (id, png) in &cc.maquinas {
+            let (Some(cel), Some(r0)) = (pos.get(id), ref_) else {
+                continue;
+            };
+            let Some(pc) = a.nos.get(&utsim_ensino_core::cena::ancora_celula(*cel)) else {
+                continue;
+            };
+            let Some(t) = textura(ui, &format!("{}:{id}", mc.missao.id), png) else {
+                continue;
+            };
+            let delta = vec2((pc[0] - r0[0]) as f32 * s, (pc[1] - r0[1]) as f32 * s);
+            pecas.push((pc[1] as f32, r.translate(desloca + delta), t));
+        }
+        pecas.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let recorte = painter.with_clip_rect(r.translate(desloca));
+        for (_, rect, t) in pecas {
+            recorte.image(t.id(), rect, uv, Color32::WHITE);
+        }
+    }
     for (b, caixa) in blocos.iter().zip(&lugares) {
         let caixa = &caixa.translate(desloca);
         let ancora = b.ancora + desloca;
@@ -308,8 +342,10 @@ pub fn desenhar(ui: &mut Ui, mc: &MissaoCarregada, d: &Decisoes, resultado: Opti
             pos2(ancora.x, caixa.bottom())
         }
         .clamp(caixa.min, caixa.max);
-        painter.line_segment([ponta, ancora], Stroke::new(2.0, Color32::WHITE));
-        painter.circle_filled(ancora, 4.0, Color32::WHITE);
+        if !b.rente {
+            painter.line_segment([ponta, ancora], Stroke::new(2.0, Color32::WHITE));
+            painter.circle_filled(ancora, 4.0, Color32::WHITE);
+        }
         painter.rect(
             *caixa,
             CornerRadius::same(7),

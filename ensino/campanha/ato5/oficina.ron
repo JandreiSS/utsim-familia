@@ -55,4 +55,20 @@ Missao(
     ],
     referencia: {"pos.fresa": 8, "pos.furadeira": 9, "pos.inspecao": 5, "pos.retifica": 2, "pos.serra": 0, "pos.torno": 1},
     animacao: (duracao: 240, unidade: "min"),
+    cena: (
+        imagem: "oficina.cena.png",
+        escala: 0.4,
+        elementos: {"doca": "palete", "serra": "prensa", "torno": "cnc", "fresa": "cnc", "furadeira": "prensa", "retifica": "cnc", "inspecao": "posto"},
+        cartoes: [
+            (no: "doca@pe", tipo: Maquina("doca")),
+            (no: "serra@pe", tipo: Maquina("serra")),
+            (no: "torno@pe", tipo: Maquina("torno")),
+            (no: "fresa@pe", tipo: Maquina("fresa")),
+            (no: "furadeira@pe", tipo: Maquina("furadeira")),
+            (no: "retifica@pe", tipo: Maquina("retifica")),
+            (no: "inspecao@pe", tipo: Maquina("inspecao")),
+            (no: "doca@pe", tipo: Valor(rotulo: "Distância vezes viagens", valor: [(chave: "arranjo.momento")], unidade: "m por dia")),
+            (no: "celula11@pe", tipo: Previsao("vizinhos")),
+        ],
+    ),
 )

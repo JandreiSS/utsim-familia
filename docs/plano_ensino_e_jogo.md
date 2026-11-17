@@ -310,8 +310,18 @@ produto desenhado.
   diferentes, cartão sem âncora, estação fora do balanceamento, alavanca, métrica ou previsão
   que não existem, e `Valor` com métrica do modelo (que só existe depois de simular). O teste
   `elementos_das_cenas_existem_em_3d` confere que todo elemento da campanha tem o `.glb`.
-- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6 (no arranjo,
-  uma miniatura por máquina na grade); D, atos 7 e 8 e o editor do professor.
+- **Arranjo.** Numa missão de arranjo, a imagem mostra a grade no piso (âncoras `celula<c>`)
+  e cada máquina é renderizada sozinha, sobre fundo transparente e com o mesmo tamanho da
+  imagem, na célula 0 (`<imagem>.<máquina>.png`). Como a câmera é ortográfica, o app desloca
+  cada máquina da célula 0 para a célula em que o aluno a põe, desenhando da fileira de trás
+  para a da frente. O cartão `Maquina(id)`, preso a `id@pe`, é uma etiqueta no piso que segue a
+  máquina. O elemento de cada máquina vem de `elementos` (padrão `cnc`).
+- **Pessoas.** Um recurso móvel com `visual: (asset: "pessoa")` vira uma pessoa de uniforme em
+  pé. Se o modelo tem pessoas próprias, as máquinas não ganham operador. `pessoas` diz o sexo
+  de quem a missão nomeia (`{"ana": "mulher"}`); os outros alternam. Recursos móveis no mesmo
+  ponto (os AGVs na doca) ficam lado a lado.
+- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6
+  (feita); D, atos 7 e 8 e o editor do professor.
 
 ## 4. Recursos do professor
 

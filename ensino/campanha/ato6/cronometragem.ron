@@ -41,4 +41,20 @@ Missao(
         "Tempo normal = média × 1,1. Tempo padrão = tempo normal × 1,15.",
     ],
     animacao: (duracao: 600, unidade: "s"),
+    cena: (
+        imagem: "cronometragem.cena.png",
+        escala: 0.8,
+        pecas: [
+            (no: "chegada", elemento: "caixa", dx: -0.35),
+            (no: "chegada", elemento: "caixa", dx: 0.35),
+            (no: "fila", elemento: "caixa", dx: -0.35),
+            (no: "fila", elemento: "caixa", dx: 0.35),
+            (no: "saida", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "aperto", tipo: Texto("Posto de aperto: o aluno cronometra os ciclos")),
+            (no: "fila@pe", tipo: Previsao("normal")),
+            (no: "saida@pe", tipo: Previsao("padrao")),
+        ],
+    ),
 )

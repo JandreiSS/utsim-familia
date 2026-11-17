@@ -39,4 +39,21 @@ Missao(
     ],
     referencia: {"metodo": 2},
     animacao: (duracao: 600, unidade: "s"),
+    cena: (
+        imagem: "operadora.cena.png",
+        escala: 0.8,
+        elementos: {"maq1": "cnc", "maq2": "cnc", "maq3": "cnc", "maq4": "cnc", "maq5": "cnc"},
+        pecas: [
+            (no: "estoque", elemento: "caixa", dx: -0.7),
+            (no: "estoque", elemento: "caixa"),
+            (no: "estoque", elemento: "caixa", dx: 0.7),
+            (no: "saida", elemento: "caixa"),
+        ],
+        pessoas: {"ana": "mulher"},
+        cartoes: [
+            (no: "ana", tipo: Alavanca("metodo")),
+            (no: "maq3@pe", tipo: Previsao("ritmo")),
+            (no: "saida@pe", tipo: Metrica("vazao")),
+        ],
+    ),
 )
