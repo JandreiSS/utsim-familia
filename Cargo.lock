@@ -8675,6 +8675,7 @@ dependencies = [
  "egui",
  "png",
  "rfd",
+ "utsim-idiomas",
 ]
 
 [[package]]

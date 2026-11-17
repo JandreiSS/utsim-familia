@@ -275,3 +275,53 @@ linha-melhor_ponto_real = meilleur point { $x } (réel)
 linha-prevista = prévue { $x }
 linha-desejabilidade_de = désirabilité de { $x }
 linha-r2_de = R² de { $x }
+
+## experimentos.rs: o plano do experimento no modelo (mensagens e linhas que o descrevem)
+experimentos-erro_fatores = l'expérience nécessite de 2 à 8 facteurs (le criblage de Plackett-Burman va jusqu'à 15)
+experimentos-erro_sem_nome = donnez un nom à chaque facteur
+experimentos-erro_niveis = le facteur { $fator } nécessite deux niveaux différents
+experimentos-erro_fracao = la fraction 2^({ $k }−{ $p }) n'est pas dans la table de l'application
+experimentos-erro_centro = le facteur { $fator } nécessite le niveau central (les niveaux ne sont pas des nombres)
+experimentos-erro_sem_chave = le facteur { $fator } n'indique pas quel paramètre du modèle il modifie (objet.champ)
+experimentos-erro_axial = le facteur { $fator } nécessite des niveaux numériques pour les points axiaux
+experimentos-bb_precisa_centro = le Box-Behnken nécessite au moins un point central
+experimentos-sem_pb = pas de Plackett-Burman de { $n } essais
+experimentos-bb_faixa = le Box-Behnken va de 3 à 5 facteurs
+experimentos-ccd_faixa = le composite centré va de 2 à { $max } facteurs
+experimentos-linha_ccd = composite centré rotatif : { $fatoriais } points factoriels, { $axiais } axiaux à ±α = { $alfa } et { $centros } centres
+experimentos-linha_face = composite à faces centrées : { $fatoriais } points factoriels, { $axiais } axiaux sur les faces (α = 1) et { $centros } centres ; trois niveaux par facteur
+experimentos-linha_bb = Box-Behnken : { $pontos } points au milieu des arêtes du cube et { $centros } centres ; aucun essai avec tous les facteurs aux extrêmes
+experimentos-linha_segunda_ordem = estime le modèle du second ordre complet ({ $termos } coefficients : la constante, les effets principaux, les interactions de deux facteurs et les carrés)
+experimentos-sem_gl_erro = pas de degrés de liberté pour l'erreur : ajoutez des points centraux
+experimentos-pb_titulo = Plackett-Burman de { $n } essais pour { $k } facteurs (criblage)
+experimentos-pb_livres = effets principaux libres entre eux (résolution III)
+experimentos-pb_confundida = chaque interaction de deux facteurs est partiellement confondue avec les effets principaux : utilisez le criblage pour trouver les quelques facteurs qui comptent, puis étudiez-les dans un plan factoriel
+experimentos-pb_colunas_livres = { $n ->
+    [one] { $n } colonne de la matrice sans facteur donne des degrés de liberté à l'erreur
+   *[other] { $n } colonnes de la matrice sans facteur donnent des degrés de liberté à l'erreur
+}
+experimentos-fatorial_completo = factoriel complet : aucun effet confondu
+experimentos-resolucao = résolution { $r }
+experimentos-resolucao_alta = résolution élevée
+
+## simulacao.rs: o estudo de simulação e o ganho estimado
+simulacao-erro_modelo = modèle invalide : { $e }
+simulacao-erro_sem_indicador = le modèle n'a pas l'indicateur { $k }
+simulacao-erro_sem_nome = donnez un nom
+simulacao-erro_sem_cenario = l'étude nécessite au moins un scénario en plus de la ligne de base
+simulacao-sipoc_gerado = SIPOC généré à partir du modèle
+simulacao-nota_kpis = KPI par réplication d'un modèle ; donnée simulée, pas une collecte
+simulacao-diferenca = { $cenario } sur { $indicador }
+simulacao-conclusao_nenhuma = aucune différence significative et pertinente
+simulacao-conclusao_relevantes = significative et pertinente : { $lista }
+simulacao-ganho_sem_descricao = donnez une description au gain
+simulacao-ganho_fator = la valeur par unité et les périodes par an doivent être positives
+simulacao-ganho_nao_significativa = la différence n'est pas significative : l'intervalle contient zéro
+simulacao-ganho_piora = le scénario dégrade l'indicateur dans le sens choisi
+simulacao-relevancia_relevante = , significative et pertinente
+simulacao-relevancia_significativa = , significative
+simulacao-base_ponta = borne de l'intervalle la plus proche de zéro
+simulacao-base_media = moyenne
+simulacao-sentido_aumento = Une hausse de l'indicateur est une amélioration.
+simulacao-sentido_reducao = Une baisse de l'indicateur est une amélioration.
+simulacao-justificativa = Estimé par simulation dans l'étude « { $estudo } » (fichier { $arquivo }, hash { $hash } ; modèle { $modelo }, hash { $hash_modelo } ; { $replicacoes } réplications, graine { $semente }). Scénario « { $cenario } » contre la ligne de base, indicateur { $indicador } : différence appariée { $media } [{ $baixo } ; { $alto }] à { $nivel } %{ $relevancia }. Base utilisée : { $base } ({ $tipo_base }). Calcul : { $melhora } × { $por_unidade } par unité × { $periodos } périodes par an = { $valor } par an. { $sentido } Un gain estimé par simulation n'est validé qu'avec des écritures réelles.

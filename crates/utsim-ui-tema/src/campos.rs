@@ -117,7 +117,8 @@ pub enum Situacao {
     AntesDoLimite(Data),
 }
 
-/// Textos do campo; o padrão é em português, e cada app passa os do seu idioma.
+/// Textos do campo; o padrão vem de `tema.ftl` na língua de agora, e um app pode passar os
+/// seus.
 #[derive(Debug, Clone, Copy)]
 pub struct TextosData<'a> {
     /// A dica no campo vazio.
@@ -130,10 +131,11 @@ pub struct TextosData<'a> {
 
 impl Default for TextosData<'_> {
     fn default() -> Self {
+        use crate::texto::tx;
         TextosData {
-            dica: "AAAA-MM-DD",
-            invalida: "Data inválida. Use AAAA-MM-DD (ou DD/MM/AAAA).",
-            antes: "Esta data vem antes de {limite}.",
+            dica: tx("campos-data_dica"),
+            invalida: tx("campos-data_invalida"),
+            antes: tx("campos-data_antes"),
         }
     }
 }

@@ -1718,17 +1718,17 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
             if matches!(f, Ferramenta::Histograma | Ferramenta::Capacidade) {
                 ui.label(tx("ferramentas-especificacao"));
                 ui.horizontal(|ui| {
-                    opcional(ui, "LIE", &mut p.lie);
-                    opcional(ui, "LSE", &mut p.lse);
-                    opcional(ui, "Alvo", &mut p.alvo);
+                    opcional(ui, tx("ferramentas-rotulo_lie"), &mut p.lie);
+                    opcional(ui, tx("ferramentas-rotulo_lse"), &mut p.lse);
+                    opcional(ui, tx("ferramentas-rotulo_alvo"), &mut p.alvo);
                 });
                 ui.end_row();
             }
             if f == Ferramenta::Tolerancias {
                 ui.label(tx("ferramentas-limites_do_resultado"));
                 ui.horizontal(|ui| {
-                    opcional(ui, "LIE", &mut p.lie);
-                    opcional(ui, "LSE", &mut p.lse);
+                    opcional(ui, tx("ferramentas-rotulo_lie"), &mut p.lie);
+                    opcional(ui, tx("ferramentas-rotulo_lse"), &mut p.lse);
                 });
                 ui.end_row();
             }
@@ -1769,7 +1769,7 @@ fn parametros_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
             }
             if f == Ferramenta::Msa {
                 ui.label(tx("ferramentas-tolerancia_lse_lie"));
-                ui.horizontal(|ui| opcional(ui, "usar", &mut p.tolerancia));
+                ui.horizontal(|ui| opcional(ui, tx("ferramentas-rotulo_usar"), &mut p.tolerancia));
                 ui.end_row();
             }
             if f == Ferramenta::Pareto {

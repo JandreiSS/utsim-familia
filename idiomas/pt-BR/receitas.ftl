@@ -273,3 +273,53 @@ linha-melhor_ponto_real = melhor ponto { $x } (real)
 linha-prevista = prevista { $x }
 linha-desejabilidade_de = desejabilidade de { $x }
 linha-r2_de = R² de { $x }
+
+## experimentos.rs: o plano do experimento no modelo (mensagens e linhas que o descrevem)
+experimentos-erro_fatores = o experimento precisa de 2 a 8 fatores (a triagem de Plackett-Burman vai até 15)
+experimentos-erro_sem_nome = dê um nome a cada fator
+experimentos-erro_niveis = o fator { $fator } precisa de dois níveis diferentes
+experimentos-erro_fracao = a fração 2^({ $k }−{ $p }) não está na tabela do app
+experimentos-erro_centro = o fator { $fator } precisa do nível central (os níveis não são números)
+experimentos-erro_sem_chave = o fator { $fator } não diz qual parâmetro do modelo ele muda (objeto.campo)
+experimentos-erro_axial = o fator { $fator } precisa de níveis numéricos para os pontos axiais
+experimentos-bb_precisa_centro = o Box-Behnken precisa de ao menos um ponto central
+experimentos-sem_pb = sem Plackett-Burman de { $n } corridas
+experimentos-bb_faixa = o Box-Behnken vai de 3 a 5 fatores
+experimentos-ccd_faixa = o composto central vai de 2 a { $max } fatores
+experimentos-linha_ccd = composto central rotacionável: { $fatoriais } pontos fatoriais, { $axiais } axiais em ±α = { $alfa } e { $centros } centros
+experimentos-linha_face = composto de face centrada: { $fatoriais } pontos fatoriais, { $axiais } axiais nas faces (α = 1) e { $centros } centros; três níveis por fator
+experimentos-linha_bb = Box-Behnken: { $pontos } pontos no meio das arestas do cubo e { $centros } centros; nenhuma corrida com todos os fatores nos extremos
+experimentos-linha_segunda_ordem = estima o modelo de segunda ordem completo ({ $termos } coeficientes: a constante, os efeitos principais, as interações de dois fatores e os quadrados)
+experimentos-sem_gl_erro = sem graus de liberdade para o erro: acrescente pontos centrais
+experimentos-pb_titulo = Plackett-Burman de { $n } corridas para { $k } fatores (triagem)
+experimentos-pb_livres = efeitos principais livres entre si (resolução III)
+experimentos-pb_confundida = cada interação de dois fatores fica parcialmente confundida com os efeitos principais: use a triagem para achar os poucos fatores que importam e estude-os depois num fatorial
+experimentos-pb_colunas_livres = { $n ->
+    [one] { $n } coluna da matriz sem fator dá graus de liberdade ao erro
+   *[other] { $n } colunas da matriz sem fator dão graus de liberdade ao erro
+}
+experimentos-fatorial_completo = fatorial completo: nenhum efeito confundido
+experimentos-resolucao = resolução { $r }
+experimentos-resolucao_alta = resolução alta
+
+## simulacao.rs: o estudo de simulação e o ganho estimado
+simulacao-erro_modelo = modelo inválido: { $e }
+simulacao-erro_sem_indicador = o modelo não tem o indicador { $k }
+simulacao-erro_sem_nome = dê um nome
+simulacao-erro_sem_cenario = o estudo precisa de ao menos um cenário além da linha de base
+simulacao-sipoc_gerado = SIPOC gerado do modelo
+simulacao-nota_kpis = KPIs por replicação de um modelo; dado simulado, não é coleta
+simulacao-diferenca = { $cenario } em { $indicador }
+simulacao-conclusao_nenhuma = nenhuma diferença significativa e relevante
+simulacao-conclusao_relevantes = significativa e relevante: { $lista }
+simulacao-ganho_sem_descricao = dê uma descrição ao ganho
+simulacao-ganho_fator = o valor por unidade e os períodos por ano devem ser positivos
+simulacao-ganho_nao_significativa = a diferença não é significativa: o intervalo contém zero
+simulacao-ganho_piora = o cenário piora o indicador no sentido escolhido
+simulacao-relevancia_relevante = , significativa e relevante
+simulacao-relevancia_significativa = , significativa
+simulacao-base_ponta = ponta do intervalo mais próxima de zero
+simulacao-base_media = média
+simulacao-sentido_aumento = Aumento do indicador é melhora.
+simulacao-sentido_reducao = Redução do indicador é melhora.
+simulacao-justificativa = Estimado por simulação no estudo "{ $estudo }" (arquivo { $arquivo }, hash { $hash }; modelo { $modelo }, hash { $hash_modelo }; { $replicacoes } replicações, semente { $semente }). Cenário "{ $cenario }" contra a linha de base, indicador { $indicador }: diferença pareada { $media } [{ $baixo }; { $alto }] a { $nivel } %{ $relevancia }. Base usada: { $base } ({ $tipo_base }). Conta: { $melhora } × { $por_unidade } por unidade × { $periodos } períodos por ano = { $valor } por ano. { $sentido } Um ganho estimado por simulação só é validado com lançamentos reais.
