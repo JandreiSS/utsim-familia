@@ -3146,6 +3146,8 @@ fn params_questao(ui: &mut Ui, i: usize, q: &mut QuestaoDados, cj: &ConjuntoMiss
 pub struct EstadoCena {
     pub trabalho: Option<Trabalho<Result<utsim_ensino_core::editor_cena::ArquivosCena, String>>>,
     pub aviso: Option<String>,
+    /// Blender was not found at the last try: the link to its official download is shown.
+    pub sem_blender: bool,
 }
 
 /// The drawn statement: suggest the scene, its cards (anchor and content), render the
@@ -3228,6 +3230,12 @@ fn secao_cena(
     if let Some(a) = &s.aviso {
         ui.label(RichText::new(a).weak());
     }
+    if s.sem_blender {
+        ui.hyperlink_to(
+            texto::ed_cena_baixar_blender(),
+            utsim_ensino_core::editor_cena::SITE_BLENDER,
+        );
+    }
     if remover {
         ed.base.cena = None;
         ed.cena_arquivos.clear();
@@ -3236,8 +3244,12 @@ fn secao_cena(
     }
     if gerar {
         use utsim_ensino_core::editor_cena::{achar_blender, achar_elementos};
+        s.sem_blender = false;
         match (achar_blender(), achar_elementos()) {
-            (None, _) => s.aviso = Some(texto::ed_cena_sem_blender().to_string()),
+            (None, _) => {
+                s.aviso = Some(texto::ed_cena_sem_blender().to_string());
+                s.sem_blender = true;
+            }
             (_, None) => s.aviso = Some(texto::ed_cena_sem_elementos().to_string()),
             (Some(b), Some(el)) => {
                 let copia = ed.clone();

@@ -323,17 +323,33 @@ pub fn achar_blender() -> Option<PathBuf> {
     achados.pop()
 }
 
-/// The 3D elements (`assets/modelos3d`, with the people): from `$UTSIM_ELEMENTOS_3D`, else
-/// next to the program or in a folder above it (an installation or the repository).
+/// The official download page of Blender, shown when it is not found (nothing is installed
+/// by the app).
+pub const SITE_BLENDER: &str = "https://www.blender.org/download/";
+
+/// The 3D elements (`assets/modelos3d`, with the people): first the ones installed with the
+/// program (`assets/modelos3d` next to it or in a folder above it, which is also the
+/// repository when running from the sources), else `$UTSIM_ELEMENTOS_3D`.
 pub fn achar_elementos() -> Option<PathBuf> {
-    let ok = |p: &Path| p.join("pessoa_homem.glb").exists() && p.join("posto.glb").exists();
-    if let Some(p) = std::env::var_os("UTSIM_ELEMENTOS_3D").map(PathBuf::from)
-        && ok(&p)
-    {
-        return Some(p);
-    }
-    let exe = std::env::current_exe().ok()?;
-    exe.ancestors()
-        .map(|d| d.join("assets").join("modelos3d"))
-        .find(|p| ok(p))
+    let instalados = std::env::current_exe().ok().and_then(|exe| {
+        exe.ancestors()
+            .map(|d| d.join("assets").join("modelos3d"))
+            .find(|p| elementos_completos(p))
+    });
+    instalados.or_else(|| {
+        std::env::var_os("UTSIM_ELEMENTOS_3D")
+            .map(PathBuf::from)
+            .filter(|p| elementos_completos(p))
+    })
+}
+
+/// Whether `p` holds the 3D elements Blender needs: the models and, two folders up, the
+/// animation clips of the people (`assets/terceiros/quaternius_ual`).
+pub fn elementos_completos(p: &Path) -> bool {
+    let clipes = p
+        .parent()
+        .map(|a| a.join("terceiros/quaternius_ual/UAL1_Standard.glb"));
+    p.join("pessoa_homem.glb").exists()
+        && p.join("posto.glb").exists()
+        && clipes.is_some_and(|c| c.exists())
 }

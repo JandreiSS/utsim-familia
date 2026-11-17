@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use utsim_ensino_core::campanha::arquivo;
 use utsim_ensino_core::cena::TipoCartao;
 use utsim_ensino_core::editor::{Edicao, PacoteProfessor};
-use utsim_ensino_core::editor_cena::{achar_blender, achar_elementos, caminhos_cena};
+use utsim_ensino_core::editor_cena::{
+    achar_blender, achar_elementos, caminhos_cena, elementos_completos,
+};
 use utsim_ensino_core::missao::Missao;
 
 fn ler(p: &str) -> String {
@@ -96,6 +98,22 @@ fn sem_imagem_nao_grava_e_os_arquivos_vao_ao_pacote() {
     assert!(carregado.missoes[0].cena.is_some());
     let de_novo = p.abrir(&caminho).unwrap();
     assert_eq!(de_novo.cena_arquivos, ed.cena_arquivos);
+}
+
+/// The elements of the repository (the same folders the installer carries) are complete; a
+/// folder with the models but without the clips of the people is not.
+#[test]
+fn elementos_precisam_dos_clipes() {
+    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert!(elementos_completos(&raiz.join("assets/modelos3d")));
+    let tmp = std::env::temp_dir().join(format!("utsim-elementos-{}", std::process::id()));
+    let pasta = tmp.join("assets/modelos3d");
+    std::fs::create_dir_all(&pasta).unwrap();
+    for f in ["pessoa_homem.glb", "posto.glb"] {
+        std::fs::write(pasta.join(f), b"glb").unwrap();
+    }
+    assert!(!elementos_completos(&pasta));
+    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 /// Renders the scene of the mixed-model line with the Blender of this machine. Needs

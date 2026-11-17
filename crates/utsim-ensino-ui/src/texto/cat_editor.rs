@@ -30,6 +30,7 @@ textos! {
     ed_cena_gerada;
     ed_cena_remover;
     ed_cena_sem_blender;
+    ed_cena_baixar_blender;
     ed_cena_sem_elementos;
     ed_mix;
     ed_mix_novo;
