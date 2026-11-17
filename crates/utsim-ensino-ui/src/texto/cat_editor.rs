@@ -18,6 +18,11 @@ textos! {
     ed_nenhuma;
     ed_estacao_inicial;
     ed_tarefa_nova;
+    ed_mix;
+    ed_mix_novo;
+    ed_mix_parcela;
+    ed_mix_remover_dica;
+    ed_tempo_media;
     ed_arranjo;
     ed_colunas;
     ed_linhas;
@@ -274,6 +279,7 @@ textos! {
 
 modelos! {
     ed_estacoes_modelo(estacoes);
+    ed_mix_dica(rotulo);
     ed_resumo_balanceamento(soma, minimo, ciclo, eficiencia);
     ed_inicial_viola(motivo);
     ed_momento_inicial(momento);

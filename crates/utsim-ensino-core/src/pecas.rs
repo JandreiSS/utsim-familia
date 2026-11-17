@@ -106,6 +106,22 @@ impl Balanceamento {
         t.tempos.get(modelo).copied().unwrap_or(t.tempo)
     }
 
+    /// Sets the `tempo` of every task to the weighted average of its model times, rounded
+    /// to hundredths (nothing without a mix).
+    pub fn acertar_medias(&mut self) {
+        if self.mix.is_empty() {
+            return;
+        }
+        let medias: Vec<f64> = self
+            .tarefas
+            .iter()
+            .map(|t| (self.tempo_ponderado(t) * 100.0).round() / 100.0)
+            .collect();
+        for (t, m) in self.tarefas.iter_mut().zip(medias) {
+            t.tempo = m;
+        }
+    }
+
     /// The average of the model times weighted by the mix (`tempo` without a mix).
     pub fn tempo_ponderado(&self, t: &Tarefa) -> f64 {
         let total: f64 = self.mix.iter().map(|m| m.parcela).sum();
