@@ -390,7 +390,7 @@ pub const REPLICACOES_TROCA: u32 = 30;
 /// The simulated capability of every characteristic of the model, as the `dados` of the
 /// `capacidade_simulada` result (format 1) other apps read from the response: model name,
 /// replications and, per characteristic, `nome`, `objeto`, `n`, `lie`, `lse`, `media`,
-/// `desvio`, `cp`, `cpk`, `cpk_lo`, `cpk_hi`, `ppk`, `ppm` and `erro` (absent values are
+/// `desvio`, `cp`, `cpk`, `cpk_lo`, `cpk_hi`, `pp`, `ppk`, `ppm` and `erro` (absent values are
 /// null). `reps` absent: the model's own replications; capped at [`REPLICACOES_TROCA`].
 pub fn capacidade_para_troca(
     model: &Model,
@@ -418,6 +418,7 @@ pub fn capacidade_para_troca(
                 "cpk": k.map(|k| k.cpk.value),
                 "cpk_lo": k.map(|k| k.cpk.lo),
                 "cpk_hi": k.map(|k| k.cpk.hi),
+                "pp": k.and_then(|k| k.pp.as_ref()).map(|i| i.value),
                 "ppk": k.map(|k| k.ppk.value),
                 "ppm": k.map(|k| k.ppm_overall.total),
                 "erro": c.erro,
