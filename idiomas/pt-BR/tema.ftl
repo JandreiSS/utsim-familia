@@ -25,3 +25,7 @@ arquivos-todos_os_arquivos = Todos os arquivos
 campos-data_dica = AAAA-MM-DD
 campos-data_invalida = Data inválida. Use AAAA-MM-DD (ou DD/MM/AAAA).
 campos-data_antes = Esta data vem antes de {"{"}limite{"}"}.
+campos-hora_dica = HH:MM
+campos-hora_invalida = Hora inválida. Use HH:MM, de 00:00 a 23:59.
+campos-data_hora_dica = AAAA-MM-DD HH:MM
+campos-data_hora_invalida = Data e hora inválidas. Use AAAA-MM-DD HH:MM (ou DD/MM/AAAA HH:MM).

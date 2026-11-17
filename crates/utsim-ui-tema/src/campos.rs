@@ -5,6 +5,8 @@
 //! antes do limite dado, ganha borda vermelha e a explicação no hover. Vazio é válido (a
 //! data ainda não foi marcada).
 //!
+//! [`CampoHora`] (`HH:MM`) e [`CampoDataHora`] (`AAAA-MM-DD HH:MM`) seguem a mesma regra.
+//!
 //! ```
 //! # let ctx = egui::Context::default();
 //! # let mut inicio = String::from("2026-11-13");
@@ -196,41 +198,205 @@ impl<'a> CampoData<'a> {
             largura,
         } = self;
         let situacao = Self::situacao(texto, limite);
-        let ruim = matches!(situacao, Situacao::Invalida | Situacao::AntesDoLimite(_));
-        let erro = ui.visuals().error_fg_color;
-        let mut resp = ui
-            .scope(|ui| {
-                if ruim {
-                    let w = &mut ui.visuals_mut().widgets;
-                    for s in [&mut w.inactive, &mut w.hovered, &mut w.active] {
-                        s.bg_stroke = Stroke::new(1.5, erro);
-                    }
-                    ui.visuals_mut().selection.stroke = Stroke::new(1.5, erro);
-                }
-                ui.add(
-                    egui::TextEdit::singleline(texto)
-                        .hint_text(textos.dica)
-                        .desired_width(largura),
-                )
-            })
-            .inner;
-        if resp.lost_focus()
-            && let Some(d) = Data::ler(texto)
-        {
-            let normal = d.to_string();
-            if *texto != normal {
-                *texto = normal;
-                resp.mark_changed();
-            }
-        }
-        match situacao {
-            Situacao::Invalida => resp.on_hover_text(textos.invalida),
+        let hover = match situacao {
+            Situacao::Invalida => Some(textos.invalida.to_string()),
             Situacao::AntesDoLimite(_) => {
                 let l = limite.map(|l| l.to_string()).unwrap_or_default();
-                resp.on_hover_text(textos.antes.replace("{limite}", &l))
+                Some(textos.antes.replace("{limite}", &l))
             }
-            _ => resp,
+            _ => None,
+        };
+        desenhar(ui, texto, textos.dica, largura, hover, |t| {
+            Data::ler(t).map(|d| d.to_string())
+        })
+    }
+}
+
+/// O desenho comum dos campos: borda vermelha e `hover` quando há problema, e o texto
+/// trocado por `normal(texto)` ao perder o foco (com `mark_changed`).
+fn desenhar(
+    ui: &mut Ui,
+    texto: &mut String,
+    dica: &str,
+    largura: f32,
+    hover: Option<String>,
+    normal: impl Fn(&str) -> Option<String>,
+) -> Response {
+    let erro = ui.visuals().error_fg_color;
+    let mut resp = ui
+        .scope(|ui| {
+            if hover.is_some() {
+                let w = &mut ui.visuals_mut().widgets;
+                for s in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+                    s.bg_stroke = Stroke::new(1.5, erro);
+                }
+                ui.visuals_mut().selection.stroke = Stroke::new(1.5, erro);
+            }
+            ui.add(
+                egui::TextEdit::singleline(texto)
+                    .hint_text(dica)
+                    .desired_width(largura),
+            )
+        })
+        .inner;
+    if resp.lost_focus()
+        && let Some(n) = normal(texto)
+        && *texto != n
+    {
+        *texto = n;
+        resp.mark_changed();
+    }
+    match hover {
+        Some(h) => resp.on_hover_text(h),
+        None => resp,
+    }
+}
+
+/// Uma hora do dia, de `00:00` a `23:59`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Hora {
+    pub h: u8,
+    pub m: u8,
+}
+
+impl Hora {
+    pub fn nova(h: u8, m: u8) -> Option<Hora> {
+        (h < 24 && m < 60).then_some(Hora { h, m })
+    }
+
+    /// Lê `HH:MM` ou `H:MM` (também `HHhMM`), ignorando espaços nas pontas.
+    pub fn ler(texto: &str) -> Option<Hora> {
+        let t = texto.trim().to_ascii_lowercase();
+        let (h, m) = t.split_once(':').or_else(|| t.split_once('h'))?;
+        let num = |p: &str| -> Option<u8> {
+            if p.is_empty() || p.len() > 2 || !p.bytes().all(|b| b.is_ascii_digit()) {
+                None
+            } else {
+                p.parse().ok()
+            }
+        };
+        if m.len() != 2 {
+            return None;
         }
+        Hora::nova(num(h)?, num(m)?)
+    }
+}
+
+/// Sempre `HH:MM`.
+impl fmt::Display for Hora {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:02}:{:02}", self.h, self.m)
+    }
+}
+
+/// Uma data com hora (sem fuso: quem guarda diz qual é).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DataHora {
+    pub data: Data,
+    pub hora: Hora,
+}
+
+impl DataHora {
+    /// Lê `AAAA-MM-DD HH:MM` ou `DD/MM/AAAA HH:MM` (data e hora separadas por espaço).
+    pub fn ler(texto: &str) -> Option<DataHora> {
+        let (d, h) = texto.trim().split_once(char::is_whitespace)?;
+        Some(DataHora {
+            data: Data::ler(d)?,
+            hora: Hora::ler(h)?,
+        })
+    }
+}
+
+/// Sempre `AAAA-MM-DD HH:MM`.
+impl fmt::Display for DataHora {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.data, self.hora)
+    }
+}
+
+/// Um campo de hora `HH:MM` (aceita `H:MM` e `HHhMM`, que viram `HH:MM` ao perder o foco).
+/// Vazio vale.
+pub struct CampoHora<'a> {
+    texto: &'a mut String,
+    largura: f32,
+}
+
+impl<'a> CampoHora<'a> {
+    pub fn new(texto: &'a mut String) -> Self {
+        CampoHora {
+            texto,
+            largura: 60.0,
+        }
+    }
+
+    pub fn largura(mut self, largura: f32) -> Self {
+        self.largura = largura;
+        self
+    }
+
+    pub fn mostrar(self, ui: &mut Ui) -> Response {
+        use crate::texto::tx;
+        let t = self.texto.trim();
+        let hover = (!t.is_empty() && Hora::ler(t).is_none())
+            .then(|| tx("campos-hora_invalida").to_string());
+        desenhar(
+            ui,
+            self.texto,
+            tx("campos-hora_dica"),
+            self.largura,
+            hover,
+            |t| Hora::ler(t).map(|h| h.to_string()),
+        )
+    }
+}
+
+/// Um campo de data com hora, `AAAA-MM-DD HH:MM` (aceita `DD/MM/AAAA HH:MM`), com limite
+/// opcional como o [`CampoData`]. Vazio vale.
+pub struct CampoDataHora<'a> {
+    texto: &'a mut String,
+    limite: Option<DataHora>,
+    largura: f32,
+}
+
+impl<'a> CampoDataHora<'a> {
+    pub fn new(texto: &'a mut String) -> Self {
+        CampoDataHora {
+            texto,
+            limite: None,
+            largura: 150.0,
+        }
+    }
+
+    /// Não pode vir antes deste instante (ex.: o fim de uma prova não antes do início).
+    pub fn nao_antes(mut self, limite: Option<DataHora>) -> Self {
+        self.limite = limite;
+        self
+    }
+
+    pub fn largura(mut self, largura: f32) -> Self {
+        self.largura = largura;
+        self
+    }
+
+    pub fn mostrar(self, ui: &mut Ui) -> Response {
+        use crate::texto::tx;
+        let t = self.texto.trim();
+        let hover = match (t.is_empty(), DataHora::ler(t), self.limite) {
+            (true, _, _) => None,
+            (false, None, _) => Some(tx("campos-data_hora_invalida").to_string()),
+            (false, Some(d), Some(l)) if d < l => {
+                Some(tx("campos-data_antes").replace("{limite}", &l.to_string()))
+            }
+            _ => None,
+        };
+        desenhar(
+            ui,
+            self.texto,
+            tx("campos-data_hora_dica"),
+            self.largura,
+            hover,
+            |t| DataHora::ler(t).map(|d| d.to_string()),
+        )
     }
 }
 
@@ -300,6 +466,23 @@ mod tests {
         assert!(Data::ler("2024-02-29").is_some());
         assert!(Data::ler("2000-02-29").is_some());
         assert!(Data::ler("1900-02-29").is_none());
+    }
+
+    #[test]
+    fn hora_e_data_com_hora() {
+        assert_eq!(
+            Hora::ler("7:05").map(|h| h.to_string()),
+            Some("07:05".into())
+        );
+        assert_eq!(Hora::ler("14h30"), Hora::nova(14, 30));
+        for t in ["24:00", "12:60", "7:5", "12", "", "a:00", "12:345"] {
+            assert_eq!(Hora::ler(t), None, "{t}");
+        }
+        let d = DataHora::ler("17/11/2026 8:00").unwrap();
+        assert_eq!(d.to_string(), "2026-11-17 08:00");
+        assert!(DataHora::ler("2026-11-17 08:01").unwrap() > d);
+        assert_eq!(DataHora::ler("2026-11-17"), None);
+        assert_eq!(DataHora::ler("2026-02-30 08:00"), None);
     }
 
     #[test]
