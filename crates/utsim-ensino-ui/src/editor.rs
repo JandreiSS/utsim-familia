@@ -578,8 +578,14 @@ fn secao_missao(
         }
         match ed.tipo_decisao() {
             TipoDecisao::Alavancas => secao_alavancas(ui, ed),
-            TipoDecisao::Balanceamento => secao_balanceamento(ui, ed),
-            TipoDecisao::Arranjo => secao_arranjo(ui, ed),
+            TipoDecisao::Balanceamento => {
+                secao_balanceamento(ui, ed);
+                secao_alavancas(ui, ed);
+            }
+            TipoDecisao::Arranjo => {
+                secao_arranjo(ui, ed);
+                secao_alavancas(ui, ed);
+            }
         }
         secao_metricas(ui, ed);
     }
@@ -949,6 +955,39 @@ fn secao_balanceamento(ui: &mut Ui, ed: &mut Edicao) {
             ui.checkbox(&mut b.permite_passar_takt, texto::ed_passar_takt());
             ui.end_row();
         });
+    ui.label(RichText::new(texto::ed_mix()).strong());
+    ui.label(RichText::new(texto::f(texto::ed_mix_dica(), &[&b.rotulo])).weak());
+    let mut tirar_modelo = None;
+    if !b.mix.is_empty() {
+        egui::Grid::new("ed_mix").striped(true).show(ui, |ui| {
+            for h in [texto::ed_col_nome(), texto::ed_mix_parcela(), ""] {
+                cabecalho(ui, h);
+            }
+            ui.end_row();
+            for m in &mut b.mix {
+                ui.add(egui::TextEdit::singleline(&mut m.nome).desired_width(160.0));
+                ui.add(
+                    egui::DragValue::new(&mut m.parcela)
+                        .speed(0.1)
+                        .range(0.0..=f64::MAX),
+                );
+                if ui
+                    .small_button("✕")
+                    .on_hover_text(texto::ed_mix_remover_dica())
+                    .clicked()
+                {
+                    tirar_modelo = Some(m.id.clone());
+                }
+                ui.end_row();
+            }
+        });
+    }
+    let novo_modelo = ui.button(texto::ed_mix_novo()).clicked();
+    let modelos: Vec<(String, String)> = b
+        .mix
+        .iter()
+        .map(|m| (m.id.clone(), m.nome.clone()))
+        .collect();
     ui.label(RichText::new(texto::ed_tarefas()).strong());
     let ids: Vec<(String, String)> = b
         .tarefas
@@ -957,25 +996,36 @@ fn secao_balanceamento(ui: &mut Ui, ed: &mut Edicao) {
         .collect();
     let ultima = b.estacoes.max(1);
     egui::Grid::new("ed_tarefas").striped(true).show(ui, |ui| {
-        for h in [
-            "",
-            texto::ed_col_nome(),
-            texto::ed_tempo(),
-            texto::ed_depois_de(),
-            texto::ed_estacao_inicial(),
-            "",
-        ] {
+        cabecalho(ui, "");
+        cabecalho(ui, texto::ed_col_nome());
+        if modelos.is_empty() {
+            cabecalho(ui, texto::ed_tempo());
+        } else {
+            for (_, nome) in &modelos {
+                cabecalho(ui, nome);
+            }
+            cabecalho(ui, texto::ed_tempo_media());
+        }
+        for h in [texto::ed_depois_de(), texto::ed_estacao_inicial(), ""] {
             cabecalho(ui, h);
         }
         ui.end_row();
         for t in &mut b.tarefas {
             ui.label(RichText::new(&t.id).strong());
             ui.add(egui::TextEdit::singleline(&mut t.nome).desired_width(220.0));
-            ui.add(
-                egui::DragValue::new(&mut t.tempo)
-                    .speed(0.5)
-                    .range(0.0..=f64::MAX),
-            );
+            if modelos.is_empty() {
+                ui.add(
+                    egui::DragValue::new(&mut t.tempo)
+                        .speed(0.5)
+                        .range(0.0..=f64::MAX),
+                );
+            } else {
+                for (id, _) in &modelos {
+                    let v = t.tempos.entry(id.clone()).or_insert(t.tempo);
+                    ui.add(egui::DragValue::new(v).speed(0.5).range(0.0..=f64::MAX));
+                }
+                ui.label(RichText::new(fmt_num(t.tempo, 2)).weak());
+            }
             let rotulo = if t.depois_de.is_empty() {
                 texto::ed_nenhuma().to_string()
             } else {
@@ -1009,6 +1059,7 @@ fn secao_balanceamento(ui: &mut Ui, ed: &mut Edicao) {
         }
     });
     let nova = ui.button(texto::ed_tarefa_nova()).clicked();
+    b.acertar_medias();
     if b.takt > 0.0 && !b.tarefas.is_empty() {
         let r = b.resumo(&b.inicial);
         let minimo = (b.soma() / b.takt - 1e-9).ceil().max(1.0);
@@ -1033,6 +1084,12 @@ fn secao_balanceamento(ui: &mut Ui, ed: &mut Edicao) {
     }
     if nova {
         ed.nova_tarefa();
+    }
+    if let Some(id) = tirar_modelo {
+        ed.remover_modelo_mix(&id);
+    }
+    if novo_modelo {
+        ed.novo_modelo_mix();
     }
 }
 

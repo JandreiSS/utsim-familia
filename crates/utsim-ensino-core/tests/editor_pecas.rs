@@ -174,3 +174,89 @@ fn erros_das_pecas() {
         assert!(e.contains(x), "{x} in {e}");
     }
 }
+
+/// The mixed-model line of the campaign (`ato4/mix`), opened again in the editor.
+fn mix() -> Edicao {
+    Edicao::abrir(
+        Missao::parse(&ler("ato4/mix.ron")).unwrap(),
+        &ler("modelos/ventilador_mix.ron"),
+        &ler("ato4/mix.md"),
+    )
+    .unwrap()
+}
+
+#[test]
+fn mix_aberto_no_editor_guarda_a_alavanca_e_o_mix() {
+    let ed = mix();
+    assert_eq!(ed.tipo_decisao(), TipoDecisao::Balanceamento);
+    assert!(ed.erros().is_empty(), "{:?}", ed.erros());
+    // The sequence lever stays beside the pieces, and so does the reference.
+    let m = ed.missao();
+    let campanha = Missao::parse(&ler("ato4/mix.ron")).unwrap();
+    assert_eq!(m.alavancas, campanha.alavancas);
+    assert_eq!(m.referencia, campanha.referencia);
+    assert_eq!(m.balanceamento, campanha.balanceamento);
+    assert_eq!(ed.combinacoes(), 3);
+    let chaves = ed.chaves_de_decisao();
+    for k in ["balanceamento.pico", "decisao.sequencia"] {
+        assert!(chaves.iter().any(|c| c == k), "{k} em {chaves:?}");
+    }
+    // The model sets the label through the sequence of the source: no warning about it.
+    assert!(
+        !ed.avisos_das_pecas().iter().any(|a| a.contains("rótulo")),
+        "{:?}",
+        ed.avisos_das_pecas()
+    );
+}
+
+#[test]
+fn modelos_do_mix_entram_e_saem() {
+    let mut ed = ventilador();
+    ed.novo_modelo_mix();
+    let b = ed.base.balanceamento.as_ref().unwrap();
+    // The first model turns the single-model line into two models with the same times.
+    assert_eq!(b.mix.len(), 2);
+    let a = &b.tarefas[0];
+    assert_eq!(a.tempos.len(), 2);
+    assert!(a.tempos.values().all(|v| *v == a.tempo));
+    assert!(b.validar().is_empty(), "{:?}", b.validar());
+    // A different time for one model moves the average by its share.
+    let id = b.mix[1].id.clone();
+    let b = ed.base.balanceamento.as_mut().unwrap();
+    b.tarefas[0].tempos.insert(id.clone(), 40.0);
+    b.mix[1].parcela = 3.0;
+    b.acertar_medias();
+    assert_eq!(b.tarefas[0].tempo, (20.0 + 3.0 * 40.0) / 4.0);
+    assert!(b.validar().is_empty(), "{:?}", b.validar());
+    // The model of the ventilator line sets no model label: the editor warns.
+    assert!(
+        ed.avisos_das_pecas()
+            .iter()
+            .any(|a| a.contains("rótulo \"modelo\"")),
+        "{:?}",
+        ed.avisos_das_pecas()
+    );
+    // A third model, then back to a single model: the last averages stay as the times.
+    ed.novo_modelo_mix();
+    assert_eq!(ed.base.balanceamento.as_ref().unwrap().mix.len(), 3);
+    let ids: Vec<String> = ed
+        .base
+        .balanceamento
+        .as_ref()
+        .unwrap()
+        .mix
+        .iter()
+        .map(|m| m.id.clone())
+        .collect();
+    ed.remover_modelo_mix(&ids[2]);
+    ed.remover_modelo_mix(&ids[0]);
+    let b = ed.base.balanceamento.as_ref().unwrap();
+    assert!(b.mix.is_empty() && b.tarefas.iter().all(|t| t.tempos.is_empty()));
+    assert_eq!(b.tarefas[0].tempo, 35.0);
+    assert!(b.validar().is_empty(), "{:?}", b.validar());
+    // A new task gets a time for each model.
+    ed.novo_modelo_mix();
+    ed.nova_tarefa();
+    let b = ed.base.balanceamento.as_ref().unwrap();
+    assert_eq!(b.tarefas.last().unwrap().tempos.len(), 2);
+}
