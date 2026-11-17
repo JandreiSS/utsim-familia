@@ -153,10 +153,26 @@ fn overlapping_cranes_are_warned_and_a_team_of_cranes_works() {
     let other = r#"(name: "ponte2", kind: Crane(bridge: (speed: 0.5), trolley: (speed: 0.25),
             hoist: (speed: 0.1), hook_height: 6.0, capacity_t: 5.0),
             position: (50.0, 9.0, 0.0), size: Some((30.0, 18.0, 8.0))),"#;
-    let w = model(&bay("Safe", 1.0, other)).warnings();
+    // No mesmo caminho de rolamento (paralelas): anticolisão, sem aviso.
+    let m = model(&bay("Safe", 1.0, other));
+    assert!(m.warnings().is_empty(), "{:?}", m.warnings());
+    assert!(
+        m.crane_lines().iter().any(|l| l.starts_with("ponte:")
+            && l.contains("mesmo caminho que ponte2 (anticolisão, 3 m entre os ganchos)")),
+        "{:?}",
+        m.crane_lines()
+    );
+    // Em ângulo, as duas se cruzam: aviso.
+    let crossing = other
+        .replace("(50.0, 9.0, 0.0)", "(38.0, 9.0, 0.0)")
+        .replace(
+            "size: Some((30.0, 18.0, 8.0))",
+            "size: Some((30.0, 18.0, 8.0)), visual: (yaw: Some(90.0))",
+        );
+    let w = model(&bay("Safe", 1.0, &crossing)).warnings();
     assert!(
         w.iter()
-            .any(|x| x.contains("ponte e ponte2") && x.contains("se sobrepõem")),
+            .any(|x| x.contains("ponte e ponte2") && x.contains("se cruzam em ângulo")),
         "{w:?}"
     );
     // Lado a lado, sem sobrepor: nenhum aviso.
@@ -395,4 +411,117 @@ fn the_crane_waits_for_its_operator_and_radio_keeps_the_speed() {
         e.contains("ponte: operator.team 'recebimento' precisa ser uma pessoa"),
         "{e}"
     );
+}
+
+/// Duas pontes no mesmo caminho de rolamento (eixo x, y = 9): `ponte` cobre x de 0 a 40 e
+/// `ponte2`, parada em x = 42, cobre de 27 a 57. A `ponte` leva uma peça de (5, 9) a
+/// (40, 9). `extra` acrescenta objetos.
+fn runway(extra: &str) -> String {
+    format!(
+        r#"Model(
+    name: "caminho",
+    run: (stop_time: 2000.0, seed: 1),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Const(10000.0), first_at_zero: true,
+            max_arrivals: Some(1)), position: (2.0, 9.0, 0.0)),
+        (name: "recebimento", kind: Queue(), transport: "ponte", position: (5.0, 9.0, 0.0)),
+        (name: "saida", kind: Sink, position: (40.0, 9.0, 0.0)),
+        (name: "ponte", kind: Crane(
+            bridge: (speed: 0.5), trolley: (speed: 0.25), hoist: (speed: 0.1),
+            hook_height: 6.0, attach: Const(30.0), detach: Const(20.0), capacity_t: 10.0,
+        ), position: (20.0, 9.0, 0.0), size: Some((40.0, 18.0, 8.0))),
+        (name: "ponte2", kind: Crane(
+            bridge: (speed: 0.5), trolley: (speed: 0.25), hoist: (speed: 0.1),
+            hook_height: 6.0, attach: Const(30.0), detach: Const(20.0), capacity_t: 10.0,
+        ), position: (42.0, 9.0, 0.0), size: Some((30.0, 18.0, 8.0))),
+        {extra}
+    ],
+    connections: [("chegada", "recebimento"), ("recebimento", "saida"), {conn}],
+)"#,
+        conn = if extra.is_empty() {
+            ""
+        } else {
+            r#"("chegada2", "estoque2"), ("estoque2", "saida2")"#
+        }
+    )
+}
+
+#[test]
+fn a_free_crane_gives_way_on_the_same_runway() {
+    // A `ponte` vai vazia de x = 20 a 5 (30 s), desce 6 m (60 s), engata (30 s) e sobe
+    // (60 s): em 180 s quer andar de 5 a 40, mas a `ponte2` está em 42, a menos de 3 m de
+    // 40. Parada, a `ponte2` sai do caminho até 43: 1 m a 0,5 m/s, 2 s. A `ponte` anda
+    // 35 m (70 s, até 252 s), desce (60 s) e solta (20 s): a peça chega em 332 s.
+    let m = model(&runway(""));
+    let x = metrics(&m);
+    close(x["saida.time_in_system.mean"], 332.0, "tempo da peça");
+    close(x["ponte.crane.lane_wait"], 2.0, "espera pela outra ponte");
+    close(x["ponte.crane.gave_way"], 0.0, "a ponte não cedeu");
+    close(x["ponte2.crane.gave_way"], 1.0, "a ponte2 cedeu uma vez");
+    close(x["ponte2.crane.bridge_time"], 2.0, "a ponte2 andou 1 m");
+    close(x["ponte2.crane.trips"], 0.0, "a ponte2 não transportou");
+    // Uma ponte com o caminho só para ela não tem essas métricas.
+    let alone = metrics(&model(&bay("Safe", 1.0, "")));
+    assert!(!alone.contains_key("ponte.crane.lane_wait"));
+}
+
+#[test]
+fn a_busy_crane_is_waited_for() {
+    // A `ponte2` tem trabalho: uma peça em x = 36 para levar a x = 55. Ela vai de 42 a 36
+    // (12 s), desce, engata e sobe (150 s) e, em 162 s, anda até 55 (19 m, 38 s). Em 180 s,
+    // a `ponte` quer ir de 5 a 40 e a `ponte2` ocupa o trecho de 36 a 55 andando: ocupada,
+    // ela não cede, e a `ponte` espera até 200 s. Anda 70 s, desce 60 s e solta 20 s: a
+    // peça chega em 350 s.
+    let extra = r#"(name: "chegada2", kind: Source(interarrival: Const(10000.0),
+            first_at_zero: true, max_arrivals: Some(1)), position: (36.0, 3.0, 0.0)),
+        (name: "estoque2", kind: Queue(), transport: "ponte2", position: (36.0, 9.0, 0.0)),
+        (name: "saida2", kind: Sink, position: (55.0, 9.0, 0.0)),"#;
+    let x = metrics(&model(&runway(extra)));
+    close(x["saida.time_in_system.mean"], 350.0, "tempo da peça");
+    close(x["ponte.crane.lane_wait"], 20.0, "espera pela outra ponte");
+    close(
+        x["ponte2.crane.gave_way"],
+        0.0,
+        "ocupada, a ponte2 não cedeu",
+    );
+    close(x["saida2.input"], 1.0, "a ponte2 entregou a sua");
+    close(x["ponte2.crane.lane_wait"], 0.0, "a ponte2 não esperou");
+    // A folga entre os ganchos é campo da ponte (o grupo usa a maior).
+    let near = runway("").replace(
+        "capacity_t: 10.0,\n        ), position: (42.0",
+        "capacity_t: 10.0, bridge_gap: 1.5,\n        ), position: (42.0",
+    );
+    let near = near.replacen(
+        "capacity_t: 10.0,\n",
+        "capacity_t: 10.0, folga_pontes: 1.0,\n",
+        1,
+    );
+    // Com 1,5 m, a ponte2 em 42 não atrapalha a ida até 40.
+    let x = metrics(&model(&near));
+    close(x["saida.time_in_system.mean"], 330.0, "folga menor");
+    close(x["ponte2.crane.gave_way"], 0.0, "não precisou ceder");
+}
+
+#[test]
+fn two_busy_cranes_in_each_others_way_both_deliver() {
+    // A `ponte2`, parada em x = 35 e com área de 10 a 60, busca a sua peça em x = 12, do
+    // outro lado da `ponte`, e a leva a x = 55: uma precisa passar pelo trecho da outra.
+    let extra = r#"(name: "chegada2", kind: Source(interarrival: Const(10000.0),
+            first_at_zero: true, max_arrivals: Some(1)), position: (12.0, 3.0, 0.0)),
+        (name: "estoque2", kind: Queue(), transport: "ponte2", position: (12.0, 9.0, 0.0)),
+        (name: "saida2", kind: Sink, position: (55.0, 9.0, 0.0)),"#;
+    let text = runway(extra).replace(
+        "position: (42.0, 9.0, 0.0), size: Some((30.0, 18.0, 8.0))",
+        "position: (35.0, 9.0, 0.0), size: Some((50.0, 18.0, 8.0))",
+    );
+    // Em t = 0, a `ponte` vai de 20 a 5 (30 s) e ocupa esse trecho: a `ponte2` espera
+    // 30 s, vai de 35 a 12 (46 s), desce, engata e sobe (150 s) e, em 226 s, leva a peça
+    // até 55 (86 s), desce e solta (80 s): chega em 392 s. A `ponte`, com a peça no gancho
+    // em 180 s, espera a `ponte2` (ocupada, ela não cede) sair do trecho até 40 + 3 m, o
+    // que acontece em 312 s: 132 s de espera. Anda 70 s, desce e solta: chega em 462 s.
+    let x = metrics(&model(&text));
+    close(x["saida.time_in_system.mean"], 462.0, "peça da ponte");
+    close(x["saida2.time_in_system.mean"], 392.0, "peça da ponte2");
+    close(x["ponte.crane.lane_wait"], 132.0, "espera da ponte");
+    close(x["ponte2.crane.lane_wait"], 30.0, "espera da ponte2");
 }

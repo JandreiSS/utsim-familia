@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use utsim_core::BlockId;
-use utsim_objects::{CraneOperator, CraneSpec};
+use utsim_objects::{CraneLane, CraneOperator, CraneSpec};
 
 use serde::{Deserialize, Serialize};
 
@@ -109,7 +109,76 @@ fn overlap(a: &CraneSpec, b: &CraneSpec) -> bool {
     true
 }
 
+/// Whether two runways are parallel (the same direction or opposite ones).
+fn parallel(a: &CraneSpec, b: &CraneSpec) -> bool {
+    (a.yaw - b.yaw).sin().abs() < 1e-6
+}
+
 impl Model {
+    /// The runways shared by cranes (areas that overlap, runways parallel), by crane
+    /// name: each group gets its own lane, the direction of its first crane and the
+    /// largest `bridge_gap` of the group.
+    pub fn crane_lanes(&self) -> HashMap<&str, CraneLane> {
+        let cranes: Vec<(&ObjectDef, CraneSpec, f64)> = self
+            .objects
+            .iter()
+            .filter_map(|o| {
+                let ObjectKind::Crane { bridge_gap, .. } = &o.kind else {
+                    return None;
+                };
+                Some((o, self.crane_spec(o)?, *bridge_gap))
+            })
+            .collect();
+        // Groups by union of the pairs that share a runway.
+        let mut group: Vec<usize> = (0..cranes.len()).collect();
+        fn root(g: &mut [usize], mut i: usize) -> usize {
+            while g[i] != i {
+                g[i] = g[g[i]];
+                i = g[i];
+            }
+            i
+        }
+        let mut shared = vec![false; cranes.len()];
+        for i in 0..cranes.len() {
+            for j in i + 1..cranes.len() {
+                let (a, b) = (&cranes[i].1, &cranes[j].1);
+                if parallel(a, b) && overlap(a, b) {
+                    let (ri, rj) = (root(&mut group, i), root(&mut group, j));
+                    group[ri.max(rj)] = ri.min(rj);
+                    shared[i] = true;
+                    shared[j] = true;
+                }
+            }
+        }
+        let mut lanes: Vec<(usize, CraneLane)> = Vec::new();
+        let mut out = HashMap::new();
+        for i in (0..cranes.len()).filter(|&i| shared[i]) {
+            let r = root(&mut group, i);
+            let lane = match lanes.iter_mut().find(|(g, _)| *g == r) {
+                Some((_, lane)) => {
+                    lane.gap = lane.gap.max(cranes[i].2);
+                    *lane
+                }
+                None => {
+                    let (s, c) = cranes[r].1.yaw.sin_cos();
+                    let lane = CraneLane {
+                        id: lanes.len() as u32,
+                        dir: [c, s],
+                        gap: cranes[i].2.max(cranes[r].2),
+                    };
+                    lanes.push((r, lane));
+                    lane
+                }
+            };
+            out.insert(cranes[i].0.name.as_str(), lane);
+        }
+        // The gap of the whole group.
+        for lane in out.values_mut() {
+            lane.gap = lanes[lane.id as usize].1.gap;
+        }
+        out
+    }
+
     /// Kernel geometry of a crane (`None`: not a crane, or without `size`).
     pub(crate) fn crane_spec(&self, obj: &ObjectDef) -> Option<CraneSpec> {
         let ObjectKind::Crane {
@@ -232,12 +301,19 @@ impl Model {
                 weight_label,
                 load_zone,
                 operator,
+                bridge_gap,
                 ..
             } = &obj.kind
             else {
                 continue;
             };
             let name = &obj.name;
+            if !(bridge_gap.is_finite() && *bridge_gap >= 0.0) {
+                errors.push(format!(
+                    "{name}: bridge_gap deve ser finita e >= 0 (distância, em metros, entre os \
+                     ganchos de duas pontes no mesmo caminho de rolamento)"
+                ));
+            }
             if let Some(team) = operator.team() {
                 if self.team_speed(team).is_none() {
                     errors.push(format!(
@@ -319,6 +395,7 @@ impl Model {
     }
 
     pub fn crane_lines(&self) -> Vec<String> {
+        let lanes = self.crane_lanes();
         self.objects
             .iter()
             .filter_map(|o| {
@@ -341,9 +418,22 @@ impl Model {
                     } => format!("; rádio (equipe '{team}')"),
                     _ => String::new(),
                 };
+                let shared = lanes.get(o.name.as_str()).map_or(String::new(), |lane| {
+                    let mut others: Vec<&str> = lanes
+                        .iter()
+                        .filter(|(n, l)| l.id == lane.id && **n != o.name.as_str())
+                        .map(|(n, _)| *n)
+                        .collect();
+                    others.sort_unstable();
+                    format!(
+                        "; mesmo caminho que {} (anticolisão, {} m entre os ganchos)",
+                        others.join(", "),
+                        lane.gap
+                    )
+                });
                 Some(format!(
                     "{}: área de {} × {} m (caminho × vão), gancho a {} m, {} t; ponte {} m/s, \
-                     carro {} m/s, gancho {} m/s; {order}{who}",
+                     carro {} m/s, gancho {} m/s; {order}{who}{shared}",
                     o.name,
                     c.length,
                     c.span,
@@ -399,11 +489,10 @@ impl Model {
         }
         for (i, (a, sa)) in cranes.iter().enumerate() {
             for (b, sb) in &cranes[i + 1..] {
-                if overlap(sa, sb) {
+                if overlap(sa, sb) && !parallel(sa, sb) {
                     out.push(format!(
-                        "{} e {}: as áreas das duas pontes se sobrepõem; o UTSim ainda não \
-                         impede que uma passe pela outra (sem anticolisão): use uma ponte por \
-                         caminho de rolamento",
+                        "{} e {}: as áreas das duas pontes se cruzam em ângulo; o UTSim só \
+                         impede a colisão de pontes no mesmo caminho de rolamento (paralelas)",
                         a.name, b.name
                     ));
                 }
