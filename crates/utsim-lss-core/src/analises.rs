@@ -225,6 +225,13 @@ pub enum Recipe {
         factors: Vec<usize>,
         responses: Vec<ResponseGoal>,
     },
+    /// General factorial: the analysis of variance of factors with any number of levels
+    /// (each column read as categories), the main effects and the two-factor interactions.
+    #[serde(rename = "fatorial_geral")]
+    GeneralFactorial {
+        factors: Vec<usize>,
+        response: usize,
+    },
 }
 
 pub use utsim_doe::Goal;
@@ -277,6 +284,7 @@ impl Recipe {
             Recipe::Cusum { .. } => tx("analises-carta_cusum"),
             Recipe::Surface { .. } => tx("analises-superficie_de_resposta"),
             Recipe::Desirability { .. } => tx("analises-desejabilidade"),
+            Recipe::GeneralFactorial { .. } => tx("analises-fatorial_geral"),
         }
     }
 
@@ -438,6 +446,217 @@ fn verdict_p(p: f64, h1: &str) -> String {
             &[("p", dx(format!("{:.4}", p))), ("h1", vx(&h1))],
         )
     }
+}
+
+/// The general factorial analysis (see [`Recipe::GeneralFactorial`]): each factor effect
+/// coded (one column less than its levels), the two-factor interactions as the products of
+/// those columns, and each term's sum of squares as the growth of the error when the term
+/// leaves the model (adjusted sums of squares; the same as the sequential ones when the
+/// plan is balanced). Without degrees of freedom for the interactions, main effects only.
+fn general_factorial(
+    t: &Table,
+    factors: &[usize],
+    response: usize,
+    o: &mut Outcome,
+) -> Result<(), String> {
+    let k = factors.len();
+    if !(2..=crate::experimentos::MAX_FACTORS).contains(&k) {
+        return Err(tx("analises-escolha_ao_menos_dois_fatores").into());
+    }
+    if factors.contains(&response) {
+        return Err(tx("analises-desejabilidade_coluna_fator").into());
+    }
+    let mut y = Vec::new();
+    let mut labels: Vec<Vec<String>> = vec![Vec::new(); k];
+    for r in &t.rows {
+        let Some(v) = r
+            .get(response)
+            .and_then(|s| utsim_quality::data::number(s, t.decimal_comma))
+        else {
+            continue;
+        };
+        let cells: Option<Vec<String>> = factors
+            .iter()
+            .map(|c| {
+                r.get(*c)
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })
+            .collect();
+        let Some(cells) = cells else { continue };
+        y.push(v);
+        for (l, c) in labels.iter_mut().zip(cells) {
+            l.push(c);
+        }
+    }
+    // The columns of each factor and the levels in order (numbers by value).
+    let mut codes: Vec<Vec<Vec<f64>>> = Vec::new();
+    let mut levels: Vec<Vec<String>> = Vec::new();
+    for (i, l) in labels.iter().enumerate() {
+        let (n, rows) = block_codes(l);
+        if n < 2 {
+            return Err(fx(
+                "analises-o_fator_tem_um_so",
+                &[("i", vx(&doe::letter(i)))],
+            ));
+        }
+        let mut names: Vec<String> = l.clone();
+        names.sort_by(|a, b| match (a.parse::<f64>(), b.parse::<f64>()) {
+            (Ok(x), Ok(y)) => x.total_cmp(&y),
+            _ => a.cmp(b),
+        });
+        names.dedup();
+        levels.push(names);
+        // Column-major: one vector per coded column.
+        codes.push(
+            (0..n - 1)
+                .map(|c| rows.iter().map(|r| r[c]).collect())
+                .collect(),
+        );
+    }
+    let n = y.len();
+    // The terms: masks of one factor (main) or two (interaction), with their columns.
+    let mut terms: Vec<(u32, Vec<Vec<f64>>)> =
+        (0..k).map(|i| (1u32 << i, codes[i].clone())).collect();
+    let mains = terms.len();
+    for i in 0..k {
+        for j in i + 1..k {
+            let mut cols = Vec::new();
+            for a in &codes[i] {
+                for b in &codes[j] {
+                    cols.push(a.iter().zip(b).map(|(x, z)| x * z).collect());
+                }
+            }
+            terms.push(((1u32 << i) | (1u32 << j), cols));
+        }
+    }
+    let width = |ts: &[(u32, Vec<Vec<f64>>)]| ts.iter().map(|t| t.1.len()).sum::<usize>();
+    if n < width(&terms) + 2 {
+        terms.truncate(mains);
+        o.notes.push(tx("analises-geral_sem_interacoes").into());
+    }
+    let fit = |ts: &[&(u32, Vec<Vec<f64>>)]| {
+        let mut names = Vec::new();
+        let mut cols = Vec::new();
+        for (m, c) in ts {
+            for (j, col) in c.iter().enumerate() {
+                names.push(format!("{}{}", doe::term_name(*m), j + 1));
+                cols.push(col.clone());
+            }
+        }
+        utsim_stats::regression::fit(&names, &cols, &y, LEVEL)
+    };
+    let sse =
+        |r: &utsim_stats::regression::Regression| r.residuals.iter().map(|e| e * e).sum::<f64>();
+    let all: Vec<&(u32, Vec<Vec<f64>>)> = terms.iter().collect();
+    let full = fit(&all)?;
+    let sse_full = sse(&full);
+    let df_error = full.df_error;
+    let mse = sse_full / df_error;
+    o.put("corridas", n as f64);
+    o.put("R²", full.r2);
+    o.put("R² ajustado", full.r2_adj);
+    let mut significant = Vec::new();
+    let mut fs = Vec::new();
+    for (idx, (mask, cols)) in terms.iter().enumerate() {
+        let rest: Vec<&(u32, Vec<Vec<f64>>)> = terms
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != idx)
+            .map(|(_, t)| t)
+            .collect();
+        let ss = (sse(&fit(&rest)?) - sse_full).max(0.0);
+        let df = cols.len() as f64;
+        let f = ss / df / mse;
+        let p = utsim_stats::special::f_sf(f, df, df_error);
+        let name = doe::term_name(*mask);
+        o.put(&format!("SQ {name}"), ss);
+        if p.is_finite() {
+            o.put(&format!("valor-p {name}"), p);
+            if p < 0.05 {
+                significant.push(name.clone());
+            }
+        }
+        fs.push((name, if f.is_finite() { f } else { 0.0 }));
+    }
+    o.put("SQ erro", sse_full);
+    o.verdict = if significant.is_empty() {
+        tx("analises-geral_nenhum").into()
+    } else {
+        fx(
+            "analises-geral_significativos",
+            &[("termos", vx(&significant.join(", ")))],
+        )
+    };
+    o.notes.push(tx("analises-geral_nota").into());
+    // The factors' names: in a worksheet of the app, the column after the coded ones.
+    let header = |c: usize| t.header.get(c).cloned().unwrap_or_default();
+    let name = |i: usize| {
+        let h = header(factors[i]);
+        let col = factors[k - 1] + 1 + i;
+        if h == doe::letter(i).to_string() && col != response && !factors.contains(&col) {
+            let real = header(col);
+            if !real.is_empty() {
+                return real;
+            }
+        }
+        h
+    };
+    if (0..k).any(|i| name(i) != doe::letter(i).to_string()) {
+        o.notes.push(
+            (0..k)
+                .map(|i| format!("{} = {}", doe::letter(i), name(i)))
+                .collect::<Vec<_>>()
+                .join("; "),
+        );
+    }
+    o.plots.push(Plot {
+        title: tx("analises-geral_grafico_f").into(),
+        bars: true,
+        labels: fs.iter().map(|(n, _)| n.clone()).collect(),
+        series: vec![("F".into(), fs.iter().map(|(_, f)| *f).collect())],
+    });
+    for (i, lv) in levels.iter().enumerate() {
+        let means: Vec<f64> = lv
+            .iter()
+            .map(|l| {
+                let v: Vec<f64> = labels[i]
+                    .iter()
+                    .zip(&y)
+                    .filter(|(a, _)| *a == l)
+                    .map(|(_, y)| *y)
+                    .collect();
+                v.iter().sum::<f64>() / v.len() as f64
+            })
+            .collect();
+        // In a worksheet of the app the coded positions read better as the written levels.
+        let real = factors[k - 1] + 1 + i;
+        let shown: Vec<String> = lv
+            .iter()
+            .map(|l| {
+                if header(factors[i]) != doe::letter(i).to_string()
+                    || real == response
+                    || factors.contains(&real)
+                {
+                    return l.clone();
+                }
+                t.rows
+                    .iter()
+                    .find(|r| r.get(factors[i]).is_some_and(|c| c.trim() == l))
+                    .and_then(|r| r.get(real))
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty())
+                    .unwrap_or_else(|| l.clone())
+            })
+            .collect();
+        o.plots.push(Plot {
+            title: fx("analises-geral_medias", &[("x", vx(&name(i)))]),
+            bars: true,
+            labels: shown,
+            series: vec![(header(response), means)],
+        });
+    }
+    Ok(())
 }
 
 /// The desirability analysis (see [`Recipe::Desirability`]).
@@ -1733,6 +1952,9 @@ pub fn run(recipe: &Recipe, t: &Table) -> Result<Outcome, String> {
         }
         Recipe::Desirability { factors, responses } => {
             desirability(t, factors, responses, &mut o)?;
+        }
+        Recipe::GeneralFactorial { factors, response } => {
+            general_factorial(t, factors, *response, &mut o)?;
         }
         Recipe::Ewma {
             col,
