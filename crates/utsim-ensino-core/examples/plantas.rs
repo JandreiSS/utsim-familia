@@ -29,7 +29,11 @@ fn main() {
                 continue;
             }
             let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
-            let modelo_path = utsim_ensino_core::pacote::junta(dir, &m.modelo);
+            // A modelling mission draws its reference model: the process of the statement.
+            let modelo_path = utsim_ensino_core::pacote::junta(
+                dir,
+                m.modelagem.as_ref().map_or(&m.modelo, |md| &md.gabarito),
+            );
             let modelo = Model::parse(&texto(&modelo_path)).expect(&modelo_path);
             let planta = cena.planta(&modelo, m.arranjo.as_ref());
             let destino = saida.join(dir).join(format!("{}.planta.json", cena.imagem));

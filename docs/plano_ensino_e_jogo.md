@@ -329,9 +329,12 @@ produto desenhado.
   de quem a missão nomeia (`{"ana": "mulher"}`); os outros alternam. Recursos móveis no mesmo
   ponto (os AGVs na doca) ficam lado a lado.
 - **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6
-  (feita); D, atos 7 e 8 e o editor do professor (feita). A padaria (ato 7), de modelagem,
-  fica sem cena: o modelo inicial dela só tem a entrada e a saída, e desenhar o gabarito
-  entregaria a resposta.
+  (feita); D, atos 7 e 8 e o editor do professor (feita). Uma missão de modelagem, como a
+  padaria (ato 7), desenha o gabarito, porque o modelo inicial do aluno só tem a entrada e a
+  saída. A imagem mostra as etapas que o texto já descreve, e os cartões `Texto` só repetem
+  os números do texto. `sem_copias` desenha um processador como um elemento só, qualquer que
+  seja a capacidade (a câmara de 10 massas é uma estante, o forno de 2 é um forno), para não
+  sugerir como modelar a capacidade.
 
 ## 4. Recursos do professor
 
