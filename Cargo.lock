@@ -8698,6 +8698,7 @@ dependencies = [
  "utsim-edit",
  "utsim-flow",
  "utsim-fluid",
+ "utsim-idiomas",
  "utsim-look",
  "utsim-model",
  "utsim-objects",
