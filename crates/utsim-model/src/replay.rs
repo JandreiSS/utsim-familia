@@ -28,6 +28,10 @@ pub struct Replay {
     /// Fluid network layout (node names, kinds, positions), when the model has one.
     #[serde(default)]
     pub fluids: Option<utsim_fluid::FluidDef>,
+    /// The floor's colour of the model (`floor_marking.floor_color`), so a replay opened
+    /// alone shows its floor; absent in older replays and in models without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_color: Option<String>,
 }
 
 pub fn kind_name(kind: &ObjectKind) -> &'static str {
@@ -108,6 +112,7 @@ impl Model {
                 blocks: Vec::new(),
             },
             fluids: self.fluids.clone(),
+            floor_color: self.marking().floor_color.clone(),
         }
     }
 }
