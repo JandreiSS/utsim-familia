@@ -55,6 +55,9 @@ pub enum BeltDrive {
     Powered,
     /// Roletes livres por gravidade: a velocidade sai da inclinação ([`gravity_speed`]).
     Gravity,
+    /// Calha (chapa lisa): a peça escorrega, com atrito, e acelera na descida
+    /// ([`chute_time`]); `speed` é a velocidade-limite na saída.
+    Chute,
 }
 
 /// Inclinação (fração, 0,015 = 1,5 %) abaixo da qual a peça não anda sozinha nos roletes
@@ -66,6 +69,46 @@ pub const FULL_GRADE: f64 = 0.05;
 /// Velocidade mínima num trecho plano ou em subida por gravidade, como fração da
 /// velocidade-limite: a peça só anda empurrada pelas de trás.
 pub const PUSHED: f64 = 0.1;
+
+/// Atrito de escorregamento da peça na chapa da calha (caixa de papelão em aço:
+/// ~0,3; a peça só escorrega acima de atan(0,3) ≈ 16,7°).
+pub const SLIDE_FRICTION: f64 = 0.3;
+/// Velocidade (m/s) de uma peça parada na calha empurrada pelas de trás.
+pub const CHUTE_CRAWL: f64 = 0.05;
+
+/// Tempo para escorregar pela linha `pts` (descendo do primeiro ao último ponto), a peça
+/// partindo do repouso, com atrito `mu`, limitada a `limit` m/s. Em cada passo, a
+/// aceleração ao longo da chapa é `g·(sen θ − μ·cos θ)`; onde ela não basta para manter a
+/// peça andando, a peça segue empurrada a [`CHUTE_CRAWL`]. Devolve `(tempo, parou)`.
+pub fn chute_time(pts: &[P3], mu: f64, limit: f64) -> (f64, bool) {
+    let mut v: f64 = 0.0;
+    let mut t = 0.0;
+    let mut stalled = false;
+    for w in pts.windows(2) {
+        let d = path3d::dist3(w[0], w[1]);
+        if d <= 0.0 {
+            continue;
+        }
+        let drop = w[0][2] - w[1][2];
+        let (sin, cos) = (drop / d, (1.0 - (drop / d).powi(2)).max(0.0).sqrt());
+        let a = GRAVITY * (sin - mu * cos);
+        let v2 = v * v + 2.0 * a * d;
+        let v1 = if v2 > 0.0 { v2.sqrt().min(limit) } else { 0.0 };
+        if v1 <= CHUTE_CRAWL && v <= CHUTE_CRAWL {
+            stalled = true;
+            t += d / CHUTE_CRAWL;
+            v = CHUTE_CRAWL;
+            continue;
+        }
+        // Uniform acceleration over the step: the mean of the two speeds.
+        t += 2.0 * d / (v + v1).max(CHUTE_CRAWL);
+        if v2 <= 0.0 {
+            stalled = true;
+        }
+        v = v1;
+    }
+    (t, stalled)
+}
 
 /// Velocidade num trecho por gravidade com essa inclinação (descendo é positiva), com
 /// `limit` a velocidade-limite (o `speed` da esteira, segurada pelos roletes de freio):
@@ -136,6 +179,12 @@ impl BeltRoute {
                     time += d / v;
                 }
                 if time > 0.0 { len / time } else { speed }
+            }
+            BeltDrive::Chute => {
+                let pts = path3d::sample(&self.nodes);
+                let (t, _) = chute_time(&pts, SLIDE_FRICTION, speed);
+                let len = path3d::length3(&pts);
+                if t > 0.0 { len / t } else { speed }
             }
         }
     }
@@ -355,7 +404,7 @@ impl Model {
             }
             let line = path3d::sample(&r.nodes);
             let worst = path3d::degrees(path3d::max_grade(&line));
-            if worst > r.max_slope() + 1e-9 {
+            if worst > r.max_slope() + 1e-9 && r.drive != BeltDrive::Chute {
                 out.push(format!(
                     "{}: trecho com {:.1}° de inclinação, acima do máximo de {:.0}° da {}; a \
                      peça escorrega ou tomba",
@@ -363,6 +412,13 @@ impl Model {
                     worst,
                     r.max_slope(),
                     r.style.label()
+                ));
+            }
+            if r.drive == BeltDrive::Chute && chute_time(&line, SLIDE_FRICTION, f64::INFINITY).1 {
+                out.push(format!(
+                    "{}: a calha não tem descida bastante para a peça escorregar (precisa de mais de {:.0}°, o atrito); ali ela só anda empurrada",
+                    o.name,
+                    SLIDE_FRICTION.atan().to_degrees()
                 ));
             }
             if r.drive == BeltDrive::Gravity {
@@ -454,6 +510,20 @@ mod tests {
             max_slope: None,
             width: None,
         }
+    }
+
+    #[test]
+    fn a_chute_takes_the_time_of_a_slide_with_friction() {
+        // 30° down over 4 m from rest: a = g (sin 30° − 0,3 cos 30°), t = √(2L/a).
+        let (s, c) = (30f64.to_radians().sin(), 30f64.to_radians().cos());
+        let pts = [[0.0, 0.0, 4.0 * s], [4.0 * c, 0.0, 0.0]];
+        let a = GRAVITY * (s - SLIDE_FRICTION * c);
+        let (t, stalled) = chute_time(&pts, SLIDE_FRICTION, f64::INFINITY);
+        assert!(!stalled);
+        assert!((t - (8.0 / a).sqrt()).abs() < 1e-9, "{t}");
+        // 10° is below the friction angle: it stalls.
+        let pts = [[0.0, 0.0, 0.7], [4.0, 0.0, 0.0]];
+        assert!(chute_time(&pts, SLIDE_FRICTION, f64::INFINITY).1);
     }
 
     #[test]
