@@ -273,3 +273,53 @@ linha-melhor_ponto_real = best point { $x } (actual)
 linha-prevista = predicted { $x }
 linha-desejabilidade_de = desirability of { $x }
 linha-r2_de = R² of { $x }
+
+## experimentos.rs: o plano do experimento no modelo (mensagens e linhas que o descrevem)
+experimentos-erro_fatores = the experiment needs 2 to 8 factors (the Plackett-Burman screening goes up to 15)
+experimentos-erro_sem_nome = give each factor a name
+experimentos-erro_niveis = factor { $fator } needs two different levels
+experimentos-erro_fracao = the 2^({ $k }−{ $p }) fraction is not in the app's table
+experimentos-erro_centro = factor { $fator } needs the center level (the levels are not numbers)
+experimentos-erro_sem_chave = factor { $fator } does not say which model parameter it changes (object.field)
+experimentos-erro_axial = factor { $fator } needs numeric levels for the axial points
+experimentos-bb_precisa_centro = the Box-Behnken needs at least one center point
+experimentos-sem_pb = no Plackett-Burman with { $n } runs
+experimentos-bb_faixa = the Box-Behnken goes from 3 to 5 factors
+experimentos-ccd_faixa = the central composite goes from 2 to { $max } factors
+experimentos-linha_ccd = rotatable central composite: { $fatoriais } factorial points, { $axiais } axial at ±α = { $alfa } and { $centros } centers
+experimentos-linha_face = face-centered composite: { $fatoriais } factorial points, { $axiais } axial on the faces (α = 1) and { $centros } centers; three levels per factor
+experimentos-linha_bb = Box-Behnken: { $pontos } points at the midpoints of the cube's edges and { $centros } centers; no run with all factors at the extremes
+experimentos-linha_segunda_ordem = estimates the full second-order model ({ $termos } coefficients: the constant, the main effects, the two-factor interactions and the squares)
+experimentos-sem_gl_erro = no degrees of freedom for error: add center points
+experimentos-pb_titulo = Plackett-Burman with { $n } runs for { $k } factors (screening)
+experimentos-pb_livres = main effects free of each other (resolution III)
+experimentos-pb_confundida = each two-factor interaction is partially confounded with the main effects: use the screening to find the few factors that matter and study them afterwards in a factorial
+experimentos-pb_colunas_livres = { $n ->
+    [one] { $n } matrix column without a factor gives degrees of freedom to the error
+   *[other] { $n } matrix columns without a factor give degrees of freedom to the error
+}
+experimentos-fatorial_completo = full factorial: no confounded effects
+experimentos-resolucao = resolution { $r }
+experimentos-resolucao_alta = high resolution
+
+## simulacao.rs: o estudo de simulação e o ganho estimado
+simulacao-erro_modelo = invalid model: { $e }
+simulacao-erro_sem_indicador = the model has no indicator { $k }
+simulacao-erro_sem_nome = give it a name
+simulacao-erro_sem_cenario = the study needs at least one scenario besides the baseline
+simulacao-sipoc_gerado = SIPOC generated from the model
+simulacao-nota_kpis = KPIs per replication of a model; simulated data, not collected
+simulacao-diferenca = { $cenario } on { $indicador }
+simulacao-conclusao_nenhuma = no significant and relevant difference
+simulacao-conclusao_relevantes = significant and relevant: { $lista }
+simulacao-ganho_sem_descricao = give the gain a description
+simulacao-ganho_fator = the value per unit and the periods per year must be positive
+simulacao-ganho_nao_significativa = the difference is not significant: the interval contains zero
+simulacao-ganho_piora = the scenario worsens the indicator in the chosen direction
+simulacao-relevancia_relevante = , significant and relevant
+simulacao-relevancia_significativa = , significant
+simulacao-base_ponta = end of the interval closest to zero
+simulacao-base_media = mean
+simulacao-sentido_aumento = An increase in the indicator is an improvement.
+simulacao-sentido_reducao = A reduction in the indicator is an improvement.
+simulacao-justificativa = Estimated by simulation in the study "{ $estudo }" (file { $arquivo }, hash { $hash }; model { $modelo }, hash { $hash_modelo }; { $replicacoes } replications, seed { $semente }). Scenario "{ $cenario }" against the baseline, indicator { $indicador }: paired difference { $media } [{ $baixo }; { $alto }] at { $nivel } %{ $relevancia }. Basis used: { $base } ({ $tipo_base }). Calculation: { $melhora } × { $por_unidade } per unit × { $periodos } periods per year = { $valor } per year. { $sentido } A gain estimated by simulation is only validated with actual booked figures.

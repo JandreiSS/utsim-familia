@@ -19,6 +19,9 @@ png = { version = "=0.18.1", optional = true }
 # "Procurar…" button of every path field. Not used by the Godot bridge.
 rfd = { version = "=0.16.0", optional = true }
 
+# The texts in five languages (idiomas/*/tema.ftl), without the picker widget.
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
+
 [features]
 # The flat look of the launcher and the admin app (`familia`).
 familia = ["dep:png"]

@@ -20,7 +20,9 @@ pub enum Tipo {
     Pasta,
 }
 
-/// Um filtro de tipos de arquivo do seletor: o nome mostrado e as extensões (sem ponto).
+/// Um filtro de tipos de arquivo do seletor: o nome mostrado e as extensões (sem ponto). Os
+/// filtros prontos daqui guardam no nome uma chave de `tema.ftl` (`arquivos-filtro_*`), que o
+/// seletor traduz; um nome escrito pelo app sai como está.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Filtro {
     pub nome: &'static str,
@@ -29,27 +31,27 @@ pub struct Filtro {
 
 /// Modelos do UTSim.
 pub const RON: Filtro = Filtro {
-    nome: "Modelo do UTSim (.ron)",
+    nome: "arquivos-filtro_ron",
     extensoes: &["ron"],
 };
 /// Tabelas em texto.
 pub const CSV: Filtro = Filtro {
-    nome: "Tabela CSV (.csv, .txt)",
+    nome: "arquivos-filtro_csv",
     extensoes: &["csv", "txt", "tsv"],
 };
 /// Planilhas e tabelas em texto.
 pub const PLANILHA: Filtro = Filtro {
-    nome: "Planilha (.csv, .txt, .xlsx)",
+    nome: "arquivos-filtro_planilha",
     extensoes: &["csv", "txt", "tsv", "xlsx", "xlsm"],
 };
 /// Relatórios em PDF.
 pub const PDF: Filtro = Filtro {
-    nome: "PDF (.pdf)",
+    nome: "arquivos-filtro_pdf",
     extensoes: &["pdf"],
 };
 /// Páginas HTML.
 pub const HTML: Filtro = Filtro {
-    nome: "Página (.html)",
+    nome: "arquivos-filtro_html",
     extensoes: &["html", "htm"],
 };
 
@@ -85,7 +87,18 @@ fn nome_inicial(atual: &str) -> Option<String> {
 /// `atual` é o caminho já escrito, de onde o seletor parte.
 #[cfg(feature = "arquivos")]
 pub fn procurar(tipo: Tipo, titulo: &str, filtros: &[Filtro], atual: &str) -> Option<PathBuf> {
-    procurar_com(tipo, titulo, filtros, atual, &Textos::PT)
+    procurar_com(tipo, titulo, filtros, atual, &Textos::atual())
+}
+
+impl Filtro {
+    /// O nome mostrado no seletor, na língua de agora.
+    pub fn nome_na_tela(&self) -> &'static str {
+        if self.nome.starts_with("arquivos-filtro_") {
+            crate::texto::tx(self.nome)
+        } else {
+            self.nome
+        }
+    }
 }
 
 /// [`procurar`] com os textos dados.
@@ -103,7 +116,7 @@ pub fn procurar_com(
     }
     if tipo != Tipo::Pasta {
         for f in filtros {
-            d = d.add_filter(f.nome, f.extensoes);
+            d = d.add_filter(f.nome_na_tela(), f.extensoes);
         }
         if !filtros.is_empty() {
             d = d.add_filter(textos.todos_os_arquivos, &["*"]);
@@ -150,6 +163,18 @@ impl Textos<'static> {
         dica_arquivo: "arquivo: escreva ou clique em Procurar…",
         todos_os_arquivos: "Todos os arquivos",
     };
+
+    /// Na língua de agora (`idiomas/*/tema.ftl`).
+    pub fn atual() -> Textos<'static> {
+        use crate::texto::tx;
+        Textos {
+            procurar: tx("arquivos-procurar"),
+            ajuda: tx("arquivos-ajuda"),
+            dica_pasta: tx("arquivos-dica_pasta"),
+            dica_arquivo: tx("arquivos-dica_arquivo"),
+            todos_os_arquivos: tx("arquivos-todos_os_arquivos"),
+        }
+    }
 }
 
 /// O campo de caminho: a caixa de texto e, ao lado, o botão "Procurar…" que abre o seletor
@@ -163,7 +188,7 @@ pub fn campo(
     filtros: &[Filtro],
     largura: f32,
 ) -> Response {
-    campo_com(ui, texto, tipo, titulo, filtros, largura, &Textos::PT)
+    campo_com(ui, texto, tipo, titulo, filtros, largura, &Textos::atual())
 }
 
 /// [`campo`] com os textos dados.

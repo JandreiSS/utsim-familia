@@ -145,7 +145,7 @@ impl TelaInicial {
                 caminho: raiz.as_deref(),
                 explicacao: tx("inicial-a_unidade_e_uma_pasta"),
             },
-            rotulos: Rotulos::PT,
+            rotulos: Rotulos::atual(),
         };
         let erro = (s.erro && !s.mensagem.is_empty()).then(|| s.mensagem.clone());
         let escolha = abertura.mostrar(
