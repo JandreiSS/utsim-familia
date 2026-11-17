@@ -49,7 +49,10 @@ fn planta_da_linha_mista() {
     let postos: Vec<_> = p.objetos.iter().filter(|o| o.elemento == "posto").collect();
     assert_eq!(postos.len(), 10);
     // Man and woman in turn, at every station.
-    let pessoas: Vec<&str> = postos.iter().map(|o| o.pessoa.as_deref().unwrap()).collect();
+    let pessoas: Vec<&str> = postos
+        .iter()
+        .map(|o| o.pessoa.as_deref().unwrap())
+        .collect();
     assert_eq!(&pessoas[..4], ["homem", "mulher", "homem", "mulher"]);
     // The distances of the model at half: est1 is at 6 m in the model.
     let est1 = p.objetos.iter().find(|o| o.nome == "est1").unwrap();
@@ -81,7 +84,11 @@ fn elementos_das_cenas_existem_em_3d() {
             .map(|o| &o.elemento)
             .chain(p.pecas.iter().map(|x| &x.elemento))
         {
-            assert!(existe(e), "{}: o elemento '{e}' não existe em assets/modelos3d", m.id);
+            assert!(
+                existe(e),
+                "{}: o elemento '{e}' não existe em assets/modelos3d",
+                m.id
+            );
         }
     }
 }
@@ -186,7 +193,11 @@ fn cena_quebrada_recusada() {
 #[test]
 fn campanha_carrega_imagem_e_ancoras() {
     let p = carregar_campanha().unwrap_or_else(|e| panic!("{}", e.join("\n")));
-    let mc = p.missoes.iter().find(|m| m.missao.id == "ato4/mix").unwrap();
+    let mc = p
+        .missoes
+        .iter()
+        .find(|m| m.missao.id == "ato4/mix")
+        .unwrap();
     let c = mc.cena.as_ref().expect("a 4.3 tem cena");
     assert!(c.png.len() > 10_000);
     // Every card has its anchor inside the picture.
