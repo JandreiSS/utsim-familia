@@ -8,7 +8,7 @@ fn modelo(chao: &str) -> Model {
         "Model(name: \"chao\", run: (stop_time: 20.0, seed: 1, replications: 1),
             {chao}
             objects: [
-                (name: \"fonte\", kind: Source(interarrival: Constant(5.0)), position: (0.0, 0.0, 0.0)),
+                (name: \"fonte\", kind: Source(interarrival: Const(5.0)), position: (0.0, 0.0, 0.0)),
                 (name: \"saida\", kind: Sink, position: (4.0, 0.0, 0.0)),
             ],
             connections: [(\"fonte\", \"saida\")])"
@@ -20,7 +20,7 @@ fn modelo(chao: &str) -> Model {
 
 #[test]
 fn a_cor_do_chao_vai_no_replay_e_volta_do_json() {
-    let m = modelo("floor_marking: Some((floor_color: Some(\"#d0c8a0\"))),");
+    let m = modelo("floor_marking: (floor_color: \"#d0c8a0\"),");
     let r = m.replay(0).unwrap();
     assert_eq!(r.floor_color.as_deref(), Some("#d0c8a0"));
     let texto = serde_json::to_string(&r).unwrap();
