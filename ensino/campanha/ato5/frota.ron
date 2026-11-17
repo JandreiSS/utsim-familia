@@ -45,4 +45,21 @@ Missao(
     ],
     referencia: {"agvs": 2, "regra": 1},
     animacao: (duracao: 1200, unidade: "s"),
+    cena: (
+        imagem: "frota.cena.png",
+        escala: 0.25,
+        elementos: {"agv_1": "agv", "agv_2": "agv", "agv_3": "agv", "agv_4": "agv"},
+        ocultar: ["chegada_paletes"],
+        pecas: [
+            (no: "doca", elemento: "palete", dx: -0.35),
+            (no: "doca", elemento: "palete", dx: 0.35),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "agv_2", tipo: Alavanca("agvs")),
+            (no: "doca@pe", tipo: Alavanca("regra")),
+            (no: "estacao_1@pe", tipo: Previsao("utilizacao")),
+            (no: "expedicao", tipo: Metrica("lead_time")),
+        ],
+    ),
 )

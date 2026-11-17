@@ -732,3 +732,26 @@ cena_meta_maior = objectif ≥ { $meta }
 cena_meta_menor = objectif ≤ { $meta }
 cena_takt = takt { $takt }
 cena_parcela = { $parcela } % { $modelo }
+
+# Editor: enunciado desenhado
+ed_cena = Énoncé dessiné
+ed_cena_dica = La scène du processus en 3D en haut de l'énoncé, avec les nombres attachés aux objets. Blender produit l'image avec les éléments d'UTSim 3D.
+ed_cena_sugerir = Suggérer la scène
+ed_cena_no = Objet
+ed_cena_cartao = Carte
+ed_cena_escala = Échelle de la scène
+ed_cena_gerar = Produire l'image
+ed_cena_gerar_dica = Rend la scène dans Blender (environ une minute)
+ed_cena_gerando = Production de l'image...
+ed_cena_gerada = Image produite.
+ed_cena_remover = Retirer la scène
+ed_cena_sem_blender = Blender introuvable. Pour générer l’image, installez Blender (gratuit) depuis son site officiel et cliquez de nouveau ; UTSim n’installe rien. S’il est dans un dossier inhabituel, définissez la variable BLENDER avec le chemin de blender.exe.
+ed_cena_baixar_blender = Télécharger Blender (blender.org)
+ed_cena_sem_elementos = Éléments 3D introuvables dans l’installation : réinstallez UTSim Ensino depuis le launcher ou définissez UTSIM_ELEMENTOS_3D avec le dossier assets/modelos3d.
+ed_cartao_estacao = Poste { $n }
+ed_cartao_alavanca = Levier : { $id }
+ed_cartao_metrica = Mesure : { $id }
+ed_cartao_previsao = Prévision : { $id }
+ed_cartao_valor = Valeur : { $rotulo }
+ed_cartao_texto = Texte : { $texto }
+ed_cartao_maquina = Machine : { $id }

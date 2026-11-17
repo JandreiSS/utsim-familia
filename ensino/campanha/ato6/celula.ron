@@ -40,4 +40,23 @@ Missao(
     ],
     referencia: {"operadores": 1},
     animacao: (duracao: 1800, unidade: "s"),
+    cena: (
+        imagem: "celula.cena.png",
+        escala: 0.6,
+        elementos: {"maq1": "cnc", "maq2": "cnc", "maq3": "cnc"},
+        pecas: [
+            (no: "chegada", elemento: "caixa", dx: -0.35),
+            (no: "chegada", elemento: "caixa", dx: 0.35),
+            (no: "fila", elemento: "caixa", dx: -0.7),
+            (no: "fila", elemento: "caixa"),
+            (no: "fila", elemento: "caixa", dx: 0.7),
+            (no: "saida", elemento: "caixa"),
+        ],
+        pessoas: {"ana": "mulher", "bruno": "homem", "carla": "mulher"},
+        cartoes: [
+            (no: "carla", tipo: Alavanca("operadores")),
+            (no: "maq2@pe", tipo: Previsao("ocupacao")),
+            (no: "saida", tipo: Metrica("lead_time")),
+        ],
+    ),
 )

@@ -41,4 +41,24 @@ Missao(
     ],
     referencia: {"regra": 1},
     animacao: (duracao: 480, unidade: "min"),
+    cena: (
+        imagem: "urgente.cena.png",
+        escala: 0.8,
+        elementos: {"retifica": "cnc"},
+        pecas: [
+            (no: "normais", elemento: "caixa"),
+            (no: "urgentes", elemento: "caixa", cor: "#d63031"),
+            (no: "fila", elemento: "caixa", dx: -0.7),
+            (no: "fila", elemento: "caixa"),
+            (no: "fila", elemento: "caixa", dx: 0.7, cor: "#d63031"),
+            (no: "entrega_normal", elemento: "caixa"),
+            (no: "entrega_urgente", elemento: "caixa", cor: "#d63031"),
+        ],
+        cartoes: [
+            (no: "fila", tipo: Alavanca("regra")),
+            (no: "retifica@pe", tipo: Previsao("fifo")),
+            (no: "entrega_normal", tipo: Metrica("normais")),
+            (no: "entrega_urgente@pe", tipo: Metrica("urgentes")),
+        ],
+    ),
 )

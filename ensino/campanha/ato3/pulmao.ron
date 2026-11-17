@@ -39,4 +39,22 @@ Missao(
     ],
     referencia: {"pulmao": 5},
     animacao: (duracao: 120, unidade: "min"),
+    cena: (
+        imagem: "pulmao.cena.png",
+        escala: 0.8,
+        elementos: {"torno": "cnc", "fresa": "cnc"},
+        pecas: [
+            (no: "barras", elemento: "caixa", dx: -0.35),
+            (no: "barras", elemento: "caixa", dx: 0.35),
+            (no: "fila_torno", elemento: "caixa", dx: -0.35),
+            (no: "fila_torno", elemento: "caixa", dx: 0.35),
+            (no: "pulmao", elemento: "caixa"),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "pulmao", tipo: Alavanca("pulmao")),
+            (no: "torno@pe", tipo: Previsao("bloqueio")),
+            (no: "expedicao", tipo: Metrica("vazao")),
+        ],
+    ),
 )

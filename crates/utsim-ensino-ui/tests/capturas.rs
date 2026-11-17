@@ -122,6 +122,7 @@ fn telas_das_pecas() {
         ("ato4/ventilador", "6_balanceamento"),
         ("ato5/oficina", "7_arranjo"),
         ("ato4/mix", "8_mix"),
+        ("ato2/urgente", "9_urgente"),
     ] {
         let p = app.pacote.clone().unwrap();
         let i = p.indice(id).unwrap();

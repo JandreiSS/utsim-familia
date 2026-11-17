@@ -47,4 +47,21 @@ Missao(
     ],
     referencia: {"plano": 2},
     animacao: (duracao: 1440, unidade: "min"),
+    cena: (
+        imagem: "manutencao.cena.png",
+        escala: 0.8,
+        elementos: {"torno": "cnc"},
+        pecas: [
+            (no: "entrada", elemento: "caixa"),
+            (no: "fila_torno", elemento: "caixa", dx: -0.35),
+            (no: "fila_torno", elemento: "caixa", dx: 0.35),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "torno", tipo: Alavanca("plano")),
+            (no: "torno@pe", tipo: Previsao("desgaste")),
+            (no: "expedicao", tipo: Metrica("disponibilidade")),
+            (no: "expedicao@pe", tipo: Metrica("custo")),
+        ],
+    ),
 )

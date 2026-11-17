@@ -40,4 +40,25 @@ Missao(
         "Ligue o retrabalho de volta a uma fila antes da calibração e confira os nomes pedidos no enunciado.",
     ],
     animacao: (duracao: 7200, unidade: "s"),
+    cena: (
+        imagem: "linha_retrabalho.cena.png",
+        escala: 0.6,
+        elementos: {"montagem": "posto", "solda": "celula", "calibracao": "posto"},
+        pecas: [
+            (no: "fila_bases", elemento: "caixa", dx: -0.35),
+            (no: "fila_bases", elemento: "caixa", dx: 0.35),
+            (no: "fila_placas", elemento: "caixa", dx: -0.35, cor: "#2e7d32"),
+            (no: "fila_placas", elemento: "caixa", dx: 0.35, cor: "#2e7d32"),
+            (no: "fila_solda", elemento: "caixa", dx: -0.35),
+            (no: "fila_solda", elemento: "caixa", dx: 0.35),
+            (no: "fila_cal", elemento: "caixa"),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "montagem", tipo: Texto("Montagem do kit: base e placa")),
+            (no: "solda", tipo: Texto("Solda: faltam as quebras")),
+            (no: "calibracao", tipo: Texto("Depois daqui faltam a inspeção e o retrabalho")),
+            (no: "expedicao@pe", tipo: Previsao("meta")),
+        ],
+    ),
 )

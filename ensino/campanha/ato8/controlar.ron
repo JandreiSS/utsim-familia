@@ -24,4 +24,27 @@ Missao(
          certa: 0),
     ],
     animacao: (duracao: 480, unidade: "min"),
+    cena: (
+        imagem: "eixos.cena.png",
+        escala: 0.8,
+        elementos: {"torno": "cnc", "retifica": "cnc", "acabamento": "posto", "inspecao": "posto"},
+        pecas: [
+            (no: "barras", elemento: "peca", dx: -0.35),
+            (no: "barras", elemento: "peca", dx: 0.35),
+            (no: "fila_torno", elemento: "peca", dx: -0.35),
+            (no: "fila_torno", elemento: "peca", dx: 0.35),
+            (no: "fila_retifica", elemento: "peca", dx: -0.35),
+            (no: "fila_retifica", elemento: "peca", dx: 0.35),
+            (no: "fila_acabamento", elemento: "peca", dx: -0.7),
+            (no: "fila_acabamento", elemento: "peca"),
+            (no: "fila_acabamento", elemento: "peca", dx: 0.7),
+            (no: "fila_inspecao", elemento: "peca"),
+            (no: "expedicao", elemento: "caixa"),
+            (no: "refugo", elemento: "caixa", cor: "#d63031"),
+        ],
+        cartoes: [
+            (no: "retifica", tipo: Texto("Um eixo por hora vai para a carta de controle")),
+            (no: "retifica@pe", tipo: Previsao("carta")),
+        ],
+    ),
 )

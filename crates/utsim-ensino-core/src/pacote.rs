@@ -136,6 +136,9 @@ pub struct CenaCarregada {
     pub cena: crate::cena::Cena,
     pub png: std::sync::Arc<[u8]>,
     pub ancoras: crate::cena::Ancoras,
+    /// In a layout: each machine on a transparent picture of the same size, drawn at the
+    /// reference cell (`<picture>.<machine>.png`).
+    pub maquinas: std::collections::BTreeMap<String, std::sync::Arc<[u8]>>,
 }
 
 impl std::fmt::Debug for CenaCarregada {
@@ -160,6 +163,7 @@ fn tamanho_png(b: &[u8]) -> Option<(u32, u32)> {
 /// Reads the picture and the anchors of a scene and checks that every card has its anchor.
 fn carregar_cena(
     arquivos: &Arquivos,
+    missao: &Missao,
     cena: &crate::cena::Cena,
     junta: &dyn Fn(&str) -> String,
 ) -> Result<CenaCarregada, Vec<String>> {
@@ -182,12 +186,32 @@ fn carregar_cena(
             ancoras.largura, ancoras.altura
         ));
     }
+    let inicial = missao.decisoes_iniciais();
     for c in &cena.cartoes {
-        if !ancoras.nos.contains_key(&c.no) {
+        let no = crate::cena::Cena::ancora(missao, c, &inicial);
+        if !ancoras.nos.contains_key(&no) {
             erros.push(format!(
                 "cena: o cartão de '{}' não tem âncora na imagem",
                 c.no
             ));
+        }
+    }
+    let mut maquinas = std::collections::BTreeMap::new();
+    if let Some(a) = &missao.arranjo {
+        for c in 0..a.celulas() {
+            if !ancoras.nos.contains_key(&crate::cena::ancora_celula(c)) {
+                erros.push(format!("cena: a célula {c} não tem âncora na imagem"));
+            }
+        }
+        for m in &a.maquinas {
+            let p = junta(&cena.imagem_maquina(&m.id));
+            match arquivos.get(&p) {
+                Some(b) if tamanho_png(b) == Some((w, h)) => {
+                    maquinas.insert(m.id.clone(), b.as_slice().into());
+                }
+                Some(_) => erros.push(format!("cena: '{p}' não tem o tamanho da imagem")),
+                None => erros.push(format!("cena: a imagem '{p}' não está no pacote")),
+            }
         }
     }
     if !erros.is_empty() {
@@ -197,6 +221,7 @@ fn carregar_cena(
         cena: cena.clone(),
         png: png.as_slice().into(),
         ancoras,
+        maquinas,
     })
 }
 
@@ -362,7 +387,7 @@ fn carregar_missao(
     // A modelling mission asks about the reference model (the starting one is incomplete).
     validar_missao(&missao, gabarito.as_ref().unwrap_or(&modelo))?;
     let cena = match &missao.cena {
-        Some(c) => Some(carregar_cena(arquivos, c, &junta)?),
+        Some(c) => Some(carregar_cena(arquivos, &missao, c, &junta)?),
         None => None,
     };
     Ok(MissaoCarregada {

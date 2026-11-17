@@ -292,8 +292,10 @@ produto desenhado.
 - **A imagem é gerada antes.** O bloco `cena` da missão diz como o modelo vira cena
   (`cena::Cena::planta`): cada objeto vira o elemento do seu tipo (fonte e fila em
   `espera_chao`, processador em `posto` com operador, saída em `palete`), na posição do modelo
-  vezes `escala`. `elementos` troca o elemento de um objeto, `ocultar` tira objetos e `pecas`
-  põe produtos sobre os objetos. `bash scripts/enunciados.sh` gera a planta (exemplo
+  vezes `escala`. `elementos` troca o elemento de um objeto (`cnc`, `prensa`, `celula`), `ocultar` tira
+  objetos (a fonte e a saída de um atendimento) e `pecas` põe produtos sobre os objetos, com
+  cor opcional. Um processador com capacidade n vira n postos lado a lado, e o do meio leva o
+  nome (`atendentes`); os outros são `atendentes#1`, `atendentes#3`. `bash scripts/enunciados.sh` gera a planta (exemplo
   `plantas` do `utsim-ensino-core`), renderiza no Blender (`tools/blender/enunciado.py`) e
   grava, ao lado da missão, a imagem (2040 × 700, reduzida a 256 cores) e as âncoras
   (`<imagem>.ancoras.json`: o ponto da imagem acima de cada objeto, `nome`, e no pé dele,
@@ -304,12 +306,35 @@ produto desenhado.
   `Previsao(id)` (a pergunta), `Valor` (uma conta só com decisões, termos das peças, custo e
   constantes, que muda ao vivo) e `Texto`. Um cartão no pé (`@pe`) fica abaixo do objeto. Os
   que não cabem lado a lado sobem em degraus, presos por hastes, e o desenho cresce para cima.
+- **Editor do professor.** "Sugerir a cena" monta o bloco a partir da missão: estações do
+  balanceamento, máquinas do arranjo, cada alavanca no objeto que as chaves dela mudam, a
+  primeira previsão sob a primeira fila e as medidas no objeto que leem (as das peças viram
+  `Valor`, ao vivo). A escala leva o modelo a uns 30 m. O professor ajusta a âncora de cada
+  cartão e a escala. "Gerar a imagem" roda o mesmo script no Blender da máquina (de `BLENDER`,
+  do `PATH` ou da pasta padrão), com os elementos de `UTSIM_ELEMENTOS_3D` ou de uma pasta
+  `assets/modelos3d` acima do programa, e guarda a imagem, as âncoras e as máquinas com a
+  missão. Sem a imagem, a missão com cena não grava.
 - **Conferência.** O pacote recusa a cena com imagem ou âncoras faltando, de tamanhos
   diferentes, cartão sem âncora, estação fora do balanceamento, alavanca, métrica ou previsão
   que não existem, e `Valor` com métrica do modelo (que só existe depois de simular). O teste
   `elementos_das_cenas_existem_em_3d` confere que todo elemento da campanha tem o `.glb`.
-- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3; C, atos 5 e 6 (no arranjo,
-  uma miniatura por máquina na grade); D, atos 7 e 8 e o editor do professor.
+- **Arranjo.** Numa missão de arranjo, a imagem mostra a grade no piso (âncoras `celula<c>`)
+  e cada máquina é renderizada sozinha, sobre fundo transparente e com o mesmo tamanho da
+  imagem, na célula 0 (`<imagem>.<máquina>.png`). Como a câmera é ortográfica, o app desloca
+  cada máquina da célula 0 para a célula em que o aluno a põe, desenhando da fileira de trás
+  para a da frente. O cartão `Maquina(id)`, preso a `id@pe`, é uma etiqueta no piso que segue a
+  máquina. O elemento de cada máquina vem de `elementos` (padrão `cnc`).
+- **Pessoas.** Um recurso móvel com `visual: (asset: "pessoa")` vira uma pessoa de uniforme em
+  pé. Se o modelo tem pessoas próprias, as máquinas não ganham operador. `pessoas` diz o sexo
+  de quem a missão nomeia (`{"ana": "mulher"}`); os outros alternam. Recursos móveis no mesmo
+  ponto (os AGVs na doca) ficam lado a lado.
+- **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6
+  (feita); D, atos 7 e 8 e o editor do professor (feita). Uma missão de modelagem, como a
+  padaria (ato 7), desenha o gabarito, porque o modelo inicial do aluno só tem a entrada e a
+  saída. A imagem mostra as etapas que o texto já descreve, e os cartões `Texto` só repetem
+  os números do texto. `sem_copias` desenha um processador como um elemento só, qualquer que
+  seja a capacidade (a câmara de 10 massas é uma estante, o forno de 2 é um forno), para não
+  sugerir como modelar a capacidade.
 
 ## 4. Recursos do professor
 

@@ -33,10 +33,13 @@ while IFS= read -r planta; do
     --planta "$(caminho "$planta")" --saida "$(caminho "$destino")" 2>&1) || { echo "$saida" >&2; exit 1; }
   if python -c "import PIL" >/dev/null 2>&1; then
     python - "$(caminho "$destino")" <<'EOF'
-import sys
+import glob, os, sys
 from PIL import Image
 p = sys.argv[1]
 Image.open(p).convert("RGB").quantize(256, method=Image.Quantize.MEDIANCUT).save(p, optimize=True)
+# As máquinas de uma grade, com transparência (oficina.cena.serra.png).
+for q in glob.glob(glob.escape(os.path.splitext(p)[0]) + ".*.png"):
+    Image.open(q).convert("RGBA").quantize(256, method=Image.Quantize.FASTOCTREE).save(q, optimize=True)
 EOF
   fi
   echo "enunciado: ensino/campanha/${rel%.planta.json}"

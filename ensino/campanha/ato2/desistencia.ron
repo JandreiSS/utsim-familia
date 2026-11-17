@@ -42,4 +42,15 @@ Missao(
     ],
     referencia: {"guiches": 2, "lugares": 10},
     animacao: (duracao: 120, unidade: "min"),
+    cena: (
+        imagem: "desistencia.cena.png",
+        escala: 0.8,
+        ocultar: ["clientes", "saida"],
+        cartoes: [
+            (no: "sala", tipo: Alavanca("lugares")),
+            (no: "guiches", tipo: Alavanca("guiches")),
+            (no: "sala@pe", tipo: Previsao("perda")),
+            (no: "guiches@pe", tipo: Metrica("perda")),
+        ],
+    ),
 )

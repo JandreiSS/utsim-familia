@@ -52,4 +52,27 @@ Missao(
     ],
     referencia: {"furacao": 2},
     animacao: (duracao: 480, unidade: "min"),
+    cena: (
+        imagem: "usinagem.cena.png",
+        escala: 0.8,
+        elementos: {"corte": "cnc", "furacao": "cnc", "pintura": "celula"},
+        pecas: [
+            (no: "chegada", elemento: "caixa", dx: -0.35),
+            (no: "chegada", elemento: "caixa", dx: 0.35),
+            (no: "fila_corte", elemento: "caixa", dx: -0.35),
+            (no: "fila_corte", elemento: "caixa", dx: 0.35),
+            (no: "fila_furacao", elemento: "caixa", dx: -0.7),
+            (no: "fila_furacao", elemento: "caixa"),
+            (no: "fila_furacao", elemento: "caixa", dx: 0.7),
+            (no: "fila_pintura", elemento: "caixa"),
+            (no: "saida", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "corte", tipo: Alavanca("corte")),
+            (no: "furacao", tipo: Alavanca("furacao")),
+            (no: "pintura", tipo: Alavanca("pintura")),
+            (no: "fila_furacao@pe", tipo: Previsao("gargalo")),
+            (no: "saida", tipo: Metrica("permanencia")),
+        ],
+    ),
 )

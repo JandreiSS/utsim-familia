@@ -28,6 +28,7 @@ pub mod dados;
 pub mod desafio;
 pub mod dicas;
 pub mod editor;
+pub mod editor_cena;
 pub mod editor_dados;
 pub mod editor_modelagem;
 pub mod editor_pecas;

@@ -47,4 +47,24 @@ Missao(
     ],
     referencia: {"lote": 0, "troca": 1},
     animacao: (duracao: 1440, unidade: "min"),
+    cena: (
+        imagem: "lote.cena.png",
+        escala: 0.8,
+        elementos: {"prensa": "prensa"},
+        pecas: [
+            (no: "lotes", elemento: "caixa", dx: -0.7),
+            (no: "lotes", elemento: "caixa"),
+            (no: "lotes", elemento: "caixa", dx: 0.7),
+            (no: "fila", elemento: "caixa", dx: -0.7),
+            (no: "fila", elemento: "caixa"),
+            (no: "fila", elemento: "caixa", dx: 0.7),
+            (no: "expedicao", elemento: "caixa"),
+        ],
+        cartoes: [
+            (no: "lotes", tipo: Alavanca("lote")),
+            (no: "prensa", tipo: Alavanca("troca")),
+            (no: "prensa@pe", tipo: Previsao("utilizacao")),
+            (no: "expedicao", tipo: Metrica("lead_time")),
+        ],
+    ),
 )
