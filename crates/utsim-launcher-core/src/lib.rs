@@ -22,6 +22,7 @@ pub mod drive;
 pub mod install;
 pub mod manifest;
 pub mod package;
+pub mod protect;
 pub mod report;
 pub mod shortcuts;
 pub mod signature;

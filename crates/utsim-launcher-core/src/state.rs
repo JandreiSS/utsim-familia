@@ -10,9 +10,9 @@ use crate::{Error, Result};
 /// Kept in `estado.json`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LauncherState {
-    /// The tester's access code, as typed (normalized). Stored in the user's own profile
-    /// folder; see the security notes in `docs/plano_launcher.md`.
-    #[serde(default)]
+    /// The tester's access code, as typed (normalized). In `estado.json` it is protected with
+    /// DPAPI on Windows ([`crate::protect`]); see the security notes in `docs/plano_launcher.md`.
+    #[serde(default, with = "protected_code")]
     pub code: Option<String>,
     /// Channel followed per product (default: stable).
     #[serde(default)]
@@ -106,6 +106,20 @@ impl LauncherState {
             .unwrap_or_default()
     }
 
+    /// Whether the file at `path` still has the access code unprotected (written by an older
+    /// launcher, or DPAPI failed then); saving the state again protects it.
+    pub fn code_unprotected_on_disk(path: &Path) -> bool {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return false;
+        };
+        let Ok(raw) = serde_json::from_str::<serde_json::Value>(&text) else {
+            return false;
+        };
+        raw.get("code")
+            .and_then(|c| c.as_str())
+            .is_some_and(|c| !crate::protect::is_protected(c))
+    }
+
     pub fn save(&self, path: &Path) -> Result<()> {
         let json = serde_json::to_vec_pretty(self).map_err(|e| Error::Format(e.to_string()))?;
         crate::install::write_atomic(path, &json)
@@ -128,6 +142,24 @@ impl LauncherState {
         self.channels
             .get(product)
             .map_or(crate::manifest::STABLE, String::as_str)
+    }
+}
+
+/// `code` on disk: protected when written; plain (old files) or protected when read. A
+/// protected code that does not open here (another user or computer) reads as no code.
+mod protected_code {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(code: &Option<String>, s: S) -> Result<S::Ok, S::Error> {
+        match code {
+            Some(c) => s.serialize_str(&crate::protect::protect(c)),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+        let stored = Option::<String>::deserialize(d)?;
+        Ok(stored.and_then(|s| crate::protect::unprotect(&s)))
     }
 }
 
@@ -227,5 +259,41 @@ mod tests {
             text.contains("\"lista\"") && text.contains("\"atualizacao\""),
             "{text}"
         );
+    }
+
+    #[test]
+    fn access_code_is_protected_on_disk_and_old_files_migrate() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("estado.json");
+        let code = "AB12-CDEF-GHJK-MNPQ-RSTV";
+        // A file of an older launcher: the code in plain text still loads.
+        std::fs::write(
+            &path,
+            format!(r#"{{"code": "{code}", "last_sequence": 2}}"#),
+        )
+        .unwrap();
+        assert!(LauncherState::code_unprotected_on_disk(&path));
+        let s = LauncherState::load(&path);
+        assert_eq!(s.code.as_deref(), Some(code));
+        // Saved again: protected on Windows, the same code read back.
+        s.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(LauncherState::load(&path).code.as_deref(), Some(code));
+        if cfg!(windows) {
+            assert!(!text.contains(code), "{text}");
+            assert!(text.contains(crate::protect::PREFIX), "{text}");
+            assert!(!LauncherState::code_unprotected_on_disk(&path));
+        }
+        // A protected code that does not open here reads as no code; the rest still loads.
+        std::fs::write(
+            &path,
+            r#"{"code": "dpapi:AAAAAAAAAAAAAAAAAAAAAA==", "last_sequence": 7}"#,
+        )
+        .unwrap();
+        let s = LauncherState::load(&path);
+        assert_eq!((s.code, s.last_sequence), (None, 7));
+        // No code at all.
+        std::fs::write(&path, r#"{"last_sequence": 1}"#).unwrap();
+        assert!(!LauncherState::code_unprotected_on_disk(&path));
     }
 }

@@ -22,6 +22,7 @@ fn spec(k: usize, fraction: usize) -> ExperimentSpec {
         fraction,
         screening: false,
         surface: None,
+        general: false,
         blocks: 1,
         replicates: 1,
         center_points: 0,
@@ -647,4 +648,97 @@ fn central_composite_in_two_blocks() {
     let mut b = s.clone();
     b.surface = Some(Surface::BoxBehnken);
     assert_eq!(b.block_options(), vec![1]);
+}
+
+#[test]
+fn general_factorial_planned_and_analysed() {
+    let s = ExperimentSpec {
+        name: "Fornecedor e temperatura".into(),
+        factors: vec![
+            FactorSpec {
+                name: "Fornecedor".into(),
+                levels: "X; Y; Z".into(),
+                ..FactorSpec::default()
+            },
+            FactorSpec {
+                name: "Temperatura".into(),
+                levels: "180;200".into(),
+                ..FactorSpec::default()
+            },
+        ],
+        general: true,
+        replicates: 2,
+        seed: 9,
+        response: "y".into(),
+        ..ExperimentSpec::default()
+    };
+    assert_eq!(s.block_options(), vec![1]);
+    let plan = s.plan().unwrap();
+    assert_eq!(plan.runs.len(), 3 * 2 * 2);
+    assert!(plan.lines[0].contains("3 × 2"), "{:?}", plan.lines);
+    let ws = worksheet(&s, &plan);
+    assert!(
+        ws.starts_with("ordem;ordem_padrao;centro;A;B;Fornecedor;Temperatura;y"),
+        "{ws}"
+    );
+    assert_eq!(ws.lines().filter(|l| l.contains(";Z;")).count(), 4);
+    // y = 10 + supplier (X 0, Y +3, Z −3) + 0,5 at 200, ± 0,1 by row: A matters, B and AB
+    // hardly.
+    let mut out = String::new();
+    for (i, line) in ws.lines().enumerate() {
+        if i == 0 {
+            out.push_str(line);
+        } else {
+            let mut c: Vec<String> = line.split(';').map(str::to_string).collect();
+            let a = match c[5].as_str() {
+                "Y" => 3.0,
+                "Z" => -3.0,
+                _ => 0.0,
+            };
+            let b = if c[6] == "200" { 0.5 } else { 0.0 };
+            let e = if i % 2 == 0 { 0.1 } else { -0.1 };
+            let last = c.len() - 1;
+            c[last] = (10.0 + a + b + e).to_string().replace('.', ",");
+            out.push_str(&c.join(";"));
+        }
+        out.push('\n');
+    }
+    let t = Table::parse(&out);
+    let (f, resp) = columns(&t.header);
+    let r = Recipe::GeneralFactorial {
+        factors: f,
+        response: resp.unwrap(),
+    };
+    assert_eq!(r.key(), "fatorial_geral");
+    let o = analises::run(&r, &t).unwrap();
+    assert!(
+        (o.value("SQ A").unwrap() - 72.0).abs() < 1.0,
+        "{:?}",
+        o.value("SQ A")
+    );
+    assert!(o.value("valor-p A").unwrap() < 0.001);
+    assert!(o.value("valor-p AB").is_some());
+    assert!(o.verdict.contains('A'), "{}", o.verdict);
+    assert!(
+        o.notes.iter().any(|n| n.contains("A = Fornecedor")),
+        "{:?}",
+        o.notes
+    );
+    assert_eq!(o.plots.len(), 3);
+    assert_eq!(o.plots[1].labels, vec!["X", "Y", "Z"]);
+    // Errors: repeated levels, center points.
+    let mut bad = s.clone();
+    bad.factors[0].levels = "X;X".into();
+    assert_eq!(
+        bad.plan(),
+        Err(ExpError::GeneralLevels("Fornecedor".into()))
+    );
+    let mut c = s.clone();
+    c.center_points = 2;
+    assert!(matches!(c.plan(), Err(ExpError::Design(_))));
+    // Unreplicated two factors: the interactions leave, main effects only.
+    let mut one = s.clone();
+    one.replicates = 1;
+    let p1 = one.plan().unwrap();
+    assert_eq!(p1.lines.len(), 2);
 }
