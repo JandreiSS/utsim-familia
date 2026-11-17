@@ -469,6 +469,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "home",
                 "load_zone",
                 "operator",
+                "bridge_gap",
             ],
         ),
         ObjectKind::Dispatcher { .. } => (

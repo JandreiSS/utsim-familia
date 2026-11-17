@@ -1,15 +1,15 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::crane::{AxisTimes, CraneOperator, CraneSpec};
+use crate::crane::{AxisTimes, CraneLane, CraneOperator, CraneSpec};
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::person::{TASK_LOAD, TASK_UNLOAD};
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
-    CRANE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_USER,
-    MSG_WITHDRAW, distance, is_case_tag, path_length, travel_time,
+    CRANE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_LANE_CHANGED, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND,
+    MSG_USER, MSG_WITHDRAW, distance, is_case_tag, path_length, travel_time,
 };
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, Router, State,
@@ -76,6 +76,9 @@ pub const MSG_FOLLOW_Z: u32 = MSG_USER + 27;
 /// Crane to the person at its pendant: start walking to the point just sent, taking this
 /// time (payload `f64::to_bits`), the time of the crane's travel.
 pub const MSG_FOLLOW: u32 = MSG_USER + 28;
+/// Crane to another crane on the same runway: move out of the way, to this point along
+/// the runway (payload `f64::to_bits`, see [`CraneLane::at`]).
+pub const MSG_GIVE_WAY: u32 = MSG_USER + 29;
 
 const START: u32 = 10;
 const ARRIVED_PICKUP: u32 = 0;
@@ -96,6 +99,8 @@ const SWITCHED: u32 = 9;
 const RAISED_LOADED: u32 = 11;
 /// Crane: the hook is back up after unhooking (the task is done).
 const RAISED_EMPTY: u32 = 12;
+/// Crane: out of the way of another crane on the same runway.
+const GAVE_WAY: u32 = 13;
 
 /// One piece of an AGV route: a controlled/free network edge or a connector between
 /// a point off the network and its node.
@@ -312,6 +317,25 @@ struct CraneState {
     op_wait_since: Option<Time>,
     /// Time the crane waited for its operator in the window.
     op_wait: f64,
+    /// The runway shared with other cranes ([`CraneLane`]); `None`: its own.
+    lane: Option<CraneLane>,
+    /// Moves waiting for the way to be free (the last one first).
+    moves: Vec<Move>,
+    /// The tag of the move under way, which ends where the crane then holds the runway.
+    moving: Option<u32>,
+    /// Since when the crane waits for another crane.
+    lane_wait_since: Option<Time>,
+    /// Time waiting for another crane in the window, and times it gave way.
+    lane_wait: f64,
+    gave_way: u64,
+}
+
+/// A crane move to above `target`, ending with the event `tag`.
+#[derive(Clone, Copy, Debug)]
+struct Move {
+    target: [f64; 3],
+    tag: u32,
+    state: State,
 }
 
 impl CraneState {
@@ -335,6 +359,11 @@ impl CraneState {
         self.op_wait = 0.0;
         if self.op_wait_since.is_some() {
             self.op_wait_since = Some(now);
+        }
+        self.lane_wait = 0.0;
+        self.gave_way = 0;
+        if self.lane_wait_since.is_some() {
+            self.lane_wait_since = Some(now);
         }
     }
 }
@@ -400,6 +429,12 @@ impl Transporter {
                 op_person: None,
                 op_wait_since: None,
                 op_wait: 0.0,
+                lane: None,
+                moves: Vec::new(),
+                moving: None,
+                lane_wait_since: None,
+                lane_wait: 0.0,
+                gave_way: 0,
             })
         });
         self
@@ -412,6 +447,131 @@ impl Transporter {
             c.operator = operator;
         }
         self
+    }
+
+    /// Crane mode: the runway shared with other cranes ([`CraneLane`]); `None`, its own.
+    /// Call after [`Transporter::crane`].
+    pub fn crane_lane(mut self, lane: Option<CraneLane>) -> Self {
+        if let Some(c) = self.crane.as_mut() {
+            c.lane = lane;
+        }
+        self
+    }
+
+    /// Crane move to above `target`: on a shared runway, once the way is free.
+    fn crane_move(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
+        let c = self.crane.as_mut().expect("crane mode");
+        c.moves.push(Move { target, tag, state });
+        self.crane_try_move(cx);
+    }
+
+    /// Starts the last waiting move if the runway lets it; else asks the cranes in the
+    /// way to give way and waits.
+    fn crane_try_move(&mut self, cx: &mut Ctx) {
+        if self.timer.is_some() || cx.is_down() {
+            return;
+        }
+        let now = cx.now();
+        let Some(c) = self.crane.as_mut() else { return };
+        let Some(m) = c.moves.last().copied() else {
+            return;
+        };
+        if let Some(lane) = c.lane {
+            let (_, _, end) = c.spec.travel(c.hook(self.position), m.target);
+            let to = c.spec.global(end.u, end.v, 0.0);
+            let (s0, s1) = (lane.at(self.position), lane.at(to));
+            let (lo, hi) = (s0.min(s1), s0.max(s1));
+            let in_way = cx.lane_hold(lane.id, lo, hi, lane.gap);
+            if !in_way.is_empty() {
+                for other in in_way {
+                    let Some((a, b)) = cx.lane_held(other) else {
+                        continue;
+                    };
+                    // Out of the stretch, on its own side.
+                    let to = if (a + b) / 2.0 >= s0 {
+                        hi + lane.gap
+                    } else {
+                        lo - lane.gap
+                    };
+                    cx.send(other, MSG_GIVE_WAY, to.to_bits());
+                }
+                if c.lane_wait_since.is_none() {
+                    c.lane_wait_since = Some(now);
+                    // Free to give way now: tell the cranes waiting on the runway.
+                    cx.lane_touch(lane.id);
+                }
+                cx.lane_wait(lane.id);
+                cx.set_state(State::Blocked);
+                return;
+            }
+            if let Some(since) = c.lane_wait_since.take() {
+                c.lane_wait += (now - since).max(0.0);
+            }
+        }
+        c.moves.pop();
+        c.moving = Some(m.tag);
+        self.crane_travel(cx, m.target, m.tag, m.state);
+    }
+
+    /// The move under way ended (or stopped) at the current position: the crane holds
+    /// only that point of the runway.
+    fn crane_settle(&mut self, cx: &mut Ctx) {
+        let Some(c) = self.crane.as_mut() else { return };
+        c.moving = None;
+        if let Some(lane) = c.lane {
+            let s = lane.at(self.position);
+            cx.lane_set(lane.id, s, s, lane.gap);
+        }
+    }
+
+    /// Another crane asks this one out of its way, to `to` along the runway: done when
+    /// free (idle, or waiting itself) and able to move there.
+    fn crane_give_way(&mut self, cx: &mut Ctx, to: f64) {
+        if self.timer.is_some() || cx.is_down() {
+            return;
+        }
+        let Some(c) = self.crane.as_mut() else { return };
+        let Some(lane) = c.lane else { return };
+        if !(self.trip.is_empty() || !c.moves.is_empty()) {
+            return;
+        }
+        let d = to - lane.at(self.position);
+        let p = self.position;
+        let target = [
+            p[0] + d * lane.dir[0],
+            p[1] + d * lane.dir[1],
+            c.spec.centre[2] + c.hook_z,
+        ];
+        let (_, _, end) = c.spec.travel(c.hook(p), target);
+        if distance(c.spec.global(end.u, end.v, 0.0), p) < 1e-9 {
+            return; // at the end of its runway: it cannot
+        }
+        if c.moves.last().is_some_and(|m| m.tag == GAVE_WAY) {
+            c.moves.pop();
+        }
+        c.gave_way += 1;
+        let state = if c.loaded_since.is_some() {
+            State::TravelLoaded
+        } else {
+            State::TravelEmpty
+        };
+        self.crane_move(cx, target, GAVE_WAY, state);
+    }
+
+    /// Out of the other crane's way: back to what it was doing.
+    fn crane_gave_way(&mut self, cx: &mut Ctx) {
+        if self.crane.as_ref().is_some_and(|c| !c.moves.is_empty()) {
+            self.crane_try_move(cx);
+        } else if self.trip.is_empty() {
+            if self.queue.is_empty() || cx.is_closing() {
+                cx.set_state(State::Idle);
+                if let Some(lane) = self.crane.as_ref().and_then(|c| c.lane) {
+                    cx.lane_touch(lane.id);
+                }
+            } else {
+                self.begin_trip(cx);
+            }
+        }
     }
 
     /// Crane with an operator: asks the team for the person of the transport that starts
@@ -839,7 +999,7 @@ impl Transporter {
     /// Starts moving to `target` in travel state `state`; `tag` fires on arrival.
     fn travel(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
         if self.crane.is_some() {
-            self.crane_travel(cx, target, tag, state);
+            self.crane_move(cx, target, tag, state);
             return;
         }
         let load = if state == State::TravelLoaded {
@@ -1101,6 +1261,10 @@ impl Transporter {
         let Some(head) = self.queue.pop_front() else {
             return;
         };
+        // Moves of an idle crane (giving way, going home) give way to the work.
+        if let Some(c) = self.crane.as_mut() {
+            c.moves.clear();
+        }
         self.trip = vec![head];
         self.k = 0;
         match head.kind {
@@ -1162,6 +1326,10 @@ impl Transporter {
     /// Nothing to do: wait (or drive home) and tell the dispatcher.
     fn go_idle(&mut self, cx: &mut Ctx, announce: bool) {
         cx.set_state(State::Idle);
+        // Free: the cranes waiting on its runway may ask it to give way.
+        if let Some(lane) = self.crane.as_ref().and_then(|c| c.lane) {
+            cx.lane_touch(lane.id);
+        }
         if announce {
             if let Some(d) = self.dispatcher {
                 self.report_position(cx);
@@ -1244,6 +1412,9 @@ impl Transporter {
             self.position = Self::progress(leg, cx.now()).0;
         }
         self.timer = None;
+        if self.crane.as_ref().is_some_and(|c| c.moving.is_some()) {
+            self.crane_settle(cx);
+        }
     }
 
     /// Whether the current work can be given back: travelling empty to the first stop
@@ -1450,7 +1621,14 @@ impl Behavior for Transporter {
             c.op_request = None;
             c.op_person = None;
             c.op_wait_since = None;
+            c.moves.clear();
+            c.moving = None;
+            c.lane_wait_since = None;
             c.reset_stats(0.0);
+            if let Some(lane) = c.lane {
+                let s = lane.at(self.position);
+                cx.lane_set(lane.id, s, s, lane.gap);
+            }
             let z = c.spec.centre[2] + c.hook_z;
             cx.trace_hoist(z, z, 0.0);
         }
@@ -1530,6 +1708,13 @@ impl Behavior for Transporter {
     fn on_event(&mut self, cx: &mut Ctx, tag: u32, _item: Option<ItemId>) {
         if let Some(Timer { leg: Some(leg), .. }) = self.timer.take() {
             self.position = *leg.path.last().expect("a path has points");
+        }
+        if self.crane.as_ref().is_some_and(|c| c.moving == Some(tag)) {
+            self.crane_settle(cx);
+        }
+        if tag == GAVE_WAY {
+            self.crane_gave_way(cx);
+            return;
         }
         if tag == AGV_STEP {
             if let Some(route) = &mut self.route {
@@ -1769,6 +1954,10 @@ impl Behavior for Transporter {
             }
             return;
         }
+        if self.crane.as_ref().is_some_and(|c| !c.moves.is_empty()) {
+            self.crane_try_move(cx);
+            return;
+        }
         if !self.trip.is_empty() {
             return; // operating a station: nothing is pending
         }
@@ -1802,7 +1991,9 @@ impl Behavior for Transporter {
     /// capacity), `crane.loaded_time` (time with an item hanging from the hook) and the
     /// time each axis moved, `crane.bridge_time`, `crane.trolley_time`,
     /// `crane.hoist_time`. With a pendant or radio, `crane.operator_wait`: time waiting
-    /// at the pick-up for the operator.
+    /// at the pick-up for the operator. On a runway shared with other cranes,
+    /// `crane.lane_wait` (time waiting for another crane to clear the way) and
+    /// `crane.gave_way` (times it moved out of another crane's way).
     fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
         let mut out = Vec::new();
         if let Some(c) = &self.crane {
@@ -1818,6 +2009,11 @@ impl Behavior for Transporter {
             if c.operator.is_some() {
                 let waiting = c.op_wait_since.map_or(0.0, |s| (now - s).max(0.0));
                 out.push(("crane.operator_wait".to_string(), c.op_wait + waiting));
+            }
+            if c.lane.is_some() {
+                let waiting = c.lane_wait_since.map_or(0.0, |s| (now - s).max(0.0));
+                out.push(("crane.lane_wait".to_string(), c.lane_wait + waiting));
+                out.push(("crane.gave_way".to_string(), c.gave_way as f64));
             }
         }
         if self.multitask.is_some() {
@@ -1882,6 +2078,14 @@ impl Behavior for Transporter {
             }
             MSG_FOLLOW => {
                 self.follow_crane(cx, from, f64::from_bits(payload));
+                return;
+            }
+            MSG_LANE_CHANGED if self.crane.is_some() => {
+                self.crane_try_move(cx);
+                return;
+            }
+            MSG_GIVE_WAY => {
+                self.crane_give_way(cx, f64::from_bits(payload));
                 return;
             }
             _ => {}

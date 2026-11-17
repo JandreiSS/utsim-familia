@@ -97,6 +97,30 @@ pub struct CraneOperator {
     pub offset: [f64; 2],
 }
 
+/// The runway a crane shares with other cranes, which it cannot pass
+/// ([`crate::Transporter::crane_lane`]). Absent: the crane has its runway to itself.
+///
+/// Before each move, the crane holds the stretch of the runway its bridge sweeps
+/// ([`utsim_core::Ctx::lane_hold`], lane `id`), keeping `gap` (m) from the bridges of the
+/// others. A crane in the way that is free (idle, or waiting itself) gives way: it moves
+/// along the runway just far enough, on its own side. Otherwise the crane waits
+/// (`blocked`) until the way is free.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CraneLane {
+    pub id: u32,
+    /// Direction of the runway on the floor (unit vector), the same for all its cranes.
+    pub dir: [f64; 2],
+    /// Distance kept between the hooks of two bridges, m.
+    pub gap: f64,
+}
+
+impl CraneLane {
+    /// Where a floor point is along the runway.
+    pub fn at(&self, p: [f64; 3]) -> f64 {
+        p[0] * self.dir[0] + p[1] * self.dir[1]
+    }
+}
+
 /// Geometry and axes of one crane.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CraneSpec {
