@@ -4,7 +4,7 @@ mod aisles;
 pub mod analysis;
 mod arrivals;
 mod crane;
-pub use crane::LoadZone;
+pub use crane::{CraneControl, LoadZone};
 pub mod csv;
 pub mod dados;
 pub mod espera;
@@ -592,6 +592,15 @@ pub enum ObjectKind {
         /// nobody should be while a load hangs (exposure analysis).
         #[serde(default = "load_zone", alias = "zona_carga")]
         load_zone: f64,
+        /// Who runs the crane: `Cabin` (default, not modelled), `Pendant(team: ..)` (a
+        /// person of the team walks with the load, and the crane goes no faster than
+        /// they walk) or `Radio(team: ..)` (a person of the team, at the crane's speed).
+        #[serde(
+            default,
+            alias = "operador",
+            skip_serializing_if = "CraneControl::is_cabin"
+        )]
+        operator: CraneControl,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -1837,6 +1846,7 @@ impl Model {
                 } => Box::new(
                     Transporter::new(self.crane_spec(obj).map_or(1.0, |c| c.bridge.speed))
                         .crane(self.crane_spec(obj))
+                        .crane_operator(self.crane_operator(obj, &ids))
                         .capacity(1)
                         .home(*home)
                         .handling(attach.clone(), detach.clone())

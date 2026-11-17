@@ -151,7 +151,7 @@ pub fn campo_modelo(
                 .desired_width(largura),
         );
         if ui
-            .button(arquivos::PROCURAR)
+            .button(arquivos::Textos::atual().procurar)
             .on_hover_text(tx("util-abre_o_explorador_de_arquivos"))
             .clicked()
         {

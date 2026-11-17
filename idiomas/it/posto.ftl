@@ -373,3 +373,9 @@ carta-u = u (difetti per unità)
 regras-basicas = di base
 regras-western = Western Electric
 regras-nelson = Nelson
+
+## Os limites opcionais da especificação (ferramentas.rs)
+ferramentas-rotulo_lie = LSI
+ferramentas-rotulo_lse = LSS
+ferramentas-rotulo_alvo = Obiettivo
+ferramentas-rotulo_usar = usa

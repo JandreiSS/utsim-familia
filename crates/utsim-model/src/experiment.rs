@@ -468,6 +468,7 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
                 "weight_label",
                 "home",
                 "load_zone",
+                "operator",
             ],
         ),
         ObjectKind::Dispatcher { .. } => (

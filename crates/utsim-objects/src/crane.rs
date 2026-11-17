@@ -77,6 +77,26 @@ pub enum CraneMotion {
     Parallel,
 }
 
+/// Person who controls the crane from the floor, with a pendant or a radio control
+/// ([`crate::Transporter::crane_operator`]). Absent: the crane is run from its cabin and
+/// the operator is not modelled.
+///
+/// For each transport the crane asks `team` for a person ([`utsim_core::task::CRANE_TAG`]),
+/// who walks to the pick-up and stands beside the load, `offset` from the hook on the
+/// floor. The crane travels there at the same time and hooks the item only when the
+/// person is there. With `follow` (pendant), the person walks with the load to the drop
+/// and the travel of the crane is never faster than `speed` (the slowest walk of the
+/// team); without it (radio), the person stays where they met the crane and the crane
+/// keeps its own speed. The crane releases the person once the item is down and the
+/// hook is up again.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CraneOperator {
+    pub team: utsim_core::BlockId,
+    pub follow: bool,
+    pub speed: f64,
+    pub offset: [f64; 2],
+}
+
 /// Geometry and axes of one crane.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CraneSpec {

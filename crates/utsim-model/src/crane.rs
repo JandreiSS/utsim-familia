@@ -4,11 +4,56 @@
 //! than the capacity, cranes whose areas overlap, points of a dispatcher out of reach).
 //! The kinematics are in `utsim_objects::crane`.
 
-use utsim_objects::CraneSpec;
+use std::collections::HashMap;
+
+use utsim_core::BlockId;
+use utsim_objects::{CraneOperator, CraneSpec};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{Model, ObjectDef, ObjectKind};
+
+/// Who runs a crane (`operator`, em português `operador`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CraneControl {
+    /// From the cabin: the operator is not modelled.
+    #[default]
+    #[serde(alias = "Cabine")]
+    Cabin,
+    /// Pendant control (botoeira): for each transport a person of `team` walks to the
+    /// load, beside it, and with it to the drop; the crane travels no faster than the
+    /// slowest walk of the team.
+    #[serde(alias = "Botoeira")]
+    Pendant {
+        #[serde(alias = "equipe")]
+        team: String,
+    },
+    /// Radio control: a person of `team` meets the crane at the load and runs it from
+    /// there; the crane keeps its own speed.
+    #[serde(alias = "Controle")]
+    Radio {
+        #[serde(alias = "equipe")]
+        team: String,
+    },
+}
+
+impl CraneControl {
+    pub fn is_cabin(&self) -> bool {
+        matches!(self, CraneControl::Cabin)
+    }
+
+    /// The team of the operator (`None`: cabin).
+    pub fn team(&self) -> Option<&str> {
+        match self {
+            CraneControl::Cabin => None,
+            CraneControl::Pendant { team } | CraneControl::Radio { team } => Some(team),
+        }
+    }
+}
+
+/// Distance (m) between the edge of the area under the load and the person at the
+/// pendant or radio control.
+pub const OPERATOR_CLEARANCE: f64 = 1.0;
 
 /// The area under a crane's suspended load ([`Model::crane_load_zone`]): a rectangle
 /// centred under the hook, of half sizes `half` (m, along the runway and across it),
@@ -101,6 +146,59 @@ impl Model {
         })
     }
 
+    /// The slowest walking speed of `team` (a person, or a dispatcher of people); `None`
+    /// when it is not one.
+    fn team_speed(&self, team: &str) -> Option<f64> {
+        let speed_of = |name: &str| {
+            self.objects
+                .iter()
+                .find(|o| o.name == name)
+                .and_then(|o| match &o.kind {
+                    ObjectKind::Transporter { speed, .. } => Some(*speed),
+                    _ => None,
+                })
+        };
+        let obj = self.objects.iter().find(|o| o.name == team)?;
+        match &obj.kind {
+            ObjectKind::Transporter { speed, .. } => Some(*speed),
+            ObjectKind::Dispatcher { team, .. } if !team.is_empty() => team
+                .iter()
+                .map(|m| speed_of(m))
+                .collect::<Option<Vec<f64>>>()
+                .map(|v| v.into_iter().fold(f64::INFINITY, f64::min)),
+            _ => None,
+        }
+    }
+
+    /// Where the person at a crane's pendant or radio stands, from the hook, on the
+    /// floor: across the runway, 1 m outside the area under the load.
+    fn operator_offset(&self, obj: &ObjectDef) -> [f64; 2] {
+        let zone = self.crane_load_zone(obj).map_or(0.0, |z| z.half[1]);
+        let d = zone + OPERATOR_CLEARANCE;
+        let yaw = self.crane_spec(obj).map_or(0.0, |c| c.yaw);
+        let (s, c) = yaw.sin_cos();
+        // Minus the local `y` (the trolley's axis), turned with the runway.
+        [s * d, -c * d]
+    }
+
+    /// The pendant or radio operator of a crane, for the kernel.
+    pub(crate) fn crane_operator(
+        &self,
+        obj: &ObjectDef,
+        ids: &HashMap<&str, BlockId>,
+    ) -> Option<CraneOperator> {
+        let ObjectKind::Crane { operator, .. } = &obj.kind else {
+            return None;
+        };
+        let team = operator.team()?;
+        Some(CraneOperator {
+            team: *ids.get(team)?,
+            follow: matches!(operator, CraneControl::Pendant { .. }),
+            speed: self.team_speed(team).unwrap_or(f64::INFINITY),
+            offset: self.operator_offset(obj),
+        })
+    }
+
     /// Points served through `transport: <name>`: each such object (pick-up) and the
     /// objects it connects to (drop).
     fn served_points(&self, name: &str) -> Vec<&ObjectDef> {
@@ -133,12 +231,21 @@ impl Model {
                 capacity_t,
                 weight_label,
                 load_zone,
+                operator,
                 ..
             } = &obj.kind
             else {
                 continue;
             };
             let name = &obj.name;
+            if let Some(team) = operator.team() {
+                if self.team_speed(team).is_none() {
+                    errors.push(format!(
+                        "{name}: operator.team '{team}' precisa ser uma pessoa (Transporter) ou \
+                         um Dispatcher só de pessoas, que opera a botoeira ou o rádio"
+                    ));
+                }
+            }
             if !(load_zone.is_finite() && *load_zone >= 0.0) {
                 errors.push(format!(
                     "{name}: load_zone deve ser finita e >= 0 (metade do lado da área sob a carga, em metros)"
@@ -223,9 +330,20 @@ impl Model {
                     utsim_objects::CraneMotion::Sequential => "um eixo de cada vez",
                     utsim_objects::CraneMotion::Parallel => "os três eixos juntos",
                 };
+                let who = match &o.kind {
+                    ObjectKind::Crane {
+                        operator: CraneControl::Pendant { team },
+                        ..
+                    } => format!("; botoeira (equipe '{team}')"),
+                    ObjectKind::Crane {
+                        operator: CraneControl::Radio { team },
+                        ..
+                    } => format!("; rádio (equipe '{team}')"),
+                    _ => String::new(),
+                };
                 Some(format!(
                     "{}: área de {} × {} m (caminho × vão), gancho a {} m, {} t; ponte {} m/s, \
-                     carro {} m/s, gancho {} m/s; {order}",
+                     carro {} m/s, gancho {} m/s; {order}{who}",
                     o.name,
                     c.length,
                     c.span,

@@ -275,3 +275,53 @@ linha-melhor_ponto_real = punto migliore { $x } (reale)
 linha-prevista = prevista { $x }
 linha-desejabilidade_de = desiderabilità di { $x }
 linha-r2_de = R² di { $x }
+
+## experimentos.rs: o plano do experimento no modelo (mensagens e linhas que o descrevem)
+experimentos-erro_fatores = l'esperimento richiede da 2 a 8 fattori (lo screening di Plackett-Burman arriva fino a 15)
+experimentos-erro_sem_nome = dai un nome a ogni fattore
+experimentos-erro_niveis = il fattore { $fator } richiede due livelli diversi
+experimentos-erro_fracao = la frazione 2^({ $k }−{ $p }) non è nella tabella dell'app
+experimentos-erro_centro = il fattore { $fator } richiede il livello centrale (i livelli non sono numeri)
+experimentos-erro_sem_chave = il fattore { $fator } non dice quale parametro del modello modifica (oggetto.campo)
+experimentos-erro_axial = il fattore { $fator } richiede livelli numerici per i punti assiali
+experimentos-bb_precisa_centro = il Box-Behnken richiede almeno un punto centrale
+experimentos-sem_pb = nessun Plackett-Burman da { $n } prove
+experimentos-bb_faixa = il Box-Behnken va da 3 a 5 fattori
+experimentos-ccd_faixa = il composito centrale va da 2 a { $max } fattori
+experimentos-linha_ccd = composito centrale rotabile: { $fatoriais } punti fattoriali, { $axiais } assiali a ±α = { $alfa } e { $centros } centri
+experimentos-linha_face = composito a facce centrate: { $fatoriais } punti fattoriali, { $axiais } assiali sulle facce (α = 1) e { $centros } centri; tre livelli per fattore
+experimentos-linha_bb = Box-Behnken: { $pontos } punti a metà degli spigoli del cubo e { $centros } centri; nessuna prova con tutti i fattori agli estremi
+experimentos-linha_segunda_ordem = stima il modello completo del secondo ordine ({ $termos } coefficienti: la costante, gli effetti principali, le interazioni a due fattori e i quadrati)
+experimentos-sem_gl_erro = nessun grado di libertà per l'errore: aggiungi punti centrali
+experimentos-pb_titulo = Plackett-Burman da { $n } prove per { $k } fattori (screening)
+experimentos-pb_livres = effetti principali liberi tra loro (risoluzione III)
+experimentos-pb_confundida = ogni interazione a due fattori è parzialmente confusa con gli effetti principali: usa lo screening per trovare i pochi fattori che contano e studiali poi in un fattoriale
+experimentos-pb_colunas_livres = { $n ->
+    [one] { $n } colonna della matrice senza fattore dà gradi di libertà all'errore
+   *[other] { $n } colonne della matrice senza fattore danno gradi di libertà all'errore
+}
+experimentos-fatorial_completo = fattoriale completo: nessun effetto confuso
+experimentos-resolucao = risoluzione { $r }
+experimentos-resolucao_alta = risoluzione alta
+
+## simulacao.rs: o estudo de simulação e o ganho estimado
+simulacao-erro_modelo = modello non valido: { $e }
+simulacao-erro_sem_indicador = il modello non ha l'indicatore { $k }
+simulacao-erro_sem_nome = dai un nome
+simulacao-erro_sem_cenario = lo studio richiede almeno uno scenario oltre alla linea di base
+simulacao-sipoc_gerado = SIPOC generato dal modello
+simulacao-nota_kpis = KPI per replica di un modello; dato simulato, non è una raccolta
+simulacao-diferenca = { $cenario } su { $indicador }
+simulacao-conclusao_nenhuma = nessuna differenza significativa e rilevante
+simulacao-conclusao_relevantes = significativa e rilevante: { $lista }
+simulacao-ganho_sem_descricao = dai una descrizione al guadagno
+simulacao-ganho_fator = il valore per unità e i periodi all'anno devono essere positivi
+simulacao-ganho_nao_significativa = la differenza non è significativa: l'intervallo contiene zero
+simulacao-ganho_piora = lo scenario peggiora l'indicatore nel senso scelto
+simulacao-relevancia_relevante = , significativa e rilevante
+simulacao-relevancia_significativa = , significativa
+simulacao-base_ponta = estremo dell'intervallo più vicino a zero
+simulacao-base_media = media
+simulacao-sentido_aumento = L'aumento dell'indicatore è un miglioramento.
+simulacao-sentido_reducao = La riduzione dell'indicatore è un miglioramento.
+simulacao-justificativa = Stimato per simulazione nello studio "{ $estudo }" (file { $arquivo }, hash { $hash }; modello { $modelo }, hash { $hash_modelo }; { $replicacoes } repliche, seme { $semente }). Scenario "{ $cenario }" rispetto alla linea di base, indicatore { $indicador }: differenza appaiata { $media } [{ $baixo }; { $alto }] al { $nivel } %{ $relevancia }. Base usata: { $base } ({ $tipo_base }). Calcolo: { $melhora } × { $por_unidade } per unità × { $periodos } periodi all'anno = { $valor } all'anno. { $sentido } Un guadagno stimato per simulazione è validato solo con registrazioni contabili reali.

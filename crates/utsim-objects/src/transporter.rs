@@ -1,15 +1,15 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::crane::{AxisTimes, CraneSpec};
+use crate::crane::{AxisTimes, CraneOperator, CraneSpec};
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
 use utsim_core::person::{TASK_LOAD, TASK_UNLOAD};
 use utsim_core::stats::TimeWeighted;
 use utsim_core::task::{
-    MAINTENANCE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_USER,
-    MSG_WITHDRAW, distance, path_length, travel_time,
+    CRANE_TAG, MSG_ARRIVED, MSG_IDLE, MSG_RELEASE, MSG_RESUME_WORK, MSG_SUSPEND, MSG_USER,
+    MSG_WITHDRAW, distance, is_case_tag, path_length, travel_time,
 };
 use utsim_core::{
     Behavior, BlockId, BlockState, Ctx, Dist, EventId, Item, ItemId, RequestId, Router, State,
@@ -68,6 +68,14 @@ pub const MSG_CASE_DONE: u32 = MSG_USER + 23;
 /// idle report. A loaded transport or a maintenance job is never interrupted: the member
 /// answers [`MSG_PREEMPT_REFUSED`].
 pub const MSG_PREEMPT_FULL: u32 = MSG_USER + 24;
+/// Crane to the person at its pendant: walk with the load to this point (one coordinate
+/// per message, payload `f64::to_bits`, like [`MSG_POSITION_X`]), then [`MSG_FOLLOW`].
+pub const MSG_FOLLOW_X: u32 = MSG_USER + 25;
+pub const MSG_FOLLOW_Y: u32 = MSG_USER + 26;
+pub const MSG_FOLLOW_Z: u32 = MSG_USER + 27;
+/// Crane to the person at its pendant: start walking to the point just sent, taking this
+/// time (payload `f64::to_bits`), the time of the crane's travel.
+pub const MSG_FOLLOW: u32 = MSG_USER + 28;
 
 const START: u32 = 10;
 const ARRIVED_PICKUP: u32 = 0;
@@ -275,6 +283,8 @@ pub struct Transporter {
     open: TimeWeighted,
     /// Overhead crane mode (see [`Transporter::crane`]).
     crane: Option<Box<CraneState>>,
+    /// Person at a crane's pendant: the point the crane told them to walk to.
+    follow_to: [f64; 3],
 }
 
 /// Run-time state of a crane: where the hook is and the statistics of the window.
@@ -292,6 +302,16 @@ struct CraneState {
     refused: u64,
     loaded_time: f64,
     axes: AxisTimes,
+    /// Pendant or radio operator ([`CraneOperator`]); `None`: cabin.
+    operator: Option<CraneOperator>,
+    /// The request for the operator of the current transport.
+    op_request: Option<RequestId>,
+    /// The operator who arrived for it.
+    op_person: Option<BlockId>,
+    /// Since when the crane waits at the pick-up for its operator.
+    op_wait_since: Option<Time>,
+    /// Time the crane waited for its operator in the window.
+    op_wait: f64,
 }
 
 impl CraneState {
@@ -311,6 +331,10 @@ impl CraneState {
         self.axes = AxisTimes::default();
         if self.loaded_since.is_some() {
             self.loaded_since = Some(now);
+        }
+        self.op_wait = 0.0;
+        if self.op_wait_since.is_some() {
+            self.op_wait_since = Some(now);
         }
     }
 }
@@ -351,6 +375,7 @@ impl Transporter {
             switching: TimeWeighted::default(),
             open: TimeWeighted::default(),
             crane: None,
+            follow_to: [0.0; 3],
         }
     }
 
@@ -370,9 +395,121 @@ impl Transporter {
                 refused: 0,
                 loaded_time: 0.0,
                 axes: AxisTimes::default(),
+                operator: None,
+                op_request: None,
+                op_person: None,
+                op_wait_since: None,
+                op_wait: 0.0,
             })
         });
         self
+    }
+
+    /// Crane mode: the person at the pendant or radio control ([`CraneOperator`]);
+    /// `None`, the cabin. Call after [`Transporter::crane`].
+    pub fn crane_operator(mut self, operator: Option<CraneOperator>) -> Self {
+        if let Some(c) = self.crane.as_mut() {
+            c.operator = operator;
+        }
+        self
+    }
+
+    /// Crane with an operator: asks the team for the person of the transport that starts
+    /// now, to meet the crane beside the load at `pickup`.
+    fn call_crane_operator(&mut self, cx: &mut Ctx, pickup: [f64; 3], priority: i32) {
+        let Some(c) = self.crane.as_mut() else { return };
+        let Some(op) = c.operator else { return };
+        let me = cx.me();
+        let id = cx.request_task(
+            op.team,
+            TaskKind::Operate {
+                station: me,
+                tag: CRANE_TAG,
+            },
+            priority,
+        );
+        let meet = [
+            pickup[0] + op.offset[0],
+            pickup[1] + op.offset[1],
+            pickup[2],
+        ];
+        cx.set_meeting_point(id, Some(meet));
+        c.op_request = Some(id);
+        c.op_person = None;
+    }
+
+    /// Whether the crane waits at the pick-up for its operator (and starts waiting).
+    fn crane_waits_operator(&mut self, cx: &mut Ctx) -> bool {
+        let Some(c) = self.crane.as_mut() else {
+            return false;
+        };
+        if c.op_request.is_none() || c.op_person.is_some() {
+            return false;
+        }
+        c.op_wait_since = Some(cx.now());
+        cx.set_state(State::WaitingOperator);
+        true
+    }
+
+    /// Lowers the hook (crane) and hooks the item of the current task at `from`.
+    fn start_loading(&mut self, cx: &mut Ctx, from: BlockId) {
+        cx.set_state(State::Loading);
+        let t = cx.sample_duration(&self.load_time);
+        let t = Self::handling_time(cx, TASK_LOAD, t);
+        // A crane lowers the hook first; it raises it after hooking.
+        let (down, _) = self.crane_hoist(cx, from);
+        self.arm_or_hold(cx, down + t, LOADED);
+    }
+
+    /// The crane's operator arrived (`from`, request `payload`).
+    fn crane_operator_arrived(&mut self, cx: &mut Ctx, from: BlockId, payload: u64) {
+        let now = cx.now();
+        let Some(c) = self.crane.as_mut() else { return };
+        if c.op_request.map(|r| r.0) != Some(payload) {
+            // Nobody waits for this person any more: give them back.
+            cx.send(from, MSG_RELEASE, payload);
+            return;
+        }
+        c.op_person = Some(from);
+        let Some(since) = c.op_wait_since.take() else {
+            return;
+        };
+        c.op_wait += (now - since).max(0.0);
+        if let Some(&TaskRequest {
+            kind: TaskKind::Transport { from: at, .. },
+            ..
+        }) = self.trip.first()
+        {
+            self.start_loading(cx, at);
+        }
+    }
+
+    /// The transport is done: the crane lets its operator go.
+    fn release_crane_operator(&mut self, cx: &mut Ctx) {
+        let Some(c) = self.crane.as_mut() else { return };
+        let Some(id) = c.op_request.take() else {
+            return;
+        };
+        cx.set_meeting_point(id, None);
+        if let Some(person) = c.op_person.take() {
+            cx.send(person, MSG_RELEASE, id.0);
+        }
+    }
+
+    /// Person at a crane's pendant: walk with the load as the crane says ([`MSG_FOLLOW`]).
+    fn follow_crane(&mut self, cx: &mut Ctx, from: BlockId, duration: f64) {
+        let with_crane = self.trip.first().is_some_and(|r| {
+            matches!(r.kind, TaskKind::Operate { station, tag } if station == from && tag == CRANE_TAG)
+                && self.started.contains(&r.id)
+        });
+        if !with_crane {
+            return;
+        }
+        let to = self.follow_to;
+        if distance(self.position, to) > 0.0 && duration > 0.0 {
+            cx.trace_travel(vec![self.position, to], duration);
+        }
+        self.position = to;
     }
 
     /// The crane refuses this task: an item heavier than its capacity.
@@ -390,12 +527,31 @@ impl Transporter {
     fn crane_travel(&mut self, cx: &mut Ctx, target: [f64; 3], tag: u32, state: State) {
         let c = self.crane.as_mut().expect("crane mode");
         let hook = c.hook(self.position);
-        let (t, axes, end) = c.spec.travel(hook, target);
+        let (mut t, axes, end) = c.spec.travel(hook, target);
         c.axes += axes;
         c.hook_z = end.z;
         let to = c.spec.global(end.u, end.v, 0.0);
         let floor = c.spec.centre[2];
         let path = vec![self.position, to];
+        // With the load and a pendant, the person walks beside it: the crane is never
+        // faster than they are.
+        let pendant = c
+            .operator
+            .filter(|op| op.follow && state == State::TravelLoaded)
+            .zip(c.op_person);
+        if let Some((op, person)) = pendant {
+            let floor_distance = (to[0] - self.position[0]).hypot(to[1] - self.position[1]);
+            t = t.max(floor_distance / op.speed);
+            let to_person = [to[0] + op.offset[0], to[1] + op.offset[1], target[2]];
+            for (tag, v) in [
+                (MSG_FOLLOW_X, to_person[0]),
+                (MSG_FOLLOW_Y, to_person[1]),
+                (MSG_FOLLOW_Z, to_person[2]),
+            ] {
+                cx.send(person, tag, v.to_bits());
+            }
+            cx.send(person, MSG_FOLLOW, t.to_bits());
+        }
         cx.set_state(state);
         // `Parallel`: the hook goes to the next height while the crane travels.
         if axes.hoist > 0.0 {
@@ -457,7 +613,7 @@ impl Transporter {
     fn on_case(&self) -> bool {
         matches!(
             self.trip.first().map(|r| r.kind),
-            Some(TaskKind::Operate { tag, .. }) if tag != MAINTENANCE_TAG
+            Some(TaskKind::Operate { tag, .. }) if is_case_tag(tag)
         )
     }
 
@@ -470,7 +626,7 @@ impl Transporter {
         let Some(m) = &self.multitask else {
             return false;
         };
-        matches!(request.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
+        matches!(request.kind, TaskKind::Operate { tag, .. } if is_case_tag(tag))
             && (self.on_case() || !self.others.is_empty())
             && self.open_cases() < m.max_open
     }
@@ -970,21 +1126,22 @@ impl Transporter {
                         cx.position(from)
                     }
                 });
+                self.call_crane_operator(cx, target, head.priority);
                 self.travel(cx, target, ARRIVED_PICKUP, State::TravelEmpty);
             }
             TaskKind::Operate { station, .. } => {
                 // Cases handed over together (an idle report) open together.
                 let limit = self.multitask.as_ref().map_or(1, |m| m.max_open);
                 while self.on_case() && self.open_cases() < limit {
-                    let Some(i) = self.queue.iter().position(|r| {
-                        matches!(r.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG)
-                    }) else {
+                    let Some(i) = self.queue.iter().position(
+                        |r| matches!(r.kind, TaskKind::Operate { tag, .. } if is_case_tag(tag)),
+                    ) else {
                         break;
                     };
                     let case = self.queue.remove(i).expect("index in range");
                     self.others.push_back((case, false));
                 }
-                let target = cx.position(station);
+                let target = cx.meeting_point(station, head.id);
                 self.travel(cx, target, ARRIVED_STATION, State::TravelEmpty);
             }
         }
@@ -1137,7 +1294,7 @@ impl Transporter {
         !cases.is_empty()
             && cases
                 .iter()
-                .all(|r| matches!(r.kind, TaskKind::Operate { tag, .. } if tag != MAINTENANCE_TAG))
+                .all(|r| matches!(r.kind, TaskKind::Operate { tag, .. } if is_case_tag(tag)))
             && cases
                 .iter()
                 .copied()
@@ -1290,6 +1447,9 @@ impl Behavior for Transporter {
             c.hook_z = c.spec.hook_height;
             c.loaded_since = None;
             c.raise = 0.0;
+            c.op_request = None;
+            c.op_person = None;
+            c.op_wait_since = None;
             c.reset_stats(0.0);
             let z = c.spec.centre[2] + c.hook_z;
             cx.trace_hoist(z, z, 0.0);
@@ -1428,7 +1588,7 @@ impl Behavior for Transporter {
             self.trip = vec![next];
             self.k = 0;
             if let TaskKind::Operate { station, .. } = next.kind {
-                let target = cx.position(station);
+                let target = cx.meeting_point(station, next.id);
                 self.travel(cx, target, ARRIVED_STATION, State::TravelEmpty);
             }
             return;
@@ -1438,12 +1598,10 @@ impl Behavior for Transporter {
         };
         match (tag, task.kind) {
             (ARRIVED_PICKUP, TaskKind::Transport { from, .. }) => {
-                cx.set_state(State::Loading);
-                let t = cx.sample_duration(&self.load_time);
-                let t = Self::handling_time(cx, TASK_LOAD, t);
-                // A crane lowers the hook first; it raises it after hooking.
-                let (down, _) = self.crane_hoist(cx, from);
-                self.arm(cx, down + t, LOADED, None);
+                // A crane with a pendant or radio hooks only with its operator there.
+                if !self.crane_waits_operator(cx) {
+                    self.start_loading(cx, from);
+                }
             }
             (RAISED_LOADED, TaskKind::Transport { .. }) => {
                 self.k = 0;
@@ -1486,11 +1644,15 @@ impl Behavior for Transporter {
                 }
                 self.arm(cx, down + t, UNLOADED, None);
             }
-            (RAISED_EMPTY, TaskKind::Transport { .. }) => self.finish(cx),
+            (RAISED_EMPTY, TaskKind::Transport { .. }) => {
+                self.release_crane_operator(cx);
+                self.finish(cx);
+            }
             (UNLOADED, TaskKind::Transport { item, to, port, .. }) if self.crane.is_some() => {
                 // Unhooked: the item is delivered; the hook goes back up.
                 cx.drop_off(item, to, port);
                 if !self.crane_raise(cx, RAISED_EMPTY) {
+                    self.release_crane_operator(cx);
                     self.finish(cx);
                 }
             }
@@ -1639,7 +1801,8 @@ impl Behavior for Transporter {
     /// A crane: `crane.trips` (items delivered), `crane.refused` (items heavier than the
     /// capacity), `crane.loaded_time` (time with an item hanging from the hook) and the
     /// time each axis moved, `crane.bridge_time`, `crane.trolley_time`,
-    /// `crane.hoist_time`.
+    /// `crane.hoist_time`. With a pendant or radio, `crane.operator_wait`: time waiting
+    /// at the pick-up for the operator.
     fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
         let mut out = Vec::new();
         if let Some(c) = &self.crane {
@@ -1652,6 +1815,10 @@ impl Behavior for Transporter {
                 ("crane.trolley_time".to_string(), c.axes.trolley),
                 ("crane.hoist_time".to_string(), c.axes.hoist),
             ]);
+            if c.operator.is_some() {
+                let waiting = c.op_wait_since.map_or(0.0, |s| (now - s).max(0.0));
+                out.push(("crane.operator_wait".to_string(), c.op_wait + waiting));
+            }
         }
         if self.multitask.is_some() {
             out.extend([
@@ -1695,6 +1862,29 @@ impl Behavior for Transporter {
                 cx.send(d, MSG_PREEMPT_REFUSED, payload);
             }
             return;
+        }
+        match tag {
+            MSG_ARRIVED if self.crane.is_some() => {
+                self.crane_operator_arrived(cx, from, payload);
+                return;
+            }
+            MSG_FOLLOW_X => {
+                self.follow_to[0] = f64::from_bits(payload);
+                return;
+            }
+            MSG_FOLLOW_Y => {
+                self.follow_to[1] = f64::from_bits(payload);
+                return;
+            }
+            MSG_FOLLOW_Z => {
+                self.follow_to[2] = f64::from_bits(payload);
+                return;
+            }
+            MSG_FOLLOW => {
+                self.follow_crane(cx, from, f64::from_bits(payload));
+                return;
+            }
+            _ => {}
         }
         if tag != MSG_RELEASE {
             return;

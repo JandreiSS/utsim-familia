@@ -169,6 +169,8 @@ struct BlockRuntime {
     withheld: Vec<Pending>,
     /// Where a carrier stands to take an item ([`Ctx::set_pickup_point`]).
     pickups: Vec<(ItemId, [f64; 3])>,
+    /// Where the operator of a request meets this station ([`Ctx::set_meeting_point`]).
+    meetings: Vec<(RequestId, [f64; 3])>,
     stats: BlockStats,
     series: Vec<SeriesPoint>,
     rng: SimRng,
@@ -735,6 +737,27 @@ impl Ctx<'_> {
             .map(|p| p.1)
     }
 
+    /// Where the operator of `request` goes to work for this station (an overhead crane
+    /// meets its pendant operator beside the load); `None` goes back to the station's
+    /// position.
+    pub fn set_meeting_point(&mut self, request: RequestId, point: Option<[f64; 3]>) {
+        let rt = &mut self.core.blocks[self.me.0];
+        rt.meetings.retain(|m| m.0 != request);
+        if let Some(point) = point {
+            rt.meetings.push((request, point));
+        }
+    }
+
+    /// Where the operator of `request` works for `station`: the point the station set
+    /// ([`Ctx::set_meeting_point`]), else its position.
+    pub fn meeting_point(&self, station: BlockId, request: RequestId) -> [f64; 3] {
+        let b = &self.core.blocks[station.0];
+        b.meetings
+            .iter()
+            .find(|m| m.0 == request)
+            .map_or(b.position, |m| m.1)
+    }
+
     /// Marks the item as ready to leave, ahead of the released items it outranks by the
     /// numeric label `label`: smallest value first, or largest first with `descending`.
     /// Ties keep the order of release; an item without the label (or with a text value)
@@ -1226,6 +1249,7 @@ impl Simulation {
             outbox: VecDeque::new(),
             withheld: Vec::new(),
             pickups: Vec::new(),
+            meetings: Vec::new(),
             stats: if self.core.keep_raw {
                 BlockStats {
                     staytime: Tally::with_raw(),
