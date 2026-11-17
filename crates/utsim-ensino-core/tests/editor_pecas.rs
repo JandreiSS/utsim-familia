@@ -175,14 +175,21 @@ fn erros_das_pecas() {
     }
 }
 
-/// The mixed-model line of the campaign (`ato4/mix`), opened again in the editor.
+/// The mixed-model line of the campaign (`ato4/mix`), opened again in the editor with the
+/// files of its drawn statement.
 fn mix() -> Edicao {
-    Edicao::abrir(
+    let mut ed = Edicao::abrir(
         Missao::parse(&ler("ato4/mix.ron")).unwrap(),
         &ler("modelos/ventilador_mix.ron"),
         &ler("ato4/mix.md"),
     )
-    .unwrap()
+    .unwrap();
+    let c = ed.base.cena.clone().unwrap();
+    for p in utsim_ensino_core::editor_cena::caminhos_cena(&c, &[]) {
+        let b = std::fs::read(raiz().join("ato4").join(&p)).unwrap();
+        ed.cena_arquivos.insert(p, b);
+    }
+    ed
 }
 
 #[test]

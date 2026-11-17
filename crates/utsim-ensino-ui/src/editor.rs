@@ -71,6 +71,8 @@ pub struct EstadoEditor {
     pub modelagem: EstadoModelagem,
     /// The warnings of the pieces (stage E), with the key of the pieces they were made for.
     pub pecas: Option<(String, Vec<String>)>,
+    /// The drawn statement: the rendering running and its last message.
+    pub cena: EstadoCena,
 }
 
 /// What a check of the modelling sends back.
@@ -599,6 +601,7 @@ fn secao_missao(
     let mut chaves = s.chaves.clone();
     chaves.extend(ed.chaves_de_decisao());
     secao_enunciado(ui, ed, &mut s.previa);
+    secao_cena(ui, ed, &mut s.cena, executor, ctx);
     if let Some(g) = &s.glossario {
         secao_conceitos(ui, ed, g);
     }
@@ -3135,5 +3138,156 @@ fn params_questao(ui: &mut Ui, i: usize, q: &mut QuestaoDados, cj: &ConjuntoMiss
             });
         }
         _ => {}
+    }
+}
+
+/// What the drawn statement keeps between frames: the rendering running, its last message.
+#[derive(Default)]
+pub struct EstadoCena {
+    pub trabalho: Option<Trabalho<Result<utsim_ensino_core::editor_cena::ArquivosCena, String>>>,
+    pub aviso: Option<String>,
+}
+
+/// The drawn statement: suggest the scene, its cards (anchor and content), render the
+/// picture with Blender and show it.
+fn secao_cena(
+    ui: &mut Ui,
+    ed: &mut Edicao,
+    s: &mut EstadoCena,
+    executor: &dyn crate::Executor,
+    ctx: &egui::Context,
+) {
+    if let Some(t) = &s.trabalho
+        && let Ok(r) = t.rx.try_recv()
+    {
+        s.trabalho = None;
+        s.aviso = Some(match r {
+            Ok(arquivos) => {
+                ed.cena_arquivos = arquivos;
+                texto::ed_cena_gerada().to_string()
+            }
+            Err(e) => e,
+        });
+    }
+    ui.add_space(4.0);
+    ui.label(RichText::new(texto::ed_cena()).strong());
+    ui.label(RichText::new(texto::ed_cena_dica()).weak());
+    let Some(cena) = &mut ed.base.cena else {
+        if ui.button(texto::ed_cena_sugerir()).clicked() {
+            ed.base.cena = Some(ed.sugerir_cena());
+            ed.cena_arquivos.clear();
+        }
+        return;
+    };
+    let mut tirar = None;
+    egui::Grid::new("ed_cena").striped(true).show(ui, |ui| {
+        for h in [texto::ed_cena_no(), texto::ed_cena_cartao(), ""] {
+            cabecalho(ui, h);
+        }
+        ui.end_row();
+        for (i, c) in cena.cartoes.iter_mut().enumerate() {
+            ui.add(egui::TextEdit::singleline(&mut c.no).desired_width(160.0));
+            ui.label(descrever_cartao(&c.tipo));
+            if ui
+                .small_button("✕")
+                .on_hover_text(texto::ed_remover())
+                .clicked()
+            {
+                tirar = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = tirar {
+        cena.cartoes.remove(i);
+    }
+    ui.horizontal(|ui| {
+        ui.label(texto::ed_cena_escala());
+        ui.add(
+            egui::DragValue::new(&mut cena.escala)
+                .speed(0.05)
+                .range(0.05..=5.0),
+        );
+    });
+    let mut remover = false;
+    let mut gerar = false;
+    ui.horizontal(|ui| {
+        gerar = ui
+            .add_enabled(
+                s.trabalho.is_none(),
+                egui::Button::new(texto::ed_cena_gerar()),
+            )
+            .on_hover_text(texto::ed_cena_gerar_dica())
+            .clicked();
+        if s.trabalho.is_some() {
+            ui.spinner();
+            ui.label(texto::ed_cena_gerando());
+        }
+        remover = ui.button(texto::ed_cena_remover()).clicked();
+    });
+    if let Some(a) = &s.aviso {
+        ui.label(RichText::new(a).weak());
+    }
+    if remover {
+        ed.base.cena = None;
+        ed.cena_arquivos.clear();
+        s.aviso = None;
+        return;
+    }
+    if gerar {
+        use utsim_ensino_core::editor_cena::{achar_blender, achar_elementos};
+        match (achar_blender(), achar_elementos()) {
+            (None, _) => s.aviso = Some(texto::ed_cena_sem_blender().to_string()),
+            (_, None) => s.aviso = Some(texto::ed_cena_sem_elementos().to_string()),
+            (Some(b), Some(el)) => {
+                let copia = ed.clone();
+                s.aviso = None;
+                s.trabalho = Some(Trabalho::iniciar(executor, Some(ctx.clone()), move |_| {
+                    copia.gerar_cena(&b, &el)
+                }));
+            }
+        }
+    }
+    // The picture rendered, small (the cards are drawn on it in the mission screen).
+    if let Some(png) = ed
+        .base
+        .cena
+        .as_ref()
+        .and_then(|c| ed.cena_arquivos.get(&c.imagem))
+    {
+        let chave = egui::Id::new(("ed_cena", png.len(), png.first().copied()));
+        let tex = ui
+            .ctx()
+            .data(|d| d.get_temp::<egui::TextureHandle>(chave))
+            .or_else(|| {
+                let img = utsim_ui_tema::familia::imagem_png(png)?;
+                let t = ui
+                    .ctx()
+                    .load_texture("ed-cena", img, egui::TextureOptions::LINEAR);
+                ui.ctx().data_mut(|d| d.insert_temp(chave, t.clone()));
+                Some(t)
+            });
+        if let Some(t) = tex {
+            let [w, h] = t.size();
+            let largura = ui.available_width().min(720.0);
+            ui.add(
+                egui::Image::new(&t)
+                    .fit_to_exact_size(egui::vec2(largura, largura * h as f32 / w.max(1) as f32)),
+            );
+        }
+    }
+}
+
+/// A card's content in a word and its target (`Alavanca: atendentes`).
+fn descrever_cartao(t: &utsim_ensino_core::cena::TipoCartao) -> String {
+    use utsim_ensino_core::cena::TipoCartao as T;
+    match t {
+        T::Estacao(n) => texto::f(texto::ed_cartao_estacao(), &[n]),
+        T::Alavanca(id) => texto::f(texto::ed_cartao_alavanca(), &[id]),
+        T::Metrica(id) => texto::f(texto::ed_cartao_metrica(), &[id]),
+        T::Previsao(id) => texto::f(texto::ed_cartao_previsao(), &[id]),
+        T::Valor { rotulo, .. } => texto::f(texto::ed_cartao_valor(), &[rotulo]),
+        T::Texto(t) => texto::f(texto::ed_cartao_texto(), &[t]),
+        T::Maquina(id) => texto::f(texto::ed_cartao_maquina(), &[id]),
     }
 }

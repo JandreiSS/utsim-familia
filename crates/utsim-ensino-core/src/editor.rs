@@ -51,6 +51,9 @@ pub struct Edicao {
     /// The reference model of a modelling mission (stage D,
     /// [`crate::editor_modelagem`]): `None` for the other missions.
     pub gabarito_ron: Option<String>,
+    /// The files of the drawn statement (picture, anchors, machines of a layout), by path
+    /// relative to the mission folder ([`crate::editor_cena`]).
+    pub cena_arquivos: crate::editor_cena::ArquivosCena,
 }
 
 /// A mission id: words of letters, digits, `_` and `-`, separated by `/`.
@@ -122,6 +125,7 @@ impl Edicao {
                 .collect(),
             origem: None,
             gabarito_ron: None,
+            cena_arquivos: Default::default(),
         })
     }
 
@@ -172,6 +176,7 @@ impl Edicao {
             metricas,
             origem: None,
             gabarito_ron: None,
+            cena_arquivos: Default::default(),
         })
     }
 
@@ -313,6 +318,7 @@ impl Edicao {
         e.extend(self.erros_dos_dados());
         e.extend(self.erros_da_modelagem());
         e.extend(self.erros_das_pecas());
+        e.extend(self.erros_da_cena());
         e
     }
 
@@ -774,6 +780,13 @@ impl PacoteProfessor {
         let mut ed = Edicao::abrir(missao, &modelo, &texto)?;
         ed.gabarito_ron = gabarito;
         ed.origem = Some(caminho.to_string());
+        if let Some(c) = &ed.base.cena {
+            for p in crate::editor_cena::caminhos_cena(c, &ed.maquinas_da_cena()) {
+                if let Some(b) = self.arquivos.get(&junta(&p)) {
+                    ed.cena_arquivos.insert(p, b.clone());
+                }
+            }
+        }
         Ok(ed)
     }
 
@@ -861,6 +874,11 @@ impl PacoteProfessor {
         if let (Some(md), Some(g)) = (&m.modelagem, &ed.gabarito_ron) {
             self.arquivos
                 .insert(junta(&dir, &md.gabarito), g.as_bytes().to_vec());
+        }
+        if m.cena.is_some() {
+            for (p, b) in &ed.cena_arquivos {
+                self.arquivos.insert(junta(&dir, p), b.clone());
+            }
         }
         if origem.is_none() {
             if ato >= self.pacote.atos.len() {

@@ -306,6 +306,14 @@ produto desenhado.
   `Previsao(id)` (a pergunta), `Valor` (uma conta só com decisões, termos das peças, custo e
   constantes, que muda ao vivo) e `Texto`. Um cartão no pé (`@pe`) fica abaixo do objeto. Os
   que não cabem lado a lado sobem em degraus, presos por hastes, e o desenho cresce para cima.
+- **Editor do professor.** "Sugerir a cena" monta o bloco a partir da missão: estações do
+  balanceamento, máquinas do arranjo, cada alavanca no objeto que as chaves dela mudam, a
+  primeira previsão sob a primeira fila e as medidas no objeto que leem (as das peças viram
+  `Valor`, ao vivo). A escala leva o modelo a uns 30 m. O professor ajusta a âncora de cada
+  cartão e a escala. "Gerar a imagem" roda o mesmo script no Blender da máquina (de `BLENDER`,
+  do `PATH` ou da pasta padrão), com os elementos de `UTSIM_ELEMENTOS_3D` ou de uma pasta
+  `assets/modelos3d` acima do programa, e guarda a imagem, as âncoras e as máquinas com a
+  missão. Sem a imagem, a missão com cena não grava.
 - **Conferência.** O pacote recusa a cena com imagem ou âncoras faltando, de tamanhos
   diferentes, cartão sem âncora, estação fora do balanceamento, alavanca, métrica ou previsão
   que não existem, e `Valor` com métrica do modelo (que só existe depois de simular). O teste
@@ -321,7 +329,7 @@ produto desenhado.
   de quem a missão nomeia (`{"ana": "mulher"}`); os outros alternam. Recursos móveis no mesmo
   ponto (os AGVs na doca) ficam lado a lado.
 - **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6
-  (feita); D, atos 7 e 8 (feita) e o editor do professor. A padaria (ato 7), de modelagem,
+  (feita); D, atos 7 e 8 e o editor do professor (feita). A padaria (ato 7), de modelagem,
   fica sem cena: o modelo inicial dela só tem a entrada e a saída, e desenhar o gabarito
   entregaria a resposta.
 

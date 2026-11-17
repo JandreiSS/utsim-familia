@@ -726,3 +726,25 @@ cena_meta_maior = meta ≥ { $meta }
 cena_meta_menor = meta ≤ { $meta }
 cena_takt = takt { $takt }
 cena_parcela = { $parcela } % { $modelo }
+
+# Editor: enunciado desenhado
+ed_cena = Enunciado desenhado
+ed_cena_dica = A cena do processo em 3D no topo do enunciado, com os números presos aos objetos. A imagem é gerada pelo Blender com os elementos do UTSim 3D.
+ed_cena_sugerir = Sugerir a cena
+ed_cena_no = Objeto
+ed_cena_cartao = Cartão
+ed_cena_escala = Escala da cena
+ed_cena_gerar = Gerar a imagem
+ed_cena_gerar_dica = Renderiza a cena no Blender (cerca de um minuto)
+ed_cena_gerando = Gerando a imagem...
+ed_cena_gerada = Imagem gerada.
+ed_cena_remover = Tirar a cena
+ed_cena_sem_blender = Blender não encontrado: instale o Blender ou defina BLENDER.
+ed_cena_sem_elementos = Elementos 3D não encontrados: defina UTSIM_ELEMENTOS_3D com a pasta assets/modelos3d.
+ed_cartao_estacao = Estação { $n }
+ed_cartao_alavanca = Alavanca: { $id }
+ed_cartao_metrica = Métrica: { $id }
+ed_cartao_previsao = Previsão: { $id }
+ed_cartao_valor = Valor: { $rotulo }
+ed_cartao_texto = Texto: { $texto }
+ed_cartao_maquina = Máquina: { $id }

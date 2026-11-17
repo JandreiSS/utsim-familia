@@ -726,3 +726,25 @@ cena_meta_maior = goal ≥ { $meta }
 cena_meta_menor = goal ≤ { $meta }
 cena_takt = takt { $takt }
 cena_parcela = { $parcela } % { $modelo }
+
+# Editor: enunciado desenhado
+ed_cena = Drawn statement
+ed_cena_dica = The 3D scene of the process at the top of the statement, with the numbers pinned to the objects. Blender renders the picture with the elements of UTSim 3D.
+ed_cena_sugerir = Suggest the scene
+ed_cena_no = Object
+ed_cena_cartao = Card
+ed_cena_escala = Scene scale
+ed_cena_gerar = Render the picture
+ed_cena_gerar_dica = Renders the scene in Blender (about a minute)
+ed_cena_gerando = Rendering the picture...
+ed_cena_gerada = Picture rendered.
+ed_cena_remover = Remove the scene
+ed_cena_sem_blender = Blender not found: install Blender or set BLENDER.
+ed_cena_sem_elementos = 3D elements not found: set UTSIM_ELEMENTOS_3D to the assets/modelos3d folder.
+ed_cartao_estacao = Station { $n }
+ed_cartao_alavanca = Lever: { $id }
+ed_cartao_metrica = Measure: { $id }
+ed_cartao_previsao = Prediction: { $id }
+ed_cartao_valor = Value: { $rotulo }
+ed_cartao_texto = Text: { $texto }
+ed_cartao_maquina = Machine: { $id }

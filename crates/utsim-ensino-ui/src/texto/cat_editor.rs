@@ -18,6 +18,19 @@ textos! {
     ed_nenhuma;
     ed_estacao_inicial;
     ed_tarefa_nova;
+    ed_cena;
+    ed_cena_dica;
+    ed_cena_sugerir;
+    ed_cena_no;
+    ed_cena_cartao;
+    ed_cena_escala;
+    ed_cena_gerar;
+    ed_cena_gerar_dica;
+    ed_cena_gerando;
+    ed_cena_gerada;
+    ed_cena_remover;
+    ed_cena_sem_blender;
+    ed_cena_sem_elementos;
     ed_mix;
     ed_mix_novo;
     ed_mix_parcela;
@@ -279,6 +292,13 @@ textos! {
 
 modelos! {
     ed_estacoes_modelo(estacoes);
+    ed_cartao_estacao(n);
+    ed_cartao_alavanca(id);
+    ed_cartao_metrica(id);
+    ed_cartao_previsao(id);
+    ed_cartao_valor(rotulo);
+    ed_cartao_texto(texto);
+    ed_cartao_maquina(id);
     ed_mix_dica(rotulo);
     ed_resumo_balanceamento(soma, minimo, ciclo, eficiencia);
     ed_inicial_viola(motivo);
