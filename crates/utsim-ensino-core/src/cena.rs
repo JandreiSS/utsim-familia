@@ -208,6 +208,8 @@ pub fn elemento_padrao(o: &utsim_model::ObjectDef) -> Option<String> {
         ObjectKind::Transporter { agv: true, .. } => "agv",
         ObjectKind::Transporter { .. } if e_pessoa(o) => "pessoa",
         ObjectKind::Transporter { .. } => "empilhadeira",
+        ObjectKind::Conveyor { .. } => "esteira",
+        ObjectKind::Rack { .. } => "porta_paletes",
         _ => return None,
     };
     Some(e.to_string())
@@ -301,10 +303,13 @@ impl Cena {
                 }),
             };
         }
-        let tem_pessoas = modelo
-            .objects
-            .iter()
-            .any(|o| matches!(o.kind, ObjectKind::Transporter { .. }) && e_pessoa(o));
+        let tem_pessoas = modelo.objects.iter().any(|o| {
+            matches!(o.kind, ObjectKind::Transporter { .. })
+                && match self.elementos.get(&o.name) {
+                    Some(e) => e == "pessoa",
+                    None => e_pessoa(o),
+                }
+        });
         let mut objetos: Vec<ObjetoPlanta> = Vec::new();
         for o in &modelo.objects {
             if self.ocultar.contains(&o.name) {

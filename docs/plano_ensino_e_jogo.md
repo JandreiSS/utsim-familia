@@ -321,7 +321,9 @@ produto desenhado.
   de quem a missão nomeia (`{"ana": "mulher"}`); os outros alternam. Recursos móveis no mesmo
   ponto (os AGVs na doca) ficam lado a lado.
 - **Etapas.** A, a infraestrutura e o ato 4 (feita); B, atos 1 a 3 (feita); C, atos 5 e 6
-  (feita); D, atos 7 e 8 e o editor do professor.
+  (feita); D, atos 7 e 8 (feita) e o editor do professor. A padaria (ato 7), de modelagem,
+  fica sem cena: o modelo inicial dela só tem a entrada e a saída, e desenhar o gabarito
+  entregaria a resposta.
 
 ## 4. Recursos do professor
 

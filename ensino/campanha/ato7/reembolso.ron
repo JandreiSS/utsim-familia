@@ -50,4 +50,24 @@ Missao(
     ],
     referencia: {"lote": 1, "envio": 1, "checklist": 0},
     animacao: (duracao: 2880, unidade: "min"),
+    cena: (
+        imagem: "reembolso.cena.png",
+        escala: 1.0,
+        elementos: {"equipe_1": "pessoa", "equipe_2": "pessoa", "gestores_1": "pessoa", "gestores_2": "pessoa"},
+        ocultar: ["malote"],
+        pecas: [
+            (no: "caixa", elemento: "caixa", dx: -0.7),
+            (no: "caixa", elemento: "caixa"),
+            (no: "caixa", elemento: "caixa", dx: 0.7),
+            (no: "lote", elemento: "caixa", dx: -0.35),
+            (no: "lote", elemento: "caixa", dx: 0.35),
+        ],
+        cartoes: [
+            (no: "lancamento", tipo: Alavanca("checklist")),
+            (no: "lote", tipo: Alavanca("lote")),
+            (no: "pagamento", tipo: Alavanca("envio")),
+            (no: "caixa@pe", tipo: Previsao("onde_espera")),
+            (no: "concluido", tipo: Metrica("lead_time")),
+        ],
+    ),
 )

@@ -1,0 +1,94 @@
+{
+ "altura": 528,
+ "largura": 2039,
+ "nos": {
+  "acabamento": [
+   1325.9,
+   168.4
+  ],
+  "acabamento@pe": [
+   1325.9,
+   270.3
+  ],
+  "barras": [
+   107.5,
+   385.9
+  ],
+  "barras@pe": [
+   107.5,
+   391.1
+  ],
+  "expedicao": [
+   1935.1,
+   197.6
+  ],
+  "expedicao@pe": [
+   1935.1,
+   209.9
+  ],
+  "fila_acabamento": [
+   1122.9,
+   285.2
+  ],
+  "fila_acabamento@pe": [
+   1122.9,
+   290.4
+  ],
+  "fila_inspecao": [
+   1529.0,
+   244.9
+  ],
+  "fila_inspecao@pe": [
+   1529.0,
+   250.1
+  ],
+  "fila_retifica": [
+   716.7,
+   325.5
+  ],
+  "fila_retifica@pe": [
+   716.7,
+   330.7
+  ],
+  "fila_torno": [
+   310.6,
+   365.7
+  ],
+  "fila_torno@pe": [
+   310.6,
+   371.0
+  ],
+  "inspecao": [
+   1732.1,
+   128.1
+  ],
+  "inspecao@pe": [
+   1732.1,
+   230.0
+  ],
+  "refugo": [
+   1699.6,
+   91.8
+  ],
+  "refugo@pe": [
+   1699.6,
+   104.1
+  ],
+  "retifica": [
+   919.8,
+   189.5
+  ],
+  "retifica@pe": [
+   919.8,
+   310.6
+  ],
+  "torno": [
+   513.7,
+   229.8
+  ],
+  "torno@pe": [
+   513.7,
+   350.8
+  ]
+ }
+}
