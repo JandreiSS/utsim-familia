@@ -341,6 +341,9 @@ trabalho-a_tarefa_terminou_sem_resultado = la tarea terminó sin resultado
 util-arquivo_ron_escreva_ou_clique = archivo .ron: escriba o haga clic en Examinar…
 util-abre_o_explorador_de_arquivos = Abre el explorador de archivos para elegir el modelo.
 util-escolha_o_modelo_do_utsim = Elija el modelo de UTSim
+util-data_dica = AAAA-MM-DD
+util-data_invalida = Fecha no válida. Use AAAA-MM-DD (o DD/MM/AAAA).
+util-data_antes = Esta fecha es anterior a {"{"}limite{"}"}.
 
 ## Os papéis das colunas, os tipos de carta e as regras de sinal (ferramentas.rs)
 ferramentas-coluna_do_papel = Columna { $papel }
