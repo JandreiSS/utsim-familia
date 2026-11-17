@@ -17,7 +17,8 @@ fn texto(p: &str) -> String {
     String::from_utf8(arquivos()[p].clone()).unwrap()
 }
 
-/// Every mission of the campaign with a scene, with its model.
+/// Every mission of the campaign with a scene, with the model it draws (a modelling
+/// mission draws its reference model).
 fn com_cena() -> Vec<(Missao, Model)> {
     let arq = arquivos();
     let pacote = manifesto(&arq).unwrap();
@@ -27,7 +28,8 @@ fn com_cena() -> Vec<(Missao, Model)> {
             let m = Missao::parse(&texto(path)).unwrap();
             if m.cena.is_some() {
                 let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
-                let modelo = Model::parse(&texto(&junta(dir, &m.modelo))).unwrap();
+                let arquivo = m.modelagem.as_ref().map_or(&m.modelo, |md| &md.gabarito);
+                let modelo = Model::parse(&texto(&junta(dir, arquivo))).unwrap();
                 v.push((m, modelo));
             }
         }
@@ -322,4 +324,22 @@ fn pessoas_com_nome_seguem_a_missao() {
     );
     // The model has its own operators: the machines get none.
     assert!(p.objetos.iter().all(|o| o.pessoa.is_none()));
+}
+
+#[test]
+fn modelagem_desenha_o_gabarito_sem_copias() {
+    let (m, modelo) = com_cena()
+        .into_iter()
+        .find(|(m, _)| m.id == "ato7/padaria")
+        .unwrap();
+    let p = m.cena.as_ref().unwrap().planta(&modelo, m.arranjo.as_ref());
+    // The process of the statement, from the reference model: the student's model has only
+    // the entrance and the exit.
+    for n in ["divisora", "camara", "forno", "embalagem", "expedicao"] {
+        assert!(p.objetos.iter().any(|o| o.nome == n), "{n}");
+    }
+    // The chamber (capacity 10) and the oven (capacity 2) are one element each.
+    assert!(p.objetos.iter().all(|o| !o.nome.contains('#')));
+    let forno = p.objetos.iter().find(|o| o.nome == "forno").unwrap();
+    assert_eq!(forno.elemento, "cnc");
 }
