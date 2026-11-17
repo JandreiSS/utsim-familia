@@ -142,12 +142,7 @@ pub fn k_one_sided(n: usize, coverage: f64, confidence: f64) -> Option<f64> {
 }
 
 /// Normal tolerance interval of `xs` (non-finite values are ignored).
-pub fn normal(
-    xs: &[f64],
-    coverage: f64,
-    confidence: f64,
-    sides: Sides,
-) -> Option<NormalTolerance> {
+pub fn normal(xs: &[f64], coverage: f64, confidence: f64, sides: Sides) -> Option<NormalTolerance> {
     let v: Vec<f64> = xs.iter().copied().filter(|x| x.is_finite()).collect();
     let n = v.len();
     let k = match sides {
