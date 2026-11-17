@@ -665,6 +665,7 @@ mod tests {
                 blocks: vec![],
             },
             fluids: None,
+            floor_color: None,
         }
     }
 
