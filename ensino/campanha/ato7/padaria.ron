@@ -39,4 +39,25 @@ Missao(
         "Use os nomes do enunciado (divisora, camara, forno, embalagem, expedicao) para que as medidas possam ser comparadas.",
     ],
     animacao: (duracao: 480, unidade: "min"),
+    // The process the statement describes, drawn from the reference model; the cards only
+    // repeat the numbers of the text.
+    cena: (
+        imagem: "padaria.cena.png",
+        escala: 0.6,
+        unidade: "min",
+        elementos: {"camara": "estante", "forno": "cnc"},
+        sem_copias: ["camara", "forno"],
+        pecas: [
+            (no: "expedicao", elemento: "caixa", dx: -0.3),
+            (no: "expedicao", elemento: "caixa", dx: 0.3, giro: 15.0),
+        ],
+        cartoes: [
+            (no: "massas", tipo: Texto("Uma massa a cada 6 min, em média")),
+            (no: "divisora", tipo: Texto("Divisora: 3 a 5,5 min, moda 4")),
+            (no: "camara", tipo: Texto("Câmara: até 10 massas, 45 min")),
+            (no: "forno", tipo: Texto("Forno: 2 massas, 10 a 16 min, quebra")),
+            (no: "embalagem", tipo: Texto("Embalagem: 4 a 6 min")),
+            (no: "fila_divisora@pe", tipo: Previsao("gargalo")),
+        ],
+    ),
 )
