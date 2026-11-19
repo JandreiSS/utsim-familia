@@ -159,7 +159,7 @@ fn publish_install_update_revoke() {
 }
 
 #[test]
-fn altered_package_is_rejected_before_decryption() {
+fn altered_package_is_rejected_before_extraction() {
     let work = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
     let layout = Layout::new(home.path());
@@ -193,4 +193,24 @@ fn zip_slip_is_refused() {
     let dest = work.path().join("dest");
     assert!(install::extract_zip(&zip_path, &dest).is_err());
     assert!(!work.path().join("fora.txt").exists());
+}
+
+#[test]
+fn disk_space_is_checked_with_a_clear_message() {
+    assert_eq!(install::human_size(500), "500 bytes");
+    assert_eq!(install::human_size(1536), "1,5 kB");
+    assert_eq!(install::human_size(320 << 20), "320 MB");
+    assert_eq!(install::human_size((3 << 30) / 2), "1,5 GB");
+
+    let dir = tempfile::tempdir().unwrap();
+    // A folder not created yet is measured on its nearest existing parent.
+    let inside = dir.path().join("ainda/nao/existe");
+    install::ensure_space(&inside, 0).unwrap();
+    if cfg!(windows) {
+        assert!(install::free_space(&inside).is_some_and(|f| f > 0));
+        let err = install::ensure_space(&inside, u64::MAX / 2).unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("espaço insuficiente"), "{text}");
+        assert!(text.contains("livres"), "{text}");
+    }
 }

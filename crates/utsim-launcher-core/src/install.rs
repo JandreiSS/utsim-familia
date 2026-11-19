@@ -130,18 +130,18 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
 
 /// Checks size and SHA-256 of a downloaded package against the manifest.
 pub fn verify_package(file: &Path, package: &Package) -> Result<()> {
+    verify_size_and_cipher(file, package)?;
+    check_sha256(&crate::sha256_file(file)?, package)
+}
+
+/// The checks that need no reading of the file.
+fn verify_size_and_cipher(file: &Path, package: &Package) -> Result<()> {
     let size = fs::metadata(file)?.len();
     if size != package.size {
         return Err(Error::Integrity(format!(
             "tamanho {size} bytes, o manifesto anuncia {}",
             package.size
         )));
-    }
-    let sum = crate::sha256_file(file)?;
-    if !sum.eq_ignore_ascii_case(&package.sha256) {
-        return Err(Error::Integrity(
-            "o SHA-256 não confere com o manifesto assinado".into(),
-        ));
     }
     if package.cipher != crypto::PACKAGE_CIPHER {
         return Err(Error::Format(format!(
@@ -150,6 +150,118 @@ pub fn verify_package(file: &Path, package: &Package) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+fn check_sha256(sum: &str, package: &Package) -> Result<()> {
+    if !sum.eq_ignore_ascii_case(&package.sha256) {
+        return Err(Error::Integrity(
+            "o SHA-256 não confere com o manifesto assinado".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Reads through to the inner reader and hashes every byte read.
+struct HashingReader<R> {
+    inner: R,
+    hasher: sha2::Sha256,
+}
+
+impl<R: std::io::Read> std::io::Read for HashingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use sha2::Digest;
+        let n = self.inner.read(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
+}
+
+/// Free bytes on the disk that holds `path` (or its nearest existing folder); `None` when
+/// unknown (then no check is made).
+pub fn free_space(path: &Path) -> Option<u64> {
+    let mut dir = path;
+    while !dir.exists() {
+        dir = dir.parent()?;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetDiskFreeSpaceExW(
+                dir: *const u16,
+                free_to_caller: *mut u64,
+                total: *mut u64,
+                total_free: *mut u64,
+            ) -> i32;
+        }
+        let wide: Vec<u16> = dir.as_os_str().encode_wide().chain([0]).collect();
+        let mut free = 0u64;
+        // SAFETY: `wide` is NUL-terminated; the counters are optional out pointers.
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        (ok != 0).then_some(free)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
+    }
+}
+
+/// Room kept free on the disk besides what an installation needs.
+pub const SPACE_MARGIN: u64 = 64 << 20;
+
+/// Fails with a clear message when the disk of `path` has less than `needed` bytes (plus
+/// [`SPACE_MARGIN`]) free. Unknown free space passes.
+pub fn ensure_space(path: &Path, needed: u64) -> Result<()> {
+    let Some(free) = free_space(path) else {
+        return Ok(());
+    };
+    let needed = needed.saturating_add(SPACE_MARGIN);
+    if free < needed {
+        return Err(Error::Install(format!(
+            "espaço insuficiente no disco de {}: são precisos {} e há {} livres. Libere espaço e tente de novo (um download já começado continua de onde parou)",
+            path.display(),
+            human_size(needed),
+            human_size(free)
+        )));
+    }
+    Ok(())
+}
+
+/// `1,5 GB`, `320 MB`, `12 kB`.
+pub fn human_size(n: u64) -> String {
+    const UNITS: [(u64, &str); 3] = [(1 << 30, "GB"), (1 << 20, "MB"), (1 << 10, "kB")];
+    for (size, unit) in UNITS {
+        if n >= size {
+            let v = n as f64 / size as f64;
+            let text = if v < 10.0 {
+                format!("{v:.1}")
+            } else {
+                format!("{v:.0}")
+            };
+            return format!("{} {unit}", text.replace('.', ","));
+        }
+    }
+    format!("{n} bytes")
+}
+
+/// Total uncompressed size of the entries of a zip (from its central directory).
+fn zip_uncompressed_size(zip_path: &Path) -> Result<u64> {
+    let bad = |e: zip::result::ZipError| Error::Integrity(format!("zip: {e}"));
+    let mut archive = zip::ZipArchive::new(BufReader::new(File::open(zip_path)?)).map_err(bad)?;
+    let mut total = 0u64;
+    for i in 0..archive.len() {
+        total = total.saturating_add(archive.by_index_raw(i).map_err(bad)?.size());
+    }
+    Ok(total)
 }
 
 /// The content key of `package`: from the tester's wrap when `code` is listed in it, else
@@ -189,8 +301,10 @@ pub fn install(
     if !manifest::valid_id(product) || !manifest::valid_version(&release.version) {
         return Err(Error::Install("produto ou versão com nome inválido".into()));
     }
-    verify_package(encrypted, package)?;
+    verify_size_and_cipher(encrypted, package)?;
     let key = content_key(product, release, package, code)?;
+    // The decrypted zip is about the size of the package.
+    ensure_space(&layout.downloads(), package.size)?;
 
     let product_dir = layout.product(product);
     fs::create_dir_all(&product_dir)?;
@@ -203,11 +317,22 @@ pub fn install(
 
     let result = (|| -> Result<PathBuf> {
         {
-            let input = BufReader::new(File::open(encrypted)?);
+            // One reading of the package: hashed while it is decrypted. Nothing is extracted
+            // before the SHA-256 is confirmed; a mismatch is reported before any decryption
+            // error, since it means the file is not the one the manifest signed.
+            use sha2::Digest;
+            let mut input = HashingReader {
+                inner: BufReader::new(File::open(encrypted)?),
+                hasher: sha2::Sha256::new(),
+            };
             let mut out = BufWriter::new(File::create(&zip_path)?);
-            crypto::decrypt_stream(&key, input, &mut out)?;
+            let decrypted = crypto::decrypt_stream(&key, &mut input, &mut out);
+            std::io::copy(&mut input, &mut std::io::sink())?;
+            check_sha256(&hex::encode(input.hasher.finalize()), package)?;
+            decrypted?;
             out.flush()?;
         }
+        ensure_space(&product_dir, zip_uncompressed_size(&zip_path)?)?;
         extract_zip(&zip_path, &staging)?;
         let exe = staging.join(&release.executable);
         if !manifest::relative_path_ok(&release.executable) || !exe.is_file() {
