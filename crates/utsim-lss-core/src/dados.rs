@@ -115,6 +115,21 @@ impl Dataset {
     }
 }
 
+/// The edit that deletes a data set (an ordinary operation: another can restore it). The
+/// screen deletes it only when no analysis uses it ([`in_use`]).
+pub fn delete(id: Id) -> Vec<Edit> {
+    vec![Edit::new(
+        Dataset::entity_ref(id),
+        crate::op::FIELD_DELETED,
+        true,
+    )]
+}
+
+/// Whether a saved analysis uses the data set.
+pub fn in_use(analyses: &[crate::analises::Analysis], id: Id) -> bool {
+    analyses.iter().any(|a| a.dataset == Some(id))
+}
+
 pub fn datasets(state: &State, project: Id) -> Vec<Dataset> {
     let key = project.to_string();
     let mut v: Vec<Dataset> = state
