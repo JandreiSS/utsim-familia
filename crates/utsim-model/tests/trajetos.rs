@@ -453,3 +453,33 @@ fn a_person_cannot_reach_a_high_belt_end() {
             .any(|w| w.contains("agachado"))
     );
 }
+
+#[test]
+fn an_item_slides_down_a_chute_with_friction() {
+    // 30° down along 4 m: a = g (sen 30° − 0,3 cos 30°), from rest t = √(2L/a).
+    let (s, c) = (30f64.to_radians().sin(), 30f64.to_radians().cos());
+    let nodes = format!(
+        "(at: (0.0, 0.0, {})), (at: ({}, 0.0, 0.0))",
+        4.0 * s,
+        4.0 * c
+    );
+    let m = belt(&nodes, ", drive: Chute, style: Channeled", 10.0, 1);
+    let a = 9.81 * (s - 0.3 * c);
+    assert!((run(&m) - (8.0 / a).sqrt()).abs() < 1e-6, "{}", run(&m));
+    // Steeper is faster.
+    let steep = belt(
+        "(at: (0.0, 0.0, 3.0)), (at: (2.0, 0.0, 0.0))",
+        ", drive: Chute, style: Channeled",
+        10.0,
+        1,
+    );
+    assert!(run(&steep) < run(&m));
+    // Too flat: the item stops on the sheet (warned).
+    let flat = belt(
+        "(at: (0.0, 0.0, 0.5)), (at: (4.0, 0.0, 0.0))",
+        ", drive: Chute, style: Channeled",
+        10.0,
+        1,
+    );
+    assert!(flat.warnings().iter().any(|w| w.contains("escorregar")));
+}

@@ -601,6 +601,10 @@ pub enum ObjectKind {
             skip_serializing_if = "CraneControl::is_cabin"
         )]
         operator: CraneControl,
+        /// Distance (m) kept between the hooks of two bridges on the same runway (cranes
+        /// whose areas overlap with the runways parallel): neither passes the other.
+        #[serde(default = "bridge_gap", alias = "folga_pontes")]
+        bridge_gap: f64,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -675,6 +679,10 @@ fn weight_label() -> String {
 
 fn load_zone() -> f64 {
     2.0
+}
+
+fn bridge_gap() -> f64 {
+    3.0
 }
 
 /// Mobile resources and dispatchers live outside the port graph.
@@ -1691,6 +1699,8 @@ impl Model {
         };
         // Pedestrian × vehicle crossings (movement `Aisles`), one board per simulation.
         let crossings = nav.crossing_board();
+        // Overhead cranes on the same runway (anticollision).
+        let crane_lanes = self.crane_lanes();
         let dispatcher_of: HashMap<&str, BlockId> = self
             .objects
             .iter()
@@ -1847,6 +1857,7 @@ impl Model {
                     Transporter::new(self.crane_spec(obj).map_or(1.0, |c| c.bridge.speed))
                         .crane(self.crane_spec(obj))
                         .crane_operator(self.crane_operator(obj, &ids))
+                        .crane_lane(crane_lanes.get(obj.name.as_str()).copied())
                         .capacity(1)
                         .home(*home)
                         .handling(attach.clone(), detach.clone())
