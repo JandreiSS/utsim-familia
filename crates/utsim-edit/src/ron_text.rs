@@ -424,12 +424,17 @@ mod tests {
                         count: 12,
                         item_type: Some("caixa".into()),
                         labels: BTreeMap::from([("prioridade".to_string(), 2.5)]),
+                        text_labels: BTreeMap::from([(
+                            "cliente".to_string(),
+                            "Loja 12".to_string(),
+                        )]),
                     },
                     ArrivalRow {
                         at: Some(600.0),
                         count: 0,
                         item_type: None,
                         labels: BTreeMap::new(),
+                        text_labels: BTreeMap::new(),
                     },
                 ],
             },
@@ -441,6 +446,7 @@ mod tests {
                     count: 3,
                     item_type: None,
                     labels: BTreeMap::new(),
+                    text_labels: BTreeMap::new(),
                 }],
             },
             ArrivalTable {
