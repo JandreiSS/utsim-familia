@@ -111,6 +111,9 @@ pub const MSG_RESUME_WORK: u32 = 10;
 /// request id): the station pauses the job and waits for an operator for the same request
 /// again, which the dispatcher hands to a member like any other.
 pub const MSG_WITHDRAW: u32 = 11;
+/// A stretch held on a lane this block waits on changed ([`crate::Ctx::lane_wait`];
+/// payload: the lane).
+pub const MSG_LANE_CHANGED: u32 = 12;
 pub const MSG_USER: u32 = 100;
 
 /// Path between two points in the layout. The default is a straight line; a path

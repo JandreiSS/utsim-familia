@@ -141,6 +141,7 @@ const LINHAS: &[(&str, &str)] = &[
     ("χ²", "linha-chi2"),
     ("Q", "linha-q"),
     ("R² ajustado", "linha-r2_ajustado"),
+    ("SQ erro", "linha-sq_erro"),
     ("erro padrão residual", "linha-erro_padrao_residual"),
     ("valor-p do modelo", "linha-valor_p_do_modelo"),
     ("pontos", "linha-pontos"),

@@ -237,6 +237,8 @@ Sem campos. Escreva `kind: Sink`.
 | `home` | `false` |
 | `load_zone` | `2.0` (metade do lado da área sob a carga, m) |
 | `operator` | `Cabin` (ou `Pendant(team: ...)`, `Radio(team: ...)`) |
+| `bridge_gap` | `3.0` (m entre os ganchos de duas pontes no mesmo caminho) |
+| `keep_clear` | `false` (com `true`, as pessoas não passam no caminho da carga) |
 
 Precisa de `size` (curso da ponte, vão, altura útil). Veja [Ponte rolante](ponte-rolante.md).
 

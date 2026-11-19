@@ -83,11 +83,53 @@ quase-conflitos. As chaves do relatório estão em [Métricas](#métricas). A an
 exposição (`utsim exposicao` e o UTSim Segurança do Trabalho) traz o mesmo número por
 pessoa e por ponte.
 
-A medida não muda o caminho das pessoas: ela mostra onde o leiaute ou a regra de
+Sozinha, a medida não muda o caminho das pessoas: ela mostra onde o leiaute ou a regra de
 circulação deixam alguém passar sob a carga.
 
-Duas pontes cujas áreas se sobrepõem geram um aviso: o UTSim ainda não impede que uma
-passe pela outra (anticolisão). Use uma ponte por caminho de rolamento.
+### Afastar as pessoas do caminho da carga
+
+Com `keep_clear: true` (`afastar_pessoas`), a ponte tira as pessoas do caminho da carga.
+O caminho é a faixa que a carga varre no piso: o quadrado de `load_zone` arrastado do ponto
+onde a peça sobe até o ponto onde ela desce.
+
+- Quem anda pelo piso (pessoas e veículos, todos os recursos móveis do modelo) e chegaria à
+  faixa com a carga ainda passando para na borda e espera a carga passar. A espera conta
+  em `load_wait`, e o estado é `blocked`. Quem já está dentro da faixa sai dela.
+- A ponte com a carga espera quem já está atravessando a faixa sair. A espera conta em
+  `crane.people_wait`, e o estado é `blocked`. Enquanto ela espera, ninguém mais entra.
+
+Quem está parado, trabalhando num posto embaixo do caminho, não é tirado de lá. A medida
+de tempo sob a carga continua contando essas pessoas. A ponte só afasta as pessoas no
+trecho em que anda com a carga. Na subida e na descida, a carga está sobre o ponto de pegar
+ou de soltar, onde o operador trabalha. Com `load_zone: 0`, não há faixa, e o
+`utsim check` avisa.
+
+Quando alguém passa sob a carga de uma ponte sem `keep_clear`, a análise de exposição
+(`utsim exposicao`) diz quanto tempo foi e sugere ligar a opção.
+
+## Duas pontes no mesmo caminho
+
+Duas pontes paralelas cujas áreas se sobrepõem andam nos mesmos trilhos: uma não passa pela
+outra (anticolisão). Os ganchos das duas ficam sempre a pelo menos `bridge_gap`
+(`folga_pontes`, padrão 3 m) um do outro, ao longo do caminho. Com três ou mais pontes no
+mesmo caminho, vale a maior folga do grupo. O `utsim check` mostra, na linha de cada ponte,
+com quais ela divide o caminho.
+
+Antes de andar, a ponte reserva o trecho do caminho que vai percorrer. Se outra ponte está
+no caminho:
+
+- parada, sem trabalho, ou parada à espera de outra ponte, ela sai do caminho: anda pelo
+  caminho de rolamento só o necessário, para o lado em que está, e conta em
+  `crane.gave_way`;
+- ocupada (andando, engatando, soltando), a ponte espera, no estado `blocked`, até o trecho
+  ficar livre, e conta a espera em `crane.lane_wait`.
+
+Uma ponte que precisa passar para o outro lado da outra nunca chega lá: elas não trocam de
+lugar no caminho. Atribua a cada ponte os pontos do seu lado, pelo campo `transport` ou por
+um `Dispatcher` de cada trecho.
+
+Pontes em caminhos que se cruzam em ângulo geram um aviso: o UTSim não impede a colisão
+entre elas.
 
 ## Operador
 
@@ -127,6 +169,8 @@ A pessoa fica ocupada até a peça ser solta e o gancho voltar para cima. Esse t
 | `home` (`volta`) | `false`: com `true`, volta à sua posição quando fica sem pedidos |
 | `load_zone` (`zona_carga`) | `2.0`: metade do lado, em metros, da área sob a carga; 0 ou mais |
 | `operator` (`operador`) | `Cabin`: ou `Pendant(team: ...)`, `Radio(team: ...)` (veja [Operador](#operador)) |
+| `bridge_gap` (`folga_pontes`) | `3.0`: distância, em metros, entre os ganchos de duas pontes no mesmo caminho; 0 ou mais (veja [Duas pontes no mesmo caminho](#duas-pontes-no-mesmo-caminho)) |
+| `keep_clear` (`afastar_pessoas`) | `false`: com `true`, as pessoas esperam a carga passar e a ponte espera quem está atravessando (veja [Afastar as pessoas do caminho da carga](#afastar-as-pessoas-do-caminho-da-carga)) |
 
 A ponte precisa de `size`. Ela não opera postos (`operators.team` não pode ser uma ponte)
 e não tem perfil de pessoa.
@@ -140,6 +184,10 @@ e não tem perfil de pessoa.
 | `crane.loaded_time` | tempo com uma peça pendurada no gancho |
 | `crane.bridge_time`, `crane.trolley_time`, `crane.hoist_time` | tempo em que cada eixo andou (com `Safe`, a ponte e o carro andam ao mesmo tempo) |
 | `crane.operator_wait` | com botoeira ou rádio: tempo parada no ponto de pegar, à espera da pessoa |
+| `crane.lane_wait` | com outra ponte no mesmo caminho: tempo à espera de que ela saia do trecho |
+| `crane.gave_way` | com outra ponte no mesmo caminho: vezes que saiu do caminho dela |
+| `crane.people_wait` | com `keep_clear`: tempo à espera de que as pessoas saiam do caminho da carga |
+| `load_wait` (em cada recurso móvel) | com uma ponte com `keep_clear`: tempo parado na borda do caminho da carga |
 | `tempo_sob_carga`, `entradas_sob_carga` | com pessoas no modelo: tempo e entradas de pessoas sob a carga desta ponte. As mesmas chaves aparecem em cada pessoa, somando todas as pontes |
 
 Os estados (`idle`, `travel_empty`, `travel_loaded`, `loading`, `unloading`) e a
