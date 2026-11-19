@@ -20,8 +20,8 @@ use crate::rng::{self, SimRng};
 use crate::script::{ItemScript, PortScript, ScriptEnv};
 use crate::stats::{StateTracker, Tally, TimeWeighted};
 use crate::task::{
-    MSG_ITEM_ENTERED, MSG_ITEM_EXITED, MSG_TRANSPORT_RESERVED, RequestId, Router, StraightLine,
-    TaskKind, TaskRequest,
+    MSG_ITEM_ENTERED, MSG_ITEM_EXITED, MSG_LANE_CHANGED, MSG_TRANSPORT_RESERVED, RequestId, Router,
+    StraightLine, TaskKind, TaskRequest,
 };
 use crate::trace::{Observer, TraceEvent, TraceRecord, item_key};
 
@@ -139,6 +139,15 @@ impl BlockStats {
     }
 }
 
+/// A stretch of a lane held by a block ([`Ctx::lane_hold`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LaneHold {
+    lane: u32,
+    lo: f64,
+    hi: f64,
+    gap: f64,
+}
+
 struct BlockRuntime {
     name: String,
     kind: &'static str,
@@ -171,6 +180,10 @@ struct BlockRuntime {
     pickups: Vec<(ItemId, [f64; 3])>,
     /// Where the operator of a request meets this station ([`Ctx::set_meeting_point`]).
     meetings: Vec<(RequestId, [f64; 3])>,
+    /// The stretch this block holds on a lane ([`Ctx::lane_hold`]).
+    lane: Option<LaneHold>,
+    /// Waits for a change on this lane ([`Ctx::lane_wait`]).
+    lane_waiting: Option<u32>,
     stats: BlockStats,
     series: Vec<SeriesPoint>,
     rng: SimRng,
@@ -758,6 +771,72 @@ impl Ctx<'_> {
             .map_or(b.position, |m| m.1)
     }
 
+    /// Holds the stretch `[lo, hi]` of the one-dimensional `lane` (the runway shared by
+    /// overhead cranes, which cannot pass one another), keeping `gap` from the stretches
+    /// other blocks hold there (the larger `gap` of the two counts). Returns the blocks
+    /// in the way; empty: held, in place of this block's earlier stretch.
+    pub fn lane_hold(&mut self, lane: u32, lo: f64, hi: f64, gap: f64) -> Vec<BlockId> {
+        let me = self.me;
+        let in_way: Vec<BlockId> = self
+            .core
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != me.0)
+            .filter_map(|(i, b)| {
+                let h = b.lane.filter(|h| h.lane == lane)?;
+                let g = gap.max(h.gap);
+                (h.lo < hi + g - 1e-9 && h.hi > lo - g + 1e-9).then_some(BlockId(i))
+            })
+            .collect();
+        if in_way.is_empty() {
+            self.lane_set(lane, lo, hi, gap);
+        }
+        in_way
+    }
+
+    /// Holds `[lo, hi]` on `lane` whatever the others hold (the start, or a stretch
+    /// inside the one already held).
+    pub fn lane_set(&mut self, lane: u32, lo: f64, hi: f64, gap: f64) {
+        let hold = LaneHold { lane, lo, hi, gap };
+        let rt = &mut self.core.blocks[self.me.0];
+        if rt.lane != Some(hold) {
+            rt.lane = Some(hold);
+            self.lane_touch(lane);
+        }
+    }
+
+    /// The stretch `block` holds on its lane.
+    pub fn lane_held(&self, block: BlockId) -> Option<(f64, f64)> {
+        self.core.blocks[block.0].lane.map(|h| (h.lo, h.hi))
+    }
+
+    /// Asks for one [`MSG_LANE_CHANGED`] when a stretch held on `lane` changes, or a
+    /// block there calls [`Ctx::lane_touch`].
+    pub fn lane_wait(&mut self, lane: u32) {
+        self.core.blocks[self.me.0].lane_waiting = Some(lane);
+    }
+
+    /// Tells the blocks waiting on `lane` that something changed there (a block that
+    /// holds a stretch is free to give way).
+    pub fn lane_touch(&mut self, lane: u32) {
+        let me = self.me;
+        let waiting: Vec<BlockId> = self
+            .core
+            .blocks
+            .iter_mut()
+            .enumerate()
+            .filter(|(i, b)| *i != me.0 && b.lane_waiting == Some(lane))
+            .map(|(i, b)| {
+                b.lane_waiting = None;
+                BlockId(i)
+            })
+            .collect();
+        for to in waiting {
+            self.send(to, MSG_LANE_CHANGED, u64::from(lane));
+        }
+    }
+
     /// Marks the item as ready to leave, ahead of the released items it outranks by the
     /// numeric label `label`: smallest value first, or largest first with `descending`.
     /// Ties keep the order of release; an item without the label (or with a text value)
@@ -1250,6 +1329,8 @@ impl Simulation {
             withheld: Vec::new(),
             pickups: Vec::new(),
             meetings: Vec::new(),
+            lane: None,
+            lane_waiting: None,
             stats: if self.core.keep_raw {
                 BlockStats {
                     staytime: Tally::with_raw(),
