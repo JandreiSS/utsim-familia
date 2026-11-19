@@ -46,6 +46,10 @@ pub struct Cena {
     /// Stations drawn without an operator.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sem_pessoa: Vec<String>,
+    /// Objects moved in the picture only, `[dx, dy]` in metres of the scene, when the model
+    /// puts them where the camera does not see them (an operator behind her machines).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mover: BTreeMap<String, [f64; 2]>,
     /// Processors drawn as one element whatever their capacity (an oven that bakes two
     /// at a time is one oven).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -351,9 +355,10 @@ impl Cena {
                 let pessoa = (trabalho && !tem_pessoas && !self.sem_pessoa.contains(&o.name))
                     .then(|| self.pessoas.get(&o.name).cloned().unwrap_or_else(&mut sexo));
                 let desvio = (k as f64 - (copias - 1) as f64 / 2.0) * PASSO_COPIAS;
+                let [mx, my] = self.mover.get(&o.name).copied().unwrap_or([0.0, 0.0]);
                 let (mut x, y) = (
-                    o.position[0] * self.escala,
-                    o.position[1] * self.escala + desvio,
+                    o.position[0] * self.escala + mx,
+                    o.position[1] * self.escala + desvio + my,
                 );
                 // Mobile resources start on the same spot (four AGVs at the dock): side by
                 // side, so all of them show.
@@ -461,6 +466,7 @@ impl Cena {
             .chain(&self.ocultar)
             .chain(&self.sem_pessoa)
             .chain(&self.sem_copias)
+            .chain(self.mover.keys())
             .chain(self.pessoas.keys())
             .chain(self.pecas.iter().map(|p| &p.no))
         {
