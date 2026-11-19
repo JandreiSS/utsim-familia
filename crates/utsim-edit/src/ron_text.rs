@@ -327,6 +327,14 @@ pub fn table(t: &ArrivalTable) -> String {
                 .collect();
             parts.push(format!("labels: {{{}}}", entries.join(", ")));
         }
+        if !r.text_labels.is_empty() {
+            let entries: Vec<String> = r
+                .text_labels
+                .iter()
+                .map(|(k, v)| format!("{}: {}", string(k), string(v)))
+                .collect();
+            parts.push(format!("text_labels: {{{}}}", entries.join(", ")));
+        }
         format!("({})", parts.join(", "))
     });
     let repeat = match t.repeat {
