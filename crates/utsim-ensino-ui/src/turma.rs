@@ -961,7 +961,7 @@ fn secao_desafio(
             let missao = pacote.missoes[d.missao].missao.id.clone();
             ui.horizontal(|ui| {
                 ui.label(texto::turma_prazo());
-                ui.text_edit_singleline(&mut d.fim);
+                utsim_ui_tema::campos::CampoDataHora::new(&mut d.fim).mostrar(ui);
             });
             ui.horizontal(|ui| {
                 if ui.button(texto::turma_montar_placar()).clicked() {
@@ -1179,10 +1179,13 @@ fn secao_prova(
             ui.text_edit_singleline(&mut p.titulo);
             ui.end_row();
             ui.label(texto::turma_inicio());
-            ui.text_edit_singleline(&mut p.inicio);
+            utsim_ui_tema::campos::CampoDataHora::new(&mut p.inicio).mostrar(ui);
             ui.end_row();
             ui.label(texto::turma_fim());
-            ui.text_edit_singleline(&mut p.fim);
+            let inicio = utsim_ui_tema::campos::DataHora::ler(&p.inicio);
+            utsim_ui_tema::campos::CampoDataHora::new(&mut p.fim)
+                .nao_antes(inicio)
+                .mostrar(ui);
             ui.end_row();
             ui.label(texto::turma_tempo_maximo());
             ui.add(egui::DragValue::new(&mut p.duracao_min).range(0..=600));

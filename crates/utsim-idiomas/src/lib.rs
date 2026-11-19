@@ -11,7 +11,6 @@
 //! [`dinheiro`], [`data`]); the currency stays R$, because it is the company's, not the
 //! language's.
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -286,7 +285,7 @@ impl Catalogo {
     pub fn f(&self, chave: &str, args: &[(&str, Valor)]) -> String {
         let mut a = FluentArgs::with_capacity(args.len());
         for (nome, v) in args {
-            a.set(Cow::Owned(nome.to_string()), v.clone());
+            a.set(*nome, v.clone());
         }
         self.formatar(chave, Some(&a))
     }
