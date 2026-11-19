@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::crane::{AxisTimes, CraneLane, CraneOperator, CraneSpec};
+use crate::loads::{LoadBoard, sweep};
 use crate::traffic::{Crossings, Traffic, crossing_plan, segment_durations};
 use serde::{Deserialize, Serialize};
 use utsim_core::init::Accepts;
@@ -101,6 +102,8 @@ const RAISED_LOADED: u32 = 11;
 const RAISED_EMPTY: u32 = 12;
 /// Crane: out of the way of another crane on the same runway.
 const GAVE_WAY: u32 = 13;
+/// Crane: the people in the way of the load should be out now (try the move again).
+const LOAD_CLEAR: u32 = 14;
 
 /// One piece of an AGV route: a controlled/free network edge or a connector between
 /// a point off the network and its node.
@@ -275,6 +278,10 @@ pub struct Transporter {
     crossings: Option<(Arc<Mutex<Crossings>>, bool)>,
     /// Ramps of the aisle network (slower on them); `None`: none.
     ramps: Option<Arc<crate::ramps::Ramps>>,
+    /// Suspended loads to keep out of (cranes with `keep_clear`); `None`: none.
+    loads: Option<Arc<Mutex<LoadBoard>>>,
+    /// Time stopped at the edge of a load's way in the window.
+    load_wait: f64,
     multitask: Option<Multitask>,
     /// Open cases other than the current one, in turn order; `true` once its station
     /// got `MSG_ARRIVED`.
@@ -328,6 +335,13 @@ struct CraneState {
     /// Time waiting for another crane in the window, and times it gave way.
     lane_wait: f64,
     gave_way: u64,
+    /// Keeps people out of the way of the load (`keep_clear`): the board and the half
+    /// side of the square under the hook.
+    clear: Option<(Arc<Mutex<LoadBoard>>, f64)>,
+    /// Since when the crane waits for people to leave the way of the load, and the time
+    /// it waited in the window.
+    people_wait_since: Option<Time>,
+    people_wait: f64,
 }
 
 /// A crane move to above `target`, ending with the event `tag`.
@@ -365,6 +379,10 @@ impl CraneState {
         if self.lane_wait_since.is_some() {
             self.lane_wait_since = Some(now);
         }
+        self.people_wait = 0.0;
+        if self.people_wait_since.is_some() {
+            self.people_wait_since = Some(now);
+        }
     }
 }
 
@@ -397,6 +415,8 @@ impl Transporter {
             router: None,
             crossings: None,
             ramps: None,
+            loads: None,
+            load_wait: 0.0,
             multitask: None,
             others: VecDeque::new(),
             started: Vec::new(),
@@ -435,6 +455,9 @@ impl Transporter {
                 lane_wait_since: None,
                 lane_wait: 0.0,
                 gave_way: 0,
+                clear: None,
+                people_wait_since: None,
+                people_wait: 0.0,
             })
         });
         self
@@ -456,6 +479,149 @@ impl Transporter {
             c.lane = lane;
         }
         self
+    }
+
+    /// Crane mode: keeps people out of the way of the load ([`crate::loads`]), with the
+    /// board and the half side of the square under the hook; `None`, it does not. Call
+    /// after [`Transporter::crane`].
+    pub fn crane_keep_clear(mut self, clear: Option<(Arc<Mutex<LoadBoard>>, f64)>) -> Self {
+        if let Some(c) = self.crane.as_mut() {
+            c.clear = clear.filter(|(_, half)| *half > 0.0);
+        }
+        self
+    }
+
+    /// On the floor: stops at the edge of the way of a crane's suspended load until it
+    /// passes ([`crate::loads`]); `None`, no crane keeps it clear.
+    pub fn loads(mut self, loads: Option<Arc<Mutex<LoadBoard>>>) -> Self {
+        self.loads = loads;
+        self
+    }
+
+    /// Crane: where a move to above `target` ends on the floor and how long it takes
+    /// (with a pendant and the load, no faster than the person walks).
+    fn crane_leg(&self, target: [f64; 3], state: State) -> ([f64; 3], f64) {
+        let c = self.crane.as_ref().expect("crane mode");
+        let (mut t, _, end) = c.spec.travel(c.hook(self.position), target);
+        let to = c.spec.global(end.u, end.v, 0.0);
+        if let Some(op) = c
+            .operator
+            .filter(|op| op.follow && state == State::TravelLoaded)
+            .filter(|_| c.op_person.is_some())
+        {
+            let floor_distance = (to[0] - self.position[0]).hypot(to[1] - self.position[1]);
+            t = t.max(floor_distance / op.speed);
+        }
+        (to, t)
+    }
+
+    /// Crane with `keep_clear`, before a loaded move: books the way of the load and, if
+    /// someone is walking through it, waits until they are out (`true`).
+    fn crane_wait_people(&mut self, cx: &mut Ctx, m: Move) -> bool {
+        let now = cx.now();
+        let Some(c) = self.crane.as_ref() else {
+            return false;
+        };
+        let Some((board, half)) = c.clear.clone() else {
+            return false;
+        };
+        if m.state != State::TravelLoaded {
+            return false;
+        }
+        let (to, t) = self.crane_leg(m.target, m.state);
+        let from = self.position;
+        if (to[0] - from[0]).hypot(to[1] - from[1]) < 1e-9 {
+            return false;
+        }
+        let c = self.crane.as_mut().expect("crane mode");
+        let strip = sweep([from[0], from[1]], [to[0], to[1]], half, c.spec.yaw);
+        let mut b = board.lock().unwrap_or_else(|e| e.into_inner());
+        let out = b.in_way(&strip, now, now + t, c.op_person);
+        match out.filter(|&o| o > now + 1e-9) {
+            Some(out) => {
+                // Nobody else walks in meanwhile.
+                b.book(cx.me(), strip, out + t);
+                drop(b);
+                if c.people_wait_since.is_none() {
+                    c.people_wait_since = Some(now);
+                }
+                cx.set_state(State::Blocked);
+                self.arm(cx, out - now, LOAD_CLEAR, None);
+                true
+            }
+            None => {
+                b.book(cx.me(), strip, now + t);
+                if let Some(since) = c.people_wait_since.take() {
+                    c.people_wait += (now - since).max(0.0);
+                }
+                false
+            }
+        }
+    }
+
+    /// On the floor, at the start of route piece `idx`: if it enters the way of a
+    /// suspended load before the load is gone, the piece is cut at the edge or, at the
+    /// edge already, a standing piece is put before it and started (`true`).
+    fn load_ahead(&mut self, cx: &mut Ctx) -> bool {
+        let (Some(board), Some(route)) = (self.loads.clone(), &mut self.route) else {
+            return false;
+        };
+        let seg = route.segs[route.idx];
+        if seg.stop || seg.dur <= 0.0 {
+            return false;
+        }
+        let now = cx.now();
+        let ahead = board.lock().unwrap_or_else(|e| e.into_inner()).ahead(
+            [seg.a[0], seg.a[1]],
+            [seg.b[0], seg.b[1]],
+            seg.dur,
+            now,
+        );
+        let Some((enter, until)) = ahead else {
+            return false;
+        };
+        let len = distance(seg.a, seg.b);
+        if enter * len > 1e-6 {
+            // Walk up to the edge first.
+            let m = [
+                seg.a[0] + (seg.b[0] - seg.a[0]) * enter,
+                seg.a[1] + (seg.b[1] - seg.a[1]) * enter,
+                seg.a[2] + (seg.b[2] - seg.a[2]) * enter,
+            ];
+            route.segs[route.idx] = Seg {
+                b: m,
+                dur: seg.dur * enter,
+                ..seg
+            };
+            route.segs.insert(
+                route.idx + 1,
+                Seg {
+                    a: m,
+                    dur: seg.dur * (1.0 - enter),
+                    cross: None,
+                    ..seg
+                },
+            );
+            return false;
+        }
+        let wait = until - now;
+        if wait <= 0.0 {
+            return false;
+        }
+        self.load_wait += wait;
+        route.segs.insert(
+            route.idx,
+            Seg {
+                a: seg.a,
+                b: seg.a,
+                edge: None,
+                dur: wait,
+                cross: None,
+                stop: true,
+            },
+        );
+        self.run_segment(cx);
+        true
     }
 
     /// Crane move to above `target`: on a shared runway, once the way is free.
@@ -508,6 +674,10 @@ impl Transporter {
                 c.lane_wait += (now - since).max(0.0);
             }
         }
+        if self.crane_wait_people(cx, m) {
+            return;
+        }
+        let Some(c) = self.crane.as_mut() else { return };
         c.moves.pop();
         c.moving = Some(m.tag);
         self.crane_travel(cx, m.target, m.tag, m.state);
@@ -1060,6 +1230,32 @@ impl Transporter {
                 return;
             }
         }
+        if self.loads.is_some() && path.len() >= 2 && path_length(&path) > 0.0 {
+            // Piece by piece, to stop at the edge of a suspended load's way.
+            let lengths: Vec<f64> = path.windows(2).map(|w| distance(w[0], w[1])).collect();
+            let durs = segment_durations(&lengths, speed, self.acceleration, self.deceleration);
+            let segs = path
+                .windows(2)
+                .zip(durs)
+                .map(|(w, dur)| Seg {
+                    a: w[0],
+                    b: w[1],
+                    edge: None,
+                    dur,
+                    cross: None,
+                    stop: false,
+                })
+                .collect();
+            self.route = Some(Route {
+                segs,
+                idx: 0,
+                tag,
+                state,
+                wait: None,
+            });
+            self.begin_segment(cx);
+            return;
+        }
         let t = travel_time(
             path_length(&path),
             speed,
@@ -1080,6 +1276,9 @@ impl Transporter {
     /// Starts piece `route.idx`: asks for its edge (waiting if it is full) and, once
     /// the edge is held, runs the piece.
     fn begin_segment(&mut self, cx: &mut Ctx) {
+        if self.load_ahead(cx) {
+            return;
+        }
         if self.cross_wait(cx) {
             return;
         }
@@ -1187,6 +1386,16 @@ impl Transporter {
         if seg.dur > 0.0 {
             cx.trace_travel(vec![seg.a, seg.b], seg.dur);
         }
+        if let Some(board) = &self.loads {
+            let now = cx.now();
+            board.lock().unwrap_or_else(|e| e.into_inner()).walk(
+                cx.me(),
+                [seg.a[0], seg.a[1]],
+                [seg.b[0], seg.b[1]],
+                now,
+                now + seg.dur,
+            );
+        }
         let leg = Leg {
             path: vec![seg.a, seg.b],
             start: cx.now(),
@@ -1210,6 +1419,12 @@ impl Transporter {
     fn abandon_route(&mut self, cx: &mut Ctx) {
         self.route = None;
         self.grant_pending = false;
+        if let Some(board) = &self.loads {
+            board
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .forget(cx.me());
+        }
         if let Some((board, _)) = &self.crossings {
             board
                 .lock()
@@ -1612,6 +1827,7 @@ impl Behavior for Transporter {
         self.switches = 0;
         self.switching = TimeWeighted::default();
         self.open = TimeWeighted::default();
+        self.load_wait = 0.0;
         self.abandon_route(cx);
         self.position = cx.position(cx.me());
         if let Some(c) = self.crane.as_mut() {
@@ -1624,6 +1840,13 @@ impl Behavior for Transporter {
             c.moves.clear();
             c.moving = None;
             c.lane_wait_since = None;
+            c.people_wait_since = None;
+            if let Some((board, _)) = &c.clear {
+                board
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .forget(cx.me());
+            }
             c.reset_stats(0.0);
             if let Some(lane) = c.lane {
                 let s = lane.at(self.position);
@@ -1714,6 +1937,10 @@ impl Behavior for Transporter {
         }
         if tag == GAVE_WAY {
             self.crane_gave_way(cx);
+            return;
+        }
+        if tag == LOAD_CLEAR {
+            self.crane_try_move(cx);
             return;
         }
         if tag == AGV_STEP {
@@ -1979,6 +2206,7 @@ impl Behavior for Transporter {
             c.reset_stats(cx.now());
         }
         self.switches = 0;
+        self.load_wait = 0.0;
         self.switching.reset(cx.now());
         self.open.reset(cx.now());
     }
@@ -1993,7 +2221,11 @@ impl Behavior for Transporter {
     /// `crane.hoist_time`. With a pendant or radio, `crane.operator_wait`: time waiting
     /// at the pick-up for the operator. On a runway shared with other cranes,
     /// `crane.lane_wait` (time waiting for another crane to clear the way) and
-    /// `crane.gave_way` (times it moved out of another crane's way).
+    /// `crane.gave_way` (times it moved out of another crane's way). With `keep_clear`,
+    /// `crane.people_wait`: time waiting for people to leave the way of the load.
+    ///
+    /// On the floor, with a crane that keeps people clear: `load_wait`, time stopped at
+    /// the edge of the way of a suspended load.
     fn custom_metrics(&self, now: Time) -> Vec<(String, f64)> {
         let mut out = Vec::new();
         if let Some(c) = &self.crane {
@@ -2015,6 +2247,12 @@ impl Behavior for Transporter {
                 out.push(("crane.lane_wait".to_string(), c.lane_wait + waiting));
                 out.push(("crane.gave_way".to_string(), c.gave_way as f64));
             }
+            if c.clear.is_some() {
+                let waiting = c.people_wait_since.map_or(0.0, |s| (now - s).max(0.0));
+                out.push(("crane.people_wait".to_string(), c.people_wait + waiting));
+            }
+        } else if self.loads.is_some() {
+            out.push(("load_wait".to_string(), self.load_wait));
         }
         if self.multitask.is_some() {
             out.extend([

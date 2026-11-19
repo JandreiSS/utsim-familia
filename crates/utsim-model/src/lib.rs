@@ -605,6 +605,11 @@ pub enum ObjectKind {
         /// whose areas overlap with the runways parallel): neither passes the other.
         #[serde(default = "bridge_gap", alias = "folga_pontes")]
         bridge_gap: f64,
+        /// Keeps people (and vehicles) out of the way of the load: before a loaded move
+        /// the crane waits for whoever is walking through the strip the load sweeps, and
+        /// whoever would walk into it stops at its edge until the load passes.
+        #[serde(default, skip_serializing_if = "is_false", alias = "afastar_pessoas")]
+        keep_clear: bool,
     },
     /// Kinematic belt: items travel `length` at `speed`, each taking `item_length`.
     Conveyor {
@@ -1701,6 +1706,21 @@ impl Model {
         let crossings = nav.crossing_board();
         // Overhead cranes on the same runway (anticollision).
         let crane_lanes = self.crane_lanes();
+        // Suspended loads kept clear of people (cranes with `keep_clear`), one board per
+        // simulation.
+        let load_board = self
+            .objects
+            .iter()
+            .any(|o| {
+                matches!(
+                    o.kind,
+                    ObjectKind::Crane {
+                        keep_clear: true,
+                        ..
+                    }
+                )
+            })
+            .then(|| Arc::new(Mutex::new(utsim_objects::LoadBoard::default())));
         let dispatcher_of: HashMap<&str, BlockId> = self
             .objects
             .iter()
@@ -1842,6 +1862,7 @@ impl Model {
                         .use_ends(self.routed_mode(obj).is_some())
                         .crossings(nav.crossings_for(&obj.name, &crossings))
                         .ramps(nav.ramps_for(&obj.name))
+                        .loads(load_board.clone())
                         .acceleration(*acceleration, *deceleration)
                         .capacity(*capacity)
                         .home(*home || home_at.is_some() || home_object.is_some())
@@ -1852,12 +1873,20 @@ impl Model {
                     attach,
                     detach,
                     home,
+                    load_zone,
+                    keep_clear,
                     ..
                 } => Box::new(
                     Transporter::new(self.crane_spec(obj).map_or(1.0, |c| c.bridge.speed))
                         .crane(self.crane_spec(obj))
                         .crane_operator(self.crane_operator(obj, &ids))
                         .crane_lane(crane_lanes.get(obj.name.as_str()).copied())
+                        .crane_keep_clear(
+                            load_board
+                                .clone()
+                                .filter(|_| *keep_clear)
+                                .map(|b| (b, *load_zone)),
+                        )
                         .capacity(1)
                         .home(*home)
                         .handling(attach.clone(), detach.clone())

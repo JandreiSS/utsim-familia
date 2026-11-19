@@ -81,6 +81,39 @@ pub fn html(model: &Model, reps: &[Exposure]) -> String {
         );
     }
     s.push_str("</table>");
+    if reps.iter().any(|e| !e.under_load.is_empty()) {
+        let t: Vec<f64> = reps.iter().map(Exposure::under_load_time).collect();
+        let n: Vec<f64> = reps
+            .iter()
+            .map(|e| f64::from(e.under_load_entries()))
+            .collect();
+        let (it, ie) = (interval(&t), interval(&n));
+        let _ = write!(
+            s,
+            "<h2>Pessoas sob carga suspensa</h2><p>Tempo {} ± {} s e {} ± {} entradas por \
+             replicação. A meta é zero: ninguém fica sob a carga suspensa de uma ponte rolante.</p>",
+            fmt(it.mean),
+            fmt(it.half_width),
+            fmt(ie.mean),
+            fmt(ie.half_width)
+        );
+        if let Some(e) = reps.first() {
+            s.push_str(
+                "<table><tr><th>Ponte</th><th>Pessoa</th><th>Tempo (s)</th><th>Entradas</th></tr>",
+            );
+            for c in &e.under_load {
+                let _ = write!(
+                    s,
+                    "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                    esc(&c.crane),
+                    esc(&c.person),
+                    fmt(c.time),
+                    c.entries
+                );
+            }
+            s.push_str("</table>");
+        }
+    }
     let n: Vec<f64> = reps.iter().map(|e| e.near_miss_count() as f64).collect();
     let i = interval(&n);
     let _ = write!(

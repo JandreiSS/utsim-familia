@@ -295,6 +295,14 @@ fn people_under_the_suspended_load_are_counted() {
     assert_eq!(e.under_load.len(), 2);
     assert!((e.under_load_time() - 64.0).abs() <= 0.1);
     assert_eq!(e.under_load_entries(), 1);
+    // A análise sugere afastar as pessoas.
+    assert!(
+        e.warnings
+            .iter()
+            .any(|w| w.starts_with("ponte 'ponte': pessoas passaram") && w.contains("keep_clear")),
+        "{:?}",
+        e.warnings
+    );
     let flat = utsim_model::exposure::metricas(&e);
     assert_eq!(flat["exposicao.sob_carga.entradas"], 1.0);
     // Uma área menor sob a carga: só a subida (a pessoa a 0,5 m, metade do lado 1 m).
@@ -524,4 +532,87 @@ fn two_busy_cranes_in_each_others_way_both_deliver() {
     close(x["saida2.time_in_system.mean"], 392.0, "peça da ponte2");
     close(x["ponte.crane.lane_wait"], 132.0, "espera da ponte");
     close(x["ponte2.crane.lane_wait"], 30.0, "espera da ponte2");
+}
+
+/// A baia com `keep_clear` e um carregador que cruza o caminho da ponte em x = 20: uma
+/// peça chega em `at` a (20, 0) e ele a leva a pé, a 1 m/s, até (20, 20).
+fn crossing(at: f64, clear: bool) -> String {
+    let people = format!(
+        r#"(name: "chegada2", kind: Source(interarrival: Const({at:?}), max_arrivals: Some(1)),
+            position: (18.0, 0.0, 0.0)),
+        (name: "estoque2", kind: Queue(), transport: "carregador", position: (20.0, 0.0, 0.0)),
+        (name: "saida2", kind: Sink, position: (20.0, 20.0, 0.0)),
+        (name: "carregador", kind: Transporter(speed: 1.0), position: (20.0, 0.0, 0.0),
+            visual: Some((asset: Some("pessoa")))),"#
+    );
+    let text = bay("Safe", 5000.0, &people).replace(
+        r#"("recebimento", "saida")]"#,
+        r#"("recebimento", "saida"), ("chegada2", "estoque2"), ("estoque2", "saida2")]"#,
+    );
+    if clear {
+        text.replace(
+            "capacity_t: 10.0,",
+            "capacity_t: 10.0, afastar_pessoas: true,",
+        )
+    } else {
+        text
+    }
+}
+
+#[test]
+fn people_keep_out_of_the_way_of_the_load() {
+    // A carga vai de (5, 9) a (35, 15) de 180 s a 240 s. A faixa que ela varre (o quadrado
+    // de 2 m de meio lado arrastado) corta x = 20 de y = 9,6 a 14,4.
+    //
+    // Peça em 185 s: o carregador chegaria à faixa em 194,6 s, com a carga ainda no ar.
+    // Para na borda (20; 9,6) até 240 s e anda os 10,4 m restantes: chega em 250,4 s.
+    let m = model(&crossing(185.0, true));
+    let x = metrics(&m);
+    close(x["saida2.time_in_system.mean"], 65.4, "peça do carregador");
+    close(x["carregador.load_wait"], 45.4, "espera na borda");
+    close(x["saida.time_in_system.mean"], 310.0, "a ponte não esperou");
+    close(x["ponte.crane.people_wait"], 0.0, "ninguém no caminho");
+    close(x["carregador.tempo_sob_carga"], 0.0, "nunca sob a carga");
+    let e = utsim_model::exposure::analyze(&m, 0, Default::default()).unwrap();
+    assert!(
+        !e.warnings.iter().any(|w| w.contains("keep_clear")),
+        "{:?}",
+        e.warnings
+    );
+    // Sem a opção, ele passa direto (20 s) e nada disso aparece no relatório.
+    let x = metrics(&model(&crossing(185.0, false)));
+    close(x["saida2.time_in_system.mean"], 20.0, "sem afastar");
+    assert!(!x.contains_key("carregador.load_wait"));
+    assert!(!x.contains_key("ponte.crane.people_wait"));
+}
+
+#[test]
+fn the_crane_waits_for_whoever_is_crossing() {
+    // Peça em 170 s: o carregador entra na faixa em 179,6 s e sai em 184,4 s. Em 180 s a
+    // ponte, com a carga, espera até 184,4 s: anda 60 s, desce 50 s e solta 20 s, e a peça
+    // chega em 314,4 s.
+    let m = model(&crossing(170.0, true));
+    let x = metrics(&m);
+    close(x["saida.time_in_system.mean"], 314.4, "peça da ponte");
+    close(x["ponte.crane.people_wait"], 4.4, "espera pelo carregador");
+    close(x["saida2.time_in_system.mean"], 20.0, "o carregador passou");
+    close(x["carregador.load_wait"], 0.0, "não esperou");
+    // O check diz que a ponte afasta as pessoas; sem área sob a carga, avisa.
+    assert!(
+        m.crane_lines()
+            .iter()
+            .any(|l| l.contains("afasta as pessoas do caminho da carga (faixa de 4 m)")),
+        "{:?}",
+        m.crane_lines()
+    );
+    let m = model(
+        &crossing(170.0, true).replace("capacity_t: 10.0,", "capacity_t: 10.0, load_zone: 0.0,"),
+    );
+    assert!(
+        m.warnings()
+            .iter()
+            .any(|w| w.contains("keep_clear com load_zone 0")),
+        "{:?}",
+        m.warnings()
+    );
 }

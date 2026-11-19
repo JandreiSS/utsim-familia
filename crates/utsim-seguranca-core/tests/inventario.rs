@@ -248,3 +248,51 @@ fn a_unit_hazard_passes_to_the_node_with_its_actions() {
     assert_eq!(inv.ultima_reavaliacao(novo).unwrap().probabilidade, 1);
     assert!(inv.acoes_do_perigo(&id).is_empty());
 }
+
+#[test]
+fn a_person_under_a_suspended_load_suggests_a_hazard_for_the_crane_station() {
+    let caminho = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/ponte_rolante.ron");
+    let model = utsim_model::Model::load(&caminho).unwrap();
+    let mut e = utsim_exposicao::analyze(&model, 0, utsim_exposicao::Options::default()).unwrap();
+    e.under_load = vec![
+        utsim_exposicao::UnderLoad {
+            crane: "ponte".into(),
+            person: "inspetor".into(),
+            time: 64.0,
+            entries: 1,
+        },
+        utsim_exposicao::UnderLoad {
+            crane: "ponte".into(),
+            person: "soldador".into(),
+            time: 0.0,
+            entries: 0,
+        },
+    ];
+    let postos = [
+        Posto {
+            id: "p1".into(),
+            nome: "Ponte".into(),
+            objeto: Some("ponte".into()),
+            ..Posto::default()
+        },
+        Posto {
+            id: "p2".into(),
+            nome: "Expedição".into(),
+            objeto: Some("expedicao".into()),
+            ..Posto::default()
+        },
+    ];
+    let sug = perigos_da_exposicao(&postos, &e, &model);
+    let carga: Vec<&Perigo> = sug
+        .iter()
+        .filter(|p| p.descricao.contains("carga suspensa"))
+        .collect();
+    assert_eq!(carga.len(), 1, "{sug:?}");
+    assert_eq!(carga[0].posto, "p1");
+    assert!(carga[0].circunstancia.contains("inspetor"));
+    assert_eq!((carga[0].probabilidade, carga[0].severidade), (0, 0));
+    // The exposure report has the section, with the target of zero.
+    let html = utsim_exposicao::relatorio::html(&model, std::slice::from_ref(&e));
+    assert!(html.contains("Pessoas sob carga suspensa"));
+    assert!(html.contains("inspetor"));
+}
