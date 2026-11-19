@@ -15,6 +15,8 @@ pub fn hoje() -> String {
     data_de_dias(dias)
 }
 
+use utsim_ui_tema::campos::{CampoData, Data, TextosData};
+
 /// Um campo de data, o comum da família (`utsim_ui_tema::campos`): guarda `AAAA-MM-DD`, aceita
 /// `DD/MM/AAAA` e normaliza ao perder o foco; borda vermelha e explicação quando não é data ou
 /// vem antes de `limite` (o fim de um período depois do começo). Vazio vale.
@@ -24,7 +26,7 @@ pub fn campo_data(
     limite: Option<&str>,
     largura: f32,
 ) -> egui::Response {
-    campo_data_com_dica(ui, texto, limite, largura, tx("util-data_dica"))
+    campo_data_com_dica(ui, texto, limite, largura, TextosData::default().dica)
 }
 
 /// [`campo_data`] com uma dica própria no campo vazio (ex.: "prazo AAAA-MM-DD").
@@ -35,52 +37,14 @@ pub fn campo_data_com_dica(
     largura: f32,
     dica: &str,
 ) -> egui::Response {
-    use utsim_ui_tema::campos::{CampoData, Data, TextosData};
     CampoData::new(texto)
         .nao_antes(limite.and_then(Data::ler))
         .textos(TextosData {
             dica,
-            invalida: tx("util-data_invalida"),
-            antes: tx("util-data_antes"),
+            ..TextosData::default()
         })
         .largura(largura)
         .mostrar(ui)
-}
-
-/// Botão de remover que pede confirmação no mesmo lugar: o primeiro clique troca o botão por
-/// "Confirmar remoção" (em vermelho) e "Cancelar". Devolve `true` só no clique da confirmação.
-/// `pendente` guarda a chave do item à espera (uma por tela, assim só um item fica pedindo
-/// confirmação), `chave` identifica este item e `rotulo` é o texto do botão na tela.
-/// `pequeno`: o botão das linhas de tabela.
-pub fn remover_confirmado(
-    ui: &mut egui::Ui,
-    pendente: &mut Option<String>,
-    chave: &str,
-    rotulo: &str,
-    pequeno: bool,
-) -> bool {
-    let botao = |ui: &mut egui::Ui, b: egui::Button<'_>| {
-        ui.add(if pequeno { b.small() } else { b }).clicked()
-    };
-    if pendente.as_deref() != Some(chave) {
-        if botao(ui, egui::Button::new(rotulo)) {
-            *pendente = Some(chave.to_string());
-        }
-        return false;
-    }
-    let mut sim = false;
-    ui.horizontal(|ui| {
-        let vermelho = Color32::from_rgb(230, 90, 80);
-        let t = egui::RichText::new(tx("ferramentas-confirmar_remocao")).color(vermelho);
-        if botao(ui, egui::Button::new(t)) {
-            *pendente = None;
-            sim = true;
-        }
-        if botao(ui, egui::Button::new(tx("ferramentas-cancelar"))) {
-            *pendente = None;
-        }
-    });
-    sim
 }
 
 /// Data e hora de agora (UTC) em ISO 8601: `AAAA-MM-DDTHH:MM:SSZ`.
