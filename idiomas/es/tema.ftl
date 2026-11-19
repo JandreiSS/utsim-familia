@@ -29,3 +29,6 @@ campos-hora_dica = HH:MM
 campos-hora_invalida = Hora no válida. Use HH:MM, de 00:00 a 23:59.
 campos-data_hora_dica = AAAA-MM-DD HH:MM
 campos-data_hora_invalida = Fecha y hora no válidas. Use AAAA-MM-DD HH:MM (o DD/MM/AAAA HH:MM).
+campos-confirmar = Confirmar
+campos-confirmar_dica = Haga clic para confirmar. No se puede deshacer.
+campos-cancelar = Cancelar

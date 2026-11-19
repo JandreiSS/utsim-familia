@@ -425,7 +425,9 @@ pub fn numero_opcional(
         _ => {}
     }
     if let Some(x) = v {
-        let mut d = egui::DragValue::new(x).speed(0.01);
+        let mut d = egui::DragValue::new(x)
+            .speed(0.01)
+            .custom_parser(ler_numero);
         if let Some(n) = max_decimais {
             d = d.max_decimals(n);
         }
@@ -433,9 +435,85 @@ pub fn numero_opcional(
     }
 }
 
+/// Campo de texto de várias linhas com o rótulo em cima, ocupando a largura toda. Para
+/// descrições ("o que aconteceu", ações, observações), onde uma linha só esconde o texto.
+pub fn texto_longo_com_rotulo(ui: &mut Ui, rotulo: &str, texto: &mut String) {
+    ui.label(rotulo);
+    ui.add(
+        egui::TextEdit::multiline(texto)
+            .desired_rows(2)
+            .desired_width(f32::INFINITY),
+    );
+}
+
+/// Lê um número digitado com vírgula ou ponto decimal: `2,5`, `2.5`, `1.234,5` e
+/// `1,234.5` dão o que se espera. Com os dois separadores, o último é o decimal e o
+/// outro é de milhar. Espaços são ignorados. Para usar em
+/// `DragValue::custom_parser(ler_numero)`, já que o egui só aceita ponto.
+pub fn ler_numero(texto: &str) -> Option<f64> {
+    let t: String = texto.chars().filter(|c| !c.is_whitespace()).collect();
+    let normal = match (t.rfind(','), t.rfind('.')) {
+        (Some(v), Some(p)) if v > p => t.replace('.', "").replace(',', "."),
+        (Some(_), Some(_)) => t.replace(',', ""),
+        (Some(_), None) if t.matches(',').count() == 1 => t.replace(',', "."),
+        (Some(_), None) => return None,
+        _ => t,
+    };
+    normal.parse().ok()
+}
+
+/// Botão que pede confirmação antes de valer (para remover, apagar, descartar): o
+/// primeiro clique troca o botão por "Confirmar" (em vermelho) e "Cancelar"; só o
+/// "Confirmar" devolve `true`. `id` distingue os botões de uma mesma lista (ex.: o id do
+/// item). O estado fica na memória do egui, então a tela não precisa de campo próprio.
+pub fn botao_confirmado(
+    ui: &mut Ui,
+    texto: &str,
+    id: impl std::hash::Hash + std::fmt::Debug,
+) -> bool {
+    use crate::texto::tx;
+    let chave = egui::Id::new(("utsim_botao_confirmado", id));
+    let pendente = ui.data(|d| d.get_temp::<bool>(chave)).unwrap_or(false);
+    if !pendente {
+        if ui.button(texto).clicked() {
+            ui.data_mut(|d| d.insert_temp(chave, true));
+        }
+        return false;
+    }
+    let erro = ui.visuals().error_fg_color;
+    let mut sim = false;
+    ui.horizontal(|ui| {
+        let confirmar = egui::RichText::new(tx("campos-confirmar")).color(erro);
+        if ui
+            .button(confirmar)
+            .on_hover_text(tx("campos-confirmar_dica"))
+            .clicked()
+        {
+            sim = true;
+            ui.data_mut(|d| d.remove::<bool>(chave));
+        }
+        if ui.button(tx("campos-cancelar")).clicked() {
+            ui.data_mut(|d| d.remove::<bool>(chave));
+        }
+    });
+    sim
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numero_com_virgula_ou_ponto() {
+        assert_eq!(ler_numero("2,5"), Some(2.5));
+        assert_eq!(ler_numero(" 2.5 "), Some(2.5));
+        assert_eq!(ler_numero("1.234,5"), Some(1234.5));
+        assert_eq!(ler_numero("1,234.5"), Some(1234.5));
+        assert_eq!(ler_numero("1 000"), Some(1000.0));
+        assert_eq!(ler_numero("-0,75"), Some(-0.75));
+        assert_eq!(ler_numero("1,2,3"), None);
+        assert_eq!(ler_numero("abc"), None);
+    }
 
     #[test]
     fn le_os_dois_formatos() {

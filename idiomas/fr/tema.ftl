@@ -32,3 +32,6 @@ campos-hora_dica = HH:MM
 campos-hora_invalida = Heure non valide. Utilisez HH:MM, de 00:00 à 23:59.
 campos-data_hora_dica = AAAA-MM-JJ HH:MM
 campos-data_hora_invalida = Date et heure non valides. Utilisez AAAA-MM-JJ HH:MM (ou JJ/MM/AAAA HH:MM).
+campos-confirmar = Confirmer
+campos-confirmar_dica = Cliquez pour confirmer. Impossible d’annuler.
+campos-cancelar = Annuler
