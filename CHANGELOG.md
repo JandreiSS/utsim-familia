@@ -71,6 +71,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- Elementos 3D do Blender, **forno de padaria** (`forno.glb`): forno rotativo com porta de vidro que gira para fora, carrinho de assadeiras com pães que gira enquanto assa, coifa, chaminé e painel. Tem os mesmos pontos, clipes e estados das outras máquinas, mais o `ponto_puxador` na porta.
 - Elementos 3D do Blender, **controle remoto da ponte rolante** (`controle_remoto.glb`): o rádio de quem opera a pé, do tipo caixa de barriga, com dois manetes, botão de emergência, chave, antena, alças laterais e a correia de pescoço num nó próprio (`alca`). A origem fica entre as mãos do operador.
 - Trajetos: calha (`drive: Chute`, "Calha (escorrega)" no painel): a peça escorrega com atrito (μ = 0,3), a aceleração em cada trecho é g·(sen θ − μ·cos θ) e o tempo de passagem sai dela; abaixo de ~16,7° há aviso de que não escorrega. Na cena, chapa lisa entre guias altas, sem correia nem tambores.
 - UTSim 3D, curva de fadiga: o botão **Abrir no UTSim Estatística** abre as leituras do estudo de tempos da pessoa numa planilha do Estatística (CSV com `;` e vírgula decimal: tarefa, método, hora do turno e tempo, uma linha por tempo medido), sem mexer no modelo nem na trava dele (`outro_app::App::Estatistica`, `ui_fadiga::csv`).
