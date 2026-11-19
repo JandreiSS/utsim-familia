@@ -471,11 +471,36 @@ pub fn botao_confirmado(
     texto: &str,
     id: impl std::hash::Hash + std::fmt::Debug,
 ) -> bool {
+    confirmado(ui, texto, None, id)
+}
+
+/// Como [`botao_confirmado`], com o aviso do que se perde (no hover do botão e do
+/// "Confirmar"), ex.: "Troca todas as fases; o que foi digitado nelas se perde."
+pub fn botao_confirmado_com_aviso(
+    ui: &mut Ui,
+    texto: &str,
+    aviso: &str,
+    id: impl std::hash::Hash + std::fmt::Debug,
+) -> bool {
+    confirmado(ui, texto, Some(aviso), id)
+}
+
+fn confirmado(
+    ui: &mut Ui,
+    texto: &str,
+    aviso: Option<&str>,
+    id: impl std::hash::Hash + std::fmt::Debug,
+) -> bool {
     use crate::texto::tx;
     let chave = egui::Id::new(("utsim_botao_confirmado", id));
     let pendente = ui.data(|d| d.get_temp::<bool>(chave)).unwrap_or(false);
     if !pendente {
-        if ui.button(texto).clicked() {
+        let r = ui.button(texto);
+        let r = match aviso {
+            Some(a) => r.on_hover_text(a),
+            None => r,
+        };
+        if r.clicked() {
             ui.data_mut(|d| d.insert_temp(chave, true));
         }
         return false;
@@ -486,7 +511,7 @@ pub fn botao_confirmado(
         let confirmar = egui::RichText::new(tx("campos-confirmar")).color(erro);
         if ui
             .button(confirmar)
-            .on_hover_text(tx("campos-confirmar_dica"))
+            .on_hover_text(aviso.unwrap_or(tx("campos-confirmar_dica")))
             .clicked()
         {
             sim = true;
