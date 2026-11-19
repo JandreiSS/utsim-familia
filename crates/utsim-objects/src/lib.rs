@@ -4,6 +4,7 @@ mod combiner;
 mod conveyor;
 pub mod crane;
 mod dispatcher;
+pub mod loads;
 pub mod network;
 mod processor;
 mod queue;
@@ -21,6 +22,7 @@ pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
 pub use crane::{Axis, CraneLane, CraneMotion, CraneOperator, CraneSpec};
 pub use dispatcher::{DispatchRule, Dispatcher, Preempt, TaskPick};
+pub use loads::LoadBoard;
 pub use processor::{
     Changeover, ChangeoverTime, Operation, OperatorUse, Processor, Recipe, RecipeTime,
 };
