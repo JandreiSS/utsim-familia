@@ -431,9 +431,20 @@ impl Model {
                         lane.gap
                     )
                 });
+                let clear = match &o.kind {
+                    ObjectKind::Crane {
+                        keep_clear: true,
+                        load_zone,
+                        ..
+                    } if *load_zone > 0.0 => format!(
+                        "; afasta as pessoas do caminho da carga (faixa de {} m)",
+                        2.0 * load_zone
+                    ),
+                    _ => String::new(),
+                };
                 Some(format!(
                     "{}: área de {} × {} m (caminho × vão), gancho a {} m, {} t; ponte {} m/s, \
-                     carro {} m/s, gancho {} m/s; {order}{who}{shared}",
+                     carro {} m/s, gancho {} m/s; {order}{who}{shared}{clear}",
                     o.name,
                     c.length,
                     c.span,
@@ -455,6 +466,19 @@ impl Model {
             .filter_map(|o| self.crane_spec(o).map(|c| (o, c)))
             .collect();
         for (obj, spec) in &cranes {
+            if let ObjectKind::Crane {
+                keep_clear: true,
+                load_zone,
+                ..
+            } = &obj.kind
+                && *load_zone <= 0.0
+            {
+                out.push(format!(
+                    "{}: keep_clear com load_zone 0 não afasta ninguém (a faixa sob a carga \
+                     não tem largura)",
+                    obj.name
+                ));
+            }
             let heaviest = self.max_weight(&spec.weight_label);
             if heaviest > spec.capacity_kg {
                 out.push(format!(
