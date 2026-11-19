@@ -15,6 +15,8 @@ pub fn hoje() -> String {
     data_de_dias(dias)
 }
 
+use utsim_ui_tema::campos::{CampoData, Data, TextosData};
+
 /// Um campo de data, o comum da família (`utsim_ui_tema::campos`): guarda `AAAA-MM-DD`, aceita
 /// `DD/MM/AAAA` e normaliza ao perder o foco; borda vermelha e explicação quando não é data ou
 /// vem antes de `limite` (o fim de um período depois do começo). Vazio vale.
@@ -24,7 +26,7 @@ pub fn campo_data(
     limite: Option<&str>,
     largura: f32,
 ) -> egui::Response {
-    campo_data_com_dica(ui, texto, limite, largura, tx("util-data_dica"))
+    campo_data_com_dica(ui, texto, limite, largura, TextosData::default().dica)
 }
 
 /// [`campo_data`] com uma dica própria no campo vazio (ex.: "prazo AAAA-MM-DD").
@@ -35,13 +37,11 @@ pub fn campo_data_com_dica(
     largura: f32,
     dica: &str,
 ) -> egui::Response {
-    use utsim_ui_tema::campos::{CampoData, Data, TextosData};
     CampoData::new(texto)
         .nao_antes(limite.and_then(Data::ler))
         .textos(TextosData {
             dica,
-            invalida: tx("util-data_invalida"),
-            antes: tx("util-data_antes"),
+            ..TextosData::default()
         })
         .largura(largura)
         .mostrar(ui)
