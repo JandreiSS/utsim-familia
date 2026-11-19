@@ -404,8 +404,10 @@ pub fn gravar_matriz(u: &mut Unidade, m: &Matriz) -> Result<(), UnidadeErro> {
 }
 
 /// Hazards suggested by the exposure of a simulated model: one per zone where some
-/// person of a station stayed, with the missing equipment as circumstance. Marked
-/// `origem: "exposicao"` and never assessed (probability and severity stay to the user).
+/// person of a station stayed, with the missing equipment as circumstance, and one per
+/// overhead crane and person that stayed under its suspended load (a station linked to the
+/// crane, to the person or to what the person serves). Marked `origem: "exposicao"` and
+/// never assessed (probability and severity stay to the user).
 pub fn perigos_da_exposicao(
     postos: &[Posto],
     exposicao: &utsim_exposicao::Exposure,
@@ -444,6 +446,35 @@ pub fn perigos_da_exposicao(
                     )
                 },
                 lesoes: String::new(),
+                controles: String::new(),
+                probabilidade: 0,
+                severidade: 0,
+                origem: "exposicao".into(),
+            });
+        }
+    }
+    for c in exposicao.under_load.iter().filter(|c| c.time > 0.0) {
+        let atendidos: Vec<String> = model
+            .served_by(&c.person)
+            .iter()
+            .map(|o| o.name.clone())
+            .collect();
+        for posto in postos.iter().filter(|p| {
+            p.objeto
+                .as_ref()
+                .is_some_and(|o| *o == c.crane || *o == c.person || atendidos.contains(o))
+        }) {
+            out.push(Perigo {
+                id: String::new(),
+                posto: posto.id.clone(),
+                grupo: Grupo::Acidente,
+                descricao: format!("Pessoa sob carga suspensa da ponte '{}'", c.crane),
+                fonte: format!("carga suspensa da ponte rolante '{}'", c.crane),
+                circunstancia: format!(
+                    "{} ficou {:.1} s sob a carga e entrou {} vezes na simulação",
+                    c.person, c.time, c.entries
+                ),
+                lesoes: "Esmagamento e traumatismo pela queda da carga".into(),
                 controles: String::new(),
                 probabilidade: 0,
                 severidade: 0,

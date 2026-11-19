@@ -13,6 +13,7 @@
 //! - [`capability`]: Cp, Cpk, Pp, Ppk, Cpm with intervals, PPM, sigma level, Box-Cox and
 //!   the percentile method;
 //! - [`normality`]: Anderson-Darling for the normal, Box-Cox;
+//! - [`johnson`]: the Johnson transformation (SU, SB, SL), chosen by Anderson-Darling;
 //! - [`msa`]: Gage R&R by ANOVA and by averages and ranges, bias, linearity;
 //! - [`attribute`]: agreement, Cohen's and Fleiss' kappa;
 //! - [`data`]: CSV layouts of the `utsim qualidade` command;
@@ -30,6 +31,7 @@ pub mod charts;
 pub mod constants;
 pub mod data;
 pub mod gemeo;
+pub mod johnson;
 pub mod memory;
 pub mod msa;
 pub mod normality;

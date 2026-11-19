@@ -248,14 +248,28 @@ pub fn validar_missao(missao: &Missao, modelo: &Model) -> Result<(), Vec<String>
         }
     }
     if erros.is_empty() && !do_modelo.is_empty() {
-        let mut m = modelo.clone();
-        m.run.replications = 1;
-        match m.run_replications() {
-            Ok(reports) => {
-                let conhecidas: BTreeSet<String> = reports
+        // The keys of the model come from a run. A short one (a twentieth of the horizon)
+        // usually shows them all; a key that only appears with a rare event (a breakdown)
+        // asks for the whole run, as the student's.
+        let rodar = |fracao: f64| {
+            let mut m = modelo.clone();
+            m.run.replications = 1;
+            let w = m.run.warmup.max(0.0);
+            m.run.stop_time = w + (m.run.stop_time - w).max(0.0) * fracao;
+            m.run_replications().map(|reports| {
+                reports
                     .iter()
                     .flat_map(|r| r.metrics().into_keys())
-                    .collect();
+                    .collect::<BTreeSet<String>>()
+            })
+        };
+        let faltam = |c: &BTreeSet<String>| do_modelo.iter().any(|(_, k)| !c.contains(k));
+        let conhecidas = match rodar(0.05) {
+            Ok(c) if !faltam(&c) => Ok(c),
+            _ => rodar(1.0),
+        };
+        match conhecidas {
+            Ok(conhecidas) => {
                 for (onde, k) in do_modelo {
                     if !conhecidas.contains(&k) {
                         erros.push(format!("'{onde}': a métrica '{k}' não sai do modelo"));
