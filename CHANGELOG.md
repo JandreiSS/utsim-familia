@@ -73,6 +73,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - `utsim run`: a lista de estados por objeto no resumo procura só as chaves do objeto, em vez de percorrer o resumo inteiro para cada objeto. A saída é a mesma.
 
 ### Corrigido
+- UTSim Segurança do Trabalho: remover um perigo da unidade agora leva junto as ações e as reavaliações dele (`inventario::remover_perigo`), e a barra de estado diz quantas saíram. Antes elas ficavam na pasta apontando para um perigo que não existia mais.
+- UTSim Segurança do Trabalho: um duplo clique em "Registrar reavaliação" gravava a mesma reavaliação duas vezes. Agora o formulário fica com o que foi gravado e o botão desabilita enquanto nada muda (`Inventario::reavaliacao_repetida`).
 - UTSim Produto: dava para apagar requisitos só por um link escondido no fim do editor. Agora o botão vermelho "Excluir" fica no topo do editor de requisitos e de itens, pede confirmação no lugar, e também há a tecla Delete e o menu do botão direito na lista. Excluir um requisito, item, variante, operação ou característica não deixa mais nada apontando para o que sumiu: filhos, pedidos de mudança, casa da qualidade, especificações e tempos por variante.
 - Rede de fluidos: uma bomba ou um tubo com vazão perto do maior `f64` (por exemplo `Pipe(max_rate: 1e308)`) não faz mais o modelo girar no mesmo instante até o limite de 2 milhões de eventos. O passo até o próximo limite de um tanque ficava menor do que o relógio distingue do instante atual; agora ele é dado na hora (o tanque chega ao limite e o volume passa adiante) e as vazões são recalculadas. Achado pelo teste de robustez, em que um caso assim levava mais de 20 s e podia passar do limite de tempo numa máquina carregada; o caso entrou nos achados conhecidos e há um teste à mão em `tests/fluids.rs`.
 - UTSim Seis Sigma: o primeiro campo de texto das tabelas (nome do fator, do processo...) não fica mais estreito; o botão de remover mostra o "✖" em vez de um quadrado; o experimento fatorial acha a coluna da resposta quando a planilha não tem as colunas dos níveis; o sinal de menos sai certo no PDF.
@@ -82,6 +84,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- UTSim Segurança do Trabalho: "Editar" e "Remover" (com confirmação) nas reavaliações do histórico, na etapa Acompanhar do inventário.
 - UTSim Segurança do Trabalho: "Remover" nas inspeções gravadas do checklist. UTSim Qualidade: "Remover" nos lançamentos digitados do custo da qualidade. Antes não havia como tirar um registro feito por engano.
 - UTSim Produto: desfazer e refazer (Ctrl+Z, Ctrl+Y ou Ctrl+Shift+Z fora dos campos de texto, e botões na barra de baixo). Guarda até 50 passos, e o que volta é gravado no projeto como qualquer mudança.
 - Elementos 3D do Blender, **forno de padaria** (`forno.glb`): forno rotativo com porta de vidro que gira para fora, carrinho de assadeiras com pães que gira enquanto assa, coifa, chaminé e painel. Tem os mesmos pontos, clipes e estados das outras máquinas, mais o `ponto_puxador` na porta.
