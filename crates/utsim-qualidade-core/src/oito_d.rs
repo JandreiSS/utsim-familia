@@ -5,7 +5,7 @@
 //! recurrence that updates the FMEA and the control plan.
 //!
 //! The 8D is a record of the unit folder (collection [`COLECAO`]). When the cause does not
-//! show up, it goes to the portfolio of UTSim Seis Sigma as an idea ([`crate::seis_sigma`]).
+//! show up, it goes to the portfolio of UTSim LSS as an idea ([`crate::seis_sigma`]).
 
 use serde::{Deserialize, Serialize};
 use utsim_ferramentas::cinco_porques::{self, WhyInput};

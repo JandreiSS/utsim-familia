@@ -60,7 +60,7 @@ const fn rule(s: u8, o: u8, d: u8, ap: Ap) -> Rule {
     Rule { s, o, d, ap }
 }
 
-/// The rules of the built-in table, documented in the manual (chapter "UTSim Seis Sigma",
+/// The rules of the built-in table, documented in the manual (chapter "UTSim LSS",
 /// FMEA). The priority of a combination is the highest among the rules it meets; none: low.
 ///
 /// - severity 9–10 (safety, legal): high with occurrence 4 or more, or occurrence 2–3 with

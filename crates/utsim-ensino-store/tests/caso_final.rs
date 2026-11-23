@@ -264,7 +264,7 @@ fn missoes_resolvidas_viram_pratica_no_programa() {
 }
 
 /// Every tool of the `competencias` tables (campaign and the packages of `ensino/pacotes`)
-/// is a key of the competence map of UTSim Seis Sigma, so no entry is refused for an
+/// is a key of the competence map of UTSim LSS, so no entry is refused for an
 /// unknown tool.
 #[test]
 fn ferramentas_das_tabelas_existem_no_mapa_do_seis_sigma() {

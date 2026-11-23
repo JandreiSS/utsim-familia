@@ -250,11 +250,23 @@ impl Animacao {
                 Stroke::new(1.0, fraco),
                 StrokeKind::Inside,
             );
+            // The name as the student reads it ("Fila embalagem", as in "O que aconteceu");
+            // a long one shrinks to fit the box instead of spilling.
+            let nome = utsim_ensino_core::dicas::nome_visivel(nome);
+            let largura = painter
+                .layout_no_wrap(nome.clone(), FontId::proportional(13.0), Color32::WHITE)
+                .size()
+                .x;
+            let tamanho = if largura > r.width() - 6.0 {
+                (13.0 * (r.width() - 6.0) / largura).max(9.0)
+            } else {
+                13.0
+            };
             painter.text(
                 r.center_top() + vec2(0.0, 2.0),
                 Align2::CENTER_TOP,
                 nome,
-                FontId::proportional(13.0),
+                FontId::proportional(tamanho),
                 Color32::WHITE,
             );
             painter.text(

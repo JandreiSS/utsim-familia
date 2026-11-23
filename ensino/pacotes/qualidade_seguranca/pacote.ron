@@ -8,7 +8,7 @@ Pacote(
     descricao: "Seis casos de fábrica: onde inspecionar, o custo da inspeção, a medição, o cruzamento de pessoas e empilhadeiras, o posto pesado e o custo da qualidade.",
     requer: ["nucleo >= 0.1"],
     glossario: "glossario.ron",
-    // Conceitos das missões → ferramentas do mapa de competências do UTSim Seis Sigma.
+    // Conceitos das missões → ferramentas do mapa de competências do UTSim LSS.
     competencias: {
         "defeito": ["pareto"],
         "inspecao": ["plano_controle"],

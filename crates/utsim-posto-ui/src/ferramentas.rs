@@ -6,8 +6,13 @@
 //! - à direita, o estudo: título, problema, assunto, conclusão, as ferramentas aplicadas e,
 //!   da ferramenta escolhida, os dados (tabela, parâmetros, importação de CSV ou xlsx, simulação) e
 //!   o resultado calculado por `utsim_estudo::calculo`, o mesmo que vai ao relatório.
+//! - as ferramentas de causa e de priorização se editam no desenho ([`desenho`]): a espinha
+//!   do Ishikawa, a árvore dos 5 porquês, a folha do A3, a casa do QFD, a matriz S × O da
+//!   FMEA e o Pareto vivo que filtra a grade.
 //! - cada mudança grava o estudo inteiro na pasta de unidade, no máximo uma vez por
 //!   segundo enquanto a pessoa digita e na hora em que o campo perde o foco.
+
+mod desenho;
 
 use crate::texto::{fx, tx, vx};
 use std::path::PathBuf;
@@ -20,8 +25,7 @@ use egui_plot::{
 use utsim_estudo::calculo::{self, Resultado};
 use utsim_estudo::relatorio::{self, Contexto, Identidade};
 use utsim_estudo::{
-    Aplicacao, App, Assunto, Cadeia, Categoria, ESTUDOS, Estudo, Ferramenta, Origem, Parametros,
-    Tabela,
+    Aplicacao, App, Assunto, ESTUDOS, Estudo, Ferramenta, Origem, Parametros, Tabela,
 };
 use utsim_ferramentas::relatorios::{Chart, ChartKind, Tone};
 use utsim_model::Model;
@@ -30,6 +34,7 @@ use crate::modelo::TelaModelo;
 use crate::sessao::Sessao;
 use crate::trabalho::Trabalho;
 use crate::util;
+use desenho::Criterio;
 
 /// Pedido de gravar os limites de especificação (LIE, LSE) de uma ferramenta na
 /// característica do nó de onde vieram os dados simulados (mão dupla com o modelo).
@@ -253,6 +258,14 @@ pub struct TelaFerramentas {
     /// Arquivos abertos pela linha de comando sem ferramenta: (nome, tabela, origem) e os
     /// parâmetros pedidos. A pessoa escolhe a ferramenta.
     pub dados_pendentes: Option<(Vec<crate::abrir::Arquivo>, Parametros)>,
+    /// Por qual risco a FMEA é colorida.
+    criterio_fmea: Criterio,
+    /// A linha da FMEA em destaque (aplicação, linha), escolhida na matriz, e se a grade
+    /// ainda tem de rolar até ela.
+    foco_fmea: Option<(String, usize)>,
+    rolar_fmea: bool,
+    /// A causa do Ishikawa com que a pessoa pediu para começar um 5 porquês.
+    porques_de: Option<String>,
 }
 
 impl TelaFerramentas {
@@ -285,6 +298,10 @@ impl TelaFerramentas {
             desmarcadas: Vec::new(),
             confirmar: None,
             dados_pendentes: None,
+            criterio_fmea: Criterio::default(),
+            foco_fmea: None,
+            rolar_fmea: false,
+            porques_de: None,
         }
     }
 
@@ -1255,11 +1272,45 @@ impl TelaFerramentas {
         let problema = e.assunto.problema.clone();
         let assunto = e.assunto.clone();
         let eid = e.id.clone();
+        let ferramenta = e.aplicacoes[i].ferramenta;
+        // As ferramentas de desenho (espinha, árvore, folha A3) ocupam a largura toda;
+        // as de tabela têm os dados à esquerda e o desenho vivo à direita.
+        let largo = matches!(
+            ferramenta,
+            Ferramenta::Ishikawa | Ferramenta::CincoPorques | Ferramenta::A3
+        );
+        if largo {
+            let com_porques = utsim_estudo::interacao::causas_com_porques(e);
+            let outras: Vec<Aplicacao> = if ferramenta == Ferramenta::A3 {
+                e.aplicacoes
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, _)| *k != i)
+                    .map(|(_, x)| x.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let a = &mut e.aplicacoes[i];
+            ui.strong(tx("ferramentas-dados"));
+            match ferramenta {
+                Ferramenta::Ishikawa => {
+                    if let Some(c) = desenho::ishikawa(ui, a, &problema, &com_porques) {
+                        self.porques_de = Some(c);
+                    }
+                }
+                Ferramenta::CincoPorques => desenho::porques(ui, a, &problema),
+                _ => desenho::a3(ui, a, &outras),
+            }
+            ui.add_space(6.0);
+        }
         let a = &mut e.aplicacoes[i];
         ui.columns(2, |cols| {
-            cols[0].strong(tx("ferramentas-dados"));
-            self.dados_ui(&mut cols[0], s, a, &assunto, &eid);
-            cols[0].add_space(6.0);
+            if !largo {
+                cols[0].strong(tx("ferramentas-dados"));
+                self.dados_ui(&mut cols[0], s, a, &assunto, &eid);
+                cols[0].add_space(6.0);
+            }
             cols[0].strong(tx("ferramentas-leitura_da_equipe"));
             cols[0].add(
                 egui::TextEdit::multiline(&mut a.conclusao)
@@ -1270,6 +1321,13 @@ impl TelaFerramentas {
             cols[1].strong(tx("ferramentas-resultado"));
             self.resultado_ui(&mut cols[1], a, &problema);
         });
+        if let Some(causa) = self.porques_de.take()
+            && !remover
+        {
+            let id = utsim_estudo::interacao::comecar_porques(e, &causa);
+            s.avisar(fx("ferramentas-porques_comecado", &[("causa", vx(&causa))]));
+            self.escolher_aplicacao(&id);
+        }
         if let Some(j) = mover {
             e.aplicacoes.swap(i, j);
         }
@@ -1296,9 +1354,7 @@ impl TelaFerramentas {
         eid: &str,
     ) {
         match a.ferramenta {
-            Ferramenta::Ishikawa => ishikawa_ui(ui, a, &assunto.problema),
-            Ferramenta::CincoPorques => porques_ui(ui, a, &assunto.problema),
-            Ferramenta::A3 => a3_ui(ui, a),
+            Ferramenta::Ishikawa | Ferramenta::CincoPorques | Ferramenta::A3 => {}
             _ => {
                 parametros_ui(ui, a);
                 if let Some(p) = limites_da_aplicacao(a)
@@ -1321,14 +1377,27 @@ impl TelaFerramentas {
                 ui.add_space(4.0);
                 a.completar_auxiliares();
                 let antes = (a.tabela.clone(), a.auxiliares.clone());
-                tabela_ui(ui, &mut a.tabela, &a.id);
+                if a.ferramenta == Ferramenta::Qfd {
+                    desenho::casa_qfd(ui, a);
+                    ui.add_space(6.0);
+                }
+                let realce = self.realce(ui, a);
+                if tabela_ui(ui, &mut a.tabela, &a.id, &realce) {
+                    // A grade já rolou até a linha escolhida na matriz.
+                    self.rolar_fmea = false;
+                }
                 for (i, (titulo, _)) in a.ferramenta.auxiliares().iter().enumerate() {
                     ui.add_space(6.0);
                     ui.label(RichText::new(*titulo).strong());
                     if let Some(dica) = dica_da_auxiliar(a.ferramenta, i) {
                         ui.label(RichText::new(dica).small().weak());
                     }
-                    tabela_ui(ui, &mut a.auxiliares[i], &format!("{}-aux{i}", a.id));
+                    tabela_ui(
+                        ui,
+                        &mut a.auxiliares[i],
+                        &format!("{}-aux{i}", a.id),
+                        &Realce::default(),
+                    );
                 }
                 if (&a.tabela, &a.auxiliares) != (&antes.0, &antes.1) && a.origem != Origem::Manual
                 {
@@ -1550,11 +1619,100 @@ impl TelaFerramentas {
             let r = calculo::calcular(a, problema);
             self.cache = Some((a.clone(), problema.to_string(), r));
         }
+        let mut pular = None;
+        match a.ferramenta {
+            Ferramenta::Pareto => {
+                let barras = desenho::barras(a);
+                if !barras.is_empty() {
+                    ui.label(RichText::new(tx("ferramentas-pareto_vivo")).small().weak());
+                    let antes = utsim_visual::pareto::escolhida(ui.ctx(), desenho::id_pareto(a));
+                    let depois =
+                        utsim_visual::pareto::mostrar(ui, desenho::id_pareto(a), &barras, 260.0);
+                    if antes != depois {
+                        ui.ctx().request_repaint();
+                    }
+                    // O primeiro gráfico do resultado é este mesmo, parado.
+                    pular = Some(0);
+                }
+            }
+            Ferramenta::Fmea => {
+                let foco = self
+                    .foco_fmea
+                    .as_ref()
+                    .filter(|(id, _)| *id == a.id)
+                    .map(|(_, l)| *l);
+                if let Some(l) = desenho::matriz_fmea(ui, a, &mut self.criterio_fmea, foco) {
+                    self.foco_fmea = Some((a.id.clone(), l));
+                    self.rolar_fmea = true;
+                    ui.ctx().request_repaint();
+                }
+                ui.add_space(6.0);
+            }
+            _ => {}
+        }
         let Some((_, _, r)) = &self.cache else {
             return;
         };
-        mostrar_resultado(ui, r, &a.id);
+        mostrar_resultado_sem(ui, r, &a.id, pular);
     }
+
+    /// O realce da grade de dados: a cor de risco de cada linha da FMEA e a linha escolhida
+    /// na matriz; no Pareto, só as linhas da barra escolhida no gráfico.
+    fn realce(&mut self, ui: &mut egui::Ui, a: &Aplicacao) -> Realce {
+        let mut r = Realce::default();
+        match a.ferramenta {
+            Ferramenta::Fmea => {
+                let (riscos, _) = calculo::riscos_fmea(&a.tabela);
+                r.selos = riscos
+                    .iter()
+                    .map(|x| (x.linha, desenho::selo(x, self.criterio_fmea)))
+                    .collect();
+                r.foco = self
+                    .foco_fmea
+                    .as_ref()
+                    .filter(|(id, _)| *id == a.id)
+                    .map(|(_, l)| *l);
+                r.rolar = self.rolar_fmea;
+            }
+            Ferramenta::Pareto => {
+                if let Some(nome) = utsim_visual::pareto::escolhida(ui.ctx(), desenho::id_pareto(a))
+                {
+                    let linhas = utsim_estudo::interacao::linhas_da_barra(a, &nome);
+                    let mut limpar = false;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(fx(
+                                "ferramentas-filtrando",
+                                &[("categoria", vx(&nome)), ("n", vx(&linhas.len()))],
+                            ))
+                            .color(AZUL),
+                        );
+                        limpar = ui.small_button(tx("ferramentas-mostrar_todas")).clicked();
+                    });
+                    if limpar {
+                        utsim_visual::pareto::escolher(ui.ctx(), desenho::id_pareto(a), None);
+                    } else {
+                        r.visiveis = Some(linhas);
+                    }
+                }
+            }
+            _ => {}
+        }
+        r
+    }
+}
+
+/// Como a grade de dados mostra as linhas.
+#[derive(Default)]
+struct Realce {
+    /// A cor e o texto do selo de cada linha (linha, (cor, texto)); as outras ficam com o
+    /// número.
+    selos: Vec<(usize, (Color32, String))>,
+    /// Só estas linhas (o filtro do Pareto); `None` mostra todas.
+    visiveis: Option<Vec<usize>>,
+    /// A linha em destaque e se a grade rola até ela.
+    foco: Option<usize>,
+    rolar: bool,
 }
 
 /// Os estudos (id, título) de um nó do modelo, lidos da unidade da sessão.
@@ -1799,9 +1957,13 @@ fn largura_coluna(t: &Tabela, c: usize) -> f32 {
     if numerica { 92.0 } else { 130.0 }
 }
 
-/// A tabela como grade editável: renomear e remover colunas, editar células, linhas.
-fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
+/// A tabela como grade editável: renomear e remover colunas, editar células, linhas. O
+/// realce pinta as linhas (o risco da FMEA), esconde as filtradas (o Pareto) e rola até a
+/// linha em foco; devolve se rolou.
+fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str, realce: &Realce) -> bool {
     let larguras: Vec<f32> = (0..t.colunas.len()).map(|c| largura_coluna(t, c)).collect();
+    let selo_w = if realce.selos.is_empty() { 28.0 } else { 62.0 };
+    let mut rolou = false;
     let mut remover_coluna: Option<usize> = None;
     let mut remover_linha: Option<usize> = None;
     ui.horizontal(|ui| {
@@ -1828,7 +1990,7 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             ui.horizontal(|ui| {
-                ui.add_sized([28.0, 20.0], egui::Label::new(""));
+                ui.add_sized([selo_w, 20.0], egui::Label::new(""));
                 for (c, nome) in t.colunas.iter_mut().enumerate() {
                     ui.add(
                         egui::TextEdit::singleline(nome)
@@ -1846,25 +2008,75 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
                 }
             });
             for (r, linha) in t.linhas.iter_mut().enumerate() {
+                if realce.visiveis.as_ref().is_some_and(|v| !v.contains(&r)) {
+                    continue;
+                }
                 if linha.len() < larguras.len() {
                     linha.resize(larguras.len(), String::new());
                 }
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [28.0, 20.0],
-                        egui::Label::new(RichText::new((r + 1).to_string()).small().weak()),
+                let selo = realce.selos.iter().find(|(l, _)| *l == r).map(|(_, x)| x);
+                let fundo = ui.painter().add(egui::Shape::Noop);
+                let linha_r = ui
+                    .horizontal(|ui| {
+                        match selo {
+                            Some((cor, texto)) => {
+                                let (rect, _) = ui
+                                    .allocate_exact_size(vec2(selo_w, 20.0), egui::Sense::hover());
+                                ui.painter().rect_filled(rect, 3.0, *cor);
+                                ui.painter().text(
+                                    rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    format!("{} {texto}", r + 1),
+                                    egui::FontId::proportional(10.5),
+                                    Color32::WHITE,
+                                );
+                            }
+                            None => {
+                                ui.add_sized(
+                                    [selo_w, 20.0],
+                                    egui::Label::new(
+                                        RichText::new((r + 1).to_string()).small().weak(),
+                                    ),
+                                );
+                            }
+                        }
+                        for (c, cel) in linha.iter_mut().enumerate().take(larguras.len()) {
+                            ui.add(
+                                egui::TextEdit::singleline(cel).desired_width(larguras[c] + 3.0),
+                            );
+                        }
+                        if ui
+                            .small_button("×")
+                            .on_hover_text(tx("ferramentas-remover_a_linha"))
+                            .clicked()
+                        {
+                            remover_linha = Some(r);
+                        }
+                    })
+                    .response
+                    .rect;
+                if let Some((cor, _)) = selo {
+                    ui.painter().set(
+                        fundo,
+                        egui::Shape::rect_filled(
+                            linha_r.expand(1.0),
+                            3.0,
+                            cor.gamma_multiply(0.12),
+                        ),
                     );
-                    for (c, cel) in linha.iter_mut().enumerate().take(larguras.len()) {
-                        ui.add(egui::TextEdit::singleline(cel).desired_width(larguras[c] + 3.0));
+                }
+                if realce.foco == Some(r) {
+                    ui.painter().rect_stroke(
+                        linha_r.expand(2.0),
+                        3.0,
+                        Stroke::new(2.0, AZUL),
+                        egui::StrokeKind::Outside,
+                    );
+                    if realce.rolar {
+                        ui.scroll_to_rect(linha_r, Some(Align::Center));
+                        rolou = true;
                     }
-                    if ui
-                        .small_button("×")
-                        .on_hover_text(tx("ferramentas-remover_a_linha"))
-                        .clicked()
-                    {
-                        remover_linha = Some(r);
-                    }
-                });
+                }
             }
         });
     if let Some(c) = remover_coluna {
@@ -1873,140 +2085,7 @@ fn tabela_ui(ui: &mut egui::Ui, t: &mut Tabela, id: &str) {
     if let Some(r) = remover_linha {
         t.remover_linha(r);
     }
-}
-
-fn ishikawa_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
-    ui.horizontal(|ui| {
-        ui.label(tx("ferramentas-efeito"));
-        ui.add(
-            egui::TextEdit::singleline(&mut a.efeito)
-                .hint_text(if problema.is_empty() {
-                    tx("ferramentas-o_efeito")
-                } else {
-                    problema
-                })
-                .desired_width(f32::INFINITY),
-        );
-    });
-    let mut remover_cat: Option<usize> = None;
-    for (k, c) in a.categorias.iter_mut().enumerate() {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut c.nome)
-                        .desired_width(180.0)
-                        .text_color(AZUL),
-                );
-                if ui.small_button(tx("ferramentas-causa")).clicked() {
-                    c.causas.push(String::new());
-                }
-                if ui
-                    .small_button(tx("ferramentas-remover_categoria"))
-                    .clicked()
-                {
-                    remover_cat = Some(k);
-                }
-            });
-            let mut remover: Option<usize> = None;
-            for (j, causa) in c.causas.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.add_space(12.0);
-                    ui.add(
-                        egui::TextEdit::singleline(causa)
-                            .hint_text(tx("ferramentas-causa-2"))
-                            .desired_width((ui.available_width() - 30.0).max(80.0)),
-                    );
-                    if ui.small_button("×").clicked() {
-                        remover = Some(j);
-                    }
-                });
-            }
-            if let Some(j) = remover {
-                c.causas.remove(j);
-            }
-        });
-    }
-    if let Some(k) = remover_cat {
-        a.categorias.remove(k);
-    }
-    if ui.button(tx("ferramentas-categoria")).clicked() {
-        a.categorias.push(Categoria {
-            nome: tx("ferramentas-nova_categoria").into(),
-            causas: Vec::new(),
-        });
-    }
-}
-
-fn porques_ui(ui: &mut egui::Ui, a: &mut Aplicacao, problema: &str) {
-    ui.horizontal(|ui| {
-        ui.label(tx("ferramentas-problema"));
-        ui.add(
-            egui::TextEdit::singleline(&mut a.efeito)
-                .hint_text(if problema.is_empty() {
-                    tx("ferramentas-o_problema")
-                } else {
-                    problema
-                })
-                .desired_width(f32::INFINITY),
-        );
-    });
-    let mut remover_cadeia: Option<usize> = None;
-    for (k, c) in a.cadeias.iter_mut().enumerate() {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.strong(fx("ferramentas-cadeia", &[("k", vx(&(k + 1)))]));
-                if ui.small_button(tx("ferramentas-por_que")).clicked() {
-                    c.porques.push(String::new());
-                }
-                if ui.small_button(tx("ferramentas-remover_cadeia")).clicked() {
-                    remover_cadeia = Some(k);
-                }
-            });
-            let mut remover: Option<usize> = None;
-            for (j, p) in c.porques.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.label(fx("ferramentas-por_que-2", &[("j", vx(&(j + 1)))]));
-                    ui.add(
-                        egui::TextEdit::singleline(p)
-                            .desired_width((ui.available_width() - 30.0).max(80.0)),
-                    );
-                    if ui.small_button("×").clicked() {
-                        remover = Some(j);
-                    }
-                });
-            }
-            if let Some(j) = remover {
-                c.porques.remove(j);
-            }
-            ui.horizontal(|ui| {
-                ui.label(tx("ferramentas-acao"));
-                ui.add(
-                    egui::TextEdit::singleline(&mut c.acao)
-                        .hint_text(tx("ferramentas-a_acao_sobre_a_causa"))
-                        .desired_width(f32::INFINITY),
-                );
-            });
-        });
-    }
-    if let Some(k) = remover_cadeia {
-        a.cadeias.remove(k);
-    }
-    if ui.button(tx("ferramentas-cadeia-2")).clicked() {
-        a.cadeias.push(Cadeia::default());
-    }
-}
-
-fn a3_ui(ui: &mut egui::Ui, a: &mut Aplicacao) {
-    for s in &mut a.secoes {
-        ui.label(RichText::new(&s.titulo).strong().color(AZUL));
-        ui.add(
-            egui::TextEdit::multiline(&mut s.texto)
-                .desired_rows(2)
-                .desired_width(f32::INFINITY),
-        );
-    }
+    rolou
 }
 
 // ---- resultado -------------------------------------------------------------------
@@ -2036,6 +2115,11 @@ fn caixa(ui: &mut egui::Ui, cor: Color32, titulo: &str, texto: &str) {
 /// O resultado de uma aplicação: indicadores, achados, gráficos, Ishikawa, textos,
 /// tabelas e avisos, na ordem do relatório.
 pub fn mostrar_resultado(ui: &mut egui::Ui, r: &Resultado, id: &str) {
+    mostrar_resultado_sem(ui, r, id, None);
+}
+
+/// O resultado sem o gráfico `pular` (o que a tela já desenha vivo, como o Pareto).
+pub fn mostrar_resultado_sem(ui: &mut egui::Ui, r: &Resultado, id: &str, pular: Option<usize>) {
     if !r.indicadores.is_empty() {
         // Cartões de largura igual, quantos couberem por linha (o quadro não sabe a
         // largura antes de desenhar, então a quebra é feita aqui).
@@ -2075,6 +2159,9 @@ pub fn mostrar_resultado(ui: &mut egui::Ui, r: &Resultado, id: &str) {
         ui.add_space(3.0);
     }
     for (i, g) in r.graficos.iter().enumerate() {
+        if pular == Some(i) {
+            continue;
+        }
         ui.add_space(4.0);
         ui.label(RichText::new(&g.title).strong());
         grafico(ui, &format!("graf_{id}_{i}"), g);

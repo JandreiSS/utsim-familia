@@ -14,6 +14,8 @@ utsim-pasta.workspace = true
 utsim-ui-tema = { workspace = true, features = ["abertura", "arquivos"] }
 utsim-estudo.workspace = true
 utsim-ferramentas.workspace = true
+# As ferramentas desenhadas e editadas na tela (as mesmas do LSS).
+utsim-visual = { path = "../utsim-visual" }
 # As cartas de controle desenhadas por `carta`.
 utsim-quality.workspace = true
 # Pedido e resposta entre os apps (`--utsim-pedido`).

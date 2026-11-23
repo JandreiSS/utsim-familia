@@ -1,4 +1,4 @@
-//! Numbers, money and dates in the language now (the rules of UTSim Seis Sigma, P8): a
+//! Numbers, money and dates in the language now (the rules of UTSim LSS, P8): a
 //! comma as decimal mark except in English, dates day first except in English (which takes
 //! `AAAA-MM-DD`, the form no reader takes for month-first or day-first), and money in R$
 //! whatever the language.

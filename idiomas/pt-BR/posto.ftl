@@ -136,19 +136,9 @@ ferramentas-remover_a_coluna = Remover a coluna
 ferramentas-remover_a_linha = Remover a linha
 ferramentas-efeito = Efeito
 ferramentas-o_efeito = o efeito
-ferramentas-causa = + causa
-ferramentas-remover_categoria = Remover categoria
-ferramentas-causa-2 = causa
 ferramentas-categoria = + categoria
 ferramentas-nova_categoria = Nova categoria
 ferramentas-o_problema = o problema
-ferramentas-cadeia = Cadeia { $k }
-ferramentas-por_que = + por quê
-ferramentas-remover_cadeia = Remover cadeia
-ferramentas-por_que-2 = Por quê { $j }
-ferramentas-acao = Ação
-ferramentas-a_acao_sobre_a_causa = a ação sobre a causa raiz
-ferramentas-cadeia-2 = + cadeia
 ferramentas-efeito-2 = Efeito: { $efeito }
 ferramentas-sem_causas = sem causas
 ferramentas-avisos = Avisos
@@ -331,6 +321,19 @@ sessao-nenhuma_unidade_aberta = Nenhuma unidade aberta
 sessao-autor = autor: { $autor }
 sessao-sem_unidade = Sem unidade
 sessao-modelo = modelo: { $nome }
+sessao-unidade_nova = Unidade nova
+sessao-salvas = { $n ->
+    [0] Tudo já estava salvo.
+    [one] { $n } gravação salva.
+   *[other] { $n } gravações salvas.
+}
+sessao-unidade_salva_em = Unidade salva em { $pasta }.
+documento-onde_salvar = Onde salvar a pasta da unidade
+documento-nome_da_unidade = Nome da unidade (a fábrica, a linha, a turma…)
+documento-sera_criada = Será criada a pasta { $pasta }.
+documento-escreva_nome_e_pasta = Escreva o nome e escolha onde fica a pasta.
+inicial-nova_unidade = Nova unidade
+inicial-nova_unidade_dica = Começa em branco, sem pasta. Você salva quando quiser, com nome e lugar.
 sessao-desfazer = Desfazer
 sessao-refazer = Refazer
 sessao-desfazer_dica = Desfaz a sua última gravação nesta unidade, feita desde que o app abriu (Ctrl+Z fora dos campos de texto).
@@ -387,3 +390,27 @@ ferramentas-rotulo_lie = LIE
 ferramentas-rotulo_lse = LSE
 ferramentas-rotulo_alvo = Alvo
 ferramentas-rotulo_usar = usar
+
+## ferramentas/desenho.rs
+
+ferramentas-dica_espinha = Clique num osso para acrescentar uma causa, arraste os cartões de um osso para outro para mudar a categoria e dê duplo clique para editar. O botão direito abre o menu, com "Começar um 5 porquês".
+ferramentas-dica_arvore = Os porquês em árvore. O + à direita de um nó acrescenta um porquê abaixo dele e duplo clique edita. Cadeias que começam com os mesmos porquês dividem o ramo; cada ramo termina na sua ação.
+ferramentas-no_de_varias_cadeias = "{ $texto }" é o começo de { $n } cadeias: editar muda todas.
+ferramentas-secoes_a3 = { $n } de { $total } seções preenchidas
+ferramentas-a3_sem_outras = Aplique um Pareto ou um Ishikawa neste estudo e eles aparecem aqui, em miniatura.
+ferramentas-do_estudo = Do estudo
+ferramentas-casa_da_qualidade = Casa da qualidade
+ferramentas-casa_vazia = Acrescente necessidades (linhas) e requisitos técnicos (colunas depois de "Ponto de venda") para desenhar a casa.
+ferramentas-dica_casa = Clique numa célula para trocar a relação (círculo cheio 9, círculo vazio 3, triângulo 1) e num losango do telhado para trocar a correlação. A tabela abaixo muda junto.
+ferramentas-matriz_s_o = Matriz severidade × ocorrência
+ferramentas-cor_por = Cor por
+ferramentas-dica_ap = Ação prioritária: alta em vermelho, média em âmbar, baixa em verde.
+ferramentas-dica_npr = NPR (S × O × D): 200 ou mais em vermelho, de 100 a 199 em âmbar, abaixo de 100 em verde.
+ferramentas-legenda_matriz = O fundo é a faixa de S × O; o ponto, o risco da linha (o pior da célula). Clique para ir à linha na grade.
+ferramentas-risco_alto = { $n } alto
+ferramentas-risco_medio = { $n } médio
+ferramentas-risco_baixo = { $n } baixo
+ferramentas-porques_comecado = 5 porquês começado com "{ $causa }".
+ferramentas-pareto_vivo = Clique numa barra para filtrar a tabela de dados; de novo, para mostrar todas.
+ferramentas-filtrando = Só as linhas de "{ $categoria }" ({ $n }).
+ferramentas-mostrar_todas = Mostrar todas

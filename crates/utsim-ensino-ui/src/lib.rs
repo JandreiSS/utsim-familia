@@ -604,9 +604,6 @@ impl App {
                 self.mensagem = None;
             }
         });
-        if let Some(m) = &self.mensagem {
-            ui.colored_label(Color32::from_rgb(255, 112, 104), m);
-        }
     }
 
     fn tela_glossario(&mut self, ui: &mut Ui) {

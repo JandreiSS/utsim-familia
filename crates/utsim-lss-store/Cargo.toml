@@ -1,6 +1,6 @@
 [package]
 name = "utsim-lss-store"
-description = "Project folder of UTSim Seis Sigma: write-once operation journal, snapshots, presence, attachments, local cache and .lssz export, safe in a synced folder"
+description = "Project folder of UTSim LSS: write-once operation journal, snapshots, presence, attachments, local cache and .lssz export, safe in a synced folder"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
