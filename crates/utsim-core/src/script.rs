@@ -20,6 +20,18 @@ pub trait ItemScript: Send {
     fn run(&mut self, item: &mut Item, env: &mut ScriptEnv) -> Result<(), String>;
 }
 
+/// Labels computed when a source creates an item (`label_exprs` of the model): the
+/// labels to set, from the item's labels so far and `count`, the number of items the
+/// source created with this one.
+pub trait LabelScript: Send {
+    fn labels(
+        &mut self,
+        item: &Item,
+        count: u64,
+        env: &mut ScriptEnv,
+    ) -> Result<Vec<(String, crate::Value)>, String>;
+}
+
 /// Chooses the output port (0-based) for a released item: `OutputRule::Script`.
 pub trait PortScript: Send {
     fn port(&mut self, item: &Item, outputs: usize, env: &mut ScriptEnv) -> Result<usize, String>;

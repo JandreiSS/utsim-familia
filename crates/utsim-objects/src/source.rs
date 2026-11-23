@@ -84,6 +84,14 @@ pub struct ArrivalRow {
     /// name (labels the source does not have are added).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, f64>,
+    /// Constant text labels of the row's items (`"cliente": "Loja 12"`), set after the
+    /// numeric ones.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        alias = "rotulos_texto"
+    )]
+    pub text_labels: BTreeMap<String, String>,
 }
 
 fn one_u64() -> u64 {
@@ -388,6 +396,10 @@ pub struct Source {
     first_at_zero: bool,
     max_arrivals: Option<u64>,
     labels: Vec<(String, Dist)>,
+    /// Constant text labels of every item.
+    texts: Vec<(String, String)>,
+    /// Labels computed at creation, after all the others (`label_exprs`).
+    on_create: Option<Box<dyn utsim_core::script::LabelScript>>,
     created: u64,
     /// Items that left the source and items destroyed because they could not leave,
     /// both since the warm-up ended (the loss fraction is `lost / (lost + entered)`).
@@ -439,6 +451,8 @@ pub struct Source {
 pub struct ItemTypeSpec {
     pub name: String,
     pub labels: Vec<(String, f64)>,
+    /// Constant text labels of the type.
+    pub texts: Vec<(String, String)>,
 }
 
 impl Source {
@@ -449,6 +463,8 @@ impl Source {
             first_at_zero: false,
             max_arrivals: None,
             labels: Vec::new(),
+            texts: Vec::new(),
+            on_create: None,
             created: 0,
             entered: 0,
             lost: 0,
@@ -632,16 +648,46 @@ impl Source {
                 for (name, v) in &spec.labels {
                     cx.item_mut(id).set_label(name.clone(), *v);
                 }
+                for (name, v) in &spec.texts {
+                    cx.item_mut(id)
+                        .set_label(name.clone(), utsim_core::Value::Text(v.clone()));
+                }
             }
         }
         self.label_item(cx, id);
+        for (name, v) in &self.texts {
+            cx.item_mut(id)
+                .set_label(name.clone(), utsim_core::Value::Text(v.clone()));
+        }
         if let Some(r) = row {
-            let labels = &self.table.as_ref().expect("row of a table").rows[r].labels;
-            for (name, v) in labels {
+            let row = &self.table.as_ref().expect("row of a table").rows[r];
+            for (name, v) in &row.labels {
                 cx.item_mut(id).set_label(name.clone(), *v);
+            }
+            for (name, v) in &row.text_labels {
+                cx.item_mut(id)
+                    .set_label(name.clone(), utsim_core::Value::Text(v.clone()));
             }
         }
         self.created += 1;
+        if let Some(script) = self.on_create.as_mut() {
+            let item = cx.item(id).clone();
+            let name = cx.block_name(cx.me()).to_string();
+            let now = cx.now();
+            let mut env = utsim_core::script::ScriptEnv {
+                now,
+                rng: cx.rng(),
+                block: &name,
+            };
+            match script.labels(&item, self.created, &mut env) {
+                Ok(labels) => {
+                    for (k, v) in labels {
+                        cx.item_mut(id).set_label(k, v);
+                    }
+                }
+                Err(e) => cx.error(format!("{name}: {e}")),
+            }
+        }
         cx.set_state(State::Blocked);
         cx.release(id);
         if self.on_blocked == OnBlocked::Drop {
@@ -712,6 +758,19 @@ impl Source {
 
     pub fn max_arrivals(mut self, max: Option<u64>) -> Self {
         self.max_arrivals = max;
+        self
+    }
+
+    /// Assigns a constant text label to every created item.
+    pub fn text_label(mut self, name: impl Into<String>, text: impl Into<String>) -> Self {
+        self.texts.push((name.into(), text.into()));
+        self
+    }
+
+    /// Labels computed when each item is created, after all the others (see
+    /// `utsim_script::compile_label_exprs`); `None`: none.
+    pub fn on_create(mut self, script: Option<Box<dyn utsim_core::script::LabelScript>>) -> Self {
+        self.on_create = script;
         self
     }
 
