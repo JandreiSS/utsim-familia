@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = No unit open
 sessao-autor = author: { $autor }
 sessao-sem_unidade = No unit
 sessao-modelo = model: { $nome }
+sessao-unidade_nova = New unit
+sessao-salvas = { $n ->
+    [0] Everything was already saved.
+    [one] { $n } change saved.
+   *[other] { $n } changes saved.
+}
+sessao-unidade_salva_em = Unit saved in { $pasta }.
+documento-onde_salvar = Where to save the unit folder
+documento-nome_da_unidade = Name of the unit (the plant, the line, the class…)
+documento-sera_criada = The folder { $pasta } will be created.
+documento-escreva_nome_e_pasta = Write the name and choose where the folder goes.
+inicial-nova_unidade = New unit
+inicial-nova_unidade_dica = Starts blank, with no folder. You save when you want, with a name and a place.
 sessao-desfazer = Undo
 sessao-refazer = Redo
 sessao-desfazer_dica = Undoes your last change in this unit since the app opened (Ctrl+Z outside text fields).
