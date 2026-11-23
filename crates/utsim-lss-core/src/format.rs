@@ -31,7 +31,7 @@ pub const MIGRATIONS: &[(u32, Migration)] = &[];
 
 #[derive(Debug, thiserror::Error)]
 pub enum FormatError {
-    #[error("{what} no formato {found}; esta versão do UTSim Seis Sigma lê até {supported}")]
+    #[error("{what} no formato {found}; esta versão do UTSim LSS lê até {supported}")]
     TooNew {
         what: &'static str,
         found: u32,
@@ -204,7 +204,7 @@ mod tests {
         let err = read::<Doc>(r#"{"formato": 9, "nome": "y"}"#, "projeto").unwrap_err();
         assert_eq!(
             err.to_string(),
-            "projeto no formato 9; esta versão do UTSim Seis Sigma lê até 1"
+            "projeto no formato 9; esta versão do UTSim LSS lê até 1"
         );
         assert!(matches!(
             read::<Doc>(r#"{"formato": "um"}"#, "projeto"),

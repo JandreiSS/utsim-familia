@@ -1,6 +1,6 @@
 [package]
 name = "utsim-lss-core"
-description = "Domain of UTSim Seis Sigma (Lean Six Sigma projects): entities, operation journal in Lamport order, conflicts and the project format"
+description = "Domain of UTSim LSS (Lean Six Sigma projects): entities, operation journal in Lamport order, conflicts and the project format"
 # Own version and tag (`lss-v<version>`), apart from the simulator (docs/plano_lean_seis_sigma.md, R1).
 version = "0.1.0"
 edition.workspace = true

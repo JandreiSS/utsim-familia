@@ -52,7 +52,7 @@ pub struct Pacote {
     /// Glossary path inside the package.
     #[serde(default)]
     pub glossario: Option<String>,
-    /// Concept of the glossary to tools of the UTSim Seis Sigma curriculum (`msa`,
+    /// Concept of the glossary to tools of the UTSim LSS curriculum (`msa`,
     /// `capacidade`...): a solved mission records `praticou` in those tools in the
     /// company program ([`crate::competencias`]).
     #[serde(default)]

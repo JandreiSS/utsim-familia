@@ -1,4 +1,4 @@
-//! Storage of UTSim Seis Sigma (`docs/plano_lean_seis_sigma.md`, 4.4 and 4.5): the project
+//! Storage of UTSim LSS (`docs/plano_lean_seis_sigma.md`, 4.4 and 4.5): the project
 //! folder `<nome>.lss/`, made to live in a folder synced by a desktop client (the team's
 //! shared Google Drive) without any server.
 //!
@@ -52,7 +52,7 @@ pub enum Error {
     },
     #[error("já existe: {}", .0.display())]
     Exists(PathBuf),
-    #[error("{} não é uma pasta de projeto do UTSim Seis Sigma (falta projeto.json)", .0.display())]
+    #[error("{} não é uma pasta de projeto do UTSim LSS (falta projeto.json)", .0.display())]
     NotAProject(PathBuf),
     #[error("{}: {source}", path.display())]
     Format { path: PathBuf, source: FormatError },
