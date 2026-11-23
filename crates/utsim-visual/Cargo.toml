@@ -1,0 +1,17 @@
+[package]
+name = "utsim-visual"
+description = "Ferramentas da qualidade desenhadas e editáveis na tela (espinha de peixe, árvore de porquês, Pareto vivo, matriz de risco, casa da qualidade), comuns ao UTSim Qualidade, ao Segurança do Trabalho e ao LSS"
+version.workspace = true
+edition.workspace = true
+# egui 0.36 needs Rust 1.95.
+rust-version = "1.95"
+
+[dependencies]
+# The workspace's single egui (the same eframe 0.36.2 of the apps): pure egui, no backend.
+egui = { version = "=0.36.2", default-features = false, features = ["default_fonts"] }
+# Os textos em cinco línguas (idiomas/*/visual.ftl).
+utsim-idiomas = { path = "../utsim-idiomas", default-features = false }
+
+[dev-dependencies]
+# Quadros sem janela com cliques e arrastos de verdade, e as imagens para revisar o desenho.
+utsim-ui-tema = { workspace = true, features = ["captura"] }
