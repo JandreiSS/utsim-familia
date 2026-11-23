@@ -110,7 +110,7 @@ impl Geom {
         match self.shape {
             Shape::Belt => BELT_THICKNESS + 0.9,
             Shape::Rack => self.half[1] * 2.0 + 0.3,
-            shape => style::top_of_stack(shape, drawn),
+            shape => style::top_of_stack_in(shape, drawn, self.half),
         }
     }
 
@@ -118,7 +118,7 @@ impl Geom {
     pub fn hidden_items(&self, resting: usize) -> usize {
         match self.shape {
             Shape::Belt | Shape::Rack => 0,
-            shape => style::hidden_items(shape, resting),
+            shape => resting.saturating_sub(style::visible_slots_in(shape, self.half)),
         }
     }
 

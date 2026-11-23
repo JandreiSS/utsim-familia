@@ -768,6 +768,75 @@ impl Scene {
         Some(self.positions[rack][1] + center[1] - size / 2.0)
     }
 
+    /// The items resting on block `b` at `t`, oldest first: `(item, arrival number)` (see
+    /// [`crate::timeline::Timeline::item_visit`]), as [`Scene::items_at`] lays them on the block.
+    pub fn resting_at(&self, b: usize, t: f64) -> Vec<(usize, Option<u32>)> {
+        let tl = &self.timeline;
+        let mut live = Vec::new();
+        tl.live_items(t, &mut live);
+        let mut list: Vec<(f64, usize)> = live
+            .into_iter()
+            .filter_map(|i| match tl.item_pos_since(i, t) {
+                (ItemPos::At(at), since) if at == b => Some((since, i)),
+                _ => None,
+            })
+            .collect();
+        list.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+        list.into_iter()
+            .map(|(_, i)| (i, tl.item_visit(i, t)))
+            .collect()
+    }
+
+    /// The place `item` has (or gets, when it is being dropped there at `t`) among the
+    /// items resting on block `b`, with `n` places ([`style::pick_slots`]).
+    pub fn slot_of(&self, b: usize, item: usize, t: f64, n: usize) -> Option<usize> {
+        let mut list = self.resting_at(b, t);
+        if !list.iter().any(|&(i, _)| i == item) {
+            list.push((item, self.timeline.item_visit(item, t)));
+        }
+        let seqs: Vec<Option<u32>> = list.iter().map(|&(_, s)| s).collect();
+        let k = list.iter().position(|&(i, _)| i == item)?;
+        style::pick_slots(&seqs, n)[k]
+    }
+
+    /// Centre of the place of `item` on fixed block `b` at `t` (layout space), as the
+    /// simple shapes lay their resting items; `None` for belts, racks and mobiles.
+    pub fn slot_center(&self, b: usize, item: usize, t: f64) -> Option<[f32; 3]> {
+        let geom = self.geoms.get(b)?;
+        if matches!(geom.shape, style::Shape::Belt | style::Shape::Rack)
+            || self.blocks.get(b)?.role.is_some()
+        {
+            return None;
+        }
+        let n = style::visible_slots_in(geom.shape, geom.half);
+        let k = self.slot_of(b, item, t, n)?;
+        Some(add(
+            self.base_at(b, t),
+            turned(
+                style::slot_offset_in(geom.shape, k, geom.half),
+                self.turn(b),
+            ),
+        ))
+    }
+
+    /// The hand-off mobile block `b` is loading or unloading at `t`: the hand-off that
+    /// closes its window, whether it picks up, and the progress through the window.
+    pub fn carrier_window(
+        &self,
+        b: usize,
+        t: f64,
+    ) -> Option<(crate::timeline::Handoff, bool, f32)> {
+        self.blocks.get(b)?.role?;
+        let (state, start, end) = self.timeline.state_span(b, t)?;
+        let pickup = match state {
+            State::Loading => true,
+            State::Unloading => false,
+            _ => return None,
+        };
+        let (progress, handoff) = self.window(b, t, start, end, pickup);
+        Some((handoff?, pickup, progress))
+    }
+
     /// Where every live item is at `t` (layout space), sorted by item index.
     pub fn items_at(&self, t: f64) -> Vec<ItemPlacement> {
         let tl = &self.timeline;
@@ -933,14 +1002,23 @@ impl Scene {
                     }
                 }
                 (shape, None) => {
-                    for (slot, &(_, i, _)) in list.iter().enumerate() {
-                        // The stack is capped; the label shows how many are not drawn.
-                        if slot >= style::visible_slots(shape) {
+                    // Each item keeps its place while it rests (its arrival number);
+                    // the stack is capped and the label shows how many are not drawn.
+                    let seqs: Vec<Option<u32>> = list
+                        .iter()
+                        .map(|&(_, i, at)| tl.item_visit(i, at))
+                        .collect();
+                    let slots = style::pick_slots(&seqs, style::visible_slots_in(shape, geom.half));
+                    for (&(_, i, _), slot) in list.iter().zip(slots) {
+                        let Some(slot) = slot else {
                             placed.push(hidden(i));
                             continue;
-                        }
+                        };
                         placed.push(ItemPlacement {
-                            center: add(base, turned(style::slot_offset(shape, slot), turn)),
+                            center: add(
+                                base,
+                                turned(style::slot_offset_in(shape, slot, geom.half), turn),
+                            ),
                             drawn: true,
                             ..hidden(i)
                         });
@@ -1213,6 +1291,47 @@ pub fn rack_approach(
             position[0] + (target[0] - position[0]) * u,
             position[1],
             position[2] + (target[2] - position[2]) * u,
+        ],
+        yaw + turn * u,
+    )
+}
+
+/// Pose of a carrier that picks an item up from (or drops it at) its own place on a
+/// block, `target` (the item's centre, layout space), not at the block's access point
+/// where the trace leaves it: over the first and last 15 % of the window (`progress`) it
+/// goes from `position` to `reach` short of the item, facing it (the forks or the hands
+/// under it), and back.
+pub fn slot_approach(
+    position: [f32; 3],
+    yaw: f32,
+    progress: f32,
+    target: [f32; 3],
+    reach: f32,
+) -> ([f32; 3], f32) {
+    let d = [target[0] - position[0], target[2] - position[2]];
+    let len = (d[0] * d[0] + d[1] * d[1]).sqrt();
+    if len <= reach + 1e-3 {
+        return (position, yaw);
+    }
+    let u_dir = [d[0] / len, d[1] / len];
+    let stand = [
+        target[0] - u_dir[0] * reach,
+        position[1],
+        target[2] - u_dir[1] * reach,
+    ];
+    // Heading `yaw` points along (cos, -sin) in (x, z).
+    let facing = (-u_dir[1]).atan2(u_dir[0]);
+    let u = (progress.min(1.0 - progress) / 0.15).clamp(0.0, 1.0);
+    let u = u * u * (3.0 - 2.0 * u);
+    let mut turn = (facing - yaw).rem_euclid(2.0 * PI);
+    if turn > PI {
+        turn -= 2.0 * PI;
+    }
+    (
+        [
+            position[0] + (stand[0] - position[0]) * u,
+            position[1],
+            position[2] + (stand[2] - position[2]) * u,
         ],
         yaw + turn * u,
     )
