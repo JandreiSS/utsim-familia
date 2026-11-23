@@ -9,7 +9,7 @@ Model(
         (name: "camara", kind: Processor(capacity: 10, process: Const(45.0)), position: (12.0, 0.0, 0.0)),
         (name: "fila_forno", kind: Queue(), position: (16.0, 0.0, 0.0)),
         (name: "forno", kind: Processor(capacity: 2, process: Triangular(min: 10.0, mode: 12.0, max: 16.0)),
-         downtime: (mtbf: Exp(mean: 300.0), mttr: Exp(mean: 20.0)), position: (20.0, 0.0, 0.0)),
+         downtime: (mtbf: Exp(mean: 300.0), mttr: Exp(mean: 20.0)), position: (20.0, 0.0, 0.0), visual: (asset: "forno")),
         (name: "fila_embalagem", kind: Queue(), position: (24.0, 0.0, 0.0)),
         (name: "embalagem", kind: Processor(process: Uniform(min: 4.0, max: 6.0)), position: (28.0, 0.0, 0.0)),
         (name: "expedicao", kind: Sink, position: (32.0, 0.0, 0.0)),

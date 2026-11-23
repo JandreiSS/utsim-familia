@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim Ensino: a padaria (ato 7) usa o forno de padaria modelado no Blender, na figura do enunciado e no gabarito (`visual: (asset: "forno")`), no lugar do centro de usinagem.
 - UTSim Ensino: o quadro "O que aconteceu" usa o nome que o aluno lê, não o id do modelo ("Máquina 1", "Fila divisora", "Câmara", em vez de `maq1`, `fila_divisora`, `camara`). A missão 6.2 usa um modelo próprio, só com as 3 máquinas do enunciado, e a vista 2D não mostra mais duas máquinas "fora do turno".
 - Tradução, rodada 9 (editor, parte 2): o painel de propriedades do editor do simulador (campos de cada tipo de objeto, distribuições, rótulos, lote, regra de saída, quebras, turnos e calendários, chegadas por período, rede de caminhos e fluidos, aparência) nas cinco línguas. O nome do tipo na tela segue a língua; os roteiros continuam achando os tipos pelo nome em português. Os textos com valores ficaram cerca de 10% mais rápidos de montar (os nomes dos valores não são mais copiados).
 - UTSim Ensino, rodada de jogo (missão 6.2 do começo ao fim): as opções de uma alavanca, de uma previsão ou de uma justificativa com rótulos longos ficam uma embaixo da outra (antes, a última se espremia numa coluna de uma letra por linha); o cabeçalho mostra "Missão 6.2", não "6,2"; a imagem da 6.2 tem os 3 tornos do enunciado, e a operadora Ana e o estoque aparecem na frente das máquinas nas missões 6.1 e 6.2 (campo `mover` da cena, só no desenho).

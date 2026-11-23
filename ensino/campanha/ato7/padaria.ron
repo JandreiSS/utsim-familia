@@ -45,7 +45,7 @@ Missao(
         imagem: "padaria.cena.png",
         escala: 0.6,
         unidade: "min",
-        elementos: {"camara": "estante", "forno": "cnc"},
+        elementos: {"camara": "estante", "forno": "forno"},
         sem_copias: ["camara", "forno"],
         pecas: [
             (no: "expedicao", elemento: "caixa", dx: -0.3),
