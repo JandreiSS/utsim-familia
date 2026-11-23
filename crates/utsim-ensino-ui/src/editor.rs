@@ -30,8 +30,8 @@ use utsim_ensino_core::questoes::{ConjuntoMissao, QuestaoDados};
 use utsim_ui_tema::arquivos::Tipo;
 
 use crate::missao::Trabalho;
-use utsim_ui_tema::documento::{self, Clique, Evento, Guarda, Pedido, Situacao};
 use crate::{App, texto};
+use utsim_ui_tema::documento::{self, Clique, Evento, Guarda, Pedido, Situacao};
 
 const VERMELHO: Color32 = Color32::from_rgb(255, 112, 104);
 const AMARELO: Color32 = Color32::from_rgb(240, 190, 80);
@@ -228,7 +228,11 @@ impl EstadoEditor {
         }
         if self.gravar_disco() {
             self.mudou = false;
-            let dir = self.pacote.as_ref().map(|p| p.0.clone()).unwrap_or_default();
+            let dir = self
+                .pacote
+                .as_ref()
+                .map(|p| p.0.clone())
+                .unwrap_or_default();
             self.mensagens = vec![texto::f(texto::ed_gravado(), &[&dir.display()])];
             self.seguir_depois_de_salvar();
         } else {
@@ -269,7 +273,11 @@ impl EstadoEditor {
             return false;
         };
         let depois = p.todos();
-        let velho = if mesma { antes.clone() } else { Default::default() };
+        let velho = if mesma {
+            antes.clone()
+        } else {
+            Default::default()
+        };
         match utsim_ensino_store::caso::gravar_trocando(dir, &velho, &depois) {
             Ok(()) => {
                 *d = dir.to_path_buf();
@@ -677,9 +685,8 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
                     &[&c.missoes.len(), &c.pacote.atos.len()],
                 ));
                 if utse && (!s.tem_pasta() || s.nao_salvo()) {
-                    s.erros.push(
-                        utsim_ui_tema::texto::tx("documento-salve_primeiro").to_string(),
-                    );
+                    s.erros
+                        .push(utsim_ui_tema::texto::tx("documento-salve_primeiro").to_string());
                 } else if utse {
                     let destino = dir.with_extension("utse");
                     match utsim_ensino_store::caso::empacotar(&dir, &destino) {

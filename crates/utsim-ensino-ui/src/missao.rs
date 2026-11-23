@@ -1024,7 +1024,10 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
         Some(utsim_ensino_core::nota::MaisLonge::Metrica { rotulo, falta }) => {
             ui.colored_label(
                 VERMELHO,
-                texto::f_literal(texto::missao_mais_longe(), &[rotulo.as_str(), falta.as_str()]),
+                texto::f_literal(
+                    texto::missao_mais_longe(),
+                    &[rotulo.as_str(), falta.as_str()],
+                ),
             );
         }
         Some(utsim_ensino_core::nota::MaisLonge::Criterio { rotulo }) => {
