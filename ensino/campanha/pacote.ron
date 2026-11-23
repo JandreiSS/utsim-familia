@@ -9,7 +9,7 @@ Pacote(
     descricao: "Do gargalo ao modelo: decisões numa fábrica simulada, com previsão, alavancas, peças para montar e modelos para entregar, e nota pela simulação.",
     requer: ["nucleo >= 0.1"],
     glossario: "glossario.ron",
-    // Conceito do glossário para ferramentas do currículo do UTSim Seis Sigma: a missão
+    // Conceito do glossário para ferramentas do currículo do UTSim LSS: a missão
     // resolvida vira "praticou" nessas ferramentas no programa da empresa.
     competencias: {
         "ctq": ["voc_ctq"],

@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = Ninguna unidad abierta
 sessao-autor = autor: { $autor }
 sessao-sem_unidade = Sin unidad
 sessao-modelo = modelo: { $nome }
+sessao-unidade_nova = Unidad nueva
+sessao-salvas = { $n ->
+    [0] Todo ya estaba guardado.
+    [one] { $n } cambio guardado.
+   *[other] { $n } cambios guardados.
+}
+sessao-unidade_salva_em = Unidad guardada en { $pasta }.
+documento-onde_salvar = Dónde guardar la carpeta de la unidad
+documento-nome_da_unidade = Nombre de la unidad (la fábrica, la línea, el grupo…)
+documento-sera_criada = Se creará la carpeta { $pasta }.
+documento-escreva_nome_e_pasta = Escriba el nombre y elija dónde va la carpeta.
+inicial-nova_unidade = Unidad nueva
+inicial-nova_unidade_dica = Empieza en blanco, sin carpeta. Usted guarda cuando quiera, con nombre y lugar.
 sessao-desfazer = Deshacer
 sessao-refazer = Rehacer
 sessao-desfazer_dica = Deshace su último cambio en esta unidad desde que se abrió la aplicación (Ctrl+Z fuera de los campos de texto).

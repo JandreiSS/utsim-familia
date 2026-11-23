@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = Nenhuma unidade aberta
 sessao-autor = autor: { $autor }
 sessao-sem_unidade = Sem unidade
 sessao-modelo = modelo: { $nome }
+sessao-unidade_nova = Unidade nova
+sessao-salvas = { $n ->
+    [0] Tudo já estava salvo.
+    [one] { $n } gravação salva.
+   *[other] { $n } gravações salvas.
+}
+sessao-unidade_salva_em = Unidade salva em { $pasta }.
+documento-onde_salvar = Onde salvar a pasta da unidade
+documento-nome_da_unidade = Nome da unidade (a fábrica, a linha, a turma…)
+documento-sera_criada = Será criada a pasta { $pasta }.
+documento-escreva_nome_e_pasta = Escreva o nome e escolha onde fica a pasta.
+inicial-nova_unidade = Nova unidade
+inicial-nova_unidade_dica = Começa em branco, sem pasta. Você salva quando quiser, com nome e lugar.
 sessao-desfazer = Desfazer
 sessao-refazer = Refazer
 sessao-desfazer_dica = Desfaz a sua última gravação nesta unidade, feita desde que o app abriu (Ctrl+Z fora dos campos de texto).

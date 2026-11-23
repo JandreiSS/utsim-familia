@@ -1,4 +1,4 @@
-//! The signed journal shared by UTSim Ensino and UTSim Seis Sigma (decision E12 of
+//! The signed journal shared by UTSim Ensino and UTSim LSS (decision E12 of
 //! `docs/plano_ensino_e_jogo.md`, base of P7 of `docs/plano_lean_seis_sigma.md`).
 //!
 //! Only primitives, no format of either app and no texts:

@@ -1,7 +1,7 @@
 //! Questions about the data sets of a mission (the Lean Six Sigma case, act 8). Each
 //! student gets data generated from their own seed, with the planted effect sometimes in
 //! another group, and the right answer is computed from those data by the same analyses
-//! the UTSim Seis Sigma app uses (`utsim-quality`): the student can answer with the
+//! the UTSim LSS app uses (`utsim-quality`): the student can answer with the
 //! reduced tools of the game or with the Seis Sigma app, and gets the same number.
 
 use serde::{Deserialize, Serialize};

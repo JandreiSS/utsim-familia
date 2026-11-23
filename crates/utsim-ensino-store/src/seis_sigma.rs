@@ -1,4 +1,4 @@
-//! The way to UTSim Seis Sigma (`docs/plano_ensino_e_jogo.md`, 7.1): the student's data of
+//! The way to UTSim LSS (`docs/plano_ensino_e_jogo.md`, 7.1): the student's data of
 //! the Lean Six Sigma case become a DMAIC training project (`.lss` folder, marked as
 //! training, out of every indicator of the program), each data set registered with the
 //! origin `Simulado`, and the model of the factory copied in. The student analyses there
@@ -46,7 +46,7 @@ pub fn exportar(
     let caminho = pasta.join(format!("{nome}_{aluno}.lss"));
     if caminho.exists() {
         return Err(Erro::Invalido(format!(
-            "{} já existe: abra esse projeto no UTSim Seis Sigma ou escolha outra pasta",
+            "{} já existe: abra esse projeto no UTSim LSS ou escolha outra pasta",
             caminho.display()
         )));
     }
@@ -99,7 +99,7 @@ pub struct RegistroCompetencias {
 
 /// Records in the company program (decision N2 of the Seis Sigma plan) the practice of the
 /// solved missions: `praticou`, origin `ensino`, in the tools the package ties to their
-/// concepts, by the student themself (`me`, the identity of UTSim Seis Sigma on this
+/// concepts, by the student themself (`me`, the identity of UTSim LSS on this
 /// computer). `so_missao` limits it to one mission (the one just solved).
 pub fn registrar_competencias(
     programa: &Path,
@@ -233,9 +233,9 @@ pub fn registrar_turma(
     Ok(r)
 }
 
-/// The identity of UTSim Seis Sigma on this computer, or why there is none.
+/// The identity of UTSim LSS on this computer, or why there is none.
 pub fn identidade_local() -> std::result::Result<Identity, String> {
     Identity::local().ok_or_else(|| {
-        "abra o UTSim Seis Sigma uma vez neste computador e preencha nome e e-mail".to_string()
+        "abra o UTSim LSS uma vez neste computador e preencha nome e e-mail".to_string()
     })
 }

@@ -13,6 +13,7 @@
 
 pub mod abrir;
 pub mod carta;
+pub mod documento;
 pub mod ferramentas;
 pub mod inicial;
 pub mod modelo;
@@ -23,6 +24,7 @@ pub mod trabalho;
 pub mod util;
 
 pub use abrir::{Abrir, Destino};
+pub use documento::{Depois, Documento};
 pub use ferramentas::{FnLeituras, FnLimites, FnPuxar, FnSimular, TelaFerramentas};
 pub use inicial::{Marca, Saida, TelaInicial};
 pub use modelo::{DESTAQUE, FnResumo, Resumo, TelaModelo};

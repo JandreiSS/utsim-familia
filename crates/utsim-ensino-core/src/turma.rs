@@ -62,7 +62,7 @@ pub struct Aluno {
     #[serde(default)]
     pub apelido: String,
     /// E-mail, optional: ties the student to a person of a Lean Six Sigma program of
-    /// UTSim Seis Sigma, so the teacher can record the class's practice there.
+    /// UTSim LSS, so the teacher can record the class's practice there.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub email: String,
 }

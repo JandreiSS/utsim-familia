@@ -239,7 +239,7 @@ fn charts_are_drawn_inside_the_pdf() {
 pub(crate) fn showcase() -> Document {
     let mut d = Document::new("Relatório de demonstração", "Todos os blocos do gerador");
     d.cover = Some(Cover {
-        app: "UTSim Seis Sigma".into(),
+        app: "UTSim LSS".into(),
         title: "Redução de refugo na usinagem da tampa".into(),
         subtitle: "Relatório do tollgate Analisar".into(),
         author: "Ana Souza".into(),
@@ -406,7 +406,7 @@ fn header_names_the_app_that_made_the_document() {
     assert_eq!(d.app_name(), "UTSim");
     d.app = "UTSim Qualidade".into();
     assert!(html::render(&d, &t, "").contains("UTSim Qualidade"));
-    assert!(!html::render(&d, &t, "").contains("Seis Sigma"));
+    assert!(!html::render(&d, &t, "").contains("UTSim LSS"));
     d.app.clear();
     d.cover = Some(Cover {
         app: "UTSim Estatística".into(),
@@ -414,5 +414,5 @@ fn header_names_the_app_that_made_the_document() {
     });
     assert_eq!(d.app_name(), "UTSim Estatística");
     let b = pdf::render(&d, &t, "");
-    assert!(!b.windows(10).any(|w| w == b"Seis Sigma"));
+    assert!(!b.windows(9).any(|w| w == b"UTSim LSS"));
 }
