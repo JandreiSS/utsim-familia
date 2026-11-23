@@ -80,6 +80,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - `utsim run`: a lista de estados por objeto no resumo procura só as chaves do objeto, em vez de percorrer o resumo inteiro para cada objeto. A saída é a mesma.
 
 ### Corrigido
+- UTSim Produto: as mensagens das regras (item dentro dele mesmo, requisito aprovado, portão com pendências e outras) aparecem na língua escolhida, e não mais sempre em português.
+- UTSim Produto: tirar ou mover uma fase não desalinha mais as decisões e as assinaturas das outras fases. Cada fase ganha uma identidade que as assinaturas guardam, e as de antes continuam valendo. Uma fase com decisão registrada fica como registro.
 - UTSim Segurança do Trabalho: remover um perigo da unidade agora leva junto as ações e as reavaliações dele (`inventario::remover_perigo`), e a barra de estado diz quantas saíram. Antes elas ficavam na pasta apontando para um perigo que não existia mais.
 - UTSim Segurança do Trabalho: um duplo clique em "Registrar reavaliação" gravava a mesma reavaliação duas vezes. Agora o formulário fica com o que foi gravado e o botão desabilita enquanto nada muda (`Inventario::reavaliacao_repetida`).
 - UTSim Produto: dava para apagar requisitos só por um link escondido no fim do editor. Agora o botão vermelho "Excluir" fica no topo do editor de requisitos e de itens, pede confirmação no lugar, e também há a tecla Delete e o menu do botão direito na lista. Excluir um requisito, item, variante, operação ou característica não deixa mais nada apontando para o que sumiu: filhos, pedidos de mudança, casa da qualidade, especificações e tempos por variante.
@@ -91,6 +93,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- UTSim Produto: a corrida da simulação (intervalo, duração, aquecimento, replicações e destino) fica gravada no projeto e não se perde ao fechar. Sem destino escolhido, vale o último modelo gerado.
+- UTSim Produto: um pedido de mudança aberto ou rejeitado pode ser excluído, com confirmação. Um aprovado fica, porque está no histórico dos requisitos.
+- UTSim Produto: **Reabrir o projeto** depois de "Parar" (ou de concluir), na fase em que estava. A reabertura entra na linha do tempo.
+- Elementos 3D do Blender, **doca de carga** (`doca.glb`): trecho de parede com porta de enrolar que abre, abrigo de lona, niveladora, balizadores, semáforo e a área de carga marcada no piso. Serve para a entrada e a saída das peças da fábrica, que não tinham elemento próprio.
+- Elementos 3D do Blender, **clipes base das pessoas** (`pessoa_clipes_base.glb`, 1,0 MB): só os sete clipes de animação que o UTSim usa, no lugar das bibliotecas inteiras (15,7 MB). O gerador de enunciados do Ensino já usa o arquivo novo; a cena 3D e os pacotes podem trocar depois.
 - UTSim Seis Sigma: meta de dias por fase definida pelo MBB para o programa todo no painel do MBB (`painel::program_target_days`), com a padrão quando vazia; o tempo de ciclo por fase e o PDF do painel usam essa meta (L6).
 - UTSim Seis Sigma: "Apagar" para conjuntos de dados e análises guardadas em Dados e análises, com confirmação; um conjunto com análises guardadas só sai depois delas. A tela lê e interpreta o arquivo do conjunto uma vez, e não mais a cada quadro.
 - UTSim Estatística 0.8.2: números digitados ou colados na planilha seguem a língua escolhida. Em português `1.234` é mil duzentos e trinta e quatro (antes era lido como 1,234), e em inglês `1,234.5` é 1234,5. Uma marca sem grupos de três (`1.5`, `0.25`) continua decimal (`planilha::entrada`, testes nas duas línguas).
