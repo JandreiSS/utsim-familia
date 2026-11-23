@@ -113,7 +113,7 @@ pub enum ChartKind {
 /// The cover page of a document.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Cover {
-    /// The app that made the document (`UTSim Seis Sigma`...).
+    /// The app that made the document (`UTSim LSS`...).
     pub app: String,
     pub title: String,
     pub subtitle: String,

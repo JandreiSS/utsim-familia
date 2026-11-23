@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim LSS: o UTSim Seis Sigma passa a se chamar UTSim LSS (de Lean Seis Sigma) na janela, na abertura, no lançador, no instalador, no manual e nas 5 línguas, e também nas menções dos outros apps da família (Ensino, Qualidade e relatórios). O id do produto (`lean-seis-sigma`), o executável, o pacote e os formatos de arquivo continuam: launchers, projetos e programas existentes seguem valendo. As notas de versão do script de publicar aceitam os dois nomes.
 - UTSim Produto: nos pedidos de mudança só aparecem para marcar os requisitos já aprovados, e a tela da simulação, quando ainda falta algo, diz o que falta e leva até a Estrutura ou os Roteiros.
 - UTSim Produto: os requisitos mostram só os campos que fazem sentido para cada tipo. "Fonte" virou "Quem pediu" (cliente), "Norma ou lei" (regulatório) e "Perigo ou norma" (segurança); o técnico ganhou "Atende a". Cada campo tem uma ajuda curta, as especificações e as verificações abrem só onde o tipo pede, e o que se usa menos fica em "Mais detalhes". Um requisito novo só entra abaixo do escolhido quando é técnico.
 - UTSim Qualidade: a carta do plano de controle virou um menu com as cartas que o CEP e as ferramentas leem (`planos::CARTAS`), em vez de um texto livre. Uma carta gravada à mão numa versão antiga aparece como está.

@@ -8,7 +8,7 @@ rust-version.workspace = true
 [dependencies]
 utsim-ensino-core = { path = "../utsim-ensino-core" }
 utsim-model.workspace = true
-# The training project of the Lean Six Sigma case for UTSim Seis Sigma (act 8).
+# The training project of the Lean Six Sigma case for UTSim LSS (act 8).
 utsim-lss-core = { path = "../utsim-lss-core" }
 utsim-lss-store = { path = "../utsim-lss-store" }
 serde.workspace = true
@@ -18,7 +18,7 @@ utsim-launcher-core = { path = "../utsim-launcher-core" }
 ron.workspace = true
 thiserror.workspace = true
 rayon.workspace = true
-# Keys, signatures and the hash chain, shared with UTSim Seis Sigma (decision E12).
+# Keys, signatures and the hash chain, shared with UTSim LSS (decision E12).
 utsim-diario.workspace = true
 zip = { version = "=2.6.1", default-features = false, features = ["deflate"] }
 # The class grades as a spreadsheet (the same writer as the Seis Sigma reports).

@@ -1,6 +1,6 @@
 [package]
 name = "utsim-diario"
-description = "Signed journal shared by UTSim Ensino and UTSim Seis Sigma: ed25519 keys, hash chain per author, incremental check and detached seals"
+description = "Signed journal shared by UTSim Ensino and UTSim LSS: ed25519 keys, hash chain per author, incremental check and detached seals"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

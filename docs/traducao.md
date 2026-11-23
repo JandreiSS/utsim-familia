@@ -7,7 +7,7 @@ texto que falta em outro idioma aparece em português.
 Idiomas de hoje: `pt-BR` (fonte), `en`, `es`, `fr` e `it`. Os arquivos `fr` e `it` foram
 traduzidos por máquina e aguardam revisão humana (o cabeçalho de cada um avisa).
 
-Apps já nos arquivos: UTSim Ensino (`ensino.ftl`), UTSim Seis Sigma (`seis-sigma.ftl`) e as
+Apps já nos arquivos: UTSim Ensino (`ensino.ftl`), UTSim LSS (`seis-sigma.ftl`) e as
 telas próprias do UTSim Qualidade (`qualidade.ftl`) e do UTSim Segurança do Trabalho
 (`seguranca.ftl`), o UTSim Estatística (`estatistica.ftl`) e o Lançador (`lancador.ftl`). Os
 outros seguem o plano do fim desta página.
