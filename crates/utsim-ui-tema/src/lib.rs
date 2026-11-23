@@ -287,6 +287,7 @@ pub mod abertura;
 pub mod navegacao;
 
 pub mod arquivos;
+pub mod documento;
 pub mod texto;
 
 pub mod campos;
