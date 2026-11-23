@@ -37,7 +37,7 @@ pub struct Regression {
 }
 
 /// Inverse of a square matrix by Gauss-Jordan with partial pivoting; `None` when singular.
-fn inverse(m: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
+pub(crate) fn inverse(m: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
     let n = m.len();
     let mut a: Vec<Vec<f64>> = m
         .iter()

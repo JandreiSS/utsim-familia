@@ -978,3 +978,187 @@ fn team_metrics_count_requests_and_waits() {
     let eq = plain.block("eq").unwrap();
     assert!(eq.custom.is_empty() && eq.extra.is_empty());
 }
+
+// ---------------------------------------------------------------- C4 text and computed labels
+
+/// Ten items, one every 10 time units from 0, routed by `script` to s1 (port 1) or s2.
+fn labelled(source: &str, script: &str) -> String {
+    format!(
+        r##"Model(
+            format: 2,
+            name: "rotulos",
+            run: (stop_time: 1000.0, seed: 3),
+            item_types: [
+                (name: "A", text_labels: {{"cliente": "Loja 12"}}),
+            ],
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(10.0), first_at_zero: true,
+                    max_arrivals: Some(10), {source}), output: Script("{script}")),
+                (name: "s1", kind: Sink),
+                (name: "s2", kind: Sink),
+            ],
+            connections: [("src", "s1"), ("src", "s2")],
+        )"##
+    )
+}
+
+fn split(text: &str) -> (u64, u64) {
+    let r = run(text);
+    (r.block("s1").unwrap().input, r.block("s2").unwrap().input)
+}
+
+#[test]
+fn text_labels_come_from_the_type_the_source_and_the_row() {
+    let both = r#"if item.cliente == \"Loja 12\" && item.origem == \"doca\" { 1 } else { 2 }"#;
+    // The type's text and the source's text.
+    let src = r#"item_type: "A", text_labels: {"origem": "doca"}"#;
+    assert_eq!(split(&labelled(src, both)), (10, 0));
+    // The source's text wins over the type's (Portuguese name of the field).
+    let src = r#"item_type: "A", rotulos_texto: {"origem": "doca", "cliente": "Loja 7"}"#;
+    assert_eq!(split(&labelled(src, both)), (0, 10));
+    // A table row's text wins over both: rows of 3 and 7 items, the second for Loja 7.
+    let src = r#"item_type: "A", text_labels: {"origem": "doca"}, table: Some((mode: Times,
+        rows: [(at: 0.0, count: 3), (at: 5.0, count: 7, text_labels: {"cliente": "Loja 7"})]))"#;
+    assert_eq!(split(&labelled(src, both)), (3, 7));
+}
+
+#[test]
+fn labels_computed_when_the_item_is_created() {
+    // `seq` counts the items (1 to 10): the even ones go to s1. `prazo` is 480 after the
+    // creation, and `dobro` sees the source's numeric label `peso`.
+    let src = r#"labels: {"peso": Const(4.0)},
+        label_exprs: {"seq": "count", "prazo": "now + 480", "dobro": "item.peso * 2"}"#;
+    let script = "if item.seq % 2.0 == 0.0 && item.prazo == now + 480.0 && item.dobro == 8.0 { 1 } else { 2 }";
+    assert_eq!(split(&labelled(src, script)), (5, 5));
+    // An expression sees the labels computed before it, in name order.
+    let src = r#"rotulos_expr: {"a": "count * 10", "b": "item.a + 1"}"#;
+    assert_eq!(
+        split(&labelled(src, "if item.b == 31.0 { 1 } else { 2 }")),
+        (1, 9)
+    );
+    // A text result is a text label.
+    let src = r#"label_exprs: {"lote": "if count <= 4 { \"L1\" } else { \"L2\" }"}"#;
+    assert_eq!(
+        split(&labelled(src, r#"if item.lote == \"L1\" { 1 } else { 2 }"#)),
+        (4, 6)
+    );
+}
+
+#[test]
+fn computed_labels_are_checked_and_listed() {
+    let bad = Model::parse(&labelled(r#"label_exprs: {"x": "now +"}"#, "1"))
+        .unwrap()
+        .validate()
+        .unwrap_err()
+        .to_string();
+    assert!(bad.contains("src: label_exprs.x"), "{bad}");
+    let m = model(&labelled(
+        r#"text_labels: {"origem": "doca"}, label_exprs: {"prazo": "now + 480"}"#,
+        "1",
+    ));
+    let lines = m.arrival_lines();
+    assert!(
+        lines.iter().any(|l| l
+            == "src: rótulos de texto origem = \"doca\"; calculados na criação prazo = now + 480"),
+        "{lines:?}"
+    );
+}
+
+// ---------------------------------------------------------------- dispatch by the processor's times
+
+/// Three items at t = 0 with `produto` 1, then `second`, then `third`, through a queue
+/// with `queue` fields to one machine with `machine` fields.
+fn dispatch(second: f64, third: f64, queue: &str, machine: &str) -> String {
+    format!(
+        r##"Model(
+            format: 2,
+            name: "despacho",
+            run: (stop_time: 1000.0, seed: 1),
+            objects: [
+                (name: "src", kind: Source(interarrival: Const(1000.0), table: Some((mode: Times,
+                    rows: [(at: 0.0, labels: {{"produto": 1.0}}),
+                           (at: 0.0, labels: {{"produto": {second:?}}}),
+                           (at: 0.0, labels: {{"produto": {third:?}}})])))),
+                (name: "fila", kind: Queue({queue})),
+                (name: "maquina", kind: Processor({machine})),
+                (name: "fim", kind: Sink),
+            ],
+            connections: [("src", "fila"), ("fila", "maquina"), ("maquina", "fim")],
+        )"##
+    )
+}
+
+#[test]
+fn shortest_processing_time_first() {
+    // Recipes: product 1 takes 10, 2 takes 2, 3 takes 5. Items 1, 3, 2 at t = 0.
+    // FIFO: 1 (0-10), 3 (10-15), 2 (15-17): mean time in system 14.
+    // SPT: 1 goes at once; then 2 (10-12) before 3 (12-17): mean 13.
+    let machine = r#"process: Const(100.0), recipe: Some((label: "produto", times: [
+        (value: 1.0, time: Const(10.0)), (value: 2.0, time: Const(2.0)),
+        (value: 3.0, time: Const(5.0))]))"#;
+    let mean = |queue: &str| {
+        run(&dispatch(3.0, 2.0, queue, machine))
+            .block("fim")
+            .unwrap()
+            .extra["time_in_system"]
+            .mean
+    };
+    assert!((mean("") - 14.0).abs() < 1e-9, "{}", mean(""));
+    assert!((mean("pick: Some(ShortestProcess)") - 13.0).abs() < 1e-9);
+    assert!((mean("regra: Some(MenorTempo)") - 13.0).abs() < 1e-9);
+}
+
+#[test]
+fn least_setup_first() {
+    // Process 10; changeover 1 -> 2 takes 30 and 2 -> 1 takes 20 (the first product is
+    // free). Items 1, 2, 1 at t = 0.
+    // FIFO: 1 (0-10), 2 (setup 10-40, 40-50), 1 (setup 50-70, 70-80): mean 140/3, two
+    // changeovers. Least setup: the other 1 first (10-20), then 2 (setup 20-50, 50-60):
+    // mean 30, one changeover.
+    let machine = r#"process: Const(10.0), setup: Some(Const(50.0)), changeover: Some((
+        label: "produto", matrix: [(from: 1.0, to: 2.0, time: Const(30.0)),
+        (from: 2.0, to: 1.0, time: Const(20.0))]))"#;
+    let report = |queue: &str| run(&dispatch(2.0, 1.0, queue, machine));
+    let r = report("");
+    let fim = &r.block("fim").unwrap().extra["time_in_system"];
+    assert!((fim.mean - 140.0 / 3.0).abs() < 1e-9, "{}", fim.mean);
+    let r = report("pick: Some(LeastSetup)");
+    let fim = &r.block("fim").unwrap().extra["time_in_system"];
+    assert!((fim.mean - 30.0).abs() < 1e-9, "{}", fim.mean);
+    assert_eq!(r.metrics()["maquina.changeovers"], 1.0);
+    // The check says which machine and times the queue goes by.
+    let m = model(&dispatch(2.0, 1.0, "pick: Some(LeastSetup)", machine));
+    assert_eq!(
+        m.dispatch_lines(),
+        [concat!(
+            "fila: menor setup primeiro, pela matriz de troca de 'maquina' ",
+            "(rótulo 'produto', 2 troca(s); as outras: 50)"
+        )]
+    );
+}
+
+#[test]
+fn dispatch_rules_need_the_processor_times() {
+    let err = |queue: &str, machine: &str| {
+        Model::parse(&dispatch(2.0, 3.0, queue, machine))
+            .unwrap()
+            .validate()
+            .unwrap_err()
+            .to_string()
+    };
+    let e = err("pick: Some(ShortestProcess)", "process: Const(1.0)");
+    assert!(
+        e.contains("fila: pick: ShortestProcess precisa de um Processor com recipe"),
+        "{e}"
+    );
+    let e = err("pick: Some(MenorSetup)", "process: Const(1.0)");
+    assert!(
+        e.contains("fila: pick: LeastSetup precisa de um Processor com changeover"),
+        "{e}"
+    );
+    let e = err(
+        r#"pick: Some(LeastSetup), order: Some(Asc("prazo"))"#,
+        r#"process: Const(1.0), changeover: Some((label: "produto"))"#,
+    );
+    assert!(e.contains("fila: use pick ou order, não os dois"), "{e}");
+}

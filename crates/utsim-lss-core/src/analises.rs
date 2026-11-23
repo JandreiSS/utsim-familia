@@ -2398,6 +2398,15 @@ impl Analysis {
     }
 }
 
+/// The edit that deletes a saved analysis (an ordinary operation: another can restore it).
+pub fn delete(id: Id) -> Vec<Edit> {
+    vec![Edit::new(
+        Analysis::entity_ref(id),
+        crate::op::FIELD_DELETED,
+        true,
+    )]
+}
+
 /// The statistical analyses of a project.
 pub fn analyses(state: &State, project: Id) -> Vec<Analysis> {
     let key = project.to_string();

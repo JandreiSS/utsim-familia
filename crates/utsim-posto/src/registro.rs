@@ -82,16 +82,17 @@ impl Estado {
     }
 
     /// Records of a collection read as `T`, in id order. Records that do not read (a newer
-    /// version of the app wrote them) are skipped.
+    /// version of the app wrote them) are skipped. Read straight from the stored value, without
+    /// copying it first (the screens read their lists on every frame).
     pub fn lista<T: DeserializeOwned>(&self, colecao: &str) -> Vec<T> {
         self.brutos(colecao)
-            .filter_map(|(_, v)| serde_json::from_value(v.clone()).ok())
+            .filter_map(|(_, v)| T::deserialize(v).ok())
             .collect()
     }
 
     pub fn um<T: DeserializeOwned>(&self, colecao: &str, id: &str) -> Option<T> {
         let v = self.colecoes.get(colecao)?.get(id)?;
-        serde_json::from_value(v.0.clone()).ok()
+        T::deserialize(&v.0).ok()
     }
 
     /// Who wrote the record last.

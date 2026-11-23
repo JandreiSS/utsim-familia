@@ -128,8 +128,8 @@ pub fn funnel(
 
 // --- Cycle time per phase ---------------------------------------------------------------
 
-/// Default target days per phase of the flow model (the company template of 4.7 will
-/// replace this).
+/// Default target days per phase of the flow model, when the program sets none
+/// ([`program_target_days`]).
 pub fn target_days(phase: &str) -> Option<f64> {
     match phase {
         "Definir" => Some(30.0),
@@ -139,6 +139,39 @@ pub fn target_days(phase: &str) -> Option<f64> {
         "Controlar" | "Verificar" => Some(60.0),
         _ => None,
     }
+}
+
+/// The field of the program entity with the target days of a phase (`meta_dias_medir`).
+pub fn target_field(phase: &str) -> String {
+    let key: String = phase
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    format!("meta_dias_{key}")
+}
+
+/// The target days of a phase in a program: the MBB's own value (above zero), else the
+/// default of [`target_days`].
+pub fn program_target_days(state: &State, program: Id, phase: &str) -> Option<f64> {
+    state
+        .entity(program)
+        .and_then(|e| e.number(&target_field(phase)))
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .or_else(|| target_days(phase))
+}
+
+/// Every phase name of the approaches, once each, in the order of the approaches.
+pub fn all_phases() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = Vec::new();
+    for a in Approach::ALL {
+        for p in a.phases() {
+            if !v.contains(p) {
+                v.push(p);
+            }
+        }
+    }
+    v
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -154,12 +187,14 @@ pub struct PhaseCycle {
 
 /// Days of each phase: from the approval of the previous tollgate (the opening of the
 /// project for the first phase) to the approval of the phase's tollgate. Per approach and
-/// phase; `level_of` gives the level of the belt to filter (`level`).
+/// phase; `level_of` gives the level of the belt to filter (`level`), and `target` the
+/// target days of a phase (usually [`program_target_days`]).
 pub fn cycle_times(
     projects: &[ProjectRecord],
     f: &Filter,
     level: Option<BeltLevel>,
     level_of: impl Fn(Id) -> Option<BeltLevel>,
+    target: impl Fn(&str) -> Option<f64>,
 ) -> Vec<PhaseCycle> {
     let mut m: BTreeMap<(u8, usize), (Approach, String, Vec<f64>)> = BTreeMap::new();
     let order = |a: Approach| Approach::ALL.iter().position(|x| *x == a).unwrap_or(0) as u8;
@@ -189,7 +224,7 @@ pub fn cycle_times(
             phase_index: i,
             median: percentile(&v, 0.5),
             p80: percentile(&v, 0.8),
-            target: target_days(&name),
+            target: target(&name),
             phase: name,
             samples: v,
         })
@@ -587,6 +622,25 @@ mod tests {
     use crate::tollgate::TollgateStatus;
     use crate::tools::Tool;
 
+    #[test]
+    fn program_sets_its_own_target_days() {
+        let mut t = T::new();
+        let p = t.program;
+        assert_eq!(target_field("Pré-evento"), "meta_dias_pré_evento");
+        assert_eq!(program_target_days(&t.s, p, "Medir"), Some(45.0));
+        t.set(crate::op::Kind::Program, p, &target_field("Medir"), 30.0);
+        assert_eq!(program_target_days(&t.s, p, "Medir"), Some(30.0));
+        // Zero or less falls back to the default; a phase with no default has none.
+        t.set(crate::op::Kind::Program, p, &target_field("Medir"), 0.0);
+        assert_eq!(program_target_days(&t.s, p, "Medir"), Some(45.0));
+        assert_eq!(program_target_days(&t.s, p, "Evento"), None);
+        t.set(crate::op::Kind::Program, p, &target_field("Evento"), 5.0);
+        assert_eq!(program_target_days(&t.s, p, "Evento"), Some(5.0));
+        let all = all_phases();
+        assert!(all.contains(&"Definir") && all.contains(&"Desenhar"));
+        assert_eq!(all.iter().filter(|x| **x == "Definir").count(), 1);
+    }
+
     fn tg(
         i: usize,
         name: &str,
@@ -779,7 +833,7 @@ mod tests {
         );
         assert_eq!(only_u2.totals.values().sum::<usize>(), 1);
 
-        let ct = cycle_times(&ps, &Filter::default(), None, |_| None);
+        let ct = cycle_times(&ps, &Filter::default(), None, |_| None, target_days);
         let define = ct.iter().find(|c| c.phase == "Definir").unwrap();
         assert_eq!(define.samples, vec![30.0, 20.0]);
         assert_eq!(define.median, Some(25.0));
@@ -789,7 +843,13 @@ mod tests {
             vec![30.0]
         );
         let level_of = |x: Id| ms.iter().find(|m| m.id == x).and_then(|m| m.level);
-        let black = cycle_times(&ps, &Filter::default(), Some(BeltLevel::Black), level_of);
+        let black = cycle_times(
+            &ps,
+            &Filter::default(),
+            Some(BeltLevel::Black),
+            level_of,
+            target_days,
+        );
         assert_eq!(black.len(), 1);
 
         let sv = savings_by_state(
