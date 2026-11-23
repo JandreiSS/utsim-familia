@@ -444,6 +444,23 @@ pub enum ObjectKind {
         /// Item types drawn for each item, `(name, weight)`; not with `item_type`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         item_type_mix: Vec<(String, f64)>,
+        /// Constant text labels of every item (`"cliente": "Loja 12"`): for reports,
+        /// routing by name in scripts and the 3D tag, not for arithmetic.
+        #[serde(
+            default,
+            skip_serializing_if = "BTreeMap::is_empty",
+            alias = "rotulos_texto"
+        )]
+        text_labels: BTreeMap<String, String>,
+        /// Labels computed when each item is created, after all the others, by an
+        /// expression (`"prazo": "now + 480"`, `"seq": "count"`): `now`, `count` (items
+        /// created by the source, this one included) and `item` (its labels so far).
+        #[serde(
+            default,
+            skip_serializing_if = "BTreeMap::is_empty",
+            alias = "rotulos_expr"
+        )]
+        label_exprs: BTreeMap<String, String>,
     },
     Queue {
         #[serde(default)]
@@ -468,6 +485,11 @@ pub enum ObjectKind {
         /// Wave release: items wait and leave together at the `times` of each `cycle`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         waves: Option<Waves>,
+        /// Dispatch rule by the processor the queue feeds: `ShortestProcess` (its
+        /// `recipe` times, SPT) or `LeastSetup` (its `changeover` matrix). Not with
+        /// `order`.
+        #[serde(default, skip_serializing_if = "Option::is_none", alias = "regra")]
+        pick: Option<utsim_objects::PickRule>,
     },
     Processor {
         #[serde(default = "one_usize")]
@@ -684,6 +706,139 @@ fn weight_label() -> String {
 
 fn load_zone() -> f64 {
     2.0
+}
+
+impl Model {
+    /// One line per queue with a dispatch rule (`pick`), for `utsim check`: the machine
+    /// and the times it goes by.
+    pub fn dispatch_lines(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for obj in &self.objects {
+            let Ok(Some(pick)) = self.queue_pick(obj) else {
+                continue;
+            };
+            let machine = self
+                .connections
+                .iter()
+                .filter(|(from, _)| *from == obj.name)
+                .map(|(_, to)| to.as_str())
+                .find(|to| {
+                    self.objects.iter().any(|o| {
+                        o.name == *to
+                            && matches!(
+                                (&o.kind, &pick),
+                                (
+                                    ObjectKind::Processor {
+                                        recipe: Some(_),
+                                        ..
+                                    },
+                                    utsim_objects::Pick::Shortest { .. },
+                                ) | (
+                                    ObjectKind::Processor {
+                                        changeover: Some(_),
+                                        ..
+                                    },
+                                    utsim_objects::Pick::LeastSetup { .. },
+                                )
+                            )
+                    })
+                })
+                .unwrap_or("?");
+            out.push(match pick {
+                utsim_objects::Pick::Shortest {
+                    label,
+                    times,
+                    default,
+                } => format!(
+                    "{}: menor tempo de processamento primeiro, pela receita de '{machine}' \
+                     (rótulo '{label}', {} tempo(s); os outros valores: {default})",
+                    obj.name,
+                    times.len()
+                ),
+                utsim_objects::Pick::LeastSetup {
+                    label,
+                    matrix,
+                    default,
+                } => format!(
+                    "{}: menor setup primeiro, pela matriz de troca de '{machine}' (rótulo \
+                     '{label}', {} troca(s); as outras: {default})",
+                    obj.name,
+                    matrix.len()
+                ),
+            });
+        }
+        out
+    }
+
+    /// The dispatch rule of a queue with `pick`, with the times of the first processor
+    /// it feeds. `Ok(None)` without `pick`; `Err` when the rule has nothing to go by.
+    pub(crate) fn queue_pick(
+        &self,
+        obj: &ObjectDef,
+    ) -> Result<Option<utsim_objects::Pick>, String> {
+        let ObjectKind::Queue {
+            pick: Some(rule),
+            order,
+            ..
+        } = &obj.kind
+        else {
+            return Ok(None);
+        };
+        if order.is_some() {
+            return Err(format!("{}: use pick ou order, não os dois", obj.name));
+        }
+        let processors = self
+            .connections
+            .iter()
+            .filter(|(from, _)| *from == obj.name)
+            .filter_map(|(_, to)| self.objects.iter().find(|o| o.name == *to))
+            .filter_map(|o| match &o.kind {
+                ObjectKind::Processor {
+                    setup,
+                    process,
+                    changeover,
+                    recipe,
+                    ..
+                } => Some((setup, process, changeover, recipe)),
+                _ => None,
+            });
+        use utsim_objects::{Pick, PickRule};
+        for (setup, process, changeover, recipe) in processors {
+            match (rule, recipe, changeover) {
+                (PickRule::ShortestProcess, Some(r), _) => {
+                    return Ok(Some(Pick::Shortest {
+                        label: r.label.clone(),
+                        times: r.times.iter().map(|t| (t.value, t.time.mean())).collect(),
+                        default: process.mean(),
+                    }));
+                }
+                (PickRule::LeastSetup, _, Some(c)) => {
+                    return Ok(Some(Pick::LeastSetup {
+                        label: c.label.clone(),
+                        matrix: c
+                            .matrix
+                            .iter()
+                            .map(|m| (m.from, m.to, m.time.mean()))
+                            .collect(),
+                        default: setup.as_ref().map_or(0.0, |d| d.mean()),
+                    }));
+                }
+                _ => {}
+            }
+        }
+        Err(match rule {
+            PickRule::ShortestProcess => format!(
+                "{}: pick: ShortestProcess precisa de um Processor com recipe na saída da fila \
+                 (o tempo de cada produto vem da receita)",
+                obj.name
+            ),
+            PickRule::LeastSetup => format!(
+                "{}: pick: LeastSetup precisa de um Processor com changeover na saída da fila \
+                 (o tempo de cada troca vem da matriz)",
+                obj.name
+            ),
+        })
+    }
 }
 
 fn bridge_gap() -> f64 {
@@ -953,6 +1108,7 @@ impl Model {
                     patience,
                     gather,
                     waves,
+                    ..
                 } => {
                     if let Some(p) = patience {
                         dists.push(("patience".into(), p));
@@ -1651,9 +1807,21 @@ impl Model {
             errors.extend(fluids.validate(&objects));
         }
         for obj in &self.objects {
+            if let Err(e) = self.queue_pick(obj) {
+                errors.push(e);
+            }
             if let Some(src) = &obj.on_entry {
                 if let Err(e) = utsim_script::compile_item_script(src) {
                     errors.push(format!("{}: on_entry: {e}", obj.name));
+                }
+            }
+            if let ObjectKind::Source { label_exprs, .. } = &obj.kind {
+                for (name, src) in label_exprs {
+                    if let Err(e) =
+                        utsim_script::compile_label_exprs(&[(name.clone(), src.clone())])
+                    {
+                        errors.push(format!("{}: {e}", obj.name));
+                    }
                 }
             }
             if let OutputRule::Script(src) = &obj.output {
@@ -1754,8 +1922,19 @@ impl Model {
                     release,
                     item_type,
                     item_type_mix,
+                    text_labels,
+                    label_exprs,
                 } => {
+                    let exprs: Vec<(String, String)> = label_exprs
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
                     let source = Source::new(interarrival.clone())
+                        .on_create(if exprs.is_empty() {
+                            None
+                        } else {
+                            utsim_script::compile_label_exprs(&exprs).ok()
+                        })
                         .batch(batch.clone())
                         .release(release.clone())
                         .on_blocked(*on_blocked)
@@ -1772,10 +1951,13 @@ impl Model {
                             item_type_mix,
                         )
                     };
+                    let source = labels
+                        .iter()
+                        .fold(source, |s, (k, d)| s.label(k.clone(), d.clone()));
                     Box::new(
-                        labels
+                        text_labels
                             .iter()
-                            .fold(source, |s, (k, d)| s.label(k.clone(), d.clone())),
+                            .fold(source, |s, (k, t)| s.text_label(k.clone(), t.clone())),
                     )
                 }
                 ObjectKind::Queue {
@@ -1786,6 +1968,7 @@ impl Model {
                     patience,
                     gather,
                     waves,
+                    ..
                 } => Box::new(
                     Queue::new(self.queue_capacity(obj).or(*capacity))
                         .lugares(self.waiting_places(obj))
@@ -1794,7 +1977,8 @@ impl Model {
                         .waves(waves.clone())
                         .discipline(*discipline)
                         .batch(*batch)
-                        .order(order.clone()),
+                        .order(order.clone())
+                        .pick(self.queue_pick(obj).ok().flatten()),
                 ),
                 ObjectKind::Combiner {
                     components,

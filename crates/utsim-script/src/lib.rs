@@ -25,7 +25,7 @@ use rhai::{
     AST, Dynamic, Engine, EvalAltResult, ImmutableString, Map, ParseError, Position, Scope,
 };
 use utsim_core::rng::SimRng;
-use utsim_core::script::{ItemScript, PortScript, ScriptEnv};
+use utsim_core::script::{ItemScript, LabelScript, PortScript, ScriptEnv};
 use utsim_core::{Dist, Item, Time, Value};
 
 /// Maximum operations a single script call may perform.
@@ -376,6 +376,51 @@ impl ItemScript for RhaiItemScript {
             None => Err(fail("a variável 'item' deixou de ser um mapa".into())),
         }
     }
+}
+
+/// Labels computed at an item's creation (`label_exprs` of a source), in name order.
+struct RhaiLabels {
+    exprs: Vec<(String, String, AST)>,
+}
+
+impl LabelScript for RhaiLabels {
+    fn labels(
+        &mut self,
+        item: &Item,
+        count: u64,
+        env: &mut ScriptEnv,
+    ) -> Result<Vec<(String, Value)>, String> {
+        let mut labels = item.labels.clone();
+        let mut out = Vec::with_capacity(self.exprs.len());
+        for (name, source, ast) in &self.exprs {
+            let mut scope = Scope::new();
+            scope.push_constant("now", env.now);
+            scope.push_constant("count", count as i64);
+            scope.push_constant("item", to_map(&labels));
+            let guard = RngGuard::new(env.rng);
+            let result = engine().eval_ast_with_scope::<Dynamic>(&mut scope, ast);
+            drop(guard);
+            let fail = |m: String| format!("label_exprs.{name} ('{}'): {m}", source.trim());
+            let value = to_value(&result.map_err(|e| fail(run_error(&e)))?).map_err(fail)?;
+            labels.insert(name.clone(), value.clone());
+            out.push((name.clone(), value));
+        }
+        Ok(out)
+    }
+}
+
+/// Compiles the labels a source computes when it creates an item: `(name, expression)`
+/// pairs, evaluated in this order with `now`, `count` (items the source created, this
+/// one included) and `item` (its labels so far, those computed before included).
+pub fn compile_label_exprs(exprs: &[(String, String)]) -> Result<Box<dyn LabelScript>, String> {
+    let mut out = Vec::with_capacity(exprs.len());
+    for (name, source) in exprs {
+        let ast = engine()
+            .compile_expression(source)
+            .map_err(|e| format!("label_exprs.{name}: {}", parse_error(source, &e)))?;
+        out.push((name.clone(), source.clone(), ast));
+    }
+    Ok(Box::new(RhaiLabels { exprs: out }))
 }
 
 /// Compiles an `on_entry` script for an object.

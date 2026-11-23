@@ -24,6 +24,13 @@ pub struct ItemTypeDef {
     /// labels of the same name win).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, f64>,
+    /// Constant text labels of the type's items.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        alias = "rotulos_texto"
+    )]
+    pub text_labels: BTreeMap<String, String>,
 }
 
 /// A named floor area (D8 of the plan): a waiting area, break room or office zone. It is
@@ -188,6 +195,11 @@ impl Model {
             .map(|t| ItemTypeSpec {
                 name: t.name.clone(),
                 labels: t.labels.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+                texts: t
+                    .text_labels
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
             })
             .collect()
     }
@@ -357,6 +369,34 @@ impl Model {
                 "tipos de item (rótulo '{ITEM_TYPE_LABEL}'): {}",
                 types.join("; ")
             ));
+        }
+        for obj in &self.objects {
+            let ObjectKind::Source {
+                text_labels,
+                label_exprs,
+                ..
+            } = &obj.kind
+            else {
+                continue;
+            };
+            let mut parts = Vec::new();
+            if !text_labels.is_empty() {
+                let t: Vec<String> = text_labels
+                    .iter()
+                    .map(|(k, v)| format!("{k} = \"{v}\""))
+                    .collect();
+                parts.push(format!("rótulos de texto {}", t.join(", ")));
+            }
+            if !label_exprs.is_empty() {
+                let e: Vec<String> = label_exprs
+                    .iter()
+                    .map(|(k, v)| format!("{k} = {}", v.trim()))
+                    .collect();
+                parts.push(format!("calculados na criação {}", e.join(", ")));
+            }
+            if !parts.is_empty() {
+                out.push(format!("{}: {}", obj.name, parts.join("; ")));
+            }
         }
         out
     }
