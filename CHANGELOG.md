@@ -7,6 +7,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim Produto: as telas ficaram com os mesmos hábitos. Todo botão de criar começa com "+", todo apagar se chama "Excluir" e confirma no lugar (a operação do roteiro ganhou título e o Excluir no topo), e os rótulos dos campos e das colunas explicam o que são. Na Estrutura, código e cor no 3D foram para "Mais detalhes".
+- UTSim Produto: a tela das fases segue o caminho do portão em quatro passos numerados (o que entregar, o que conferir, quem aprova, decidir no portão), cada um com uma linha de ajuda. As datas, a troca de modelo e Excluir fase foram para "Mais detalhes", cada decisão explica o que faz, e o Relatório do portão fica ao lado do portão.
 - UTSim Produto: nos pedidos de mudança só aparecem para marcar os requisitos já aprovados, e a tela da simulação, quando ainda falta algo, diz o que falta e leva até a Estrutura ou os Roteiros.
 - UTSim Produto: os requisitos mostram só os campos que fazem sentido para cada tipo. "Fonte" virou "Quem pediu" (cliente), "Norma ou lei" (regulatório) e "Perigo ou norma" (segurança); o técnico ganhou "Atende a". Cada campo tem uma ajuda curta, as especificações e as verificações abrem só onde o tipo pede, e o que se usa menos fica em "Mais detalhes". Um requisito novo só entra abaixo do escolhido quando é técnico.
 - UTSim Qualidade: a carta do plano de controle virou um menu com as cartas que o CEP e as ferramentas leem (`planos::CARTAS`), em vez de um texto livre. Uma carta gravada à mão numa versão antiga aparece como está.
@@ -105,6 +107,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- UTSim Produto: **Ctrl+R** grava uma revisão. As dicas de Desfazer e Refazer citam os atalhos que valem (Ctrl+Z; Ctrl+Y ou Ctrl+Shift+Z).
 - Base comum (`utsim_ui_tema::documento`): o "começar sem salvar" para todos os apps da família, com a guarda do fechar da janela, a pergunta Salvar, Não salvar ou Cancelar, a barra com a chave Salvamento automático, o indicador "Não salvo" e os textos nas cinco línguas. Por enquanto só o UTSim Produto usa.
 - UTSim Produto: tela **Visão geral**, com o nome e a descrição do produto e os passos para montar o projeto, na ordem, cada um com o que já tem e um botão para ir.
 - UTSim Produto: o app abre num projeto em branco, sem pedir pasta. **Salvar** (Ctrl+S) pergunta o nome e a pasta na primeira vez, **Salvar como…** (Ctrl+Shift+S) copia para outra pasta, e fechar, criar ou abrir com trabalho nunca salvo pergunta Salvar, Não salvar ou Cancelar. A chave **Salvamento automático**, no canto de cima à esquerda, fica ligada depois do primeiro Salvar e grava sozinha como antes; desligada, o projeto grava só no Salvar e fechar com mudanças pergunta antes. A escolha fica guardada por projeto. Gravar revisão ficou só no botão.
