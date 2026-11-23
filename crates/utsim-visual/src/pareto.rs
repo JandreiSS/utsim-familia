@@ -209,7 +209,14 @@ pub fn mostrar(
             g.colunas[i].max,
         );
         if w >= 44.0 {
-            let gal = cortado(&p, &b.nome, pequena.clone(), fg, w - 4.0, if w >= 70.0 { 2 } else { 1 });
+            let gal = cortado(
+                &p,
+                &b.nome,
+                pequena.clone(),
+                fg,
+                w - 4.0,
+                if w >= 70.0 { 2 } else { 1 },
+            );
             p.galley(
                 pos2(nome_rect.center().x - gal.size().x / 2.0, nome_rect.top()),
                 gal,
