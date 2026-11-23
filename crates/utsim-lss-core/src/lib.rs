@@ -1,4 +1,4 @@
-//! Domain of UTSim Seis Sigma, the Lean Six Sigma project manager of the UTSim family
+//! Domain of UTSim LSS, the Lean Six Sigma project manager of the UTSim family
 //! (`docs/plano_lean_seis_sigma.md`). Pure: no file access, no clock, no randomness (the
 //! caller supplies instants and random bytes), so everything here is tested in isolation
 //! and gives the same result on every machine.

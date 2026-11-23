@@ -12,7 +12,7 @@
 //! - [`desafio`]: the class scoreboard and the team solutions;
 //! - [`planilha`]: the grades as `.xlsx`;
 //! - [`prova`]: exams published in the class folder and rebuilt from the seed;
-//! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim Seis Sigma;
+//! - [`seis_sigma`]: the training project of the Lean Six Sigma case for UTSim LSS;
 //! - [`tres_d`]: "Ver em 3D", the attempt opened in the UTSim client of the launcher;
 //! - [`perfil`]: the local profile (identity, progress, journal, joined class).
 

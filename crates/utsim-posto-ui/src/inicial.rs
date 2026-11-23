@@ -34,6 +34,11 @@ pub enum Saida {
     Modelo(PathBuf),
     /// Uma ação própria do app (de `extras` em [`TelaInicial::ui_com`]).
     Acao(&'static str),
+    /// Com [`TelaInicial::sem_pasta`]: abrir esta unidade (o app passa pela guarda, que
+    /// pergunta antes de largar uma unidade não salva).
+    PedirAbrir(PathBuf),
+    /// Com [`TelaInicial::sem_pasta`]: começar uma unidade em branco, sem pasta.
+    PedirNova,
 }
 
 /// O formulário de criar unidade (uma janela por cima da abertura).
@@ -49,6 +54,9 @@ pub struct TelaInicial {
     editando_autor: bool,
     criar: Option<Criar>,
     iniciada: bool,
+    /// O app começa sem pasta e salva depois (`utsim_ui_tema::documento`): abrir e criar
+    /// viram pedidos ([`Saida::PedirAbrir`], [`Saida::PedirNova`]) em vez de agir direto.
+    pub sem_pasta: bool,
 }
 
 impl TelaInicial {
@@ -70,7 +78,11 @@ impl TelaInicial {
         if !self.iniciada {
             self.iniciada = true;
             if self.autor.is_empty() {
-                self.autor = s.config.autor.clone();
+                self.autor = if self.sem_pasta {
+                    s.autor_padrao()
+                } else {
+                    s.config.autor.clone()
+                };
             }
             self.editando_autor = self.autor.trim().is_empty();
         }
@@ -109,15 +121,22 @@ impl TelaInicial {
             )
             .bloqueada_se(sem_autor, precisa_nome),
         );
-        acoes.push(
+        acoes.push(if self.sem_pasta {
+            Acao::nova(
+                "criar",
+                Simbolo::Novo,
+                tx("inicial-nova_unidade"),
+                tx("inicial-nova_unidade_dica"),
+            )
+        } else {
             Acao::nova(
                 "criar",
                 Simbolo::Novo,
                 tx("inicial-criar_unidade"),
                 tx("inicial-comece_uma_unidade_nova_voce"),
             )
-            .bloqueada_se(sem_autor, precisa_nome),
-        );
+            .bloqueada_se(sem_autor, precisa_nome)
+        });
         acoes.push(
             Acao::nova(
                 "modelo",
@@ -177,6 +196,12 @@ impl TelaInicial {
                     saida = self.abrir(s, &p);
                 }
             }
+            Some(Escolha::Acao("criar")) if self.sem_pasta => {
+                if !sem_autor {
+                    s.lembrar_autor(self.autor.trim());
+                }
+                saida = Some(Saida::PedirNova);
+            }
             Some(Escolha::Acao("criar")) => {
                 self.criar = Some(Criar {
                     nome: String::new(),
@@ -230,6 +255,10 @@ impl TelaInicial {
         if !Unidade::eh_unidade(p) {
             s.falhar(fx("inicial-a_pasta_nao_e_uma", &[("p", vx(&p.display()))]));
             return None;
+        }
+        if self.sem_pasta {
+            s.lembrar_autor(self.autor.trim());
+            return Some(Saida::PedirAbrir(p.to_path_buf()));
         }
         s.abrir(p, &self.autor).then_some(Saida::Aberta)
     }

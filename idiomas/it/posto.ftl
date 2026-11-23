@@ -323,6 +323,19 @@ sessao-nenhuma_unidade_aberta = Nessuna unità aperta
 sessao-autor = autore: { $autor }
 sessao-sem_unidade = Senza unità
 sessao-modelo = modello: { $nome }
+sessao-unidade_nova = Nuova unità
+sessao-salvas = { $n ->
+    [0] Era già tutto salvato.
+    [one] { $n } modifica salvata.
+   *[other] { $n } modifiche salvate.
+}
+sessao-unidade_salva_em = Unità salvata in { $pasta }.
+documento-onde_salvar = Dove salvare la cartella dell'unità
+documento-nome_da_unidade = Nome dell'unità (lo stabilimento, la linea, la classe…)
+documento-sera_criada = Verrà creata la cartella { $pasta }.
+documento-escreva_nome_e_pasta = Scrivi il nome e scegli dove va la cartella.
+inicial-nova_unidade = Nuova unità
+inicial-nova_unidade_dica = Inizia vuota, senza cartella. Salvi quando vuoi, con nome e posto.
 sessao-desfazer = Annulla
 sessao-refazer = Ripeti
 sessao-desfazer_dica = Annulla la tua ultima modifica in questa unità da quando l'app è stata aperta (Ctrl+Z fuori dai campi di testo).

@@ -32,3 +32,18 @@ campos-data_hora_invalida = Invalid date and time. Use YYYY-MM-DD HH:MM (or DD/M
 campos-confirmar = Confirm
 campos-confirmar_dica = Click to confirm. This cannot be undone.
 campos-cancelar = Cancel
+
+## documento.rs: começar sem salvar, "Não salvo" e a pergunta ao fechar
+documento-pergunta_titulo = Save the changes?
+documento-pergunta_texto = There are changes that have not been saved yet. If you do not save, they are lost.
+documento-salvar = Save
+documento-salvar_como = Save as…
+documento-nao_salvar = Don't save
+documento-cancelar = Cancel
+documento-nao_salvo = Not saved
+documento-nao_salvo_ajuda = This work is not stored anywhere yet. Use Save (Ctrl+S).
+documento-salvo = Saved
+documento-sem_nome = Untitled
+documento-salve_primeiro = Save first to use this.
+documento-automatico = AutoSave
+documento-automatico_ajuda = On, it saves by itself after every change. Off, it saves only on Save (Ctrl+S).

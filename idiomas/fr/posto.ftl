@@ -323,6 +323,19 @@ sessao-nenhuma_unidade_aberta = Aucune unité ouverte
 sessao-autor = auteur : { $autor }
 sessao-sem_unidade = Sans unité
 sessao-modelo = modèle : { $nome }
+sessao-unidade_nova = Nouvelle unité
+sessao-salvas = { $n ->
+    [0] Tout était déjà enregistré.
+    [one] { $n } modification enregistrée.
+   *[other] { $n } modifications enregistrées.
+}
+sessao-unidade_salva_em = Unité enregistrée dans { $pasta }.
+documento-onde_salvar = Où enregistrer le dossier de l'unité
+documento-nome_da_unidade = Nom de l'unité (l'usine, la ligne, la classe…)
+documento-sera_criada = Le dossier { $pasta } sera créé.
+documento-escreva_nome_e_pasta = Écrivez le nom et choisissez où va le dossier.
+inicial-nova_unidade = Nouvelle unité
+inicial-nova_unidade_dica = Commence vierge, sans dossier. Vous enregistrez quand vous voulez, avec un nom et un lieu.
 sessao-desfazer = Annuler
 sessao-refazer = Rétablir
 sessao-desfazer_dica = Annule votre dernière modification dans cette unité depuis l'ouverture de l'application (Ctrl+Z hors des champs de texte).

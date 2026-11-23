@@ -1,5 +1,5 @@
 //! File primitives that are safe in a folder synced by a desktop client (the user's Drive),
-//! shared by the storage of UTSim Seis Sigma (`utsim-lss-store`, which re-exports them as
+//! shared by the storage of UTSim LSS (`utsim-lss-store`, which re-exports them as
 //! `fsio`) and by the unit folder of the quality and safety apps (`utsim-posto`). Decision
 //! G6 of `docs/plano_qualidade_e_seguranca.md`.
 //!
