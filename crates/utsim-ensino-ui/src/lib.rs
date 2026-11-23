@@ -374,6 +374,8 @@ impl App {
     pub fn draw(&mut self, ui: &mut Ui) {
         self.aplicar_estilo(ui.ctx());
         self.receber();
+        let ctx = ui.ctx().clone();
+        self.editor.quadro(&ctx);
         if self.tela == Tela::Identidade {
             egui::CentralPanel::default().show(ui, |ui| self.tela_abertura(ui));
             return;

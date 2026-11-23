@@ -126,7 +126,8 @@ pub fn requisitos(faltas: &[utsim_ensino_core::requisitos::Falta]) -> String {
     f(requisitos_aviso(), &[&lista.join(", ")])
 }
 
-/// Draws a statement: `#` headings, `-` and `1.` lists, `**bold**` as strong text.
+/// Draws a statement: `#` headings, `-` and `1.` lists, `**bold**` as strong text and
+/// `` `nome` `` (an object name the student types in the model) in monospace.
 pub fn markdown(ui: &mut Ui, md: &str) {
     for bloco in md.split("\n\n") {
         let bloco = bloco.trim();
@@ -173,7 +174,16 @@ fn linha_rica(ui: &mut Ui, t: &str) {
         if i % 2 == 1 {
             ui.label(RichText::new(parte).strong());
         } else {
-            ui.label(parte);
+            for (j, trecho) in parte.split('`').enumerate() {
+                if trecho.is_empty() {
+                    continue;
+                }
+                if j % 2 == 1 {
+                    ui.label(RichText::new(trecho).monospace());
+                } else {
+                    ui.label(trecho);
+                }
+            }
         }
     }
 }

@@ -30,6 +30,7 @@ use utsim_ensino_core::questoes::{ConjuntoMissao, QuestaoDados};
 use utsim_ui_tema::arquivos::Tipo;
 
 use crate::missao::Trabalho;
+use utsim_ui_tema::documento::{self, Clique, Evento, Guarda, Pedido, Situacao};
 use crate::{App, texto};
 
 const VERMELHO: Color32 = Color32::from_rgb(255, 112, 104);
@@ -73,6 +74,24 @@ pub struct EstadoEditor {
     pub pecas: Option<(String, Vec<String>)>,
     /// The drawn statement: the rendering running and its last message.
     pub cena: EstadoCena,
+    /// The package changed since it was last written to its folder (or since it was
+    /// started, when it has no folder yet).
+    pub mudou: bool,
+    /// "Automatic saving" turned off: the package is written only on Save (Ctrl+S).
+    pub sem_automatico: bool,
+    /// Asks before unsaved work is lost (closing the window, opening another folder).
+    pub guarda: Guarda<DepoisDaPergunta>,
+    /// "Save as" open: the folder typed.
+    pub salvar_como: Option<String>,
+    /// A save the question asked for, before closing, went through: close now.
+    fechar_janela: bool,
+}
+
+/// What the editor does after the "save the changes?" question.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DepoisDaPergunta {
+    /// Open (or start) the package of this folder.
+    Abrir(String),
 }
 
 /// What a check of the modelling sends back.
@@ -152,6 +171,164 @@ impl EstadoEditor {
         }
     }
 
+    /// The package has a folder on disk (a package started without one lives in memory
+    /// until the first Save).
+    pub fn tem_pasta(&self) -> bool {
+        self.pacote
+            .as_ref()
+            .is_some_and(|(d, _, _)| !d.as_os_str().is_empty())
+    }
+
+    /// There is work that is not on disk: a package without a folder that was changed, or
+    /// changes waiting for Save with automatic saving off.
+    pub fn nao_salvo(&self) -> bool {
+        self.mudou && (!self.tem_pasta() || self.sem_automatico)
+    }
+
+    /// Starts a blank package in memory, with no folder ("start without a folder").
+    pub fn comecar_sem_pasta(&mut self) {
+        let nome = texto::ed_meu_pacote().to_string();
+        let p = PacoteProfessor::novo(&slug(&nome), &nome, "");
+        self.pacote = Some((PathBuf::new(), p, Default::default()));
+        self.mudou = false;
+        self.glossario = None;
+    }
+
+    /// "Open or create" through the question: unsaved work is not lost without asking.
+    pub fn pedir_abrir(&mut self) {
+        let pedido = DepoisDaPergunta::Abrir(self.pasta.clone());
+        if let Some(a) = self.guarda.pedir(self.nao_salvo(), pedido) {
+            self.fazer(a);
+        }
+    }
+
+    fn fazer(&mut self, a: DepoisDaPergunta) {
+        match a {
+            DepoisDaPergunta::Abrir(pasta) => {
+                self.pasta = pasta;
+                self.abrir_pasta();
+            }
+        }
+    }
+
+    /// A change to the package: written now when it has a folder and automatic saving is
+    /// on, else kept for Save.
+    pub fn marcar_mudanca(&mut self) {
+        self.mudou = true;
+        if self.tem_pasta() && !self.sem_automatico && self.gravar_disco() {
+            self.mudou = false;
+        }
+    }
+
+    /// Save (Ctrl+S): with a folder, writes now; without one, opens "Save as".
+    pub fn salvar(&mut self) {
+        if !self.tem_pasta() {
+            self.abrir_salvar_como();
+            return;
+        }
+        if self.gravar_disco() {
+            self.mudou = false;
+            let dir = self.pacote.as_ref().map(|p| p.0.clone()).unwrap_or_default();
+            self.mensagens = vec![texto::f(texto::ed_gravado(), &[&dir.display()])];
+            self.seguir_depois_de_salvar();
+        } else {
+            self.guarda.cancelar();
+        }
+    }
+
+    /// Save as (Ctrl+Shift+S): asks for the folder.
+    pub fn abrir_salvar_como(&mut self) {
+        let atual = self
+            .pacote
+            .as_ref()
+            .map(|p| p.0.display().to_string())
+            .filter(|d| !d.is_empty())
+            .or_else(|| Some(self.pasta.trim().to_string()).filter(|d| !d.is_empty()))
+            .or_else(|| {
+                utsim_ui_tema::arquivos::documentos()
+                    .map(|d| d.join(texto::ed_meu_pacote()).display().to_string())
+            })
+            .unwrap_or_default();
+        self.salvar_como = Some(atual);
+    }
+
+    /// Writes the whole package to `dir` (empty or new) and goes on working there.
+    pub fn salvar_em(&mut self, dir: &std::path::Path) -> bool {
+        self.erros.clear();
+        if dir.as_os_str().is_empty() {
+            self.erros.push(texto::ed_escolha_pasta().into());
+            return false;
+        }
+        let mesma = self.pacote.as_ref().is_some_and(|p| p.0 == dir);
+        let ocupada = std::fs::read_dir(dir).is_ok_and(|mut r| r.next().is_some());
+        if ocupada && !mesma {
+            self.erros.push(texto::ed_pasta_ocupada().into());
+            return false;
+        }
+        let Some((d, p, antes)) = &mut self.pacote else {
+            return false;
+        };
+        let depois = p.todos();
+        let velho = if mesma { antes.clone() } else { Default::default() };
+        match utsim_ensino_store::caso::gravar_trocando(dir, &velho, &depois) {
+            Ok(()) => {
+                *d = dir.to_path_buf();
+                *antes = depois;
+                self.pasta = dir.display().to_string();
+                self.mudou = false;
+                self.salvar_como = None;
+                self.mensagens = vec![texto::f(texto::ed_gravado(), &[&dir.display()])];
+                self.seguir_depois_de_salvar();
+                true
+            }
+            Err(e) => {
+                self.erros.push(e.to_string());
+                false
+            }
+        }
+    }
+
+    /// "Save as" given up: whatever waited for the save does not happen.
+    pub fn desistir_de_salvar(&mut self) {
+        self.salvar_como = None;
+        self.guarda.cancelar();
+    }
+
+    fn seguir_depois_de_salvar(&mut self) {
+        match self.guarda.salvou() {
+            Some(Pedido::Fechar) => self.fechar_janela = true,
+            Some(Pedido::Acao(a)) => self.fazer(a),
+            None => {}
+        }
+    }
+
+    /// Turns automatic saving on or off. On a package never saved, turning it on opens Save.
+    pub fn definir_automatico(&mut self, ligado: bool) {
+        if !self.tem_pasta() {
+            if ligado {
+                self.salvar();
+            }
+            return;
+        }
+        self.sem_automatico = !ligado;
+        if ligado && self.mudou && self.gravar_disco() {
+            self.mudou = false;
+        }
+    }
+
+    /// The question and the window's close, once per frame (from [`App::draw`]).
+    pub fn quadro(&mut self, ctx: &egui::Context) {
+        if self.fechar_janela {
+            self.fechar_janela = false;
+            self.guarda.fechar_agora(ctx);
+        }
+        match self.guarda.quadro(ctx, self.nao_salvo()) {
+            Some(Evento::Salvar) => self.salvar(),
+            Some(Evento::Seguir(Pedido::Acao(a))) => self.fazer(a),
+            Some(Evento::Seguir(Pedido::Fechar)) | None => {}
+        }
+    }
+
     /// Opens the package of the typed folder, or starts a new one there.
     pub fn abrir_pasta(&mut self) {
         let dir = PathBuf::from(self.pasta.trim().trim_matches('"'));
@@ -169,6 +346,7 @@ impl EstadoEditor {
                         &[&p.pacote.titulo, &p.missoes().len()],
                     ));
                     self.pacote = Some((dir, p, a));
+                    self.mudou = false;
                     self.glossario = None;
                 }
                 Err(e) => self.erros.push(e),
@@ -186,6 +364,11 @@ impl EstadoEditor {
                     .push(texto::f(texto::ed_pacote_novo(), &[&dir.display()]));
                 self.pacote = Some((dir, p, Default::default()));
                 self.glossario = None;
+                // A new package in an empty folder is written at once.
+                self.mudou = true;
+                if self.gravar_disco() {
+                    self.mudou = false;
+                }
             }
             Err(e) => self.erros.push(e.to_string()),
         }
@@ -251,8 +434,11 @@ impl EstadoEditor {
         let dir = dir.clone();
         match p.gravar(ed, self.ato) {
             Ok(c) => {
-                if self.gravar_disco() {
-                    self.erros.clear();
+                self.erros.clear();
+                self.marcar_mudanca();
+                if self.mudou {
+                    self.mensagens = vec![texto::f(texto::ed_missao_no_pacote(), &[&c])];
+                } else if self.erros.is_empty() {
                     self.mensagens =
                         vec![texto::f(texto::ed_missao_gravada(), &[&c, &dir.display()])];
                 }
@@ -265,6 +451,9 @@ impl EstadoEditor {
         let Some((dir, p, antes)) = &mut self.pacote else {
             return false;
         };
+        if dir.as_os_str().is_empty() {
+            return false;
+        }
         let depois = p.todos();
         match utsim_ensino_store::caso::gravar_trocando(dir, antes, &depois) {
             Ok(()) => {
@@ -334,6 +523,38 @@ pub fn tela_editor(app: &mut App, ui: &mut Ui) {
     let executor = app.executor.clone();
     let s = &mut app.editor;
     s.receber();
+    if s.pacote.is_none() {
+        s.comecar_sem_pasta();
+    }
+    let (salvar_como, salvar) = ui.input_mut(|i| {
+        let como = i.consume_shortcut(&egui::KeyboardShortcut::new(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::S,
+        ));
+        let salvar = i.consume_shortcut(&egui::KeyboardShortcut::new(
+            egui::Modifiers::COMMAND,
+            egui::Key::S,
+        ));
+        (como, salvar)
+    });
+    if salvar_como {
+        s.abrir_salvar_como();
+    } else if salvar {
+        s.salvar();
+    }
+    let situacao = if s.nao_salvo() || !s.tem_pasta() {
+        Situacao::NaoSalvo
+    } else {
+        Situacao::Salvo
+    };
+    match documento::barra(ui, s.tem_pasta() && !s.sem_automatico, situacao) {
+        Some(Clique::Salvar) => s.salvar(),
+        Some(Clique::SalvarComo) => s.abrir_salvar_como(),
+        Some(Clique::Automatico(l)) => s.definir_automatico(l),
+        None => {}
+    }
+    janela_salvar_como(s, &ctx);
+    ui.add_space(4.0);
     ui.heading(texto::ed_titulo());
     ui.label(RichText::new(texto::ed_texto()).weak());
     ui.add_space(6.0);
@@ -366,19 +587,32 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
             360.0,
         );
         if ui.button(texto::ed_abrir_criar()).clicked() {
-            s.abrir_pasta();
+            s.pedir_abrir();
         }
     });
     let Some((dir, p, _)) = &mut s.pacote else {
         return;
     };
     let dir = dir.clone();
+    let (mut mudou_cabecalho, mut saiu_do_campo) = (false, false);
     ui.horizontal(|ui| {
         ui.label(texto::ed_titulo_pacote());
-        ui.text_edit_singleline(&mut p.pacote.titulo);
+        let a = ui.text_edit_singleline(&mut p.pacote.titulo);
         ui.label(texto::ed_autor());
-        ui.text_edit_singleline(&mut p.pacote.autor);
+        let b = ui.text_edit_singleline(&mut p.pacote.autor);
+        mudou_cabecalho = a.changed() || b.changed();
+        saiu_do_campo = a.lost_focus() || b.lost_focus();
     });
+    if mudou_cabecalho {
+        s.mudou = true;
+    }
+    // Written when the field is left, not at every key.
+    if saiu_do_campo && s.mudou {
+        s.marcar_mudanca();
+    }
+    let Some((_, p, _)) = &mut s.pacote else {
+        return;
+    };
     let lista = p.missoes();
     let mut acao: Option<(String, i32)> = None;
     let mut abrir: Option<String> = None;
@@ -428,12 +662,9 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
     ui.horizontal(|ui| {
         conferir = ui.button(texto::ed_conferir_pacote()).clicked();
         utse = ui.button(texto::ed_gravar_utse()).clicked();
-        if ui.button(texto::ed_gravar_pasta()).clicked() {
-            gravar = true;
-        }
     });
-    if gravar && s.gravar_disco() {
-        s.mensagens = vec![texto::f(texto::ed_gravado(), &[&dir.display()])];
+    if gravar {
+        s.marcar_mudanca();
     }
     let Some((_, p, _)) = &s.pacote else { return };
     if conferir || utse {
@@ -445,7 +676,11 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
                     texto::ed_pacote_confere(),
                     &[&c.missoes.len(), &c.pacote.atos.len()],
                 ));
-                if utse && s.gravar_disco() {
+                if utse && (!s.tem_pasta() || s.nao_salvo()) {
+                    s.erros.push(
+                        utsim_ui_tema::texto::tx("documento-salve_primeiro").to_string(),
+                    );
+                } else if utse {
                     let destino = dir.with_extension("utse");
                     match utsim_ensino_store::caso::empacotar(&dir, &destino) {
                         Ok(d) => s
@@ -457,6 +692,51 @@ fn secao_pacote(s: &mut EstadoEditor, ui: &mut Ui) {
             }
             Err(e) => s.erros = e,
         }
+    }
+}
+
+/// "Save as": the folder of the package (empty or new), with Browse.
+fn janela_salvar_como(s: &mut EstadoEditor, ctx: &egui::Context) {
+    let Some(mut pasta) = s.salvar_como.take() else {
+        return;
+    };
+    let mut aberta = true;
+    let mut salvar = false;
+    let mut desistir = false;
+    egui::Window::new(utsim_ui_tema::texto::tx("documento-salvar_como"))
+        .collapsible(false)
+        .resizable(false)
+        .open(&mut aberta)
+        .show(ctx, |ui| {
+            ui.label(texto::ed_salvar_como_texto());
+            crate::abertura::campo(
+                ui,
+                &mut pasta,
+                Tipo::Pasta,
+                texto::ed_pasta_pacote(),
+                &[],
+                360.0,
+            );
+            for e in &s.erros {
+                ui.colored_label(VERMELHO, e);
+            }
+            ui.horizontal(|ui| {
+                salvar = ui
+                    .add(utsim_ui_tema::widgets::primary(utsim_ui_tema::texto::tx(
+                        "documento-salvar",
+                    )))
+                    .clicked();
+                desistir = ui
+                    .button(utsim_ui_tema::texto::tx("documento-cancelar"))
+                    .clicked();
+            });
+        });
+    s.salvar_como = Some(pasta.clone());
+    if salvar {
+        let dir = PathBuf::from(pasta.trim().trim_matches('"'));
+        s.salvar_em(&dir);
+    } else if desistir || !aberta {
+        s.desistir_de_salvar();
     }
 }
 
