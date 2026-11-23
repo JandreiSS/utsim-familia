@@ -32,3 +32,18 @@ campos-data_hora_invalida = Fecha y hora no válidas. Use AAAA-MM-DD HH:MM (o DD
 campos-confirmar = Confirmar
 campos-confirmar_dica = Haga clic para confirmar. No se puede deshacer.
 campos-cancelar = Cancelar
+
+## documento.rs: começar sem salvar, "Não salvo" e a pergunta ao fechar
+documento-pergunta_titulo = ¿Guardar los cambios?
+documento-pergunta_texto = Hay cambios que aún no se guardaron. Si no guarda, se pierden.
+documento-salvar = Guardar
+documento-salvar_como = Guardar como…
+documento-nao_salvar = No guardar
+documento-cancelar = Cancelar
+documento-nao_salvo = Sin guardar
+documento-nao_salvo_ajuda = Este trabajo aún no está guardado en ningún lugar. Use Guardar (Ctrl+S).
+documento-salvo = Guardado
+documento-sem_nome = Sin nombre
+documento-salve_primeiro = Guarde primero para usar esto.
+documento-automatico = Guardado automático
+documento-automatico_ajuda = Activado, guarda solo con cada cambio. Desactivado, guarda solo al Guardar (Ctrl+S).

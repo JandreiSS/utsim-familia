@@ -13,6 +13,18 @@ pub fn marca_decimal(s: &str) -> String {
     }
 }
 
+/// A number as Rust writes it (the shortest form that reads back the same), with the
+/// language's decimal mark: `2.5` is `2,5` in Portuguese. For limits, targets and other
+/// values typed by the user, shown as they were typed.
+pub fn numero(v: f64) -> String {
+    marca_decimal(&v.to_string())
+}
+
+/// [`numero`], or a dash when there is no value.
+pub fn numero_ou_traco(v: Option<f64>) -> String {
+    v.map_or_else(|| "–".to_string(), numero)
+}
+
 /// Digits with the language's mark between thousands: `1234567` → `1.234.567`.
 pub fn agrupar_milhares(digitos: &str) -> String {
     let marca = atual().separador_milhar();

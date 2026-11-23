@@ -21,12 +21,13 @@ pub enum Origem {
 }
 
 impl Origem {
+    /// The name in the language now.
     pub fn nome(self) -> &'static str {
-        match self {
-            Origem::Real => "Real",
-            Origem::Gemeo => "Gêmeo",
-            Origem::Simulado => "Simulado",
-        }
+        crate::texto::tx(match self {
+            Origem::Real => "cep-origem_real",
+            Origem::Gemeo => "cep-origem_gemeo",
+            Origem::Simulado => "cep-origem_simulado",
+        })
     }
 }
 

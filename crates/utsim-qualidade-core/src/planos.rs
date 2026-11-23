@@ -55,6 +55,15 @@ pub struct LinhaControle {
     pub objeto_modelo: Option<String>,
 }
 
+/// The control charts a control plan line can name, as `utsim qualidade carta` and the
+/// tools read them (`utsim_quality::charts::ChartKind::parse`).
+pub const CARTAS: [&str; 7] = ["imr", "xbarr", "xbars", "p", "np", "c", "u"];
+
+/// Whether `carta` is one of [`CARTAS`] (empty counts: no chart chosen).
+pub fn carta_valida(carta: &str) -> bool {
+    carta.is_empty() || CARTAS.contains(&carta)
+}
+
 /// One line of the inspection plan.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LinhaInspecao {
@@ -184,5 +193,20 @@ mod tests {
             model.objects[3].inspection.as_ref().unwrap().measure[0].sigma,
             0.002
         );
+    }
+}
+
+#[cfg(test)]
+mod testes_cartas {
+    use super::*;
+
+    #[test]
+    fn every_chart_of_the_list_is_read_by_the_charts() {
+        for c in CARTAS {
+            assert!(utsim_quality::charts::ChartKind::parse(c).is_some(), "{c}");
+            assert!(carta_valida(c));
+        }
+        assert!(carta_valida(""));
+        assert!(!carta_valida("x-barra"));
     }
 }
