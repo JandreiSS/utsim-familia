@@ -189,10 +189,17 @@ impl BeltRoute {
         }
     }
 
-    /// Pontas de entrada e de saída (primeiro e último nó), absolutas.
+    /// Pontas de entrada e de saída (primeiro e último nó), absolutas. As pontas nunca
+    /// têm curva, então saem direto dos nós, sem amostrar a linha.
     pub fn ends(&self, origin: [f64; 3]) -> Option<(P3, P3)> {
-        let line = self.line(origin);
-        Some((*line.first()?, *line.last()?))
+        let abs = |n: &PathNode| {
+            [
+                n.at[0] + origin[0],
+                n.at[1] + origin[1],
+                n.at[2] + origin[2],
+            ]
+        };
+        Some((abs(self.nodes.first()?), abs(self.nodes.last()?)))
     }
 }
 
@@ -501,6 +508,23 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_ends_are_the_first_and_last_points_of_the_line() {
+        let mut mid = PathNode::new([5.0, 0.0, 1.0]);
+        mid.radius = Some(2.0);
+        let r = route(
+            vec![
+                PathNode::new([0.0, 0.0, 0.8]),
+                mid,
+                PathNode::new([5.0, 5.0, 1.2]),
+            ],
+            BeltDrive::Powered,
+        );
+        let o = [3.0, -2.0, 0.0];
+        let line = r.line(o);
+        assert_eq!(r.ends(o), Some((line[0], line[line.len() - 1])));
+    }
 
     fn route(nodes: Vec<PathNode>, drive: BeltDrive) -> BeltRoute {
         BeltRoute {
