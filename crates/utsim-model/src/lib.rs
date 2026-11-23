@@ -395,6 +395,10 @@ pub struct VisualDef {
     /// Colour override, "#rrggbb".
     #[serde(default)]
     pub color: Option<String>,
+    /// Element of the Blender catalogue (`assets/modelos3d`) the items a source creates
+    /// are drawn with (e.g. "palete", "peca"); `None` draws them as the box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item: Option<String>,
 }
 
 impl ObjectKind {

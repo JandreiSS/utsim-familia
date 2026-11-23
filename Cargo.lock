@@ -8625,6 +8625,7 @@ dependencies = [
  "utsim-diagram",
  "utsim-exposicao",
  "utsim-ferramentas",
+ "utsim-idiomas",
  "utsim-model",
  "utsim-posto",
  "utsim-quality",

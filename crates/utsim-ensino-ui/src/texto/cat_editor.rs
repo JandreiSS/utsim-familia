@@ -95,6 +95,7 @@ textos! {
     ed_pacote_vazio;
     ed_ato_fixo;
     ed_pasta_ocupada;
+    ed_salvar_como_texto;
     ed_ato_novo;
     ed_editar;
     ed_remover;
@@ -312,6 +313,7 @@ modelos! {
     ed_opcoes(opcoes);
     ed_combinacoes(combinacoes);
     ed_missao_gravada(c, dir);
+    ed_missao_no_pacote(c);
     ed_resultado(combinacoes, viaveis, batem_meta, fracao_meta);
     ed_melhor_combinacao(decis);
     ed_conceitos(conceitos);

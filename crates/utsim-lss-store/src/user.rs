@@ -90,6 +90,13 @@ pub struct UserConfig {
     pub theme: Theme,
     #[serde(rename = "idioma", default)]
     pub language: Language,
+    /// The project folders with automatic saving turned off (the default is on).
+    #[serde(
+        rename = "sem_automatico",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub sem_automatico: Vec<PathBuf>,
 }
 
 /// Language of the interface (stage P8).

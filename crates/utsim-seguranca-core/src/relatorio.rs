@@ -5,7 +5,7 @@
 use std::fmt::Write;
 
 use crate::AVISO_LEGAL;
-use crate::inventario::{ETAPAS, Inventario};
+use crate::inventario::{Inventario, etapa};
 
 /// Notice that the report is not the legal document of the risk management programme.
 pub const AVISO_PGR: &str = "Este relatório organiza o inventário de riscos e o plano de ação \
@@ -67,7 +67,7 @@ pub fn blocos(inv: &Inventario, unidade: &str, postos: &[String], data: &str) ->
         b.push(Bloco::Subtitulo(format!("Posto: {}", posto.nome)));
         b.push(Bloco::Paragrafo(format!(
             "{}: área {}, {} pessoa(s) exposta(s) por turno. Atividades: {}. EPI exigido: {}.{}",
-            ETAPAS[0],
+            etapa(0),
             if posto.area.is_empty() {
                 "não informada"
             } else {
@@ -150,7 +150,7 @@ pub fn blocos(inv: &Inventario, unidade: &str, postos: &[String], data: &str) ->
             })
             .collect();
         if !acoes.is_empty() {
-            b.push(Bloco::Paragrafo(format!("{} e {}", ETAPAS[3], ETAPAS[4])));
+            b.push(Bloco::Paragrafo(format!("{} e {}", etapa(3), etapa(4))));
             b.push(Bloco::Tabela {
                 cabecalho: [
                     "Perigo",

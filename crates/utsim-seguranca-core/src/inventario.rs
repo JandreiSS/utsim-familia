@@ -173,14 +173,19 @@ pub struct Reavaliacao {
     pub nota: String,
 }
 
-/// The five steps, for the screen and the report.
+/// The keys of the five steps in `idiomas/<código>/seguranca.ftl`, for the screen and the report.
 pub const ETAPAS: [&str; 5] = [
-    "1. Identificar o posto",
-    "2. Levantar perigos",
-    "3. Avaliar riscos",
-    "4. Planejar ações",
-    "5. Acompanhar",
+    "inventario-etapa_1",
+    "inventario-etapa_2",
+    "inventario-etapa_3",
+    "inventario-etapa_4",
+    "inventario-etapa_5",
 ];
+
+/// The name of the step `i` (0 to 4) in the language now.
+pub fn etapa(i: usize) -> &'static str {
+    crate::texto::tx(ETAPAS[i.min(ETAPAS.len() - 1)])
+}
 
 /// Origin of the hazards read from the node of the model (`safety.hazards`). They are
 /// edited on the node (its Segurança tab), not in the unit, and their id is
