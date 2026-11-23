@@ -103,6 +103,8 @@ modelos! {
     missao_erro_3d(e);
     missao_nota(nota);
     missao_restricao_violada(p);
+    missao_mais_longe(rotulo, falta);
+    missao_criterio_primeiro(rotulo);
     missao_pontos(pontos_desempenho, pontos_previsao, pontos_justificativa, pontos_possiveis, desconto_dicas, desconto_rodadas);
     missao_previsao_certa(pergunta, esperado);
     missao_previsao_errada(pergunta, esperado);

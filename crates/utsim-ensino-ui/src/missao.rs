@@ -1020,6 +1020,24 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
     if let Some(p) = &r.portao {
         ui.colored_label(VERMELHO, texto::f(texto::missao_restricao_violada(), &[p]));
     }
+    match utsim_ensino_core::nota::mais_longe(r) {
+        Some(utsim_ensino_core::nota::MaisLonge::Metrica { rotulo, falta }) => {
+            ui.colored_label(
+                VERMELHO,
+                texto::f_literal(
+                    texto::missao_mais_longe(),
+                    &[rotulo.as_str(), falta.as_str()],
+                ),
+            );
+        }
+        Some(utsim_ensino_core::nota::MaisLonge::Criterio { rotulo }) => {
+            ui.colored_label(
+                VERMELHO,
+                texto::f_literal(texto::missao_criterio_primeiro(), &[rotulo.as_str()]),
+            );
+        }
+        None => {}
+    }
     tabela_metricas(ui, r, true);
     ui.label(texto::f(
         texto::missao_pontos(),

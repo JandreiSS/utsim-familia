@@ -915,3 +915,50 @@ fn editor_de_missoes_do_professor() {
     assert!(pp.abrir(&lista[0].caminho).is_ok());
     frames(&mut outro, &ctx, 2);
 }
+
+#[test]
+fn editor_comeca_sem_pasta_e_salva_depois() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = Context::default();
+    let mut prof = App::com(Perfil::em(&dir.path().join("prof")), Arc::new(NaHora), || 0);
+    prof.salvar_identidade("Professor", "prof", "");
+    prof.config.professor = true;
+    prof.tela = Tela::Editor;
+    frames(&mut prof, &ctx, 1);
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let e = &mut prof.editor;
+    // A blank package in memory: nothing to save yet.
+    assert!(e.pacote.is_some() && !e.tem_pasta());
+    assert!(!e.nao_salvo());
+    e.modelo = raiz
+        .join("examples/tutorial_02_linha.ron")
+        .display()
+        .to_string();
+    e.titulo_novo = "Linha".into();
+    e.nova_missao();
+    e.gravar_missao();
+    assert!(e.erros.is_empty(), "{:?}", e.erros);
+    assert!(e.nao_salvo());
+    // Opening another folder asks first.
+    e.pasta = dir.path().join("outra").display().to_string();
+    e.pedir_abrir();
+    assert!(e.guarda.perguntando());
+    e.guarda.cancelar();
+    // Save: no folder yet, so "Save as" opens; an occupied folder is refused.
+    e.salvar();
+    assert!(e.salvar_como.is_some());
+    std::fs::create_dir_all(dir.path().join("ocupada")).unwrap();
+    std::fs::write(dir.path().join("ocupada/x.txt"), "x").unwrap();
+    assert!(!e.salvar_em(&dir.path().join("ocupada")));
+    let pasta = dir.path().join("Meu pacote");
+    assert!(e.salvar_em(&pasta));
+    assert!(pasta.join("pacote.ron").is_file());
+    assert!(e.tem_pasta() && !e.nao_salvo());
+    // Automatic saving off: a change waits for Save.
+    e.definir_automatico(false);
+    e.marcar_mudanca();
+    assert!(e.nao_salvo());
+    e.salvar();
+    assert!(!e.nao_salvo());
+    frames(&mut prof, &ctx, 2);
+}

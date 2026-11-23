@@ -203,6 +203,53 @@ pub struct Resultado {
     pub criterios: Vec<crate::modelagem::ResultadoCriterio>,
 }
 
+/// What to look at first in an unsolved attempt.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MaisLonge {
+    /// The measure farthest from its goal (relative to the goal) and how much is missing,
+    /// as text with the unit.
+    Metrica { rotulo: String, falta: String },
+    /// A criterion of the delivered model that failed (the heaviest one).
+    Criterio { rotulo: String },
+}
+
+/// The measure (or model criterion) farthest from its goal, for a line under "not
+/// solved". `None` when the attempt is solved or what failed is a constraint or the
+/// predictions, which the screen already names.
+pub fn mais_longe(r: &Resultado) -> Option<MaisLonge> {
+    if r.resolvida || r.portao.is_some() {
+        return None;
+    }
+    let metrica = r
+        .metricas
+        .iter()
+        .filter(|m| !m.situacao.ok())
+        .filter_map(|m| {
+            let meta = m.meta?;
+            let falta = (meta - m.aluno.media).abs();
+            Some((m, falta, falta / meta.abs().max(1e-9)))
+        })
+        .max_by(|a, b| a.2.total_cmp(&b.2));
+    if let Some((m, falta, _)) = metrica {
+        let n = fmt_num(falta, m.casas);
+        return Some(MaisLonge::Metrica {
+            rotulo: m.rotulo.clone(),
+            falta: if m.unidade.is_empty() {
+                n
+            } else {
+                format!("{n} {}", m.unidade)
+            },
+        });
+    }
+    r.criterios
+        .iter()
+        .filter(|c| !c.ok)
+        .max_by(|a, b| a.peso.total_cmp(&b.peso))
+        .map(|c| MaisLonge::Criterio {
+            rotulo: c.rotulo.clone(),
+        })
+}
+
 /// Why `decisoes` break a constraint of `missao` (`None` when they pass).
 pub fn portao(missao: &Missao, decisoes: &Decisoes) -> Option<String> {
     let iniciais = missao.decisoes_iniciais();
