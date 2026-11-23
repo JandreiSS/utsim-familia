@@ -237,7 +237,10 @@ fn without_exposure_hours_the_indicators_say_zero_with_no_sign() {
         "2026-04-04",
     );
     assert_eq!(k.horas, 0.0);
-    assert!(k.horas.is_sign_positive(), "the sum of nothing came out as -0.0");
+    assert!(
+        k.horas.is_sign_positive(),
+        "the sum of nothing came out as -0.0"
+    );
     assert_eq!(format!("{}", k.horas), "0");
 }
 
@@ -250,6 +253,9 @@ fn the_step_names_follow_the_language() {
     assert_eq!(etapa(0), "1. Identificar o posto");
     assert_eq!(etapa(4), "5. Acompanhar");
     for i in 0..ETAPAS.len() {
-        assert!(!etapa(i).starts_with("inventario-"), "key without text: {i}");
+        assert!(
+            !etapa(i).starts_with("inventario-"),
+            "key without text: {i}"
+        );
     }
 }
