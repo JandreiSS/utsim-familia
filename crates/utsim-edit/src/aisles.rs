@@ -90,7 +90,11 @@ pub(crate) fn set_size(
         .iter_mut()
         .find(|o| o.name == name)
         .ok_or_else(|| format!("objeto \"{name}\" não existe"))?;
-    if size.is_some() && utsim_model::is_mobile(&obj.kind) {
+    // A crane moves but covers its own area (runway length × span).
+    if size.is_some()
+        && utsim_model::is_mobile(&obj.kind)
+        && !matches!(obj.kind, utsim_model::ObjectKind::Crane { .. })
+    {
         return Err("recursos móveis não têm dimensões próprias".into());
     }
     if size.is_some()
