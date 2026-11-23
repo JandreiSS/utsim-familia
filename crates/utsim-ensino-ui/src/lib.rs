@@ -374,6 +374,8 @@ impl App {
     pub fn draw(&mut self, ui: &mut Ui) {
         self.aplicar_estilo(ui.ctx());
         self.receber();
+        let ctx = ui.ctx().clone();
+        self.editor.quadro(&ctx);
         if self.tela == Tela::Identidade {
             egui::CentralPanel::default().show(ui, |ui| self.tela_abertura(ui));
             return;
@@ -604,9 +606,6 @@ impl App {
                 self.mensagem = None;
             }
         });
-        if let Some(m) = &self.mensagem {
-            ui.colored_label(Color32::from_rgb(255, 112, 104), m);
-        }
     }
 
     fn tela_glossario(&mut self, ui: &mut Ui) {

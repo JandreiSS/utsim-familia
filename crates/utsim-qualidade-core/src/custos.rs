@@ -35,13 +35,14 @@ impl Categoria {
         Categoria::FalhaExterna,
     ];
 
+    /// The name in the language now.
     pub fn nome(self) -> &'static str {
-        match self {
-            Categoria::Prevencao => "Prevenção",
-            Categoria::Avaliacao => "Avaliação",
-            Categoria::FalhaInterna => "Falha interna",
-            Categoria::FalhaExterna => "Falha externa",
-        }
+        crate::texto::tx(match self {
+            Categoria::Prevencao => "custos-cat_prevencao",
+            Categoria::Avaliacao => "custos-cat_avaliacao",
+            Categoria::FalhaInterna => "custos-cat_falha_interna",
+            Categoria::FalhaExterna => "custos-cat_falha_externa",
+        })
     }
 }
 

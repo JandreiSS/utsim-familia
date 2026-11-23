@@ -23,13 +23,13 @@ O arquivo `.ron` pode declarar `format: N` no topo do `Model(...)`. Ausente, val
 | 1 | primeira versão | — |
 | 2 | modos de movimentação: `run.movement` ausente passa a valer `Free` (menor caminho no piso, desviando dos obstáculos) | `1 → 2` grava `format: 2` e, se o modelo tem transportadores, `movement: Legacy` em `run` (o comportamento do formato 1). Os resultados dos modelos antigos não mudam |
 
-## Formato do projeto do UTSim Seis Sigma (`formato`)
+## Formato do projeto do UTSim LSS (`formato`)
 
 Cada arquivo JSON de uma pasta de projeto `.lss` (`projeto.json`, cada operação de `ops/`,
 cada instantâneo, a presença) começa com `"formato": N`; ausente, vale 1. `FORMAT` (em
 `utsim-lss-core::format`) é o mais novo que o programa lê e o que ele grava.
 
-- Mais novo que o suportado: erro `projeto no formato N; esta versão do UTSim Seis Sigma lê até
+- Mais novo que o suportado: erro `projeto no formato N; esta versão do UTSim LSS lê até
   M` (num arquivo de operação, ele fica pendente e o aviso aparece na barra de baixo).
 - Mais antigo: o documento passa pelos passos de `MIGRATIONS`, em ordem, como `serde_json::Value`.
 - Campos novos opcionais não mudam o formato. A versão do app (`0.1.0`, tag `lss-v<versão>`) é

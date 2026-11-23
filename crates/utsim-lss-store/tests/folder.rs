@@ -601,7 +601,7 @@ fn newer_project_format_is_refused() {
     let err = ProjectFolder::open(a.root(), &ana, None).unwrap_err();
     assert!(
         err.to_string()
-            .contains("projeto no formato 2; esta versão do UTSim Seis Sigma lê até 1"),
+            .contains("projeto no formato 2; esta versão do UTSim LSS lê até 1"),
         "{err}"
     );
 }

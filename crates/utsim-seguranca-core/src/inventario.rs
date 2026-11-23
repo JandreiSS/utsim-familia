@@ -385,6 +385,10 @@ impl Inventario {
 /// its actions and reassessments now point at `novo` and the unit record goes. Returns how
 /// many actions and reassessments moved.
 pub fn passar_ao_no(u: &mut Unidade, antigo: &str, novo: &str) -> Result<usize, UnidadeErro> {
+    u.em_grupo(|u| passar_filhos_ao_no(u, antigo, novo))
+}
+
+fn passar_filhos_ao_no(u: &mut Unidade, antigo: &str, novo: &str) -> Result<usize, UnidadeErro> {
     let mut n = 0;
     for col in [ACOES, REAVALIACOES] {
         let mudar: Vec<(String, serde_json::Value)> = u
@@ -410,6 +414,11 @@ pub fn passar_ao_no(u: &mut Unidade, antigo: &str, novo: &str) -> Result<usize, 
 /// a hazard that is gone. The hazard goes first: if that fails, nothing else changes.
 /// Returns how many actions and reassessments went with it.
 pub fn remover_perigo(u: &mut Unidade, id: &str) -> Result<usize, UnidadeErro> {
+    // One step of undo: the hazard comes back with its children.
+    u.em_grupo(|u| remover_perigo_e_filhos(u, id))
+}
+
+fn remover_perigo_e_filhos(u: &mut Unidade, id: &str) -> Result<usize, UnidadeErro> {
     u.remover(PERIGOS, id)?;
     let mut n = 0;
     for col in [ACOES, REAVALIACOES] {

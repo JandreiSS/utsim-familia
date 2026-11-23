@@ -8,7 +8,7 @@ O que falta:
 - **Inspeção.** Depois da calibração, uma fila de 2 lugares e a inspeção com 3 bancadas em paralelo. Cada inspeção leva um tempo Gama de forma 4,117 e escala 24,787 segundos e ocupa um inspetor durante todo o tempo. A equipe tem 3 inspetores, que andam a 1,3 m/s e seguem os turnos da fábrica.
 - **Retrabalho.** 12 % das peças inspecionadas são reprovadas e vão para uma fila sem limite antes do posto de retrabalho (triangular de 150, 240 e 420 segundos). Depois voltam para uma fila sem limite antes da calibração, que tem prioridade sobre as peças novas.
 
-Use estes nomes de objeto, que a correção procura: **solda**, **inspecao**, **retrabalho** e **expedicao** (as aprovadas).
+Use estes nomes de objeto, sem acento, que a correção procura: solda (`solda`), inspeção (`inspecao`), retrabalho (`retrabalho`) e expedição das aprovadas (`expedicao`).
 
 ## O que fazer
 

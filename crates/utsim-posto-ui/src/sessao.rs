@@ -24,6 +24,9 @@ pub struct Config {
     /// A língua da interface (`pt-BR`, `en`, `es`, `fr`, `it`); sem ela, a do sistema.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idioma: Option<String>,
+    /// As unidades com o salvamento automático desligado (pelo caminho). O padrão é ligado.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sem_automatico: Vec<String>,
 }
 
 impl Config {
@@ -164,9 +167,143 @@ impl Sessao {
         self.gravar_config();
     }
 
+    /// O nome de quem usa: o guardado ou, sem ele, o usuário do sistema (dá para trocar no
+    /// Início).
+    pub fn autor_padrao(&self) -> String {
+        let a = self.config.autor.trim();
+        if !a.is_empty() {
+            return a.to_string();
+        }
+        std::env::var("USERNAME")
+            .or_else(|_| std::env::var("USER"))
+            .map(|u| u.trim().to_string())
+            .ok()
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| "autor".to_string())
+    }
+
+    /// Começa uma unidade em branco, sem pasta: o app já deixa trabalhar, e ela vai para uma
+    /// pasta no primeiro Salvar ([`Sessao::salvar_como`]). A que estava aberta é fechada.
+    pub fn rascunho(&mut self) -> bool {
+        self.unidade = None;
+        match Unidade::rascunho(tx("sessao-unidade_nova"), &self.autor_padrao()) {
+            Ok(u) => {
+                self.unidade = Some(u);
+                self.versao += 1;
+                true
+            }
+            Err(e) => {
+                self.falhar(e.to_string());
+                false
+            }
+        }
+    }
+
+    /// A unidade aberta nunca foi salva numa pasta.
+    pub fn eh_rascunho(&self) -> bool {
+        self.unidade.as_ref().is_some_and(Unidade::eh_rascunho)
+    }
+
+    /// Há trabalho que não está numa pasta: a unidade nunca salva já tem algo, ou, com o
+    /// salvamento automático desligado, há gravações esperando o Salvar.
+    pub fn nao_salvo(&self) -> bool {
+        match &self.unidade {
+            None => false,
+            Some(u) if u.eh_rascunho() => u.total_operacoes() > 0,
+            Some(u) => u.por_gravar() > 0,
+        }
+    }
+
+    /// O salvamento automático da unidade aberta (desligado enquanto ela não tem pasta).
+    pub fn automatico(&self) -> bool {
+        self.unidade
+            .as_ref()
+            .is_some_and(|u| !u.eh_rascunho() && !u.gravacao_adiada())
+    }
+
+    /// Liga ou desliga o salvamento automático da unidade aberta e guarda a escolha para
+    /// ela. Ao ligar, grava o que estava esperando. Não vale para a unidade sem pasta.
+    pub fn definir_automatico(&mut self, ligado: bool) {
+        let Some(u) = self.unidade.as_mut() else {
+            return;
+        };
+        if u.eh_rascunho() {
+            return;
+        }
+        let chave = u.raiz().display().to_string();
+        let r = u.adiar_gravacao(!ligado);
+        self.config.sem_automatico.retain(|p| *p != chave);
+        if !ligado {
+            self.config.sem_automatico.push(chave);
+        }
+        self.gravar_config();
+        match r {
+            Ok(n) if n > 0 => self.avisar(fx("sessao-salvas", &[("n", vx(&n))])),
+            Ok(_) => {}
+            Err(e) => self.falhar(e.to_string()),
+        }
+    }
+
+    /// Salvar com a unidade numa pasta: grava o que esperava. Devolve se ficou tudo na
+    /// pasta. Sem pasta, devolve `false` (é a vez do "Salvar como").
+    pub fn salvar(&mut self) -> bool {
+        let Some(u) = self.unidade.as_mut() else {
+            return false;
+        };
+        if u.eh_rascunho() {
+            return false;
+        }
+        match u.gravar_pendentes() {
+            Ok(n) => {
+                self.avisar(fx("sessao-salvas", &[("n", vx(&n))]));
+                true
+            }
+            Err(e) => {
+                self.falhar(e.to_string());
+                false
+            }
+        }
+    }
+
+    /// Salva a unidade aberta numa pasta nova (`destino`), com o nome dado, e passa a
+    /// trabalhar nela. Nunca passa por cima de uma pasta com arquivos.
+    pub fn salvar_como(&mut self, destino: &Path, nome: &str) -> bool {
+        let autor = self.autor_padrao();
+        let Some(u) = self.unidade.as_mut() else {
+            return false;
+        };
+        match u.salvar_como(destino, nome) {
+            Ok(()) => {
+                let adiar = self
+                    .config
+                    .sem_automatico
+                    .contains(&destino.display().to_string());
+                let _ = u.adiar_gravacao(adiar);
+                self.versao += 1;
+                self.avisar(fx(
+                    "sessao-unidade_salva_em",
+                    &[("pasta", vx(&destino.display()))],
+                ));
+                self.lembrar(&autor, destino);
+                true
+            }
+            Err(e) => {
+                self.falhar(e.to_string());
+                false
+            }
+        }
+    }
+
     pub fn abrir(&mut self, caminho: &Path, autor: &str) -> bool {
         match Unidade::abrir(caminho, autor.trim()) {
-            Ok(u) => {
+            Ok(mut u) => {
+                if self
+                    .config
+                    .sem_automatico
+                    .contains(&caminho.display().to_string())
+                {
+                    let _ = u.adiar_gravacao(true);
+                }
                 let msg = fx("sessao-unidade_aberta", &[("nome", vx(&u.manifesto.nome))]);
                 self.unidade = Some(u);
                 self.versao += 1;
@@ -265,6 +402,79 @@ impl Sessao {
                 self.falhar(e.to_string());
                 None
             }
+        }
+    }
+
+    /// Desfaz a última gravação desta pessoa na unidade (nesta sessão do app).
+    pub fn desfazer(&mut self) {
+        let r = match self.unidade.as_mut() {
+            Some(u) => u.desfazer(),
+            None => return,
+        };
+        self.depois_de_voltar(r, "sessao-desfeito");
+    }
+
+    /// Refaz o último passo desfeito.
+    pub fn refazer(&mut self) {
+        let r = match self.unidade.as_mut() {
+            Some(u) => u.refazer(),
+            None => return,
+        };
+        self.depois_de_voltar(r, "sessao-refeito");
+    }
+
+    fn depois_de_voltar(
+        &mut self,
+        r: Result<utsim_posto::Desfeito, utsim_posto::UnidadeErro>,
+        ok: &'static str,
+    ) {
+        match r {
+            Ok(utsim_posto::Desfeito::Nada) => {}
+            Ok(utsim_posto::Desfeito::Feito(n)) => {
+                self.mudou();
+                self.avisar(fx(ok, &[("n", vx(&n))]));
+            }
+            Ok(utsim_posto::Desfeito::Mudou) => self.falhar(tx("sessao-desfazer_mudou")),
+            Err(e) => {
+                // O que chegou a ser gravado já está na unidade.
+                self.mudou();
+                self.falhar(e.to_string());
+            }
+        }
+    }
+
+    /// Botões Desfazer e Refazer das gravações na unidade. Com `atalhos`, também Ctrl+Z,
+    /// Ctrl+Y e Ctrl+Shift+Z fora dos campos de texto (a tela Modelo tem os seus).
+    pub fn desfazer_ui(&mut self, ui: &mut egui::Ui, atalhos: bool) {
+        let Some(u) = &self.unidade else {
+            return;
+        };
+        let (pd, pr) = (u.pode_desfazer(), u.pode_refazer());
+        let mut desfazer = ui
+            .add_enabled(pd, egui::Button::new(tx("sessao-desfazer")).small())
+            .on_hover_text(tx("sessao-desfazer_dica"))
+            .clicked();
+        let mut refazer = ui
+            .add_enabled(pr, egui::Button::new(tx("sessao-refazer")).small())
+            .on_hover_text(tx("sessao-refazer_dica"))
+            .clicked();
+        ui.separator();
+        if atalhos && !ui.ctx().egui_wants_keyboard_input() {
+            use egui::{Key, Modifiers};
+            ui.input_mut(|i| {
+                if i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z)
+                    || i.consume_key(Modifiers::COMMAND, Key::Y)
+                {
+                    refazer = true;
+                } else if i.consume_key(Modifiers::COMMAND, Key::Z) {
+                    desfazer = true;
+                }
+            });
+        }
+        if desfazer {
+            self.desfazer();
+        } else if refazer {
+            self.refazer();
         }
     }
 

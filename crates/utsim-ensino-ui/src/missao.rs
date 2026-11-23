@@ -99,6 +99,8 @@ pub struct EstadoMissao {
     /// The data sets of the student (whose id comes first), made once: a simulation set
     /// runs the model.
     pub dados_gerados: Option<(String, Vec<utsim_ensino_core::dados::Conjunto>)>,
+    /// A run has just arrived: the screen scrolls to its result once.
+    pub rolar_resultado: bool,
 }
 
 impl EstadoMissao {
@@ -126,6 +128,7 @@ impl EstadoMissao {
             pasta_dados: String::new(),
             aviso_dados: None,
             dados_gerados: None,
+            rolar_resultado: false,
             pacote,
         }
     }
@@ -263,6 +266,7 @@ pub fn aplicar_rodada(app: &mut App, r: Rodada) {
                 m.animacao = Some(Animacao::new(rep, &unidade));
                 app.progresso.registrar(&id, &res, t.dicas);
                 m.resultado = Some(res.clone());
+                m.rolar_resultado = true;
                 let pacote = m.pacote.clone();
                 if let Err(e) = app
                     .perfil
@@ -324,6 +328,12 @@ fn situacao_texto(s: Situacao) -> (&'static str, Color32) {
         Situacao::NaoAtingida => (texto::missao_meta_nao_atingida(), VERMELHO),
         Situacao::SemMeta => (texto::missao_sem_meta(), Color32::GRAY),
     }
+}
+
+/// The title of a part of the mission (prediction, decisions...), a step above the body.
+fn secao(ui: &mut Ui, titulo: &str) {
+    ui.add_space(6.0);
+    ui.label(RichText::new(titulo).size(17.0).strong());
 }
 
 /// The label of a slider in a column of fixed width, so the sliders line up.
@@ -411,6 +421,11 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     let executor = app.executor.clone();
     let agora = (app.relogio)();
     let prova = app.prova();
+    // Whether the mission after this one is open (asked before borrowing the mission).
+    let proxima = app.missao.as_ref().is_some_and(|m| {
+        m.indice + 1 < m.pacote.missoes.len() && app.progresso.liberada(&m.pacote, m.indice + 1)
+    });
+    let mut seguir: Option<bool> = None;
     let Some(m) = app.missao.as_mut() else {
         app.tela = Tela::Mapa;
         return;
@@ -450,7 +465,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     ui.separator();
 
     if !missao.medicoes.is_empty() {
-        ui.label(RichText::new(texto::missao_medicoes()).strong());
+        secao(ui, texto::missao_medicoes());
         match &m.medicoes {
             Some(v) => {
                 for l in v {
@@ -470,7 +485,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.dados.is_empty() {
-        ui.label(RichText::new(texto::missao_dados_titulo()).strong());
+        secao(ui, texto::missao_dados_titulo());
         ui.label(RichText::new(texto::missao_dados_texto()).weak());
         if m.dados_gerados.as_ref().is_none_or(|(a, _)| *a != aluno) {
             let v = missao
@@ -603,7 +618,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.previsao.is_empty() {
-        ui.label(RichText::new(texto::missao_previsao()).strong());
+        secao(ui, texto::missao_previsao());
         ui.label(RichText::new(texto::prever_antes()).weak());
         let travada = m.previsao_travada;
         for p in &missao.previsao {
@@ -677,7 +692,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.alavancas.is_empty() {
-        ui.label(RichText::new(texto::missao_decisoes()).strong());
+        secao(ui, texto::missao_decisoes());
         for a in &missao.alavancas {
             let v = m
                 .tentativa
@@ -709,11 +724,11 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if let Some(b) = missao.balanceamento.as_ref().filter(|b| b.editavel) {
-        ui.label(RichText::new(texto::missao_balanceamento()).strong());
+        secao(ui, texto::missao_balanceamento());
         crate::pecas::quadro_balanceamento(ui, b, &mut m.tentativa.decisoes, &mut m.selecionada);
     }
     if let Some(a) = &missao.arranjo {
-        ui.label(RichText::new(texto::missao_arranjo()).strong());
+        secao(ui, texto::missao_arranjo());
         crate::pecas::grade_arranjo(ui, a, &mut m.tentativa.decisoes, &mut m.selecionada);
     }
     if missao.tem_pecas()
@@ -726,7 +741,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if missao.modelagem.is_some() {
-        ui.label(RichText::new(texto::missao_seu_modelo()).strong());
+        secao(ui, texto::missao_seu_modelo());
         ui.label(RichText::new(texto::missao_modelo_texto()).weak());
         ui.horizontal(|ui| {
             ui.label(texto::missao_arquivo_ron());
@@ -775,7 +790,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
 
     if !missao.justificativa.is_empty() {
-        ui.label(RichText::new(texto::missao_justificativa()).strong());
+        secao(ui, texto::missao_justificativa());
         for (qi, q) in missao.justificativa.iter().enumerate() {
             ui.label(&q.pergunta);
             em_linha_ou_coluna(ui, &q.opcoes, |ui| {
@@ -837,7 +852,14 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         if ui
             .add_enabled(
                 pode,
-                egui::Button::new(RichText::new(texto::simular()).strong()),
+                egui::Button::new(
+                    RichText::new(texto::simular())
+                        .size(16.0)
+                        .strong()
+                        .color(Color32::WHITE),
+                )
+                .fill(crate::ROXO)
+                .min_size(egui::vec2(120.0, 32.0)),
             )
             .clicked()
         {
@@ -877,11 +899,37 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     }
     if let Some(r) = m.resultado.clone() {
         ui.separator();
+        if std::mem::take(&mut m.rolar_resultado) {
+            ui.scroll_to_cursor(Some(egui::Align::TOP));
+        }
         resultado(ui, &r, missao, prova.is_some());
+        // Solved: the next step right under the grade, not after the animation.
+        if prova.is_none() && r.resolvida {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if proxima
+                    && ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(texto::missao_proxima())
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(crate::ROXO),
+                        )
+                        .clicked()
+                {
+                    seguir = Some(true);
+                }
+                if ui.button(texto::missao_caixa_areia()).clicked() {
+                    seguir = Some(false);
+                }
+            });
+        }
     }
     if let Some(a) = m.animacao.as_mut() {
         ui.separator();
-        ui.label(RichText::new(texto::missao_sua_fabrica()).strong());
+        secao(ui, texto::missao_sua_fabrica());
         a.mostrar(ui);
     }
     if app.cliente_3d && m.animacao.is_some() {
@@ -930,17 +978,13 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
     {
         ui.colored_label(VERMELHO, e);
     }
-    let Some(m) = app.missao.as_mut() else { return };
-    if prova.is_none() && m.resultado.as_ref().is_some_and(|r| r.resolvida) {
-        let i = m.indice;
-        let proxima = i + 1 < m.pacote.missoes.len() && app.progresso.liberada(&m.pacote, i + 1);
-        ui.horizontal(|ui| {
-            if proxima && ui.button(texto::missao_proxima()).clicked() {
-                app.abrir_missao(i + 1);
-            } else if ui.button(texto::missao_caixa_areia()).clicked() {
-                app.abrir_areia(i);
-            }
-        });
+    let Some(i) = app.missao.as_ref().map(|m| m.indice) else {
+        return;
+    };
+    match seguir {
+        Some(true) => app.abrir_missao(i + 1),
+        Some(false) => app.abrir_areia(i),
+        None => {}
     }
 }
 
@@ -975,6 +1019,24 @@ fn resultado(ui: &mut Ui, r: &Resultado, missao: &utsim_ensino_core::missao::Mis
     });
     if let Some(p) = &r.portao {
         ui.colored_label(VERMELHO, texto::f(texto::missao_restricao_violada(), &[p]));
+    }
+    match utsim_ensino_core::nota::mais_longe(r) {
+        Some(utsim_ensino_core::nota::MaisLonge::Metrica { rotulo, falta }) => {
+            ui.colored_label(
+                VERMELHO,
+                texto::f_literal(
+                    texto::missao_mais_longe(),
+                    &[rotulo.as_str(), falta.as_str()],
+                ),
+            );
+        }
+        Some(utsim_ensino_core::nota::MaisLonge::Criterio { rotulo }) => {
+            ui.colored_label(
+                VERMELHO,
+                texto::f_literal(texto::missao_criterio_primeiro(), &[rotulo.as_str()]),
+            );
+        }
+        None => {}
     }
     tabela_metricas(ui, r, true);
     ui.label(texto::f(
@@ -1277,7 +1339,10 @@ fn em_linha_ou_coluna<S: AsRef<str>>(ui: &mut Ui, rotulos: &[S], conteudo: impl 
     let total: usize = rotulos.iter().map(|r| r.as_ref().chars().count() + 6).sum();
     // About 7 points a character in the body font.
     if total as f32 * 7.0 <= ui.available_width() {
-        ui.horizontal_wrapped(conteudo);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 14.0;
+            conteudo(ui)
+        });
     } else {
         ui.vertical(conteudo);
     }

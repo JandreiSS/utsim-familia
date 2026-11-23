@@ -34,7 +34,7 @@ pub struct Identity {
 }
 
 impl Identity {
-    /// The identity UTSim Seis Sigma keeps on this computer (the same person and id in
+    /// The identity UTSim LSS keeps on this computer (the same person and id in
     /// every app of the family that writes in a Seis Sigma folder); `None` before the first
     /// run of the Seis Sigma.
     pub fn local() -> Option<Identity> {

@@ -249,6 +249,16 @@ pub fn medida(termos: &[Termo], metricas: &BTreeMap<String, Vec<f64>>) -> Result
     Ok(out)
 }
 
+/// Decimal places for a measure of size `v`: a count per week (hundreds) with none, a time
+/// in the tens with one, a fraction such as a utilization with two.
+pub fn casas_para(v: f64) -> u32 {
+    match v.abs() {
+        x if x >= 100.0 => 0,
+        x if x >= 10.0 => 1,
+        _ => 2,
+    }
+}
+
 /// Compares a measure of the student's model with the reference one.
 pub fn comparar(
     aluno: &Intervalo,
@@ -348,7 +358,8 @@ pub fn corrigir_modelagem(
                 None => (false, "o modelo não rodou".into()),
                 Some(ma) => match (medida(valor, ma), medida(valor, &ref_metricas)) {
                     (Ok(a), Ok(r)) => {
-                        comparar(&Intervalo::de(&a), &Intervalo::de(&r), *tolerancia, 2)
+                        let r = Intervalo::de(&r);
+                        comparar(&Intervalo::de(&a), &r, *tolerancia, casas_para(r.media))
                     }
                     (Err(e), _) => (false, e),
                     (_, Err(e)) => (false, format!("gabarito: {e}")),

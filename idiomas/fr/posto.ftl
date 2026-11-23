@@ -138,19 +138,9 @@ ferramentas-remover_a_coluna = Supprimer la colonne
 ferramentas-remover_a_linha = Supprimer la ligne
 ferramentas-efeito = Effet
 ferramentas-o_efeito = l'effet
-ferramentas-causa = + cause
-ferramentas-remover_categoria = Supprimer la catégorie
-ferramentas-causa-2 = cause
 ferramentas-categoria = + catégorie
 ferramentas-nova_categoria = Nouvelle catégorie
 ferramentas-o_problema = le problème
-ferramentas-cadeia = Chaîne { $k }
-ferramentas-por_que = + pourquoi
-ferramentas-remover_cadeia = Supprimer la chaîne
-ferramentas-por_que-2 = Pourquoi { $j }
-ferramentas-acao = Action
-ferramentas-a_acao_sobre_a_causa = l'action sur la cause racine
-ferramentas-cadeia-2 = + chaîne
 ferramentas-efeito-2 = Effet : { $efeito }
 ferramentas-sem_causas = sans causes
 ferramentas-avisos = Avertissements
@@ -333,6 +323,32 @@ sessao-nenhuma_unidade_aberta = Aucune unité ouverte
 sessao-autor = auteur : { $autor }
 sessao-sem_unidade = Sans unité
 sessao-modelo = modèle : { $nome }
+sessao-unidade_nova = Nouvelle unité
+sessao-salvas = { $n ->
+    [0] Tout était déjà enregistré.
+    [one] { $n } modification enregistrée.
+   *[other] { $n } modifications enregistrées.
+}
+sessao-unidade_salva_em = Unité enregistrée dans { $pasta }.
+documento-onde_salvar = Où enregistrer le dossier de l'unité
+documento-nome_da_unidade = Nom de l'unité (l'usine, la ligne, la classe…)
+documento-sera_criada = Le dossier { $pasta } sera créé.
+documento-escreva_nome_e_pasta = Écrivez le nom et choisissez où va le dossier.
+inicial-nova_unidade = Nouvelle unité
+inicial-nova_unidade_dica = Commence vierge, sans dossier. Vous enregistrez quand vous voulez, avec un nom et un lieu.
+sessao-desfazer = Annuler
+sessao-refazer = Rétablir
+sessao-desfazer_dica = Annule votre dernière modification dans cette unité depuis l'ouverture de l'application (Ctrl+Z hors des champs de texte).
+sessao-refazer_dica = Rétablit ce qui a été annulé (Ctrl+Y ou Ctrl+Maj+Z hors des champs de texte).
+sessao-desfeito = Annulé : { $n ->
+    [one] { $n } enregistrement est revenu à son état précédent.
+   *[other] { $n } enregistrements sont revenus à leur état précédent.
+}
+sessao-refeito = Rétabli : { $n ->
+    [one] { $n } enregistrement.
+   *[other] { $n } enregistrements.
+}
+sessao-desfazer_mudou = Impossible d'annuler : une autre personne a modifié ensuite le même enregistrement. Rien n'a été changé.
 
 ## trabalho.rs
 
@@ -376,3 +392,27 @@ ferramentas-rotulo_lie = LSI
 ferramentas-rotulo_lse = LSS
 ferramentas-rotulo_alvo = Cible
 ferramentas-rotulo_usar = utiliser
+
+## ferramentas/desenho.rs
+
+ferramentas-dica_espinha = Cliquez sur une arête pour ajouter une cause, faites glisser les cartes d’une arête à l’autre pour changer de catégorie et double-cliquez pour modifier. Le clic droit ouvre le menu, avec « Commencer un 5 pourquoi ».
+ferramentas-dica_arvore = Les pourquoi en arbre. Le + à droite d’un nœud ajoute un pourquoi en dessous et le double clic modifie. Les chaînes qui commencent par les mêmes pourquoi partagent la branche ; chaque branche se termine par son action.
+ferramentas-no_de_varias_cadeias = « { $texto } » est le début de { $n } chaînes : modifier les change toutes.
+ferramentas-secoes_a3 = { $n } sur { $total } sections remplies
+ferramentas-a3_sem_outras = Appliquez un Pareto ou un Ishikawa dans cette étude et ils apparaissent ici, en miniature.
+ferramentas-do_estudo = De l’étude
+ferramentas-casa_da_qualidade = Maison de la qualité
+ferramentas-casa_vazia = Ajoutez des besoins (lignes) et des exigences techniques (colonnes après « Ponto de venda ») pour dessiner la maison.
+ferramentas-dica_casa = Cliquez sur une case pour changer la relation (cercle plein 9, cercle vide 3, triangle 1) et sur un losange du toit pour changer la corrélation. Le tableau ci-dessous change aussi.
+ferramentas-matriz_s_o = Matrice gravité × occurrence
+ferramentas-cor_por = Couleur par
+ferramentas-dica_ap = Priorité d’action : haute en rouge, moyenne en ambre, basse en vert.
+ferramentas-dica_npr = IPR (S × O × D) : 200 ou plus en rouge, de 100 à 199 en ambre, moins de 100 en vert.
+ferramentas-legenda_matriz = Le fond est la bande de S × O ; le point, le risque de la ligne (le pire de la case). Cliquez pour aller à la ligne dans la grille.
+ferramentas-risco_alto = { $n } élevé
+ferramentas-risco_medio = { $n } moyen
+ferramentas-risco_baixo = { $n } faible
+ferramentas-porques_comecado = 5 pourquoi commencé avec « { $causa } ».
+ferramentas-pareto_vivo = Cliquez sur une barre pour filtrer le tableau de données ; à nouveau, pour tout afficher.
+ferramentas-filtrando = Seulement les lignes de « { $categoria } » ({ $n }).
+ferramentas-mostrar_todas = Tout afficher

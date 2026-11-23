@@ -320,7 +320,7 @@ pub enum TeachingError {
     #[error("a pasta não é de um programa Lean Seis Sigma")]
     NotAProgram,
     #[error(
-        "{0} não está no cadastro deste programa: abra o programa uma vez no UTSim Seis Sigma ou peça ao master black belt para incluir você"
+        "{0} não está no cadastro deste programa: abra o programa uma vez no UTSim LSS ou peça ao master black belt para incluir você"
     )]
     NotAMember(String),
     #[error("o UTSim Ensino só registra os níveis \"estudou\" e \"praticou\"")]

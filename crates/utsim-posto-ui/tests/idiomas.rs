@@ -7,10 +7,25 @@ use utsim_posto_ui::texto::{TEXTOS, tx};
 /// As chaves escritas no código (`tx("...")`, `fx("...")` e as chaves guardadas em tabelas,
 /// como `"carta-imr"` e `"papel-valor"`).
 fn chaves_do_codigo() -> Vec<String> {
-    let pasta = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+    let mut pastas = vec![std::path::PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src"
+    ))];
+    let mut arquivos = Vec::new();
+    // As subpastas também (ferramentas/desenho.rs).
+    while let Some(p) = pastas.pop() {
+        for e in std::fs::read_dir(p).unwrap() {
+            let c = e.unwrap().path();
+            if c.is_dir() {
+                pastas.push(c);
+            } else {
+                arquivos.push(c);
+            }
+        }
+    }
     let mut chaves = Vec::new();
-    for e in std::fs::read_dir(pasta).unwrap() {
-        let texto = std::fs::read_to_string(e.unwrap().path()).unwrap();
+    for arquivo in arquivos {
+        let texto = std::fs::read_to_string(arquivo).unwrap();
         for parte in texto.split('"').skip(1).step_by(2) {
             let prefixos = [
                 "abrir-",

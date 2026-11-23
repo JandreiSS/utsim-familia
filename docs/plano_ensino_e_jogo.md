@@ -1,6 +1,6 @@
 # Plano: app de ensino da família UTSim e o jogo de problemas da indústria
 
-Este é um plano técnico, sem implementação, de um aplicativo próprio da família UTSim para o ensino de engenharia de produção pela simulação. O núcleo do app é um **jogo** em que o aluno resolve problemas reais da indústria. O pedido do dono (2026-11-03, marcado como muito importante) tem três partes. O aluno aprende sem precisar usar o simulador no começo. A trilha vai do básico (gargalo, filas, balanceamento de linha, arranjo físico, capacidade, tempos e métodos) aos problemas complexos. O fim é um caso que exige Lean Seis Sigma, ligado ao app UTSim Seis Sigma.
+Este é um plano técnico, sem implementação, de um aplicativo próprio da família UTSim para o ensino de engenharia de produção pela simulação. O núcleo do app é um **jogo** em que o aluno resolve problemas reais da indústria. O pedido do dono (2026-11-03, marcado como muito importante) tem três partes. O aluno aprende sem precisar usar o simulador no começo. A trilha vai do básico (gargalo, filas, balanceamento de linha, arranjo físico, capacidade, tempos e métodos) aos problemas complexos. O fim é um caso que exige Lean Seis Sigma, ligado ao app UTSim LSS.
 
 O nome provisório é **UTSim Ensino**. O launcher já reserva para ele o produto `ensino`, com o subtítulo "Ensino pela simulação" e o ícone `assets/icone/familia/ensino_256.png` (`crates/utsim-launcher/src/catalogo.rs`). As crates novas levam o prefixo `utsim-ensino`. O formato ainda não foi escolhido pelo dono. A seção 2 traz as opções, e a seção 10 lista as decisões E1 a E16 com a proposta de cada uma.
 
@@ -8,7 +8,7 @@ Cada seção diz o que o app faz, onde mora o cálculo e como é testado. A seç
 
 Documentos relacionados, que este plano não repete:
 
-- `docs/plano_lean_seis_sigma.md`, seção 8.6. É o antigo modo de ensino (L8), que saiu do UTSim Seis Sigma pela decisão N2 e passa para cá. A seção 8.5 descreve as provas com sorteio reprodutível, que este app reaproveita.
+- `docs/plano_lean_seis_sigma.md`, seção 8.6. É o antigo modo de ensino (L8), que saiu do UTSim LSS pela decisão N2 e passa para cá. A seção 8.5 descreve as provas com sorteio reprodutível, que este app reaproveita.
 - `docs/plano_linhas_especializadas.md`. Descreve o pacote de linha e o Lean Office, fonte de missões administrativas.
 - `docs/plano_launcher.md`. Descreve os produtos, os canais, o acesso aberto (seção 13) e o Drive.
 - `docs/plano_interface_rust.md`. Descreve o egui dentro do cliente Godot.
@@ -60,7 +60,7 @@ Documentos relacionados, que este plano não repete:
 
 1. Ensinar os conceitos centrais da engenharia de produção pela consequência das decisões numa fábrica simulada, com variabilidade real, e não só por fórmula.
 2. Levar o aluno do uso de alavancas à construção do próprio modelo no UTSim, em degraus.
-3. Fechar a trilha com um caso DMAIC completo, que leve o aluno ao UTSim Seis Sigma com dados e modelo prontos.
+3. Fechar a trilha com um caso DMAIC completo, que leve o aluno ao UTSim LSS com dados e modelo prontos.
 4. Dar ao professor exercícios corrigidos automaticamente, um painel da turma e um modo prova, sem servidor.
 5. Servir de porta de entrada para a família UTSim. Quem termina a campanha sabe o que o simulador e o Seis Sigma fazem.
 
@@ -262,7 +262,7 @@ Depois de resolver uma missão, o aluno abre a mesma fábrica sem meta e sem or�
 
 **Fases.**
 
-| Fase | No jogo | No UTSim Seis Sigma |
+| Fase | No jogo | No UTSim LSS |
 |---|---|---|
 | Definir | escolher o CTQ e a meta entre opções e escrever o problema | termo de abertura do projeto de treino |
 | Medir | planejar a coleta (cada amostra custa dias de fábrica), receber os dados simulados | MSA, linha de base, capacidade |
@@ -527,7 +527,7 @@ O formato de pacote é o ponto de encaixe. Um pacote declara o que precisa (`req
 
 ## 7. Integrações
 
-### 7.1 UTSim Seis Sigma
+### 7.1 UTSim LSS
 
 - **Projeto de treino.** O ato 8 exporta um projeto `.lss` (ou `.lssz`) marcado como treino, com o modelo ligado por hash, os conjuntos de dados com origem `Simulado` e o termo pré-preenchido. O Seis Sigma já separa o espaço de treino do programa real (LSS-RNF-15).
 - **Volta das respostas.** As respostas-chave do aluno (causa raiz, R&R, Cpk, ganho) são digitadas no jogo ou lidas do `estudo.json` do Seis Sigma. O jogo corrige sem depender da tela do outro app.
@@ -650,7 +650,7 @@ Propostas, a aceitar ou mudar.
 6. **E6 Pesos da nota.** Proposta: desempenho 70, previsão 20, justificativa 10, desconto por dica de 0, 3 e 8, configuráveis por pacote.
 7. **E7 Tentativas.** Proposta: tentativas livres na campanha com a melhor nota registrada, e o professor escolhe "melhor" ou "última" na turma.
 8. **E8 Atos e ordem.** Confirmar os oito atos da seção 3.3 e a ordem (gargalo, filas, capacidade, balanceamento, arranjo, tempos e métodos, integrados, Lean Seis Sigma). Alternativa: tempos e métodos antes do balanceamento.
-9. **E9 Caso final.** Proposta: análise no UTSim Seis Sigma com volta das respostas-chave ao jogo, mais uma versão reduzida dentro do jogo para quem não tem o Seis Sigma. Os tollgates são avaliados pelo professor no Seis Sigma, se ele quiser.
+9. **E9 Caso final.** Proposta: análise no UTSim LSS com volta das respostas-chave ao jogo, mais uma versão reduzida dentro do jogo para quem não tem o Seis Sigma. Os tollgates são avaliados pelo professor no Seis Sigma, se ele quiser.
 10. **E10 Missões de modelo.** Proposta: o degrau 3 (o aluno entrega o `.ron`) entra no ato 7 e no modo sala de aula. Alternativa: deixar a modelagem só para a disciplina de simulação, fora da campanha.
 11. **E11 Lugar do balanceamento.** Proposta: módulo em `utsim-ensino-core` agora, movido para uma crate comum quando o Seis Sigma fizer o balanceamento da P6. Alternativa: crate `utsim-metodos` desde já, usada pelos dois apps.
 12. **E12 Diário das entregas.** (**decidida** em 2026-11-09, de acordo com a sessão Seis Sigma) Crate comum `utsim-diario`, criado pelo Ensino e usado pelo Seis Sigma na P7. Ele só tem primitivas: chave ed25519 com a pública em hex, `sha256_hex`, `Elo {corpo, hash, assinatura}` com o corpo guardado como texto, cadeia por autor dentro do corpo (trait `Encadeado`: autor, sequência e hash do anterior), `conferir` e `conferir_desde` (conferência incremental a partir do último elo conferido) e `Selo` para assinatura avulsa, com várias assinaturas possíveis sobre o mesmo corpo. A conferência devolve problemas sem texto (`Problema`), e cada app escreve a mensagem no seu catálogo. Um buraco no meio da cadeia é apontado, e um final faltando não é, porque a pasta sincroniza com atraso. Dois elos do mesmo autor com a mesma sequência e hashes diferentes são uma bifurcação (backup restaurado). `Selo.publica` é sempre a chave de quem assinou, e `quando` vem de quem chama, nunca do relógio do crate. Ficam no Seis Sigma o formato do `Op` com `sequencia` e `anterior`, o chaveiro pessoa→chave, a troca de chave e os textos. Os arquivos já gravados pelo Ensino continuam válidos.

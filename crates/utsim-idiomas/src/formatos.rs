@@ -1,4 +1,4 @@
-//! Numbers, money and dates in the language now (the rules of UTSim Seis Sigma, P8): a
+//! Numbers, money and dates in the language now (the rules of UTSim LSS, P8): a
 //! comma as decimal mark except in English, dates day first except in English (which takes
 //! `AAAA-MM-DD`, the form no reader takes for month-first or day-first), and money in R$
 //! whatever the language.
@@ -11,6 +11,18 @@ pub fn marca_decimal(s: &str) -> String {
         '.' => s.to_string(),
         m => s.replace('.', &m.to_string()),
     }
+}
+
+/// A number as Rust writes it (the shortest form that reads back the same), with the
+/// language's decimal mark: `2.5` is `2,5` in Portuguese. For limits, targets and other
+/// values typed by the user, shown as they were typed.
+pub fn numero(v: f64) -> String {
+    marca_decimal(&v.to_string())
+}
+
+/// [`numero`], or a dash when there is no value.
+pub fn numero_ou_traco(v: Option<f64>) -> String {
+    v.map_or_else(|| "–".to_string(), numero)
 }
 
 /// Digits with the language's mark between thousands: `1234567` → `1.234.567`.

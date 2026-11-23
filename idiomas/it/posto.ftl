@@ -138,19 +138,9 @@ ferramentas-remover_a_coluna = Rimuovi la colonna
 ferramentas-remover_a_linha = Rimuovi la riga
 ferramentas-efeito = Effetto
 ferramentas-o_efeito = l'effetto
-ferramentas-causa = + causa
-ferramentas-remover_categoria = Rimuovi categoria
-ferramentas-causa-2 = causa
 ferramentas-categoria = + categoria
 ferramentas-nova_categoria = Nuova categoria
 ferramentas-o_problema = il problema
-ferramentas-cadeia = Catena { $k }
-ferramentas-por_que = + perché
-ferramentas-remover_cadeia = Rimuovi catena
-ferramentas-por_que-2 = Perché { $j }
-ferramentas-acao = Azione
-ferramentas-a_acao_sobre_a_causa = l'azione sulla causa radice
-ferramentas-cadeia-2 = + catena
 ferramentas-efeito-2 = Effetto: { $efeito }
 ferramentas-sem_causas = senza cause
 ferramentas-avisos = Avvisi
@@ -333,6 +323,32 @@ sessao-nenhuma_unidade_aberta = Nessuna unità aperta
 sessao-autor = autore: { $autor }
 sessao-sem_unidade = Senza unità
 sessao-modelo = modello: { $nome }
+sessao-unidade_nova = Nuova unità
+sessao-salvas = { $n ->
+    [0] Era già tutto salvato.
+    [one] { $n } modifica salvata.
+   *[other] { $n } modifiche salvate.
+}
+sessao-unidade_salva_em = Unità salvata in { $pasta }.
+documento-onde_salvar = Dove salvare la cartella dell'unità
+documento-nome_da_unidade = Nome dell'unità (lo stabilimento, la linea, la classe…)
+documento-sera_criada = Verrà creata la cartella { $pasta }.
+documento-escreva_nome_e_pasta = Scrivi il nome e scegli dove va la cartella.
+inicial-nova_unidade = Nuova unità
+inicial-nova_unidade_dica = Inizia vuota, senza cartella. Salvi quando vuoi, con nome e posto.
+sessao-desfazer = Annulla
+sessao-refazer = Ripeti
+sessao-desfazer_dica = Annulla la tua ultima modifica in questa unità da quando l'app è stata aperta (Ctrl+Z fuori dai campi di testo).
+sessao-refazer_dica = Ripete ciò che è stato annullato (Ctrl+Y o Ctrl+Maiusc+Z fuori dai campi di testo).
+sessao-desfeito = Annullato: { $n ->
+    [one] { $n } record è tornato com'era.
+   *[other] { $n } record sono tornati com'erano.
+}
+sessao-refeito = Ripetuto: { $n ->
+    [one] { $n } record.
+   *[other] { $n } record.
+}
+sessao-desfazer_mudou = Impossibile annullare: un'altra persona ha poi modificato lo stesso record. Non è cambiato nulla.
 
 ## trabalho.rs
 
@@ -376,3 +392,27 @@ ferramentas-rotulo_lie = LSI
 ferramentas-rotulo_lse = LSS
 ferramentas-rotulo_alvo = Obiettivo
 ferramentas-rotulo_usar = usa
+
+## ferramentas/desenho.rs
+
+ferramentas-dica_espinha = Fai clic su una lisca per aggiungere una causa, trascina le schede da una lisca all’altra per cambiare categoria e fai doppio clic per modificare. Il tasto destro apre il menu, con "Inizia un 5 perché".
+ferramentas-dica_arvore = I perché ad albero. Il + a destra di un nodo aggiunge un perché sotto e il doppio clic modifica. Le catene che iniziano con gli stessi perché condividono il ramo; ogni ramo termina con la sua azione.
+ferramentas-no_de_varias_cadeias = "{ $texto }" è l’inizio di { $n } catene: modificarlo le cambia tutte.
+ferramentas-secoes_a3 = { $n } di { $total } sezioni compilate
+ferramentas-a3_sem_outras = Applica un Pareto o un Ishikawa in questo studio e compaiono qui, in miniatura.
+ferramentas-do_estudo = Dallo studio
+ferramentas-casa_da_qualidade = Casa della qualità
+ferramentas-casa_vazia = Aggiungi esigenze (righe) e requisiti tecnici (colonne dopo "Ponto de venda") per disegnare la casa.
+ferramentas-dica_casa = Fai clic su una cella per cambiare la relazione (cerchio pieno 9, cerchio vuoto 3, triangolo 1) e su un rombo del tetto per cambiare la correlazione. Anche la tabella sotto cambia.
+ferramentas-matriz_s_o = Matrice gravità × occorrenza
+ferramentas-cor_por = Colore per
+ferramentas-dica_ap = Priorità d’azione: alta in rosso, media in ambra, bassa in verde.
+ferramentas-dica_npr = RPN (S × O × D): 200 o più in rosso, da 100 a 199 in ambra, sotto 100 in verde.
+ferramentas-legenda_matriz = Lo sfondo è la fascia di S × O; il punto, il rischio della riga (il peggiore della cella). Fai clic per andare alla riga nella griglia.
+ferramentas-risco_alto = { $n } alto
+ferramentas-risco_medio = { $n } medio
+ferramentas-risco_baixo = { $n } basso
+ferramentas-porques_comecado = 5 perché iniziato con "{ $causa }".
+ferramentas-pareto_vivo = Fai clic su una barra per filtrare la tabella dei dati; di nuovo, per mostrare tutto.
+ferramentas-filtrando = Solo le righe di "{ $categoria }" ({ $n }).
+ferramentas-mostrar_todas = Mostra tutto

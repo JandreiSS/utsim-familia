@@ -8,6 +8,8 @@
 //! - [`tabela`]: a tabela de dados de uma aplicação e a importação de CSV;
 //! - [`calculo`]: o resultado de cada ferramenta (indicadores, gráficos, tabelas, avisos),
 //!   o mesmo na tela e no relatório;
+//! - [`interacao`]: o que cada gesto nas ferramentas desenhadas (arrastar uma causa,
+//!   clicar numa barra, numa célula da casa) faz nos dados;
 //! - [`relatorio`]: o relatório de uma ferramenta e o consolidado do estudo, pelo gerador
 //!   comum (`utsim_ferramentas::relatorios`), em PDF e HTML.
 //!
@@ -17,6 +19,7 @@
 pub mod calculo;
 pub mod exemplo;
 pub mod importar;
+pub mod interacao;
 pub mod relatorio;
 pub mod tabela;
 

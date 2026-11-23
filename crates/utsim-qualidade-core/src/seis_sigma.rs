@@ -1,4 +1,4 @@
-//! An 8D sent to the portfolio of UTSim Seis Sigma (stage QS13 of
+//! An 8D sent to the portfolio of UTSim LSS (stage QS13 of
 //! `docs/plano_qualidade_e_seguranca.md`, section 7.1): when the cause does not show up,
 //! the 8D becomes an idea in the portfolio through the intake of the Seis Sigma store
 //! (`utsim_lss_store::intake::submit_idea`), with the source `qualidade_8d`, the 8D's

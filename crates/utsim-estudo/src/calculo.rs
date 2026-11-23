@@ -23,6 +23,7 @@ use utsim_quality::charts::{self, ChartData, ChartKind as Carta};
 use utsim_quality::msa::{self, GageData, GageOptions, Measurement};
 use utsim_quality::rules::RuleSet;
 
+use crate::Tabela;
 use crate::tabela::numero;
 use crate::{Aplicacao, Ferramenta, num};
 
@@ -406,15 +407,10 @@ fn estratificacao(a: &Aplicacao, r: &mut Resultado) {
     }
 }
 
-fn pareto(a: &Aplicacao, r: &mut Resultado) {
+/// O Pareto da tabela de uma aplicação (o mesmo do resultado) e a coluna das categorias:
+/// a tela desenha o gráfico vivo com ele e filtra a tabela pela barra escolhida.
+pub fn pareto_da_tabela(a: &Aplicacao) -> (utsim_ferramentas::pareto::Pareto, usize) {
     let (cc, cq) = (col(a, 0, 0), col(a, 1, 1));
-    let cu = a
-        .parametros
-        .colunas
-        .get(2)
-        .copied()
-        .or_else(|| (a.tabela.colunas.len() > 2).then_some(2));
-    avisar_invalidas(a, r, cq);
     let entrada: Vec<(String, f64)> = a
         .tabela
         .linhas
@@ -429,7 +425,22 @@ fn pareto(a: &Aplicacao, r: &mut Resultado) {
             })
         })
         .collect();
-    let p = utsim_ferramentas::pareto::pareto(&entrada, a.parametros.outros_abaixo);
+    (
+        utsim_ferramentas::pareto::pareto(&entrada, a.parametros.outros_abaixo),
+        cc,
+    )
+}
+
+fn pareto(a: &Aplicacao, r: &mut Resultado) {
+    let (cc, cq) = (col(a, 0, 0), col(a, 1, 1));
+    let cu = a
+        .parametros
+        .colunas
+        .get(2)
+        .copied()
+        .or_else(|| (a.tabela.colunas.len() > 2).then_some(2));
+    avisar_invalidas(a, r, cq);
+    let (p, _) = pareto_da_tabela(a);
     if p.total <= 0.0 {
         r.avisos.push("As quantidades somam zero.".into());
         return;
@@ -1169,21 +1180,37 @@ fn nota(s: &str) -> Option<u8> {
         .map(|v| v as u8)
 }
 
-fn fmea(a: &Aplicacao, r: &mut Resultado) {
-    let t = &a.tabela;
+/// O risco de uma linha da FMEA com S, O e D de 1 a 10.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RiscoFmea {
+    /// A linha na tabela.
+    pub linha: usize,
+    pub s: u8,
+    pub o: u8,
+    pub d: u8,
+    /// S × O × D.
+    pub npr: u32,
+    /// A ação prioritária pela tabela de sempre (AIAG-VDA).
+    pub ap: Ap,
+}
+
+/// NPR a partir do qual a linha fica vermelha na tela.
+pub const NPR_ALTO: u32 = 200;
+/// NPR a partir do qual a linha fica âmbar na tela.
+pub const NPR_MEDIO: u32 = 100;
+
+/// As linhas da FMEA com modo de falha e S, O e D de 1 a 10, na ordem da tabela, e quantas
+/// têm modo de falha mas ficaram sem alguma nota.
+pub fn riscos_fmea(t: &Tabela) -> (Vec<RiscoFmea>, usize) {
     let idx = |nome: &str, padrao: usize| t.coluna(nome).unwrap_or(padrao);
-    let (ce, cm, cf, cs, cc, co, cd, ca) = (
-        idx("Etapa", 0),
+    let (cm, cs, co, cd) = (
         idx("Modo de falha", 1),
-        idx("Efeito", 2),
         idx("S", 3),
-        idx("Causa", 4),
         idx("O", 5),
         idx("D", 8),
-        idx("Ação recomendada", 9),
     );
     let tab = ApTable::builtin();
-    let mut linhas = Vec::new();
+    let mut riscos = Vec::new();
     let mut incompletas = 0;
     for (i, l) in t.linhas.iter().enumerate() {
         let cel = |c: usize| l.get(c).map_or("", |s| s.trim());
@@ -1191,13 +1218,35 @@ fn fmea(a: &Aplicacao, r: &mut Resultado) {
             continue;
         }
         match (nota(cel(cs)), nota(cel(co)), nota(cel(cd))) {
-            (Some(s), Some(o), Some(d)) => {
-                let ap = tab.get(s, o, d).unwrap_or(Ap::Low);
-                linhas.push((i, s, o, d, u32::from(s) * u32::from(o) * u32::from(d), ap));
-            }
+            (Some(s), Some(o), Some(d)) => riscos.push(RiscoFmea {
+                linha: i,
+                s,
+                o,
+                d,
+                npr: u32::from(s) * u32::from(o) * u32::from(d),
+                ap: tab.get(s, o, d).unwrap_or(Ap::Low),
+            }),
             _ => incompletas += 1,
         }
     }
+    (riscos, incompletas)
+}
+
+fn fmea(a: &Aplicacao, r: &mut Resultado) {
+    let t = &a.tabela;
+    let idx = |nome: &str, padrao: usize| t.coluna(nome).unwrap_or(padrao);
+    let (ce, cm, cf, cc, ca) = (
+        idx("Etapa", 0),
+        idx("Modo de falha", 1),
+        idx("Efeito", 2),
+        idx("Causa", 4),
+        idx("Ação recomendada", 9),
+    );
+    let (riscos, incompletas) = riscos_fmea(t);
+    let mut linhas: Vec<(usize, u8, u8, u8, u32, Ap)> = riscos
+        .iter()
+        .map(|x| (x.linha, x.s, x.o, x.d, x.npr, x.ap))
+        .collect();
     if incompletas > 0 {
         r.avisos.push(format!(
             "{incompletas} {} sem S, O e D de 1 a 10 ficaram de fora.",

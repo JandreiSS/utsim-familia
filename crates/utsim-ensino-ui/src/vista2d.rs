@@ -31,6 +31,52 @@ pub struct Animacao {
     posicoes: Vec<Pos2>,
 }
 
+/// Where the playback starts: the first instant with a queue (some block holding two
+/// items or more), so the first picture already shows work; at most a tenth of the run,
+/// and the start when nothing ever piles up.
+pub fn instante_inicial(replay: &Replay) -> f64 {
+    let limite = replay.stop_time * 0.1;
+    let mut conteudo = vec![0usize; replay.blocks.len()];
+    let mut onde: BTreeMap<u64, usize> = BTreeMap::new();
+    for r in &replay.records {
+        if r.t > limite {
+            break;
+        }
+        match &r.event {
+            TraceEvent::Created { item, block } | TraceEvent::Unpacked { item, block } => {
+                onde.insert(*item, *block);
+                if let Some(c) = conteudo.get_mut(*block) {
+                    *c += 1;
+                    if *c >= 2 {
+                        return r.t;
+                    }
+                }
+            }
+            TraceEvent::Moved { item, from, to } => {
+                if let Some(c) = conteudo.get_mut(*from) {
+                    *c = c.saturating_sub(1);
+                }
+                onde.insert(*item, *to);
+                if let Some(c) = conteudo.get_mut(*to) {
+                    *c += 1;
+                    if *c >= 2 {
+                        return r.t;
+                    }
+                }
+            }
+            TraceEvent::Packed { item, .. } | TraceEvent::Destroyed { item } => {
+                if let Some(b) = onde.remove(item)
+                    && let Some(c) = conteudo.get_mut(b)
+                {
+                    *c = c.saturating_sub(1);
+                }
+            }
+            _ => {}
+        }
+    }
+    0.0
+}
+
 /// Blocks that are drawn (the team dispatchers and mobile resources are left out).
 fn desenhavel(kind: &str) -> bool {
     !matches!(kind, "Dispatcher" | "Transporter")
@@ -53,7 +99,8 @@ impl Animacao {
             movimentos: VecDeque::new(),
             posicoes,
         };
-        a.ir_para(0.0);
+        let t0 = instante_inicial(&a.replay);
+        a.ir_para(t0);
         a
     }
 
@@ -250,11 +297,23 @@ impl Animacao {
                 Stroke::new(1.0, fraco),
                 StrokeKind::Inside,
             );
+            // The name as the student reads it ("Fila embalagem", as in "O que aconteceu");
+            // a long one shrinks to fit the box instead of spilling.
+            let nome = utsim_ensino_core::dicas::nome_visivel(nome);
+            let largura = painter
+                .layout_no_wrap(nome.clone(), FontId::proportional(13.0), Color32::WHITE)
+                .size()
+                .x;
+            let tamanho = if largura > r.width() - 6.0 {
+                (13.0 * (r.width() - 6.0) / largura).max(9.0)
+            } else {
+                13.0
+            };
             painter.text(
                 r.center_top() + vec2(0.0, 2.0),
                 Align2::CENTER_TOP,
                 nome,
-                FontId::proportional(13.0),
+                FontId::proportional(tamanho),
                 Color32::WHITE,
             );
             painter.text(
