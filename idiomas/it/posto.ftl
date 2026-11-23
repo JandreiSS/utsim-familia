@@ -333,6 +333,19 @@ sessao-nenhuma_unidade_aberta = Nessuna unità aperta
 sessao-autor = autore: { $autor }
 sessao-sem_unidade = Senza unità
 sessao-modelo = modello: { $nome }
+sessao-desfazer = Annulla
+sessao-refazer = Ripeti
+sessao-desfazer_dica = Annulla la tua ultima modifica in questa unità da quando l'app è stata aperta (Ctrl+Z fuori dai campi di testo).
+sessao-refazer_dica = Ripete ciò che è stato annullato (Ctrl+Y o Ctrl+Maiusc+Z fuori dai campi di testo).
+sessao-desfeito = Annullato: { $n ->
+    [one] { $n } record è tornato com'era.
+   *[other] { $n } record sono tornati com'erano.
+}
+sessao-refeito = Ripetuto: { $n ->
+    [one] { $n } record.
+   *[other] { $n } record.
+}
+sessao-desfazer_mudou = Impossibile annullare: un'altra persona ha poi modificato lo stesso record. Non è cambiato nulla.
 
 ## trabalho.rs
 

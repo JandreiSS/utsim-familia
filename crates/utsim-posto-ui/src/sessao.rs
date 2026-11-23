@@ -268,6 +268,78 @@ impl Sessao {
         }
     }
 
+    /// Desfaz a última gravação desta pessoa na unidade (nesta sessão do app).
+    pub fn desfazer(&mut self) {
+        let r = match self.unidade.as_mut() {
+            Some(u) => u.desfazer(),
+            None => return,
+        };
+        self.depois_de_voltar(r, "sessao-desfeito");
+    }
+
+    /// Refaz o último passo desfeito.
+    pub fn refazer(&mut self) {
+        let r = match self.unidade.as_mut() {
+            Some(u) => u.refazer(),
+            None => return,
+        };
+        self.depois_de_voltar(r, "sessao-refeito");
+    }
+
+    fn depois_de_voltar(
+        &mut self,
+        r: Result<utsim_posto::Desfeito, utsim_posto::UnidadeErro>,
+        ok: &'static str,
+    ) {
+        match r {
+            Ok(utsim_posto::Desfeito::Nada) => {}
+            Ok(utsim_posto::Desfeito::Feito(n)) => {
+                self.mudou();
+                self.avisar(fx(ok, &[("n", vx(&n))]));
+            }
+            Ok(utsim_posto::Desfeito::Mudou) => self.falhar(tx("sessao-desfazer_mudou")),
+            Err(e) => {
+                // O que chegou a ser gravado já está na unidade.
+                self.mudou();
+                self.falhar(e.to_string());
+            }
+        }
+    }
+
+    /// Botões Desfazer e Refazer das gravações na unidade. Com `atalhos`, também Ctrl+Z,
+    /// Ctrl+Y e Ctrl+Shift+Z fora dos campos de texto (a tela Modelo tem os seus).
+    pub fn desfazer_ui(&mut self, ui: &mut egui::Ui, atalhos: bool) {
+        let Some(u) = &self.unidade else {
+            return;
+        };
+        let (pd, pr) = (u.pode_desfazer(), u.pode_refazer());
+        let mut desfazer = ui
+            .add_enabled(pd, egui::Button::new(tx("sessao-desfazer")))
+            .on_hover_text(tx("sessao-desfazer_dica"))
+            .clicked();
+        let mut refazer = ui
+            .add_enabled(pr, egui::Button::new(tx("sessao-refazer")))
+            .on_hover_text(tx("sessao-refazer_dica"))
+            .clicked();
+        if atalhos && !ui.ctx().egui_wants_keyboard_input() {
+            use egui::{Key, Modifiers};
+            ui.input_mut(|i| {
+                if i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z)
+                    || i.consume_key(Modifiers::COMMAND, Key::Y)
+                {
+                    refazer = true;
+                } else if i.consume_key(Modifiers::COMMAND, Key::Z) {
+                    desfazer = true;
+                }
+            });
+        }
+        if desfazer {
+            self.desfazer();
+        } else if refazer {
+            self.refazer();
+        }
+    }
+
     /// Barra de estado com a última mensagem.
     pub fn barra(&self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {

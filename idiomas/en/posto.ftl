@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = No unit open
 sessao-autor = author: { $autor }
 sessao-sem_unidade = No unit
 sessao-modelo = model: { $nome }
+sessao-desfazer = Undo
+sessao-refazer = Redo
+sessao-desfazer_dica = Undoes your last change in this unit since the app opened (Ctrl+Z outside text fields).
+sessao-refazer_dica = Redoes what was undone (Ctrl+Y or Ctrl+Shift+Z outside text fields).
+sessao-desfeito = Undone: { $n ->
+    [one] { $n } record is back to what it was.
+   *[other] { $n } records are back to what they were.
+}
+sessao-refeito = Redone: { $n ->
+    [one] { $n } record.
+   *[other] { $n } records.
+}
+sessao-desfazer_mudou = Cannot undo: someone else changed the same record afterwards. Nothing was changed.
 
 ## trabalho.rs
 

@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = Nenhuma unidade aberta
 sessao-autor = autor: { $autor }
 sessao-sem_unidade = Sem unidade
 sessao-modelo = modelo: { $nome }
+sessao-desfazer = Desfazer
+sessao-refazer = Refazer
+sessao-desfazer_dica = Desfaz a sua última gravação nesta unidade, feita desde que o app abriu (Ctrl+Z fora dos campos de texto).
+sessao-refazer_dica = Refaz o que foi desfeito (Ctrl+Y ou Ctrl+Shift+Z fora dos campos de texto).
+sessao-desfeito = Desfeito: { $n ->
+    [one] { $n } registro voltou ao que era.
+   *[other] { $n } registros voltaram ao que eram.
+}
+sessao-refeito = Refeito: { $n ->
+    [one] { $n } registro.
+   *[other] { $n } registros.
+}
+sessao-desfazer_mudou = Não dá para desfazer: outra pessoa mudou depois o mesmo registro. Nada foi mudado.
 
 ## trabalho.rs
 

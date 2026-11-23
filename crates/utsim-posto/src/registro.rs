@@ -60,7 +60,8 @@ impl Estado {
         e
     }
 
-    fn aplicar(&mut self, op: &Operacao) {
+    /// Applies one operation on top (it must come after every one applied so far).
+    pub(crate) fn aplicar(&mut self, op: &Operacao) {
         let col = self.colecoes.entry(op.colecao.clone()).or_default();
         match &op.acao {
             Acao::Gravar(v) => {
@@ -93,6 +94,11 @@ impl Estado {
     pub fn um<T: DeserializeOwned>(&self, colecao: &str, id: &str) -> Option<T> {
         let v = self.colecoes.get(colecao)?.get(id)?;
         T::deserialize(&v.0).ok()
+    }
+
+    /// The raw value of a record, if it exists.
+    pub fn valor(&self, colecao: &str, id: &str) -> Option<&Value> {
+        Some(&self.colecoes.get(colecao)?.get(id)?.0)
     }
 
     /// Who wrote the record last.

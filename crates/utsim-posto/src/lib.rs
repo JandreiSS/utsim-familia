@@ -15,7 +15,7 @@ pub mod pasta;
 pub mod registro;
 pub mod restrita;
 
-pub use pasta::{Unidade, UnidadeErro};
+pub use pasta::{Desfeito, Unidade, UnidadeErro};
 pub use registro::{Acao, Estado, Operacao};
 pub use restrita::{Pessoa, Restrita, nomes_no_texto};
 

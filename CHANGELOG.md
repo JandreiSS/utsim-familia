@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- Pasta de unidade: gravar um registro aplica a operação nova por cima do estado, em vez de refazer o estado inteiro a partir de todas as operações a cada gravação (o que copiava todos os registros). Só quando a operação não fica por último, como com o relógio atrasado de outra pessoa, o estado é refeito como antes.
 - UTSim 3D: a ponte rolante ganhou os seus campos no painel de propriedades (Parâmetros): velocidade, aceleração e desaceleração da ponte, do carro e do gancho, ordem dos movimentos, altura do gancho, capacidade, rótulo do peso, engate e desengate, controle (cabine, botoeira ou rádio, com a equipe do operador), área sob a carga, afastar as pessoas, folga entre pontes e a linha "Caminho", que diz com quais pontes ela divide o caminho. Nas dimensões, os rótulos passam a ser comprimento do caminho, vão e altura. Antes esses campos só mudavam no RON. Corrigido junto: os campos da ponte em `set` (cenários e experimentos, por exemplo `ponte.bridge_gap`) eram recusados como campo inexistente; e as dimensões da ponte podem ser mudadas pelo editor (antes, "recursos móveis não têm dimensões próprias").
 - Tradução, rodada 10 (editor, parte 3): a janela Resultados do editor do simulador (Resumo, Gráficos, Cenários e Otimização) nas cinco línguas, com plural nas contagens. Um teste novo confere que cada texto com valores recebe exatamente as variáveis que a mensagem usa.
 - UTSim Ensino: a padaria (ato 7) usa o forno de padaria modelado no Blender, na figura do enunciado e no gabarito (`visual: (asset: "forno")`), no lugar do centro de usinagem.
@@ -80,6 +81,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - `utsim run`: a lista de estados por objeto no resumo procura só as chaves do objeto, em vez de percorrer o resumo inteiro para cada objeto. A saída é a mesma.
 
 ### Corrigido
+- UTSim Segurança do Trabalho: as horas-homem aceitavam "2025/03" ou o mês 13 (só conferiam o tamanho) e um mês repetido trocava o valor gravado sem aviso. Agora o mês precisa ser AAAA-MM de 01 a 12 (`incidentes::mes_valido`), e um mês que já tem horas mostra o valor gravado e pede confirmação para substituir.
 - UTSim Produto: as mensagens das regras (item dentro dele mesmo, requisito aprovado, portão com pendências e outras) aparecem na língua escolhida, e não mais sempre em português.
 - UTSim Produto: tirar ou mover uma fase não desalinha mais as decisões e as assinaturas das outras fases. Cada fase ganha uma identidade que as assinaturas guardam, e as de antes continuam valendo. Uma fase com decisão registrada fica como registro.
 - UTSim Segurança do Trabalho: remover um perigo da unidade agora leva junto as ações e as reavaliações dele (`inventario::remover_perigo`), e a barra de estado diz quantas saíram. Antes elas ficavam na pasta apontando para um perigo que não existia mais.
@@ -93,6 +95,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - O editor 3D (`utsim-view`) não abre mais uma janela de terminal junto no Windows: a versão de distribuição é marcada como programa de janela, como o launcher e o UTSim Seis Sigma (a de desenvolvimento continua com o console para os registros).
 
 ### Adicionado
+- UTSim Qualidade e UTSim Segurança do Trabalho: Desfazer e Refazer em todas as telas que gravam na unidade, não só no Modelo. Os botões ficam na barra de baixo, e Ctrl+Z, Ctrl+Y e Ctrl+Shift+Z valem fora dos campos de texto. Desfazer grava de volta o valor anterior de cada registro (`Unidade::desfazer`), uma remoção em cascata volta num passo só (`Unidade::em_grupo`), e se outra pessoa mudou o registro depois nada é feito e a barra avisa. A pasta restrita fica de fora.
+- UTSim Segurança do Trabalho: "Editar" nas pessoas da pasta restrita corrige nome, setor e consentimento sem trocar o código (`Restrita::atualizar`). Só a versão nova fica na pasta: os arquivos antigos com o nome errado são apagados, como na anonimização.
+- UTSim Segurança do Trabalho: "Editar" e "Remover" (com confirmação) nas horas-homem de cada mês.
 - UTSim Produto: a corrida da simulação (intervalo, duração, aquecimento, replicações e destino) fica gravada no projeto e não se perde ao fechar. Sem destino escolhido, vale o último modelo gerado.
 - UTSim Produto: um pedido de mudança aberto ou rejeitado pode ser excluído, com confirmação. Um aprovado fica, porque está no histórico dos requisitos.
 - UTSim Produto: **Reabrir o projeto** depois de "Parar" (ou de concluir), na fase em que estava. A reabertura entra na linha do tempo.

@@ -18,6 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::registro::{Acao, Estado, Operacao};
 use crate::{POSTOS, Posto};
@@ -56,6 +57,31 @@ pub struct Manifesto {
     pub restrita: Option<String>,
 }
 
+/// One record changed by an operation of this person: the value before and after
+/// (`None`: the record did not exist, or was removed).
+#[derive(Clone, Debug, PartialEq)]
+struct Mudanca {
+    colecao: String,
+    registro: String,
+    antes: Option<Value>,
+    depois: Option<Value>,
+}
+
+/// How many steps [`Unidade::desfazer`] keeps.
+pub const PASSOS_DE_DESFAZER: usize = 100;
+
+/// What [`Unidade::desfazer`] and [`Unidade::refazer`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Desfeito {
+    /// Nothing to undo (or redo).
+    Nada,
+    /// The step went back (or forward), changing this many records.
+    Feito(usize),
+    /// Someone changed one of those records after this step: nothing was done, and the
+    /// step stays for later.
+    Mudou,
+}
+
 /// A unit folder opened by one person.
 pub struct Unidade {
     raiz: PathBuf,
@@ -67,6 +93,14 @@ pub struct Unidade {
     /// Files that could not be read yet, with the reason.
     pub pendentes: BTreeMap<PathBuf, String>,
     estado: Estado,
+    /// Steps of this person in this session, to undo and redo (each step is one action,
+    /// that may change several records, like a removal that takes the children along).
+    desfazer: Vec<Vec<Mudanca>>,
+    refazer: Vec<Vec<Mudanca>>,
+    /// The step being gathered by [`Unidade::em_grupo`].
+    grupo: Option<Vec<Mudanca>>,
+    /// Writing an undo or a redo: the operations are not new steps.
+    voltando: bool,
 }
 
 fn agora_ms() -> i64 {
@@ -138,6 +172,10 @@ impl Unidade {
             lidos: BTreeSet::new(),
             pendentes: BTreeMap::new(),
             estado: Estado::default(),
+            desfazer: Vec::new(),
+            refazer: Vec::new(),
+            grupo: None,
+            voltando: false,
         };
         u.atualizar()?;
         Ok(u)
@@ -196,27 +234,148 @@ impl Unidade {
     /// Writes one operation file and applies it.
     pub fn registrar(&mut self, colecao: &str, registro: &str, acao: Acao) -> R<Operacao> {
         self.seq += 1;
+        let ultima = self.ops.values().max_by(|a, b| a.chave().cmp(&b.chave()));
+        let instante_ultima = ultima.map_or(0, |o| o.instante_ms);
         let op = Operacao {
             id: novo_id(),
             autor: self.autor.clone(),
             // Never before the last operation known, even if this clock is late.
-            instante_ms: agora_ms()
-                .max(self.ops.values().map(|o| o.instante_ms).max().unwrap_or(0)),
+            instante_ms: agora_ms().max(instante_ultima),
             seq: self.seq,
             colecao: colecao.to_string(),
             registro: registro.to_string(),
             acao,
         };
+        // After every operation known (the usual case): it goes on top of the state,
+        // without replaying (and copying) the whole log again.
+        let no_topo = ultima.is_none_or(|u| op.chave() > u.chave());
         let dir = self.raiz.join(OPS);
         let nome = format!("{}-{}-{}.json", op.instante_ms, seguro(&op.autor), op.id);
         let fim = dir.join(&nome);
         let texto = serde_json::to_string_pretty(&op).expect("operação");
         // Written once and never replaced (G6: the same primitive as the Seis Sigma).
         utsim_pasta::write_new(&fim, texto.as_bytes()).map_err(|e| UnidadeErro(e.to_string()))?;
+        let antes = self.estado.valor(colecao, registro).cloned();
         self.lidos.insert(fim);
+        if no_topo {
+            self.estado.aplicar(&op);
+        }
         self.ops.insert(op.id.clone(), op.clone());
-        self.estado = Estado::reproduzir(self.ops.values());
+        if !no_topo {
+            self.estado = Estado::reproduzir(self.ops.values());
+        }
+        let depois = match &op.acao {
+            Acao::Gravar(v) => Some(v.clone()),
+            Acao::Remover => None,
+        };
+        self.anotar(Mudanca {
+            colecao: colecao.to_string(),
+            registro: registro.to_string(),
+            antes,
+            depois,
+        });
         Ok(op)
+    }
+
+    fn anotar(&mut self, m: Mudanca) {
+        if self.voltando || m.antes == m.depois {
+            return;
+        }
+        match &mut self.grupo {
+            Some(g) => g.push(m),
+            None => self.novo_passo(vec![m]),
+        }
+    }
+
+    fn novo_passo(&mut self, passo: Vec<Mudanca>) {
+        self.desfazer.push(passo);
+        if self.desfazer.len() > PASSOS_DE_DESFAZER {
+            self.desfazer.remove(0);
+        }
+        self.refazer.clear();
+    }
+
+    /// Runs `f` as one step of undo: everything it writes goes back together. Inside
+    /// another group, it joins that one. A failure keeps what was written (as one step).
+    pub fn em_grupo<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
+        let fora = self.grupo.is_none();
+        if fora {
+            self.grupo = Some(Vec::new());
+        }
+        let r = f(self);
+        if fora
+            && let Some(g) = self.grupo.take()
+            && !g.is_empty()
+        {
+            self.novo_passo(g);
+        }
+        r
+    }
+
+    pub fn pode_desfazer(&self) -> bool {
+        !self.desfazer.is_empty()
+    }
+
+    pub fn pode_refazer(&self) -> bool {
+        !self.refazer.is_empty()
+    }
+
+    /// Undoes the last step of this person in this session: each record it changed gets
+    /// back the value it had before, as new operations (the log keeps everything). When
+    /// someone changed one of those records after the step, nothing is done.
+    pub fn desfazer(&mut self) -> R<Desfeito> {
+        let Some(passo) = self.desfazer.pop() else {
+            return Ok(Desfeito::Nada);
+        };
+        if passo
+            .iter()
+            .any(|m| self.estado.valor(&m.colecao, &m.registro) != m.depois.as_ref())
+        {
+            self.desfazer.push(passo);
+            return Ok(Desfeito::Mudou);
+        }
+        let n = passo.len();
+        let r = self.voltar(passo.iter().rev().map(|m| (m, &m.antes)));
+        self.refazer.push(passo);
+        r.map(|()| Desfeito::Feito(n))
+    }
+
+    /// Writes again the last step undone (while nothing else was written).
+    pub fn refazer(&mut self) -> R<Desfeito> {
+        let Some(passo) = self.refazer.pop() else {
+            return Ok(Desfeito::Nada);
+        };
+        if passo
+            .iter()
+            .any(|m| self.estado.valor(&m.colecao, &m.registro) != m.antes.as_ref())
+        {
+            self.refazer.push(passo);
+            return Ok(Desfeito::Mudou);
+        }
+        let n = passo.len();
+        let r = self.voltar(passo.iter().map(|m| (m, &m.depois)));
+        self.desfazer.push(passo);
+        r.map(|()| Desfeito::Feito(n))
+    }
+
+    fn voltar<'a>(
+        &mut self,
+        valores: impl Iterator<Item = (&'a Mudanca, &'a Option<Value>)>,
+    ) -> R<()> {
+        self.voltando = true;
+        let mut r = Ok(());
+        for (m, v) in valores {
+            let acao = match v {
+                Some(v) => Acao::Gravar(v.clone()),
+                None => Acao::Remover,
+            };
+            if let Err(e) = self.registrar(&m.colecao, &m.registro, acao) {
+                r = Err(e);
+                break;
+            }
+        }
+        self.voltando = false;
+        r
     }
 
     /// Writes a record (`id` empty: a new id is made). Returns the id.
@@ -277,7 +436,10 @@ impl Unidade {
 
     /// Forgets the operations matching `apagar` (their files were deleted on purpose, as in
     /// an anonymisation) and rebuilds the state.
+    /// The undo steps go too: they could bring back what was deleted.
     pub fn esquecer(&mut self, apagar: impl Fn(&Operacao) -> bool) {
+        self.desfazer.clear();
+        self.refazer.clear();
         self.ops.retain(|_, op| !apagar(op));
         self.lidos.retain(|p| p.exists());
         self.estado = Estado::reproduzir(self.ops.values());
@@ -343,5 +505,82 @@ mod tests {
         caio.remover(POSTOS, &p2).unwrap();
         ana.atualizar().unwrap();
         assert_eq!(ana.postos().len(), 1);
+    }
+
+    fn nomes(u: &Unidade) -> Vec<String> {
+        u.postos().into_iter().map(|p| p.nome).collect()
+    }
+
+    #[test]
+    fn undo_and_redo_go_back_and_forth_and_stop_when_someone_else_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ana = Unidade::criar(dir.path(), "Fábrica", "ana").unwrap();
+        assert_eq!(ana.desfazer().unwrap(), Desfeito::Nada);
+        let p = ana
+            .gravar_posto(&Posto {
+                nome: "Prensa".into(),
+                ..Posto::default()
+            })
+            .unwrap();
+        let mut posto: Posto = ana.estado().um(POSTOS, &p).unwrap();
+        posto.nome = "Prensa 2".into();
+        ana.gravar_posto(&posto).unwrap();
+        ana.remover(POSTOS, &p).unwrap();
+        assert!(nomes(&ana).is_empty());
+        // Back one step at a time, then forward.
+        assert_eq!(ana.desfazer().unwrap(), Desfeito::Feito(1));
+        assert_eq!(nomes(&ana), ["Prensa 2"]);
+        assert_eq!(ana.desfazer().unwrap(), Desfeito::Feito(1));
+        assert_eq!(nomes(&ana), ["Prensa"]);
+        assert_eq!(ana.refazer().unwrap(), Desfeito::Feito(1));
+        assert_eq!(nomes(&ana), ["Prensa 2"]);
+        // Another person renames it: Ana's step no longer undoes, and stays.
+        let mut bia = Unidade::abrir(dir.path(), "bia").unwrap();
+        posto.nome = "Prensa da Bia".into();
+        bia.gravar_posto(&posto).unwrap();
+        ana.atualizar().unwrap();
+        assert_eq!(ana.desfazer().unwrap(), Desfeito::Mudou);
+        assert!(ana.pode_desfazer());
+        assert_eq!(nomes(&ana), ["Prensa da Bia"]);
+        // A new write clears the redo.
+        assert!(ana.refazer().is_ok());
+        ana.gravar(POSTOS, "", &Posto::default()).unwrap();
+        assert!(!ana.pode_refazer());
+        // Undoing writes new operations: the log keeps everything, and others see it.
+        bia.atualizar().unwrap();
+        assert_eq!(bia.estado(), ana.estado());
+    }
+
+    #[test]
+    fn a_group_goes_back_in_one_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut u = Unidade::criar(dir.path(), "Fábrica", "ana").unwrap();
+        u.em_grupo(|u| {
+            u.gravar(POSTOS, "a", &Posto::default())?;
+            u.em_grupo(|u| u.gravar(POSTOS, "b", &Posto::default()))?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(u.estado().conta(POSTOS), 2);
+        assert_eq!(u.desfazer().unwrap(), Desfeito::Feito(2));
+        assert_eq!(u.estado().conta(POSTOS), 0);
+        assert!(!u.pode_desfazer());
+    }
+
+    #[test]
+    fn writing_on_top_keeps_the_same_state_as_replaying() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut u = Unidade::criar(dir.path(), "Fábrica", "ana").unwrap();
+        for i in 0..20 {
+            let id = format!("p{}", i % 7);
+            if i % 5 == 4 {
+                u.remover(POSTOS, &id).unwrap();
+            } else {
+                u.gravar(POSTOS, &id, &Posto::default()).unwrap();
+            }
+        }
+        let replay = Estado::reproduzir(u.ops.values());
+        assert_eq!(u.estado().conta(POSTOS), replay.conta(POSTOS));
+        assert_eq!(u.estado(), &replay);
     }
 }

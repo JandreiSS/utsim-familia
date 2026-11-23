@@ -333,6 +333,19 @@ sessao-nenhuma_unidade_aberta = Aucune unité ouverte
 sessao-autor = auteur : { $autor }
 sessao-sem_unidade = Sans unité
 sessao-modelo = modèle : { $nome }
+sessao-desfazer = Annuler
+sessao-refazer = Rétablir
+sessao-desfazer_dica = Annule votre dernière modification dans cette unité depuis l'ouverture de l'application (Ctrl+Z hors des champs de texte).
+sessao-refazer_dica = Rétablit ce qui a été annulé (Ctrl+Y ou Ctrl+Maj+Z hors des champs de texte).
+sessao-desfeito = Annulé : { $n ->
+    [one] { $n } enregistrement est revenu à son état précédent.
+   *[other] { $n } enregistrements sont revenus à leur état précédent.
+}
+sessao-refeito = Rétabli : { $n ->
+    [one] { $n } enregistrement.
+   *[other] { $n } enregistrements.
+}
+sessao-desfazer_mudou = Impossible d'annuler : une autre personne a modifié ensuite le même enregistrement. Rien n'a été changé.
 
 ## trabalho.rs
 
