@@ -225,3 +225,31 @@ fn only_aaaa_mm_is_a_month() {
         assert!(!mes_valido(nao), "{nao}");
     }
 }
+
+#[test]
+fn without_exposure_hours_the_indicators_say_zero_with_no_sign() {
+    let k = indicadores(
+        &[],
+        &[],
+        Config::default(),
+        "2026-01-01",
+        "2026-03-31",
+        "2026-04-04",
+    );
+    assert_eq!(k.horas, 0.0);
+    assert!(k.horas.is_sign_positive(), "the sum of nothing came out as -0.0");
+    assert_eq!(format!("{}", k.horas), "0");
+}
+
+#[test]
+fn the_step_names_follow_the_language() {
+    use utsim_seguranca_core::inventario::{ETAPAS, etapa};
+    utsim_idiomas::definir_nesta_thread(Some(utsim_idiomas::Idioma::En));
+    assert_eq!(etapa(0), "1. Identify the workstation");
+    utsim_idiomas::definir_nesta_thread(Some(utsim_idiomas::Idioma::PtBr));
+    assert_eq!(etapa(0), "1. Identificar o posto");
+    assert_eq!(etapa(4), "5. Acompanhar");
+    for i in 0..ETAPAS.len() {
+        assert!(!etapa(i).starts_with("inventario-"), "key without text: {i}");
+    }
+}

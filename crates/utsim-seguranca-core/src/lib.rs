@@ -14,6 +14,7 @@ pub mod incidentes;
 pub mod inventario;
 pub mod matriz;
 pub mod relatorio;
+pub mod texto;
 
 pub use inventario::{Acao, Grupo, Hierarquia, Inventario, Perigo, Reavaliacao, Situacao};
 pub use matriz::Matriz;
