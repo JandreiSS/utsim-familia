@@ -335,6 +335,9 @@ produto desenhado.
   os números do texto. `sem_copias` desenha um processador como um elemento só, qualquer que
   seja a capacidade (a câmara de 10 massas é uma estante, o forno de 2 é um forno), para não
   sugerir como modelar a capacidade.
+- **Mover só no desenho.** `mover: {"ana": (2.0, -3.0)}` desloca um objeto na imagem, em
+  metros da cena, quando o modelo o põe onde a câmera não vê (a operadora atrás dos tornos).
+  A simulação não muda.
 
 ## 4. Recursos do professor
 
