@@ -2,7 +2,7 @@ Missao(
     id: "ato6/trabalho_externo",
     titulo: "Trabalho externo",
     conceitos: ["trabalho_externo", "ciclo", "relacao_homem_maquina"],
-    modelo: "../modelos/operadora.ron",
+    modelo: "../modelos/operadora3.ron",
     texto: "trabalho_externo.md",
     previsao: [
         Escolha(
@@ -40,15 +40,16 @@ Missao(
     referencia: {"metodo": 2},
     animacao: (duracao: 600, unidade: "s"),
     cena: (
-        imagem: "operadora.cena.png",
+        imagem: "trabalho_externo.cena.png",
         escala: 0.8,
-        elementos: {"maq1": "cnc", "maq2": "cnc", "maq3": "cnc", "maq4": "cnc", "maq5": "cnc"},
+        elementos: {"maq1": "cnc", "maq2": "cnc", "maq3": "cnc"},
         pecas: [
             (no: "estoque", elemento: "caixa", dx: -0.7),
             (no: "estoque", elemento: "caixa"),
             (no: "estoque", elemento: "caixa", dx: 0.7),
             (no: "saida", elemento: "caixa"),
         ],
+        mover: {"ana": (2.0, -3.0), "estoque": (4.0, -5.0)},
         pessoas: {"ana": "mulher"},
         cartoes: [
             (no: "ana", tipo: Alavanca("metodo")),

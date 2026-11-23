@@ -8094,7 +8094,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estatistica-app"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "eframe",
  "egui_plot",
@@ -8476,6 +8476,7 @@ dependencies = [
  "tempfile",
  "utsim-core",
  "utsim-diario",
+ "utsim-ferramentas",
  "utsim-idiomas",
  "utsim-launcher-core",
  "utsim-model",

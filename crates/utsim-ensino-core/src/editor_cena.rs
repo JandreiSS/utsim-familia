@@ -200,6 +200,7 @@ impl Edicao {
             ocultar: Vec::new(),
             sem_pessoa: Vec::new(),
             sem_copias: Vec::new(),
+            mover: BTreeMap::new(),
             pessoas: BTreeMap::new(),
             pecas: Vec::new(),
             cartoes,

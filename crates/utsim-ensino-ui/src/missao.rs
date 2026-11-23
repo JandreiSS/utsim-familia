@@ -378,13 +378,18 @@ fn alavanca(ui: &mut Ui, a: &Alavanca, v: &mut f64, id: &str) -> bool {
         Alavanca::Escolha { opcoes, rotulo, .. } => {
             ui.label(rotulo);
             let mut sel = v.round().max(0.0) as usize;
-            ui.horizontal_wrapped(|ui| {
-                for (i, o) in opcoes.iter().enumerate() {
-                    let r = if o.custo > 0.0 {
+            let rotulos: Vec<String> = opcoes
+                .iter()
+                .map(|o| {
+                    if o.custo > 0.0 {
                         format!("{} ({})", o.rotulo, dinheiro(o.custo))
                     } else {
                         o.rotulo.clone()
-                    };
+                    }
+                })
+                .collect();
+            em_linha_ou_coluna(ui, &rotulos, |ui| {
+                for (i, r) in rotulos.iter().enumerate() {
                     ui.push_id((id, i), |ui| ui.radio_value(&mut sel, i, r));
                 }
             });
@@ -417,7 +422,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
             app.tela = Tela::Mapa;
         }
         ui.label(
-            RichText::new(texto::f(
+            RichText::new(texto::f_literal(
                 texto::missao_numero(),
                 &[&numero_missao(&m.pacote, m.indice)],
             ))
@@ -609,7 +614,8 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
                         Some(RespostaPrevisao::Escolha(i)) => Some(*i),
                         _ => None,
                     };
-                    ui.horizontal_wrapped(|ui| {
+                    let rotulos: Vec<&str> = opcoes.iter().map(|o| o.rotulo.as_str()).collect();
+                    em_linha_ou_coluna(ui, &rotulos, |ui| {
                         for (i, o) in opcoes.iter().enumerate() {
                             if ui.radio(atual == Some(i), &o.rotulo).clicked() {
                                 m.tentativa
@@ -772,7 +778,7 @@ pub fn tela_missao(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new(texto::missao_justificativa()).strong());
         for (qi, q) in missao.justificativa.iter().enumerate() {
             ui.label(&q.pergunta);
-            ui.horizontal_wrapped(|ui| {
+            em_linha_ou_coluna(ui, &q.opcoes, |ui| {
                 for (i, o) in q.opcoes.iter().enumerate() {
                     let sel = m.tentativa.justificativas.get(qi).copied().flatten() == Some(i);
                     if ui.radio(sel, o).clicked() {
@@ -1263,4 +1269,16 @@ pub fn tela_areia(app: &mut App, ui: &mut Ui) {
             });
         }
     });
+}
+
+/// Options side by side when they are short, one under the other when long: a long label at
+/// the end of a row would wrap into a column one word wide.
+fn em_linha_ou_coluna<S: AsRef<str>>(ui: &mut Ui, rotulos: &[S], conteudo: impl FnOnce(&mut Ui)) {
+    let total: usize = rotulos.iter().map(|r| r.as_ref().chars().count() + 6).sum();
+    // About 7 points a character in the body font.
+    if total as f32 * 7.0 <= ui.available_width() {
+        ui.horizontal_wrapped(conteudo);
+    } else {
+        ui.vertical(conteudo);
+    }
 }

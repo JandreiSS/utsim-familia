@@ -341,5 +341,31 @@ fn modelagem_desenha_o_gabarito_sem_copias() {
     // The chamber (capacity 10) and the oven (capacity 2) are one element each.
     assert!(p.objetos.iter().all(|o| !o.nome.contains('#')));
     let forno = p.objetos.iter().find(|o| o.nome == "forno").unwrap();
-    assert_eq!(forno.elemento, "cnc");
+    assert_eq!(forno.elemento, "forno");
+}
+
+#[test]
+fn mover_tira_a_operadora_de_tras_das_maquinas() {
+    let (m, modelo) = com_cena()
+        .into_iter()
+        .find(|(m, _)| m.id == "ato6/trabalho_externo")
+        .unwrap();
+    let c = m.cena.as_ref().unwrap();
+    let p = c.planta(&modelo, None);
+    // Ana stands at y = 1 in the model, behind the machines; the picture brings her to the
+    // front (the camera looks from -y), and the simulation keeps her place.
+    let ana = p.objetos.iter().find(|o| o.nome == "ana").unwrap();
+    assert!(ana.y < 0.0, "{}", ana.y);
+    assert_eq!(
+        modelo
+            .objects
+            .iter()
+            .find(|o| o.name == "ana")
+            .unwrap()
+            .position[1],
+        1.0
+    );
+    // Three lathes, as the statement says.
+    let maquinas = p.objetos.iter().filter(|o| o.elemento == "cnc").count();
+    assert_eq!(maquinas, 3);
 }
