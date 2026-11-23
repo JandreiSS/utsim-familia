@@ -104,6 +104,17 @@ impl Incidente {
     }
 }
 
+/// Whether `mes` is a month `AAAA-MM`: four digits, a dash and 01 to 12 (`2025/03` and
+/// `2025-13` are not).
+pub fn mes_valido(mes: &str) -> bool {
+    let b = mes.as_bytes();
+    b.len() == 7
+        && b[4] == b'-'
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[5..].iter().all(u8::is_ascii_digit)
+        && matches!(mes[5..].parse::<u32>(), Ok(1..=12))
+}
+
 /// Exposure hours of one month (`AAAA-MM`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct HorasHomem {

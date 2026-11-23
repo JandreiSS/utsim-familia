@@ -212,3 +212,16 @@ fn names_never_leave_the_restricted_folder() {
     assert!(nomes_no_texto(&texto, &r.pessoas()).is_empty());
     assert!(texto.contains(&codigo));
 }
+
+#[test]
+fn only_aaaa_mm_is_a_month() {
+    use utsim_seguranca_core::incidentes::mes_valido;
+    for ok in ["2025-03", "2026-12", "1999-01"] {
+        assert!(mes_valido(ok), "{ok}");
+    }
+    for nao in [
+        "2025/03", "2025-13", "2025-00", "2025-3", "25-03-01", "abcd-03", "2025-03 ", "",
+    ] {
+        assert!(!mes_valido(nao), "{nao}");
+    }
+}

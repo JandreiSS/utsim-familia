@@ -331,6 +331,19 @@ sessao-nenhuma_unidade_aberta = Ninguna unidad abierta
 sessao-autor = autor: { $autor }
 sessao-sem_unidade = Sin unidad
 sessao-modelo = modelo: { $nome }
+sessao-desfazer = Deshacer
+sessao-refazer = Rehacer
+sessao-desfazer_dica = Deshace su último cambio en esta unidad desde que se abrió la aplicación (Ctrl+Z fuera de los campos de texto).
+sessao-refazer_dica = Rehace lo deshecho (Ctrl+Y o Ctrl+Shift+Z fuera de los campos de texto).
+sessao-desfeito = Deshecho: { $n ->
+    [one] { $n } registro volvió a lo que era.
+   *[other] { $n } registros volvieron a lo que eran.
+}
+sessao-refeito = Rehecho: { $n ->
+    [one] { $n } registro.
+   *[other] { $n } registros.
+}
+sessao-desfazer_mudou = No se puede deshacer: otra persona cambió después el mismo registro. No se cambió nada.
 
 ## trabalho.rs
 

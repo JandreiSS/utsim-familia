@@ -156,6 +156,38 @@ impl Restrita {
             codigo,
             Acao::Gravar(serde_json::to_value(&p).expect("pessoa")),
         )?;
+        self.apagar_anteriores(codigo, &nova.id)
+    }
+
+    /// Corrects the name, sector, health notes or consent of a person (the code stays).
+    /// As in [`Restrita::anonimizar`], only the new version stays: the older operation files
+    /// of the person are deleted, so a wrong name or sector does not linger in the folder.
+    /// An anonymised person cannot get data back.
+    pub fn atualizar(&mut self, p: &Pessoa) -> R<()> {
+        self.exigir_escrita()?;
+        let atual = self
+            .pessoa(&p.codigo)
+            .ok_or_else(|| UnidadeErro(format!("{} não está na pasta restrita", p.codigo)))?;
+        if atual.anonimizada {
+            return Err(UnidadeErro(format!(
+                "{} foi anonimizada: os dados pessoais não voltam",
+                p.codigo
+            )));
+        }
+        let nova = Pessoa {
+            anonimizada: false,
+            ..p.clone()
+        };
+        let op = self.unidade.registrar(
+            PESSOAS,
+            &p.codigo,
+            Acao::Gravar(serde_json::to_value(&nova).expect("pessoa")),
+        )?;
+        self.apagar_anteriores(&p.codigo, &op.id)
+    }
+
+    /// Deletes every operation file of person `codigo` but `manter`, and forgets them.
+    fn apagar_anteriores(&mut self, codigo: &str, manter: &str) -> R<()> {
         let dir = self.unidade.raiz().join(OPS);
         for e in fs::read_dir(&dir)
             .map_err(|e| UnidadeErro(e.to_string()))?
@@ -168,12 +200,12 @@ impl Restrita {
             let Ok(op) = serde_json::from_str::<crate::registro::Operacao>(&texto) else {
                 continue;
             };
-            if op.colecao == PESSOAS && op.registro == codigo && op.id != nova.id {
+            if op.colecao == PESSOAS && op.registro == codigo && op.id != manter {
                 fs::remove_file(&path).map_err(|e| UnidadeErro(e.to_string()))?;
             }
         }
         self.unidade
-            .esquecer(|op| op.colecao == PESSOAS && op.registro == codigo && op.id != nova.id);
+            .esquecer(|op| op.colecao == PESSOAS && op.registro == codigo && op.id != manter);
         Ok(())
     }
 }
@@ -254,5 +286,44 @@ mod tests {
             .abrir_restrita()
             .unwrap();
         assert_eq!(reaberta.pessoa(&codigo).unwrap().nome, ANONIMIZADO);
+    }
+
+    #[test]
+    fn name_and_sector_can_be_corrected_and_the_old_ones_are_gone() {
+        let unidade = tempfile::tempdir().unwrap();
+        let mut u = Unidade::criar(unidade.path(), "Fábrica", "tecnica").unwrap();
+        let mut r = u.criar_restrita(None, &[]).unwrap();
+        let codigo = r
+            .cadastrar(Pessoa {
+                nome: "Joao Sliva".into(),
+                setor: "pintura".into(),
+                ..Pessoa::default()
+            })
+            .unwrap();
+        let mut p = r.pessoa(&codigo).unwrap();
+        p.nome = "João Silva".into();
+        p.setor = "solda".into();
+        r.atualizar(&p).unwrap();
+        let lida = u.abrir_restrita().unwrap().pessoa(&codigo).unwrap();
+        assert_eq!(
+            (lida.nome.as_str(), lida.setor.as_str()),
+            ("João Silva", "solda")
+        );
+        // The wrong name is in no file of the restricted folder any more.
+        for e in fs::read_dir(r.unidade.raiz().join(OPS)).unwrap().flatten() {
+            let t = fs::read_to_string(e.path()).unwrap();
+            assert!(!t.contains("Sliva") && !t.contains("pintura"), "{t}");
+        }
+        // An unknown code, or an anonymised person, is refused.
+        assert!(
+            r.atualizar(&Pessoa {
+                codigo: "P-000000".into(),
+                ..p.clone()
+            })
+            .is_err()
+        );
+        r.anonimizar(&codigo).unwrap();
+        assert!(r.atualizar(&p).is_err());
+        assert!(r.pessoa(&codigo).unwrap().anonimizada);
     }
 }
