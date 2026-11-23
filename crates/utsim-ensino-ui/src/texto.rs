@@ -45,6 +45,18 @@ pub fn f(modelo: Modelo, valores: &[&dyn Display]) -> String {
     TEXTOS.f(modelo.chave, &args)
 }
 
+/// Like [`f`], with every value kept as written: a mission number `6.2` is not a decimal
+/// (it would become `6,2`).
+pub fn f_literal(modelo: Modelo, valores: &[&str]) -> String {
+    let args: Vec<(&str, utsim_idiomas::Valor)> = modelo
+        .nomes
+        .iter()
+        .zip(valores)
+        .map(|(n, v)| (*n, v.to_string().into()))
+        .collect();
+    TEXTOS.f(modelo.chave, &args)
+}
+
 fn valor(s: String) -> utsim_idiomas::Valor<'static> {
     if let Ok(n) = s.parse::<i64>()
         && n.to_string() == s

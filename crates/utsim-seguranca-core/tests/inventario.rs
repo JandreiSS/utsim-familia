@@ -248,3 +248,120 @@ fn a_unit_hazard_passes_to_the_node_with_its_actions() {
     assert_eq!(inv.ultima_reavaliacao(novo).unwrap().probabilidade, 1);
     assert!(inv.acoes_do_perigo(&id).is_empty());
 }
+
+#[test]
+fn a_person_under_a_suspended_load_suggests_a_hazard_for_the_crane_station() {
+    let caminho = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/ponte_rolante.ron");
+    let model = utsim_model::Model::load(&caminho).unwrap();
+    let mut e = utsim_exposicao::analyze(&model, 0, utsim_exposicao::Options::default()).unwrap();
+    e.under_load = vec![
+        utsim_exposicao::UnderLoad {
+            crane: "ponte".into(),
+            person: "inspetor".into(),
+            time: 64.0,
+            entries: 1,
+        },
+        utsim_exposicao::UnderLoad {
+            crane: "ponte".into(),
+            person: "soldador".into(),
+            time: 0.0,
+            entries: 0,
+        },
+    ];
+    let postos = [
+        Posto {
+            id: "p1".into(),
+            nome: "Ponte".into(),
+            objeto: Some("ponte".into()),
+            ..Posto::default()
+        },
+        Posto {
+            id: "p2".into(),
+            nome: "Expedição".into(),
+            objeto: Some("expedicao".into()),
+            ..Posto::default()
+        },
+    ];
+    let sug = perigos_da_exposicao(&postos, &e, &model);
+    let carga: Vec<&Perigo> = sug
+        .iter()
+        .filter(|p| p.descricao.contains("carga suspensa"))
+        .collect();
+    assert_eq!(carga.len(), 1, "{sug:?}");
+    assert_eq!(carga[0].posto, "p1");
+    assert!(carga[0].circunstancia.contains("inspetor"));
+    assert_eq!((carga[0].probabilidade, carga[0].severidade), (0, 0));
+    // The exposure report has the section, with the target of zero.
+    let html = utsim_exposicao::relatorio::html(&model, std::slice::from_ref(&e));
+    assert!(html.contains("Pessoas sob carga suspensa"));
+    assert!(html.contains("inspetor"));
+}
+
+#[test]
+fn removing_a_hazard_takes_its_actions_and_reassessments() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Fábrica", "Bia").unwrap();
+    let perigo = |d: &str| Perigo {
+        posto: "p1".into(),
+        descricao: d.into(),
+        probabilidade: 2,
+        severidade: 2,
+        ..Perigo::default()
+    };
+    let id = u.gravar(PERIGOS, "", &perigo("Ruído")).unwrap();
+    let outro = u.gravar(PERIGOS, "", &perigo("Calor")).unwrap();
+    for p in [&id, &outro] {
+        u.gravar(
+            ACOES,
+            "",
+            &Acao {
+                perigo: p.clone(),
+                descricao: "Enclausurar".into(),
+                ..Acao::default()
+            },
+        )
+        .unwrap();
+        u.gravar(
+            REAVALIACOES,
+            "",
+            &Reavaliacao {
+                perigo: p.clone(),
+                data: "2026-11-20".into(),
+                probabilidade: 1,
+                severidade: 2,
+                ..Reavaliacao::default()
+            },
+        )
+        .unwrap();
+    }
+    assert_eq!(inventario::remover_perigo(&mut u, &id).unwrap(), 2);
+    let inv = Inventario::ler(&u);
+    assert_eq!(inv.perigos.len(), 1);
+    assert!(inv.acoes.iter().all(|a| a.perigo == outro));
+    assert!(inv.reavaliacoes.iter().all(|r| r.perigo == outro));
+    assert_eq!(inv.acoes.len(), 1);
+    assert_eq!(inv.reavaliacoes.len(), 1);
+}
+
+#[test]
+fn a_reassessment_saved_as_it_is_counts_as_repeated() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Fábrica", "Bia").unwrap();
+    let r = Reavaliacao {
+        perigo: "h1".into(),
+        data: "2026-11-20".into(),
+        probabilidade: 1,
+        severidade: 3,
+        nota: "Protetor trocado".into(),
+        ..Reavaliacao::default()
+    };
+    assert!(!Inventario::ler(&u).reavaliacao_repetida(&r));
+    u.gravar(REAVALIACOES, "", &r).unwrap();
+    let inv = Inventario::ler(&u);
+    assert!(inv.reavaliacao_repetida(&r));
+    let mut outra = r.clone();
+    outra.nota = "Protetor trocado ".into();
+    assert!(inv.reavaliacao_repetida(&outra));
+    outra.severidade = 2;
+    assert!(!inv.reavaliacao_repetida(&outra));
+}

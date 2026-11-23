@@ -4,6 +4,7 @@ mod combiner;
 mod conveyor;
 pub mod crane;
 mod dispatcher;
+pub mod loads;
 pub mod network;
 mod processor;
 mod queue;
@@ -21,10 +22,13 @@ pub use combiner::{CombineMode, Combiner};
 pub use conveyor::Conveyor;
 pub use crane::{Axis, CraneLane, CraneMotion, CraneOperator, CraneSpec};
 pub use dispatcher::{DispatchRule, Dispatcher, Preempt, TaskPick};
+pub use loads::LoadBoard;
 pub use processor::{
     Changeover, ChangeoverTime, Operation, OperatorUse, Processor, Recipe, RecipeTime,
 };
-pub use queue::{ABANDONED_LABEL, Batch, Discipline, Gather, LabelOrder, Queue, Waves};
+pub use queue::{
+    ABANDONED_LABEL, Batch, Discipline, Gather, LabelOrder, Pick, PickRule, Queue, Waves,
+};
 pub use rack::{Access, CLASS_LABEL, Rack, RackPlacement};
 pub use separator::{LINE_LABEL, MAX_SPLIT, SeparateMode, Separator};
 pub use sink::{Sink, TypedSink};

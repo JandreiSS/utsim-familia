@@ -533,25 +533,29 @@ pub fn under_loads(
         if total.is_finite() && total / step > MAX_SAMPLES as f64 {
             step = total / MAX_SAMPLES as f64;
         }
-        for p in people {
-            let mut time = 0.0;
-            let mut entries = 0;
-            for &(a, b) in &spans {
-                let n = ((b - a) / step).ceil().clamp(1.0, MAX_SAMPLES as f64) as usize;
-                let dt = (b - a) / n as f64;
-                let mut was_in = false;
-                for k in 0..n {
-                    let t = a + (k as f64 + 0.5) * dt;
-                    let inside = load.zone.contains(load.at(t), p.at(t));
+        // Per person: time, entries and whether it was under the load at the last sample.
+        // The hook is found once per sample for all of them.
+        let mut acc: Vec<(f64, u32, bool)> = vec![(0.0, 0, false); people.len()];
+        for &(a, b) in &spans {
+            let n = ((b - a) / step).ceil().clamp(1.0, MAX_SAMPLES as f64) as usize;
+            let dt = (b - a) / n as f64;
+            acc.iter_mut().for_each(|x| x.2 = false);
+            for k in 0..n {
+                let t = a + (k as f64 + 0.5) * dt;
+                let hook = load.at(t);
+                for (p, (time, entries, was_in)) in people.iter().zip(acc.iter_mut()) {
+                    let inside = load.zone.contains(hook, p.at(t));
                     if inside {
-                        time += dt;
-                        if !was_in {
-                            entries += 1;
+                        *time += dt;
+                        if !*was_in {
+                            *entries += 1;
                         }
                     }
-                    was_in = inside;
+                    *was_in = inside;
                 }
             }
+        }
+        for (p, (time, entries, _)) in people.iter().zip(acc) {
             out.push(UnderLoad {
                 crane: load.name.clone(),
                 person: p.name.clone(),
@@ -596,7 +600,31 @@ pub fn analyze(model: &Model, replication: u32, options: Options) -> Result<Expo
     let people: Vec<&Track> = tracks.iter().filter(|t| t.is_person()).collect();
     let loads = load_tracks(model, &replay.records, stop);
     e.under_load = under_loads(&people, &loads, from, stop, options.step);
+    e.warnings.extend(keep_clear_hints(model, &e.under_load));
     Ok(e)
+}
+
+/// Cranes whose load passed over people without `keep_clear`: what to turn on.
+fn keep_clear_hints(model: &Model, under: &[UnderLoad]) -> Vec<String> {
+    let mut out = Vec::new();
+    for o in &model.objects {
+        let ObjectKind::Crane { keep_clear, .. } = &o.kind else {
+            continue;
+        };
+        let time: f64 = under
+            .iter()
+            .filter(|u| u.crane == o.name)
+            .map(|u| u.time)
+            .sum();
+        if *keep_clear || time <= 0.0 {
+            continue;
+        }
+        out.push(format!(
+            "ponte '{}': pessoas passaram {:.1} s sob a carga; com keep_clear (afastar_pessoas)              quem anda espera a carga passar e a ponte espera quem atravessa",
+            o.name, time
+        ));
+    }
+    out
 }
 
 /// Exposure of every replication of the model (`run.replications`).

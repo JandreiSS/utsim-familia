@@ -841,6 +841,23 @@ impl Ctx<'_> {
     /// numeric label `label`: smallest value first, or largest first with `descending`.
     /// Ties keep the order of release; an item without the label (or with a text value)
     /// ranks after every item that has it.
+    /// Reorders the items this block released and that have not left yet, smallest
+    /// `key` first (stable: equal keys keep their order).
+    pub fn sort_outbox(&mut self, key: impl Fn(&Item) -> f64) {
+        let core = &mut self.core;
+        let items = &core.items;
+        let outbox = &mut core.blocks[self.me.0].outbox;
+        if outbox.len() < 2 {
+            return;
+        }
+        // Each key once (not once per comparison).
+        let mut keyed: Vec<(f64, Pending)> =
+            outbox.drain(..).map(|p| (key(&items[p.item]), p)).collect();
+        keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+        outbox.extend(keyed.into_iter().map(|(_, p)| p));
+        core.mark_dirty(self.me);
+    }
+
     pub fn release_ordered(&mut self, id: ItemId, label: &str, descending: bool) {
         let worst = if descending {
             f64::NEG_INFINITY
