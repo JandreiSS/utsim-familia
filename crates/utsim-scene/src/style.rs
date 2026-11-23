@@ -124,29 +124,87 @@ pub fn extents(shape: Shape) -> ([f32; 3], f32) {
     }
 }
 
-/// Offset of item slot `i` (0 = oldest) from the block's base center.
+/// Offset of item slot `i` (0 = oldest) from the block's base center, at the shape's
+/// default size.
 pub fn slot_offset(shape: Shape, i: usize) -> [f32; 3] {
-    let (_, top) = extents(shape);
-    const S: f32 = 0.4;
-    if shape == Shape::LongBox {
-        // 10 along the queue (oldest at the exit, +X), 3 lanes, then stacked.
-        let col = i % 10;
-        let lane = (i / 10) % 3;
-        let layer = i / 30;
-        [
-            1.8 - col as f32 * S,
-            top + 0.17 + layer as f32 * 0.32,
-            (lane as f32 - 1.0) * S,
-        ]
+    slot_offset_in(shape, i, extents(shape).0)
+}
+
+/// Distance between two resting items on a block, metres.
+const SLOT_PITCH: f32 = 0.4;
+
+/// Columns (along `x`) and lanes (across) of resting items on a block of half extents
+/// `half`: the default grid (10 × 3 on a queue, 3 × 3 elsewhere) grown or shrunk with the
+/// block, at least one of each.
+pub fn slot_grid(shape: Shape, half: [f32; 3]) -> (usize, usize) {
+    let (d, _) = extents(shape);
+    let (cols, lanes) = if shape == Shape::LongBox {
+        (10, 3)
     } else {
-        let cell = i % 9;
-        let layer = i / 9;
-        [
-            ((cell % 3) as f32 - 1.0) * S,
-            top + 0.17 + layer as f32 * 0.32,
-            ((cell / 3) as f32 - 1.0) * S,
-        ]
+        (3, 3)
+    };
+    let n = |k: usize, h: f32, dh: f32| {
+        if h.is_finite() && h > 0.0 {
+            ((k as f32 * h / dh).round() as usize).max(1)
+        } else {
+            k
+        }
+    };
+    (n(cols, half[0], d[0]), n(lanes, half[2], d[2]))
+}
+
+/// Offset of item slot `i` (0 = oldest) from the base center of a block of half extents
+/// `half` (its size in the model): the items lie on its top in [`slot_grid`], the oldest
+/// of a queue at its exit (`+X`), then stack.
+pub fn slot_offset_in(shape: Shape, i: usize, half: [f32; 3]) -> [f32; 3] {
+    let (cols, lanes) = slot_grid(shape, half);
+    let per = cols * lanes;
+    let (k, layer) = (i % per, i / per);
+    let (col, lane) = (k % cols, k / cols);
+    let mid = |n: usize| (n as f32 - 1.0) / 2.0;
+    let x = if shape == Shape::LongBox {
+        mid(cols) - col as f32
+    } else {
+        col as f32 - mid(cols)
+    };
+    [
+        x * SLOT_PITCH,
+        2.0 * half[1] + 0.17 + layer as f32 * 0.32,
+        (lane as f32 - mid(lanes)) * SLOT_PITCH,
+    ]
+}
+
+/// Places of the items resting on a block with `n` places, oldest first: each item has
+/// its own place while it rests, its arrival number (`seq`) modulo `n`, so the others do
+/// not move when one leaves. Two items wanting the same place (a stack, or more than `n`
+/// waiting) leave the newer to the lowest free place; past `n` items, `None` (not drawn).
+pub fn pick_slots(seqs: &[Option<u32>], n: usize) -> Vec<Option<usize>> {
+    let mut out = vec![None; seqs.len()];
+    if n == 0 {
+        return out;
     }
+    let mut used = vec![false; n];
+    let shown = seqs.len().min(n);
+    for (k, seq) in seqs.iter().take(shown).enumerate() {
+        if let Some(s) = seq {
+            let want = *s as usize % n;
+            if !used[want] {
+                used[want] = true;
+                out[k] = Some(want);
+            }
+        }
+    }
+    let mut free = 0;
+    for slot in out.iter_mut().take(shown) {
+        if slot.is_none() {
+            while used[free] {
+                free += 1;
+            }
+            used[free] = true;
+            *slot = Some(free);
+        }
+    }
+    out
 }
 
 /// Layers of items drawn on a block; items beyond that are not drawn (the label shows "+N").
@@ -154,8 +212,13 @@ pub const MAX_LAYERS: usize = 2;
 
 /// How many resting items a block of this shape draws at most.
 pub fn visible_slots(shape: Shape) -> usize {
-    let per_layer = if shape == Shape::LongBox { 30 } else { 9 };
-    per_layer * MAX_LAYERS
+    visible_slots_in(shape, extents(shape).0)
+}
+
+/// How many resting items a block of half extents `half` draws at most.
+pub fn visible_slots_in(shape: Shape, half: [f32; 3]) -> usize {
+    let (cols, lanes) = slot_grid(shape, half);
+    cols * lanes * MAX_LAYERS
 }
 
 /// Items of a block that are not drawn because the stack is capped.
@@ -165,11 +228,15 @@ pub fn hidden_items(shape: Shape, resting: usize) -> usize {
 
 /// Height above the block base of the top of what is drawn on it (`drawn` items).
 pub fn top_of_stack(shape: Shape, drawn: usize) -> f32 {
-    let (half, _) = extents(shape);
+    top_of_stack_in(shape, drawn, extents(shape).0)
+}
+
+/// [`top_of_stack`] on a block of half extents `half`.
+pub fn top_of_stack_in(shape: Shape, drawn: usize, half: [f32; 3]) -> f32 {
     if drawn == 0 {
         half[1] * 2.0
     } else {
-        slot_offset(shape, drawn.min(visible_slots(shape)) - 1)[1] + 0.2
+        slot_offset_in(shape, drawn.min(visible_slots_in(shape, half)) - 1, half)[1] + 0.2
     }
 }
 
@@ -254,6 +321,56 @@ mod tests {
             state_color(Some(State::TravelEmpty)),
             state_color(Some(State::Loading))
         );
+    }
+
+    #[test]
+    fn resting_items_keep_their_places_when_one_leaves() {
+        // Items 0..5 arrived in order; with 8 places each has its own.
+        let seqs: Vec<Option<u32>> = (0..5).map(Some).collect();
+        assert_eq!(
+            pick_slots(&seqs, 8),
+            vec![Some(0), Some(1), Some(2), Some(3), Some(4)]
+        );
+        // The oldest left (FIFO): the others stay where they were.
+        assert_eq!(
+            pick_slots(&seqs[1..], 8),
+            vec![Some(1), Some(2), Some(3), Some(4)]
+        );
+        // The next arrivals wrap around into the places freed at the front.
+        let seqs: Vec<Option<u32>> = (6..10).map(Some).collect();
+        assert_eq!(
+            pick_slots(&seqs, 8),
+            vec![Some(6), Some(7), Some(0), Some(1)]
+        );
+        // A clash (a stack keeps an old item under new ones) takes the lowest free place;
+        // no arrival number takes one too; past the places, not drawn.
+        assert_eq!(
+            pick_slots(&[Some(0), Some(3), None, Some(1)], 3),
+            vec![Some(0), Some(1), Some(2), None]
+        );
+    }
+
+    #[test]
+    fn slots_follow_the_size_of_the_block() {
+        // The default size keeps the old grid.
+        let near = |a: [f32; 3], b: [f32; 3]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-5);
+        assert!(near(slot_offset(Shape::LongBox, 0), [1.8, 0.47, -0.4]));
+        assert!(near(
+            slot_offset(Shape::LongBox, 13),
+            [1.8 - 1.2, 0.47, 0.0]
+        ));
+        assert!(near(slot_offset(Shape::Box, 4), [0.0, 1.17, 0.0]));
+        // A queue twice as long has twice the columns, and its oldest item at its exit.
+        let (d, _) = extents(Shape::LongBox);
+        let long = [2.0 * d[0], d[1], d[2]];
+        assert_eq!(slot_grid(Shape::LongBox, long), (20, 3));
+        assert!((slot_offset_in(Shape::LongBox, 0, long)[0] - 3.8).abs() < 1e-5);
+        assert_eq!(visible_slots_in(Shape::LongBox, long), 120);
+        // A taller block lifts its items with its top.
+        let tall = [d[0], 1.0, d[2]];
+        assert!((slot_offset_in(Shape::LongBox, 0, tall)[1] - 2.17).abs() < 1e-5);
+        // A small one keeps one slot.
+        assert_eq!(slot_grid(Shape::Box, [0.1, 0.5, 0.1]), (1, 1));
     }
 
     #[test]

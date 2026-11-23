@@ -76,6 +76,9 @@ enum ItemStep {
         from: usize,
         to: usize,
         transit: f64,
+        /// How many items had arrived at `to` before this one (its arrival number there):
+        /// it gives the item a place on the block that it keeps while it rests there.
+        seq: u32,
     },
     /// Left `from` on a timed direct connection; the `Moved` that follows is the arrival.
     /// `flight` indexes `Timeline::flights`; `delay` is the wait before moving.
@@ -113,11 +116,11 @@ pub(crate) struct TravelLeg {
 /// An item handed to (`pickup`) or taken from a mobile resource: the `Moved` event
 /// between the carrier and `other`, at `t`.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Handoff {
-    pub(crate) t: f64,
-    pub(crate) item: usize,
-    pub(crate) other: usize,
-    pub(crate) pickup: bool,
+pub struct Handoff {
+    pub t: f64,
+    pub item: usize,
+    pub other: usize,
+    pub pickup: bool,
 }
 
 impl TravelLeg {
@@ -344,7 +347,7 @@ pub struct Timeline {
 /// default SipHash showed up as the top cost of `Timeline::build` (one lookup per record).
 /// The keys are trace ids and block/item indices, never attacker-controlled.
 #[derive(Clone, Copy, Default)]
-pub(crate) struct FxHasher(u64);
+pub struct FxHasher(u64);
 
 impl FxHasher {
     fn mix(&mut self, word: u64) {
@@ -376,7 +379,8 @@ impl Hasher for FxHasher {
     }
 }
 
-pub(crate) type FxMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+/// A hash map with the fast hasher of the timeline (integer keys of the trace).
+pub type FxMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 /// Samples `(t, level, rate)` of each fluid node, by (network block, node).
 type FluidSeries = HashMap<(usize, usize), Vec<(f64, f64, f64)>>;
@@ -403,6 +407,9 @@ fn median(values: &mut [f64]) -> Option<f64> {
     Some(*values.select_nth_unstable_by(mid, f64::total_cmp).1)
 }
 
+/// Steps of the trace up to which the default transit time looks at every item's gaps.
+const GAP_SAMPLE: usize = 1_000_000;
+
 impl Timeline {
     pub fn build(replay: &Replay, setting: TransitSetting) -> Self {
         let n_blocks = replay.blocks.len();
@@ -425,7 +432,9 @@ impl Timeline {
             .map(|b| is_positioned_kind(&b.kind))
             .collect();
         let is_positioned = |b: usize| positioned.get(b).copied().unwrap_or(false);
-        let is_belt = |b: usize| replay.blocks.get(b).is_some_and(|x| x.kind == "Conveyor");
+        // Per block, once: the test runs several times for each of millions of records.
+        let belt: Vec<bool> = replay.blocks.iter().map(|b| b.kind == "Conveyor").collect();
+        let is_belt = |b: usize| belt.get(b).copied().unwrap_or(false);
         let mut belt_events: HashMap<usize, Vec<BeltEv>> = HashMap::new();
         let mut belt_halted: HashMap<usize, bool> = HashMap::new();
         let mut slots: FxMap<(usize, usize), Vec<(f64, usize)>> = FxMap::default();
@@ -492,12 +501,14 @@ impl Timeline {
                     // The arrival of a timed transfer: the departure was already counted.
                     let arriving =
                         matches!(items[i].steps.last(), Some((_, ItemStep::Flight { .. })));
+                    let seq = blocks.get(*to).map_or(0, |track| track.arrivals.len()) as u32;
                     items[i].steps.push((
                         t,
                         ItemStep::Moved {
                             from: *from,
                             to: *to,
                             transit: 0.0,
+                            seq,
                         },
                     ));
                     if !arriving {
@@ -675,8 +686,13 @@ impl Timeline {
         // Global fallback: median positive gap over all items.
         let global_default = match setting {
             TransitSetting::Auto => {
+                // A long trace (millions of steps) takes the median of a sample of the
+                // items, spread over the run: the same value within the sampling, without
+                // a vector of every gap.
+                let steps: usize = items.iter().map(|it| it.steps.len()).sum();
+                let every = (steps / GAP_SAMPLE).max(1);
                 let mut all_gaps: Vec<f64> = Vec::new();
-                for it in &items {
+                for it in items.iter().step_by(every) {
                     all_gaps.extend(positive_gaps(&it.steps));
                 }
                 (0.4 * median(&mut all_gaps).unwrap_or(hi)).clamp(lo, hi)
@@ -704,7 +720,10 @@ impl Timeline {
                 let next = it.steps.get(k + 1).map(|s| s.0);
                 let here = it.steps[k].0;
                 let after_flight = k > 0 && matches!(it.steps[k - 1].1, ItemStep::Flight { .. });
-                if let ItemStep::Moved { from, to, transit } = &mut it.steps[k].1 {
+                if let ItemStep::Moved {
+                    from, to, transit, ..
+                } = &mut it.steps[k].1
+                {
                     if after_flight {
                         *transit = 0.0;
                         continue;
@@ -791,7 +810,7 @@ impl Timeline {
     }
 
     /// Items handed to or taken from mobile block `b`, in time order.
-    pub(crate) fn handoffs(&self, b: usize) -> &[Handoff] {
+    pub fn handoffs(&self, b: usize) -> &[Handoff] {
         self.handoffs.get(&b).map_or(&[], Vec::as_slice)
     }
 
@@ -955,6 +974,20 @@ impl Timeline {
             .map_or(0, |track| track.arrivals.partition_point(|&a| a <= t))
     }
 
+    /// The state records of block `b` (time, state), in order.
+    pub fn block_states(&self, b: usize) -> &[(f64, State)] {
+        self.blocks
+            .get(b)
+            .map_or(&[], |track| track.states.as_slice())
+    }
+
+    /// The times items arrived at block `b`, in order.
+    pub fn block_arrivals(&self, b: usize) -> &[f64] {
+        self.blocks
+            .get(b)
+            .map_or(&[], |track| track.arrivals.as_slice())
+    }
+
     /// Creation block of an item (for coloring), if known.
     pub fn item_origin(&self, item: usize) -> Option<usize> {
         match self.items.get(item)?.steps.first()?.1 {
@@ -992,7 +1025,9 @@ impl Timeline {
         let (te, step) = track.steps[k];
         let pos = match step {
             ItemStep::Created(b) | ItemStep::Unpacked(b) => ItemPos::At(b),
-            ItemStep::Moved { from, to, transit } => {
+            ItemStep::Moved {
+                from, to, transit, ..
+            } => {
                 if transit > 0.0 && t < te + transit {
                     ItemPos::Transit {
                         from,
@@ -1029,6 +1064,18 @@ impl Timeline {
     }
 
     /// Appends the dense indices of the items that exist at `t`.
+    /// Arrival number of `item` at the block it rests on at `t` (how many items had
+    /// arrived there before it), when it came by a move; `None` when it was created or
+    /// unpacked there, or is not resting.
+    pub fn item_visit(&self, item: usize, t: f64) -> Option<u32> {
+        let track = self.items.get(item)?;
+        let k = track.steps.partition_point(|s| s.0 <= t).checked_sub(1)?;
+        match track.steps[k].1 {
+            ItemStep::Moved { seq, .. } => Some(seq),
+            _ => None,
+        }
+    }
+
     pub fn live_items(&self, t: f64, out: &mut Vec<usize>) {
         self.live.alive(t, out);
     }
@@ -1148,7 +1195,10 @@ mod tests {
         for i in 0..tl.item_count() {
             let track = &tl.items[i];
             for (k, (te, step)) in track.steps.iter().enumerate() {
-                let ItemStep::Moved { from, to, transit } = step else {
+                let ItemStep::Moved {
+                    from, to, transit, ..
+                } = step
+                else {
                     continue;
                 };
                 if let Some(next) = track.steps.get(k + 1) {
