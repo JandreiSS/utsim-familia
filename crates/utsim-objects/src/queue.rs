@@ -42,6 +42,67 @@ impl LabelOrder {
     }
 }
 
+/// Dispatch rule that looks at the processor the queue feeds (the model fills the
+/// times in from it): which waiting item goes next.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PickRule {
+    /// Shortest processing time first (SPT): the mean recipe time of each item's
+    /// product, from the processor's `recipe`.
+    #[serde(alias = "MenorTempo")]
+    ShortestProcess,
+    /// Least setup first: the item whose product changes over fastest from the product
+    /// the queue sent last (the same product first), from the processor's `changeover`.
+    #[serde(alias = "MenorSetup")]
+    LeastSetup,
+}
+
+/// A [`PickRule`] with the times of the processor: items by the value of `label`;
+/// `default` for values without a time of their own.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pick {
+    /// Mean process time of each value.
+    Shortest {
+        label: String,
+        times: Vec<(f64, f64)>,
+        default: f64,
+    },
+    /// Mean changeover time from one value to another (no change: 0).
+    LeastSetup {
+        label: String,
+        matrix: Vec<(f64, f64, f64)>,
+        default: f64,
+    },
+}
+
+impl Pick {
+    fn label(&self) -> &str {
+        match self {
+            Pick::Shortest { label, .. } | Pick::LeastSetup { label, .. } => label,
+        }
+    }
+
+    /// Key of an item (smaller goes first), with `last` the product sent last.
+    fn key(&self, item: &Item, last: Option<f64>) -> f64 {
+        let v = item.label(self.label()).and_then(Value::as_num);
+        match self {
+            Pick::Shortest { times, default, .. } => v
+                .and_then(|v| times.iter().find(|t| t.0 == v).map(|t| t.1))
+                .unwrap_or(*default),
+            Pick::LeastSetup {
+                matrix, default, ..
+            } => match (last, v) {
+                (None, _) => 0.0,
+                (Some(a), Some(b)) if a == b => 0.0,
+                (Some(a), Some(b)) => matrix
+                    .iter()
+                    .find(|m| m.0 == a && m.1 == b)
+                    .map_or(*default, |m| m.2),
+                (Some(_), None) => *default,
+            },
+        }
+    }
+}
+
 /// Batching: items are held and released together.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Batch {
@@ -132,6 +193,9 @@ pub struct Queue {
     discipline: Discipline,
     batch: Option<Batch>,
     order: Option<LabelOrder>,
+    /// Dispatch rule by the processor's times (see [`Pick`]) and the product sent last.
+    pick: Option<Pick>,
+    last: Option<f64>,
     /// Items held for the batch being collected.
     held: Vec<ItemId>,
     /// Released batch items that have not left yet.
@@ -167,6 +231,8 @@ impl Queue {
             discipline: Discipline::Fifo,
             batch: None,
             order: None,
+            pick: None,
+            last: None,
             held: Vec::new(),
             outstanding: 0,
             timer: PausableTimer::default(),
@@ -249,6 +315,7 @@ impl Queue {
             Some(LabelOrder::Desc(l)) => cx.release_ordered(id, l, true),
             None => cx.release_ranked(id, self.rank(id)),
         }
+        self.sort_by_pick(cx);
     }
 
     /// Holds the lines of each order until all are here (see [`Queue`]).
@@ -363,6 +430,20 @@ impl Queue {
         self
     }
 
+    /// Dispatch by the processor's times (see [`Pick`]); `None`: none.
+    pub fn pick(mut self, pick: Option<Pick>) -> Self {
+        self.pick = pick;
+        self
+    }
+
+    /// Puts the released items in the order of the dispatch rule.
+    fn sort_by_pick(&self, cx: &mut Ctx) {
+        if let Some(p) = &self.pick {
+            let last = self.last;
+            cx.sort_outbox(|item| p.key(item, last));
+        }
+    }
+
     /// Items leave by label value with `order` (see [`LabelOrder`]).
     pub fn order(mut self, order: Option<LabelOrder>) -> Self {
         self.order = order;
@@ -384,6 +465,7 @@ impl Queue {
             (None, Discipline::Fifo) => cx.release(id),
             (None, Discipline::Lifo) => cx.release_front(id),
         }
+        self.sort_by_pick(cx);
     }
 
     fn release_held(&mut self, cx: &mut Ctx) {
@@ -414,6 +496,7 @@ impl Behavior for Queue {
     }
 
     fn reset(&mut self, cx: &mut Ctx) {
+        self.last = None;
         self.held.clear();
         self.outstanding = 0;
         self.timer = PausableTimer::default();
@@ -536,6 +619,12 @@ impl Behavior for Queue {
     }
 
     fn on_exit(&mut self, cx: &mut Ctx, item: ItemId) {
+        if let Some(p @ Pick::LeastSetup { .. }) = &self.pick {
+            if let Some(v) = cx.item(item).label(p.label()).and_then(Value::as_num) {
+                self.last = Some(v);
+            }
+            self.sort_by_pick(cx);
+        }
         self.unplace(cx, item);
         if let Some(at) = self.giving_up.iter().position(|(i, _)| *i == item) {
             let (_, event) = self.giving_up.remove(at);

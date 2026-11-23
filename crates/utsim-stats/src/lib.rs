@@ -41,6 +41,7 @@ pub mod doe;
 pub mod equivalence;
 pub mod hypothesis;
 pub mod little;
+pub mod logistic;
 pub mod nonparametric;
 pub mod power;
 pub mod precision;

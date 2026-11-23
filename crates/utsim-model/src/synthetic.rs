@@ -81,6 +81,7 @@ fn queue() -> ObjectKind {
         patience: None,
         gather: None,
         waves: None,
+        pick: None,
     }
 }
 
@@ -109,6 +110,8 @@ fn source(mean: f64, items: u64) -> ObjectKind {
         release: Default::default(),
         item_type: None,
         item_type_mix: Vec::new(),
+        text_labels: BTreeMap::new(),
+        label_exprs: BTreeMap::new(),
     }
 }
 

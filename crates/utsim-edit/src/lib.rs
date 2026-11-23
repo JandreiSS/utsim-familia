@@ -1066,6 +1066,8 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             release: Default::default(),
             item_type: None,
             item_type_mix: Vec::new(),
+            text_labels: Default::default(),
+            label_exprs: Default::default(),
         },
         "Queue" => ObjectKind::Queue {
             capacity: None,
@@ -1075,6 +1077,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
             patience: None,
             gather: None,
             waves: None,
+            pick: None,
         },
         "Processor" => ObjectKind::Processor {
             capacity: 1,
