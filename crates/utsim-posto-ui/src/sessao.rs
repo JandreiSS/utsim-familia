@@ -314,13 +314,14 @@ impl Sessao {
         };
         let (pd, pr) = (u.pode_desfazer(), u.pode_refazer());
         let mut desfazer = ui
-            .add_enabled(pd, egui::Button::new(tx("sessao-desfazer")))
+            .add_enabled(pd, egui::Button::new(tx("sessao-desfazer")).small())
             .on_hover_text(tx("sessao-desfazer_dica"))
             .clicked();
         let mut refazer = ui
-            .add_enabled(pr, egui::Button::new(tx("sessao-refazer")))
+            .add_enabled(pr, egui::Button::new(tx("sessao-refazer")).small())
             .on_hover_text(tx("sessao-refazer_dica"))
             .clicked();
+        ui.separator();
         if atalhos && !ui.ctx().egui_wants_keyboard_input() {
             use egui::{Key, Modifiers};
             ui.input_mut(|i| {
