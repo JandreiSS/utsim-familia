@@ -7,6 +7,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- Tradução, rodada 10 (editor, parte 3): a janela Resultados do editor do simulador (Resumo, Gráficos, Cenários e Otimização) nas cinco línguas, com plural nas contagens. Um teste novo confere que cada texto com valores recebe exatamente as variáveis que a mensagem usa.
 - Tradução, rodada 9 (editor, parte 2): o painel de propriedades do editor do simulador (campos de cada tipo de objeto, distribuições, rótulos, lote, regra de saída, quebras, turnos e calendários, chegadas por período, rede de caminhos e fluidos, aparência) nas cinco línguas. O nome do tipo na tela segue a língua; os roteiros continuam achando os tipos pelo nome em português. Os textos com valores ficaram cerca de 10% mais rápidos de montar (os nomes dos valores não são mais copiados).
 - UTSim Ensino, rodada de jogo (missão 6.2 do começo ao fim): as opções de uma alavanca, de uma previsão ou de uma justificativa com rótulos longos ficam uma embaixo da outra (antes, a última se espremia numa coluna de uma letra por linha); o cabeçalho mostra "Missão 6.2", não "6,2"; a imagem da 6.2 tem os 3 tornos do enunciado, e a operadora Ana e o estoque aparecem na frente das máquinas nas missões 6.1 e 6.2 (campo `mover` da cena, só no desenho).
 - UTSim Ensino abre mais rápido: ao carregar um pacote, a conferência das métricas roda primeiro 1/20 da simulação e só roda a simulação inteira se faltar alguma chave (a campanha passou de 0,69 s para 0,12 s nessa etapa, no modo de testes).
