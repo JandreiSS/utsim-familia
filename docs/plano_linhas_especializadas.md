@@ -4,13 +4,13 @@ Plano técnico, sem implementação, do pedido do dono: ter **linhas** do UTSim 
 simulações e estudos em domínios específicos, começando pelo **Lean Office** (processos
 administrativos de qualquer área; veja o escopo na seção 1.1). O plano define o que é uma linha, como ela usa o núcleo que já
 existe, o que o Lean Office precisa (objetos, vocabulário, modelos prontos, indicadores,
-relatórios, aparência 3D e 2D, integração com o UTSim Seis Sigma), lista outras linhas
+relatórios, aparência 3D e 2D, integração com o UTSim LSS), lista outras linhas
 candidatas e propõe os primeiros passos com estimativa e modelo de IA. Os requisitos sugeridos
 começam em RF-269 e ficam só aqui até o dono aprovar.
 
 Documentos relacionados, que este plano não repete:
 
-- `docs/plano_lean_seis_sigma.md`: o app UTSim Seis Sigma, VSM e SIPOC gerados do modelo,
+- `docs/plano_lean_seis_sigma.md`: o app UTSim LSS, VSM e SIPOC gerados do modelo,
   pacote de evidência `estudo.json`;
 - `docs/plano_chegadas_e_equipes_3d.md`: tabela de chegadas, tipos de item, prioridade,
   preempção e áreas (peças de que o Lean Office depende);
@@ -39,7 +39,7 @@ de eventos, os objetos, o formato `.ron`, as replicações, a estatística, os e
 | Indicadores e relatórios | conjunto de KPIs do domínio (cálculo em crate pura) e relatório próprio | crate `utsim-linhas` (módulo por linha) |
 | Aparência | modelos 3D e ícones 2D do domínio, cores, cenário padrão | `linhas/<linha>/visual/` e biblioteca de ativos |
 | Tutoriais e manual | capítulos do manual e tutoriais com o vocabulário da linha | `docs/manual/src/linhas/<linha>/` |
-| Modelos de projeto no Seis Sigma | modelos de projeto (kaizen administrativo, por exemplo) | app UTSim Seis Sigma |
+| Modelos de projeto no Seis Sigma | modelos de projeto (kaizen administrativo, por exemplo) | app UTSim LSS |
 
 ### 0.2 Como o modelo sabe a linha
 
@@ -233,7 +233,7 @@ linha, sem mudar o relatório dos modelos atuais.
 - **Cores de estado** do posto e da pessoa iguais às do resto do UTSim; legenda com o
   vocabulário da linha.
 
-### 1.8 Integração com o UTSim Seis Sigma
+### 1.8 Integração com o UTSim LSS
 
 O Lean Office é o caso mais natural para o app Seis Sigma, porque muitos projetos de melhoria
 em empresas são administrativos:
@@ -488,7 +488,7 @@ aprovado.
 | RF-273 | A linha Lean Office gera o VSM administrativo (atual e futuro) e o fluxograma de raias por departamento a partir do modelo e da rodada |
 | RF-274 | As filas aceitam ordem por rótulo (prioridade ou prazo) |
 | RF-275 | Uma pessoa pode ter vários casos abertos ao mesmo tempo, com custo de troca entre eles (feito: `multitask` do `Transporter`) |
-| RF-276 | O UTSim Seis Sigma oferece modelos de projeto de Kaizen administrativo e DMAIC transacional ligados à linha Lean Office |
+| RF-276 | O UTSim LSS oferece modelos de projeto de Kaizen administrativo e DMAIC transacional ligados à linha Lean Office |
 
 ---
 

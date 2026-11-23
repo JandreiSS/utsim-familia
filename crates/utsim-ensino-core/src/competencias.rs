@@ -1,4 +1,4 @@
-//! The link with the competence map of UTSim Seis Sigma (`docs/plano_ensino_e_jogo.md`,
+//! The link with the competence map of UTSim LSS (`docs/plano_ensino_e_jogo.md`,
 //! 7.1, and decision N2 of the Seis Sigma plan): each mission a student solved becomes
 //! `praticou` in the curriculum tools its concepts are tied to, by the package table
 //! `competencias`. Writing in the program journal is the teacher's (an instructor), so

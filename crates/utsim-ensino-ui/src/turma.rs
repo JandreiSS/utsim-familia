@@ -44,7 +44,7 @@ pub struct EstadoTurma {
     pub convite: String,
     pub pasta: String,
     pub destino_entrega: String,
-    /// Folder of the company program of UTSim Seis Sigma, as typed.
+    /// Folder of the company program of UTSim LSS, as typed.
     pub programa: String,
 }
 
@@ -223,7 +223,7 @@ pub struct EstadoProfessor {
     pub pacote_corrigido: Option<Arc<PacoteCarregado>>,
     pub prova: EstadoProva,
     pub desafio: EstadoDesafio,
-    /// Folder of the company program of UTSim Seis Sigma where the class's practice goes.
+    /// Folder of the company program of UTSim LSS where the class's practice goes.
     pub programa: String,
 }
 
@@ -1248,7 +1248,7 @@ fn secao_prova(
     msg
 }
 
-/// The company program of UTSim Seis Sigma: the solved missions record `praticou` in its
+/// The company program of UTSim LSS: the solved missions record `praticou` in its
 /// competence map, by the student themself.
 fn programa_seis_sigma(app: &mut App, ui: &mut Ui) {
     ui.separator();
