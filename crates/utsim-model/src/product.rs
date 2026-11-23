@@ -1,4 +1,4 @@
-//! The product project a model came from (UTSim Desenvolvimento de Produto, decision P4 of
+//! The product project a model came from (UTSim Produto, decision P4 of
 //! `docs/plano_desenvolvimento_produto.md`): the project folder and the revision whose
 //! routings, times and critical characteristics were written into the model. Never read by
 //! the simulation.

@@ -333,6 +333,18 @@ impl Inventario {
             .max_by(|a, b| a.data.cmp(&b.data).then(a.id.cmp(&b.id)))
     }
 
+    /// Whether `r` is already saved as it is (same hazard, date, P, S and note). Saving it
+    /// again would only repeat it, like a second click on "Registrar".
+    pub fn reavaliacao_repetida(&self, r: &Reavaliacao) -> bool {
+        self.reavaliacoes.iter().any(|x| {
+            x.perigo == r.perigo
+                && x.data == r.data
+                && x.probabilidade == r.probabilidade
+                && x.severidade == r.severidade
+                && x.nota.trim() == r.nota.trim()
+        })
+    }
+
     /// Current level of a hazard: the last reassessment, or the first assessment.
     pub fn nivel_atual(&self, p: &Perigo) -> usize {
         match self.ultima_reavaliacao(&p.id) {
@@ -391,6 +403,27 @@ pub fn passar_ao_no(u: &mut Unidade, antigo: &str, novo: &str) -> Result<usize, 
         }
     }
     u.remover(PERIGOS, antigo)?;
+    Ok(n)
+}
+
+/// Removes unit hazard `id` with its actions and reassessments, so none is left pointing at
+/// a hazard that is gone. The hazard goes first: if that fails, nothing else changes.
+/// Returns how many actions and reassessments went with it.
+pub fn remover_perigo(u: &mut Unidade, id: &str) -> Result<usize, UnidadeErro> {
+    u.remover(PERIGOS, id)?;
+    let mut n = 0;
+    for col in [ACOES, REAVALIACOES] {
+        let ids: Vec<String> = u
+            .estado()
+            .brutos(col)
+            .filter(|(_, v)| v.get("perigo").and_then(|x| x.as_str()) == Some(id))
+            .map(|(i, _)| i.clone())
+            .collect();
+        for i in ids {
+            u.remover(col, &i)?;
+            n += 1;
+        }
+    }
     Ok(n)
 }
 

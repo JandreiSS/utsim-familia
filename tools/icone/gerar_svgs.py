@@ -182,7 +182,7 @@ def estatistica():
 
 
 def produto():
-    """Desenvolvimento de Produto: um cubo em perspectiva (o produto) com um visto."""
+    """UTSim Produto: um cubo em perspectiva (o produto) com um visto."""
     svg = fundo("#ee6d9b", "#8a1a47")
     svg += f'  <polygon points="{pts([(128, 40), (204, 84), (128, 128), (52, 84)])}" fill="#ffffff"/>\n'
     svg += f'  <polygon points="{pts([(52, 92), (124, 134), (124, 218), (52, 176)])}" fill="#ffffff" fill-opacity="0.82"/>\n'
