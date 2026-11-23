@@ -341,7 +341,7 @@ fn modelagem_desenha_o_gabarito_sem_copias() {
     // The chamber (capacity 10) and the oven (capacity 2) are one element each.
     assert!(p.objetos.iter().all(|o| !o.nome.contains('#')));
     let forno = p.objetos.iter().find(|o| o.nome == "forno").unwrap();
-    assert_eq!(forno.elemento, "cnc");
+    assert_eq!(forno.elemento, "forno");
 }
 
 #[test]

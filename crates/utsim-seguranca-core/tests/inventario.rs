@@ -296,3 +296,72 @@ fn a_person_under_a_suspended_load_suggests_a_hazard_for_the_crane_station() {
     assert!(html.contains("Pessoas sob carga suspensa"));
     assert!(html.contains("inspetor"));
 }
+
+#[test]
+fn removing_a_hazard_takes_its_actions_and_reassessments() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Fábrica", "Bia").unwrap();
+    let perigo = |d: &str| Perigo {
+        posto: "p1".into(),
+        descricao: d.into(),
+        probabilidade: 2,
+        severidade: 2,
+        ..Perigo::default()
+    };
+    let id = u.gravar(PERIGOS, "", &perigo("Ruído")).unwrap();
+    let outro = u.gravar(PERIGOS, "", &perigo("Calor")).unwrap();
+    for p in [&id, &outro] {
+        u.gravar(
+            ACOES,
+            "",
+            &Acao {
+                perigo: p.clone(),
+                descricao: "Enclausurar".into(),
+                ..Acao::default()
+            },
+        )
+        .unwrap();
+        u.gravar(
+            REAVALIACOES,
+            "",
+            &Reavaliacao {
+                perigo: p.clone(),
+                data: "2026-11-20".into(),
+                probabilidade: 1,
+                severidade: 2,
+                ..Reavaliacao::default()
+            },
+        )
+        .unwrap();
+    }
+    assert_eq!(inventario::remover_perigo(&mut u, &id).unwrap(), 2);
+    let inv = Inventario::ler(&u);
+    assert_eq!(inv.perigos.len(), 1);
+    assert!(inv.acoes.iter().all(|a| a.perigo == outro));
+    assert!(inv.reavaliacoes.iter().all(|r| r.perigo == outro));
+    assert_eq!(inv.acoes.len(), 1);
+    assert_eq!(inv.reavaliacoes.len(), 1);
+}
+
+#[test]
+fn a_reassessment_saved_as_it_is_counts_as_repeated() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut u = Unidade::criar(dir.path(), "Fábrica", "Bia").unwrap();
+    let r = Reavaliacao {
+        perigo: "h1".into(),
+        data: "2026-11-20".into(),
+        probabilidade: 1,
+        severidade: 3,
+        nota: "Protetor trocado".into(),
+        ..Reavaliacao::default()
+    };
+    assert!(!Inventario::ler(&u).reavaliacao_repetida(&r));
+    u.gravar(REAVALIACOES, "", &r).unwrap();
+    let inv = Inventario::ler(&u);
+    assert!(inv.reavaliacao_repetida(&r));
+    let mut outra = r.clone();
+    outra.nota = "Protetor trocado ".into();
+    assert!(inv.reavaliacao_repetida(&outra));
+    outra.severidade = 2;
+    assert!(!inv.reavaliacao_repetida(&outra));
+}

@@ -327,6 +327,14 @@ pub fn table(t: &ArrivalTable) -> String {
                 .collect();
             parts.push(format!("labels: {{{}}}", entries.join(", ")));
         }
+        if !r.text_labels.is_empty() {
+            let entries: Vec<String> = r
+                .text_labels
+                .iter()
+                .map(|(k, v)| format!("{}: {}", string(k), string(v)))
+                .collect();
+            parts.push(format!("text_labels: {{{}}}", entries.join(", ")));
+        }
         format!("({})", parts.join(", "))
     });
     let repeat = match t.repeat {
@@ -424,12 +432,17 @@ mod tests {
                         count: 12,
                         item_type: Some("caixa".into()),
                         labels: BTreeMap::from([("prioridade".to_string(), 2.5)]),
+                        text_labels: BTreeMap::from([(
+                            "cliente".to_string(),
+                            "Loja 12".to_string(),
+                        )]),
                     },
                     ArrivalRow {
                         at: Some(600.0),
                         count: 0,
                         item_type: None,
                         labels: BTreeMap::new(),
+                        text_labels: BTreeMap::new(),
                     },
                 ],
             },
@@ -441,6 +454,7 @@ mod tests {
                     count: 3,
                     item_type: None,
                     labels: BTreeMap::new(),
+                    text_labels: BTreeMap::new(),
                 }],
             },
             ArrivalTable {

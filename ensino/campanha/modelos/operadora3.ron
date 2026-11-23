@@ -1,0 +1,33 @@
+// Operadora com três máquinas automáticas (missão 6.2)
+// Uma operadora carrega e prepara as máquinas automáticas (a preparação ocupa a operadora e
+// a máquina), anda 4 m entre máquinas vizinhas a 1 m/s e volta. Só as três máquinas do
+// enunciado, para a vista 2D não mostrar máquinas desligadas. Tempo em segundos.
+Model(
+    name: "Operadora com três máquinas automáticas",
+    run: (stop_time: 36600.0, warmup: 600.0, seed: 61, replications: 10),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Const(5.0)), position: (8.0, 3.0, 0.0)),
+        (name: "estoque", kind: Queue(capacity: 6), position: (8.0, 2.0, 0.0)),
+        (name: "maq1", kind: Processor(setup: Triangular(min: 18.0, mode: 20.0, max: 24.0), process: Const(70.0),
+            operators: OperatorUse(team: "operadora", setup: true, process: false)),
+         position: (0.0, 0.0, 0.0)),
+        (name: "maq2", kind: Processor(setup: Triangular(min: 18.0, mode: 20.0, max: 24.0), process: Const(70.0),
+            operators: OperatorUse(team: "operadora", setup: true, process: false)),
+         position: (4.0, 0.0, 0.0)),
+        (name: "maq3", kind: Processor(setup: Triangular(min: 18.0, mode: 20.0, max: 24.0), process: Const(70.0),
+            operators: OperatorUse(team: "operadora", setup: true, process: false)),
+         position: (8.0, 0.0, 0.0)),
+        (name: "saida", kind: Sink, position: (8.0, -3.0, 0.0)),
+        (name: "ana", kind: Transporter(speed: 1.0), position: (0.0, 1.0, 0.0), visual: (asset: "pessoa")),
+        (name: "operadora", kind: Dispatcher(team: ["ana"]), position: (0.0, 1.5, 0.0)),
+    ],
+    connections: [
+        ("chegada", "estoque"),
+        ("estoque", "maq1"),
+        ("maq1", "saida"),
+        ("estoque", "maq2"),
+        ("maq2", "saida"),
+        ("estoque", "maq3"),
+        ("maq3", "saida"),
+    ],
+)

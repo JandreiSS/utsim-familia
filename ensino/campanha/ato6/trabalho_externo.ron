@@ -2,7 +2,7 @@ Missao(
     id: "ato6/trabalho_externo",
     titulo: "Trabalho externo",
     conceitos: ["trabalho_externo", "ciclo", "relacao_homem_maquina"],
-    modelo: "../modelos/operadora.ron",
+    modelo: "../modelos/operadora3.ron",
     texto: "trabalho_externo.md",
     previsao: [
         Escolha(
@@ -43,7 +43,6 @@ Missao(
         imagem: "trabalho_externo.cena.png",
         escala: 0.8,
         elementos: {"maq1": "cnc", "maq2": "cnc", "maq3": "cnc"},
-        ocultar: ["maq4", "maq5"],
         pecas: [
             (no: "estoque", elemento: "caixa", dx: -0.7),
             (no: "estoque", elemento: "caixa"),
