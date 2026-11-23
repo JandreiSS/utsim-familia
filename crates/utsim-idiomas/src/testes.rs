@@ -77,3 +77,15 @@ fn a_conferencia_acha_faltas_sobras_e_argumentos() {
     assert_eq!(k, vec!["b", "c"]);
     assert!(chaves("a = { $x").is_err());
 }
+
+#[test]
+fn numero_usa_a_marca_decimal_da_lingua() {
+    use crate::{Idioma, definir_nesta_thread, numero, numero_ou_traco};
+    definir_nesta_thread(Some(Idioma::PtBr));
+    assert_eq!(numero(2.5), "2,5");
+    assert_eq!(numero(10.0), "10");
+    assert_eq!(numero_ou_traco(None), "–");
+    definir_nesta_thread(Some(Idioma::En));
+    assert_eq!(numero(-0.125), "-0.125");
+    definir_nesta_thread(None);
+}

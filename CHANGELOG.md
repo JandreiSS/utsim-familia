@@ -7,6 +7,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Mudado
+- UTSim Qualidade: a carta do plano de controle virou um menu com as cartas que o CEP e as ferramentas leem (`planos::CARTAS`), em vez de um texto livre. Uma carta gravada à mão numa versão antiga aparece como está.
+- `utsim_idiomas::numero` e `numero_ou_traco`: o formatador comum de um número com a marca decimal da língua.
 - Tradução, rodada 11: no editor do simulador (UTSim dev), os fluxos de tokens, os modos de câmera, o seletor de visual dos modelos e os nomes dos estados dos blocos seguem a língua escolhida (antes, o painel do bloco e os gráficos de estados mostravam "processando" mesmo em inglês). No UTSim 3D (Godot), o conteúdo dos painéis ao vivo, os fluxos de tokens e a janela Resultados também, nas cinco línguas. O modo roteiro continua em português.
 - Pasta de unidade: gravar um registro aplica a operação nova por cima do estado, em vez de refazer o estado inteiro a partir de todas as operações a cada gravação (o que copiava todos os registros). Só quando a operação não fica por último, como com o relógio atrasado de outra pessoa, o estado é refeito como antes.
 - UTSim 3D: a ponte rolante ganhou os seus campos no painel de propriedades (Parâmetros): velocidade, aceleração e desaceleração da ponte, do carro e do gancho, ordem dos movimentos, altura do gancho, capacidade, rótulo do peso, engate e desengate, controle (cabine, botoeira ou rádio, com a equipe do operador), área sob a carga, afastar as pessoas, folga entre pontes e a linha "Caminho", que diz com quais pontes ela divide o caminho. Nas dimensões, os rótulos passam a ser comprimento do caminho, vão e altura. Antes esses campos só mudavam no RON. Corrigido junto: os campos da ponte em `set` (cenários e experimentos, por exemplo `ponte.bridge_gap`) eram recusados como campo inexistente; e as dimensões da ponte podem ser mudadas pelo editor (antes, "recursos móveis não têm dimensões próprias").
@@ -83,6 +85,10 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - `utsim run`: a lista de estados por objeto no resumo procura só as chaves do objeto, em vez de percorrer o resumo inteiro para cada objeto. A saída é a mesma.
 
 ### Corrigido
+- UTSim Qualidade: o Desfazer da unidade e o 8D aberto não conversavam. Desfazer a gravação do 8D deixava o rascunho antigo na tela, e gravar de novo trazia de volta o que foi desfeito. Agora o 8D aberto confere o gravado depois de cada mudança na unidade (`TelaOitoD::sincronizar`): sem mudanças no rascunho, recarrega. Com mudanças, avisa e oferece "Recarregar o gravado".
+- UTSim Qualidade: "Encerrar o 8D" grava junto. Antes mudava só o rascunho e pedia para gravar depois.
+- UTSim Qualidade: as categorias do custo da qualidade e a origem dos dados do CEP (Real, Gêmeo, Simulado) saíam sempre em português, também no relatório. Agora o core as lê do catálogo `qualidade` (`utsim_qualidade_core::texto`), na língua escolhida.
+- UTSim Qualidade: no plano de controle, LIE, LSE e alvo apareciam com ponto (e as sugestões do modelo como `Some(1.5)`). Agora usam `utsim_idiomas::numero`, com a vírgula da língua.
 - UTSim Segurança do Trabalho: as horas-homem aceitavam "2025/03" ou o mês 13 (só conferiam o tamanho) e um mês repetido trocava o valor gravado sem aviso. Agora o mês precisa ser AAAA-MM de 01 a 12 (`incidentes::mes_valido`), e um mês que já tem horas mostra o valor gravado e pede confirmação para substituir.
 - UTSim Produto: as mensagens das regras (item dentro dele mesmo, requisito aprovado, portão com pendências e outras) aparecem na língua escolhida, e não mais sempre em português.
 - UTSim Produto: tirar ou mover uma fase não desalinha mais as decisões e as assinaturas das outras fases. Cada fase ganha uma identidade que as assinaturas guardam, e as de antes continuam valendo. Uma fase com decisão registrada fica como registro.

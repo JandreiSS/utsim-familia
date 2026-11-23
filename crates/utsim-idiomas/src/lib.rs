@@ -25,7 +25,9 @@ mod formatos;
 #[cfg(feature = "egui")]
 mod seletor;
 
-pub use formatos::{agrupar_milhares, data, dinheiro, ler_numero, marca_decimal, mes};
+pub use formatos::{
+    agrupar_milhares, data, dinheiro, ler_numero, marca_decimal, mes, numero, numero_ou_traco,
+};
 #[cfg(feature = "egui")]
 pub use seletor::seletor;
 

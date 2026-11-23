@@ -12,5 +12,6 @@ pub mod planos;
 pub mod relatorio;
 pub mod seis_sigma;
 pub mod simulado;
+pub mod texto;
 
 pub use simulado::{Indicadores, Medicao, RelatorioQualidade, Replicacao, rodar};
