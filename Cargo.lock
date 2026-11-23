@@ -8316,6 +8316,7 @@ dependencies = [
  "utsim-quality",
  "utsim-stats",
  "utsim-ui-tema",
+ "utsim-visual",
  "winresource",
 ]
 
@@ -8464,6 +8465,7 @@ dependencies = [
  "utsim-quality",
  "utsim-troca",
  "utsim-ui-tema",
+ "utsim-visual",
 ]
 
 [[package]]
@@ -8709,6 +8711,15 @@ dependencies = [
  "web-sys",
  "winit",
  "winresource",
+]
+
+[[package]]
+name = "utsim-visual"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "utsim-idiomas",
+ "utsim-ui-tema",
 ]
 
 [[package]]
