@@ -1,3 +1,5 @@
+# Traduzione automatica, in attesa di revisione umana.
+# Tradução automática, aguardando revisão humana.
 # I componenti disegnati degli strumenti della qualità (crates/utsim-visual).
 
 ## espinha.rs
