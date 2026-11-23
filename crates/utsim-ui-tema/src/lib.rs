@@ -244,8 +244,16 @@ pub fn fonts() -> FontDefinitions {
 }
 
 /// The fonts with `primary` (a `.ttf`) in front of egui's defaults, or the defaults alone.
+/// egui's monospace font (Hack) closes the proportional list: it has the symbols the others
+/// lack (● △ ◆ ◉ ▲ ◇), drawn by the quality tools and their tables.
 pub fn fonts_with(primary: Option<Vec<u8>>) -> FontDefinitions {
     let mut defs = FontDefinitions::default();
+    if defs.font_data.contains_key("Hack") {
+        defs.families
+            .entry(FontFamily::Proportional)
+            .or_default()
+            .push("Hack".to_owned());
+    }
     if let Some(bytes) = primary {
         defs.font_data
             .insert("utsim-ui".to_owned(), FontData::from_owned(bytes).into());
