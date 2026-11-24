@@ -111,3 +111,56 @@ abas-ligue_o_bloco_antes = attivare prima il blocco '{ $nome }'
 abas-bloco_invalido = blocco non valido
 abas-cadastre_uma_caracteristica_medida_antes = registrare una caratteristica misurata prima del piano di controllo
 abas-item_nao_existe-2 = '{ $lista }': l'elemento { $indice } non esiste
+
+## Paleta de objetos, categorias e nós de fluido (o editor do simulador e o UTSim 3D)
+
+paleta-source = Arrivo
+paleta-queue = Coda
+paleta-processor = Processo
+paleta-sink = Uscita
+paleta-combiner = Assemblaggio
+paleta-separator = Disassemblaggio
+paleta-conveyor = Nastro trasportatore
+paleta-rack = Scaffale portapallet
+paleta-transporter = Trasportatore
+paleta-operator = Operatore
+paleta-forklift = Carrello elevatore
+paleta-agv = AGV
+paleta-dispatcher = Smistatore
+categoria-fluxo-de-itens = Flusso di elementi
+categoria-montagem = Assemblaggio
+categoria-manuseio-de-materiais = Movimentazione dei materiali
+categoria-recursos-moveis = Risorse mobili
+fluido-source = Sorgente
+fluido-tank = Serbatoio
+fluido-pipe = Tubazione
+fluido-sink = Scarico
+fluido-fromitems = Elementi in fluido
+fluido-toitems = Fluido in elementi
+
+## Estados dos blocos (o editor do simulador e o UTSim 3D; o rótulo 3D dos roteiros continua em português)
+
+estado-sem-estado = nessuno stato
+estado-ocioso = inattivo
+estado-vazio = vuoto
+estado-gerando = genera
+estado-liberando = rilascia
+estado-coletando = raccoglie
+estado-preparacao = attrezzaggio
+estado-processando = in lavorazione
+estado-bloqueado = bloccato
+estado-aguardando-operador = attende l’operatore
+estado-aguardando-transporte = attende il trasporto
+estado-em-falha = guasto
+estado-fora-do-turno = fuori turno
+estado-viajando-vazio = viaggia vuoto
+estado-viajando-carregado = viaggia carico
+estado-carregando = carico
+estado-descarregando = scarico
+estado-trabalhando-no-posto = lavora alla postazione
+estado-parado = fermo (comando esterno)
+estado-aguardando-tecnico = attende il tecnico
+estado-em-manutencao = in manutenzione preventiva
+estado-em-pausa = in pausa (fatica)
+estado-operador-entrando = operatore in entrata
+estado-operador-saindo = operatore in uscita

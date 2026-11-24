@@ -109,3 +109,56 @@ abas-ligue_o_bloco_antes = active antes el bloque '{ $nome }'
 abas-bloco_invalido = bloque inválido
 abas-cadastre_uma_caracteristica_medida_antes = registre una característica medida antes del plan de control
 abas-item_nao_existe-2 = '{ $lista }': el ítem { $indice } no existe
+
+## Paleta de objetos, categorias e nós de fluido (o editor do simulador e o UTSim 3D)
+
+paleta-source = Llegada
+paleta-queue = Cola
+paleta-processor = Proceso
+paleta-sink = Salida
+paleta-combiner = Montaje
+paleta-separator = Desmontaje
+paleta-conveyor = Cinta transportadora
+paleta-rack = Estantería de palés
+paleta-transporter = Transportador
+paleta-operator = Operador
+paleta-forklift = Montacargas
+paleta-agv = AGV
+paleta-dispatcher = Despachador
+categoria-fluxo-de-itens = Flujo de ítems
+categoria-montagem = Montaje
+categoria-manuseio-de-materiais = Manejo de materiales
+categoria-recursos-moveis = Recursos móviles
+fluido-source = Fuente
+fluido-tank = Tanque
+fluido-pipe = Tubería
+fluido-sink = Sumidero
+fluido-fromitems = Ítems a fluido
+fluido-toitems = Fluido a ítems
+
+## Estados dos blocos (o editor do simulador e o UTSim 3D; o rótulo 3D dos roteiros continua em português)
+
+estado-sem-estado = sin estado
+estado-ocioso = ocioso
+estado-vazio = vacío
+estado-gerando = generando
+estado-liberando = liberando
+estado-coletando = recolectando
+estado-preparacao = preparación
+estado-processando = procesando
+estado-bloqueado = bloqueado
+estado-aguardando-operador = esperando operador
+estado-aguardando-transporte = esperando transporte
+estado-em-falha = en falla
+estado-fora-do-turno = fuera de turno
+estado-viajando-vazio = viajando vacío
+estado-viajando-carregado = viajando cargado
+estado-carregando = cargando
+estado-descarregando = descargando
+estado-trabalhando-no-posto = trabajando en el puesto
+estado-parado = detenido (comando externo)
+estado-aguardando-tecnico = esperando técnico
+estado-em-manutencao = en mantenimiento preventivo
+estado-em-pausa = en pausa (fatiga)
+estado-operador-entrando = operador entrando
+estado-operador-saindo = operador saliendo
