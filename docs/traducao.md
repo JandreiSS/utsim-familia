@@ -12,6 +12,11 @@ telas próprias do UTSim Qualidade (`qualidade.ftl`) e do UTSim Segurança do Tr
 (`seguranca.ftl`), o UTSim Estatística (`estatistica.ftl`) e o Lançador (`lancador.ftl`). Os
 outros seguem o plano do fim desta página.
 
+Os nomes que os núcleos da família dão às telas e aos relatórios ficam em arquivos próprios,
+separados dos do app: `qualidade-nucleo.ftl` (`utsim-qualidade-core`: categorias de custo e
+origens dos dados) e `seguranca-nucleo.ftl` (`utsim-seguranca-core`: etapas do inventário).
+Assim o núcleo e o app podem morar em repositórios diferentes.
+
 ## Onde ficam
 
 ```
