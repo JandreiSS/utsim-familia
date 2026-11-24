@@ -109,3 +109,56 @@ abas-ligue_o_bloco_antes = turn on the '{ $nome }' block first
 abas-bloco_invalido = invalid block
 abas-cadastre_uma_caracteristica_medida_antes = register a measured characteristic before the control plan
 abas-item_nao_existe-2 = '{ $lista }': item { $indice } does not exist
+
+## Paleta de objetos, categorias e nós de fluido (o editor do simulador e o UTSim 3D)
+
+paleta-source = Arrival
+paleta-queue = Queue
+paleta-processor = Process
+paleta-sink = Exit
+paleta-combiner = Assembly
+paleta-separator = Disassembly
+paleta-conveyor = Conveyor
+paleta-rack = Pallet rack
+paleta-transporter = Transporter
+paleta-operator = Operator
+paleta-forklift = Forklift
+paleta-agv = AGV
+paleta-dispatcher = Dispatcher
+categoria-fluxo-de-itens = Item flow
+categoria-montagem = Assembly
+categoria-manuseio-de-materiais = Material handling
+categoria-recursos-moveis = Mobile resources
+fluido-source = Source
+fluido-tank = Tank
+fluido-pipe = Piping
+fluido-sink = Drain
+fluido-fromitems = Items to fluid
+fluido-toitems = Fluid to items
+
+## Estados dos blocos (o editor do simulador e o UTSim 3D; o rótulo 3D dos roteiros continua em português)
+
+estado-sem-estado = no state
+estado-ocioso = idle
+estado-vazio = empty
+estado-gerando = generating
+estado-liberando = releasing
+estado-coletando = collecting
+estado-preparacao = setup
+estado-processando = processing
+estado-bloqueado = blocked
+estado-aguardando-operador = waiting for operator
+estado-aguardando-transporte = waiting for transport
+estado-em-falha = down
+estado-fora-do-turno = off shift
+estado-viajando-vazio = travelling empty
+estado-viajando-carregado = travelling loaded
+estado-carregando = loading
+estado-descarregando = unloading
+estado-trabalhando-no-posto = working at the station
+estado-parado = stopped (external command)
+estado-aguardando-tecnico = waiting for a technician
+estado-em-manutencao = in preventive maintenance
+estado-em-pausa = on a break (fatigue)
+estado-operador-entrando = operator entering
+estado-operador-saindo = operator leaving

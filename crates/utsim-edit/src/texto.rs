@@ -37,3 +37,109 @@ pub fn vx(x: &impl Display) -> Valor<'static> {
     }
     s.into()
 }
+
+/// O nome de um estado de bloco na língua de agora (`utsim_scene::style::state_label` fica em
+/// português: é o rótulo 3D que os roteiros conferem).
+pub fn estado(state: Option<utsim_core::State>) -> &'static str {
+    use utsim_core::State;
+    tx(match state {
+        None => "estado-sem-estado",
+        Some(State::Idle) => "estado-ocioso",
+        Some(State::Empty) => "estado-vazio",
+        Some(State::Generating) => "estado-gerando",
+        Some(State::Releasing) => "estado-liberando",
+        Some(State::Collecting) => "estado-coletando",
+        Some(State::Setup) => "estado-preparacao",
+        Some(State::Processing) => "estado-processando",
+        Some(State::Blocked) => "estado-bloqueado",
+        Some(State::WaitingOperator) => "estado-aguardando-operador",
+        Some(State::WaitingTransport) => "estado-aguardando-transporte",
+        Some(State::Down) => "estado-em-falha",
+        Some(State::OffShift) => "estado-fora-do-turno",
+        Some(State::TravelEmpty) => "estado-viajando-vazio",
+        Some(State::TravelLoaded) => "estado-viajando-carregado",
+        Some(State::Loading) => "estado-carregando",
+        Some(State::Unloading) => "estado-descarregando",
+        Some(State::Utilize) => "estado-trabalhando-no-posto",
+        Some(State::Stopped) => "estado-parado",
+        Some(State::WaitingRepair) => "estado-aguardando-tecnico",
+        Some(State::Maintenance) => "estado-em-manutencao",
+        Some(State::Resting) => "estado-em-pausa",
+        Some(State::Entering) => "estado-operador-entrando",
+        Some(State::Leaving) => "estado-operador-saindo",
+    })
+}
+
+/// O rótulo de uma entrada da paleta de objetos na língua de agora (o `label` da entrada
+/// fica em português: é o que os roteiros e os modelos antigos conhecem).
+pub fn rotulo_paleta(e: &crate::PaletteEntry) -> &'static str {
+    match e.id {
+        "Source" => tx("paleta-source"),
+        "Queue" => tx("paleta-queue"),
+        "Processor" => tx("paleta-processor"),
+        "Sink" => tx("paleta-sink"),
+        "Combiner" => tx("paleta-combiner"),
+        "Separator" => tx("paleta-separator"),
+        "Conveyor" => tx("paleta-conveyor"),
+        "Rack" => tx("paleta-rack"),
+        "Transporter" => tx("paleta-transporter"),
+        "Operator" => tx("paleta-operator"),
+        "Forklift" => tx("paleta-forklift"),
+        "Agv" => tx("paleta-agv"),
+        "Dispatcher" => tx("paleta-dispatcher"),
+        _ => e.label,
+    }
+}
+
+/// O nome de uma categoria da paleta ([`crate::CATEGORIES`]) na língua de agora.
+pub fn rotulo_categoria(categoria: &str) -> &str {
+    match categoria {
+        "Fluxo de itens" => tx("categoria-fluxo-de-itens"),
+        "Montagem" => tx("categoria-montagem"),
+        "Manuseio de materiais" => tx("categoria-manuseio-de-materiais"),
+        "Recursos móveis" => tx("categoria-recursos-moveis"),
+        outra => outra,
+    }
+}
+
+/// O rótulo de um tipo de nó da ferramenta Fluidos na língua de agora.
+pub fn rotulo_fluido(e: &crate::fluids::FluidEntry) -> &'static str {
+    match e.id {
+        "Source" => tx("fluido-source"),
+        "Tank" => tx("fluido-tank"),
+        "Pipe" => tx("fluido-pipe"),
+        "Sink" => tx("fluido-sink"),
+        "FromItems" => tx("fluido-fromitems"),
+        "ToItems" => tx("fluido-toitems"),
+        _ => e.label,
+    }
+}
+
+#[cfg(test)]
+mod tests_paleta {
+    use super::*;
+
+    /// Cada entrada da paleta, cada categoria e cada tipo de fluido tem texto nas cinco
+    /// línguas, e em português é o rótulo de sempre.
+    #[test]
+    fn a_paleta_fala_as_cinco_linguas() {
+        assert!(TEXTOS.faltas().is_empty(), "{:?}", TEXTOS.faltas());
+        utsim_idiomas::definir_nesta_thread(Some(utsim_idiomas::Idioma::PtBr));
+        for e in crate::PALETTE {
+            assert_eq!(rotulo_paleta(&e), e.label, "{}", e.id);
+        }
+        for c in crate::CATEGORIES {
+            assert_eq!(rotulo_categoria(c), c);
+        }
+        for e in crate::fluids::FLUID_PALETTE {
+            assert_eq!(rotulo_fluido(&e), e.label, "{}", e.id);
+        }
+        utsim_idiomas::definir_nesta_thread(Some(utsim_idiomas::Idioma::En));
+        assert_eq!(
+            rotulo_paleta(crate::palette_entry("Queue").unwrap()),
+            "Queue"
+        );
+        assert_eq!(rotulo_categoria("Montagem"), "Assembly");
+        utsim_idiomas::definir_nesta_thread(None);
+    }
+}

@@ -109,3 +109,56 @@ abas-ligue_o_bloco_antes = ligue o bloco '{ $nome }' antes
 abas-bloco_invalido = bloco inválido
 abas-cadastre_uma_caracteristica_medida_antes = cadastre uma característica medida antes do plano de controle
 abas-item_nao_existe-2 = '{ $lista }': item { $indice } não existe
+
+## Paleta de objetos, categorias e nós de fluido (o editor do simulador e o UTSim 3D)
+
+paleta-source = Chegada
+paleta-queue = Fila
+paleta-processor = Processo
+paleta-sink = Saída
+paleta-combiner = Montagem
+paleta-separator = Desmontagem
+paleta-conveyor = Esteira
+paleta-rack = Porta-paletes
+paleta-transporter = Transportador
+paleta-operator = Operador
+paleta-forklift = Empilhadeira
+paleta-agv = AGV
+paleta-dispatcher = Despachante
+categoria-fluxo-de-itens = Fluxo de itens
+categoria-montagem = Montagem
+categoria-manuseio-de-materiais = Manuseio de materiais
+categoria-recursos-moveis = Recursos móveis
+fluido-source = Fonte
+fluido-tank = Tanque
+fluido-pipe = Tubulação
+fluido-sink = Sumidouro
+fluido-fromitems = Itens em fluido
+fluido-toitems = Fluido em itens
+
+## Estados dos blocos (o editor do simulador e o UTSim 3D; o rótulo 3D dos roteiros continua em português)
+
+estado-sem-estado = sem estado
+estado-ocioso = ocioso
+estado-vazio = vazio
+estado-gerando = gerando
+estado-liberando = liberando
+estado-coletando = coletando
+estado-preparacao = preparação
+estado-processando = processando
+estado-bloqueado = bloqueado
+estado-aguardando-operador = aguardando operador
+estado-aguardando-transporte = aguardando transporte
+estado-em-falha = em falha
+estado-fora-do-turno = fora do turno
+estado-viajando-vazio = viajando vazio
+estado-viajando-carregado = viajando carregado
+estado-carregando = carregando
+estado-descarregando = descarregando
+estado-trabalhando-no-posto = trabalhando no posto
+estado-parado = parado (comando externo)
+estado-aguardando-tecnico = aguardando técnico
+estado-em-manutencao = em manutenção preventiva
+estado-em-pausa = em pausa (fadiga)
+estado-operador-entrando = operador entrando
+estado-operador-saindo = operador saindo
