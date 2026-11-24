@@ -193,7 +193,8 @@ pub fn indicadores(
         .iter()
         .filter(|h| h.mes.as_str() >= mes_de && h.mes.as_str() <= mes_ate)
         .collect();
-    let total_h: f64 = hh.iter().map(|h| h.horas).sum();
+    // `+ 0.0`: the sum of nothing is -0.0, and the sign would go to the report and the export.
+    let total_h: f64 = hh.iter().map(|h| h.horas).sum::<f64>() + 0.0;
     let taxa = |n: f64| {
         if total_h > 0.0 {
             n * config.base / total_h
@@ -213,7 +214,8 @@ pub fn indicadores(
     let dias_tot: f64 = no_periodo
         .iter()
         .map(|i| i.dias_perdidos + i.dias_debitados)
-        .sum();
+        .sum::<f64>()
+        + 0.0;
     let quase = no_periodo
         .iter()
         .filter(|i| i.tipo == Tipo::QuaseAcidente)

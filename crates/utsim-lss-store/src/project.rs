@@ -79,6 +79,38 @@ pub struct ProjectFolder {
     signer: Option<crate::assinatura::Signer>,
     /// The last link of the chain, read on the first signed commit.
     last_link: Option<Option<utsim_diario::Elo>>,
+    /// A project never saved: it lives in a temporary folder, deleted when the folder is
+    /// dropped ([`ProjectFolder::create_draft`], [`ProjectFolder::save_as`]).
+    draft: bool,
+    /// Automatic saving off: the files of the new operations (and their signature links)
+    /// wait here, path and bytes, for [`ProjectFolder::write_deferred`]. The state already
+    /// has them.
+    defer: bool,
+    deferred: Vec<(PathBuf, Vec<u8>)>,
+}
+
+impl Drop for ProjectFolder {
+    fn drop(&mut self) {
+        // The temporary folder of a project never saved goes with it; a saved folder is
+        // never touched.
+        if self.draft {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+}
+
+/// Copies the folder `de` into `para`, file by file (subfolders too).
+fn copy_dir(de: &Path, para: &Path) -> Result<()> {
+    fs::create_dir_all(para).map_err(|e| Error::io(para, e))?;
+    for e in fs::read_dir(de).map_err(|e| Error::io(de, e))?.flatten() {
+        let (from, to) = (e.path(), para.join(e.file_name()));
+        if from.is_dir() {
+            copy_dir(&from, &to)?;
+        } else {
+            fs::copy(&from, &to).map_err(|e| Error::io(&from, e))?;
+        }
+    }
+    Ok(())
 }
 
 /// The path with the `.lss` extension (added when missing).
@@ -205,8 +237,97 @@ impl ProjectFolder {
             full: false,
             signer: crate::assinatura::signer_of(me.person),
             last_link: None,
+            draft: false,
+            defer: false,
+            deferred: Vec::new(),
             me,
         }
+    }
+
+    /// A new project that is not in any folder of the person yet ("começar sem pasta"): it
+    /// lives in a temporary folder of the system, deleted when it is dropped, until
+    /// [`ProjectFolder::save_as`] gives it a place. Everything works on it as on a saved
+    /// project.
+    pub fn create_draft(
+        title: &str,
+        approach: Approach,
+        me: &Identity,
+        clock: &dyn Clock,
+    ) -> Result<Self> {
+        let path = std::env::temp_dir().join(format!("utsim-lss-novo-{}", clock.new_id()));
+        let mut pf = Self::create(&path, title, approach, me, clock, None)?;
+        pf.draft = true;
+        Ok(pf)
+    }
+
+    /// The project was never saved (a draft in a temporary folder).
+    pub fn is_draft(&self) -> bool {
+        self.draft
+    }
+
+    /// Saves the project in the folder `dest` (the `.lss` extension is added when missing)
+    /// and goes on working there: every file goes, with the operations still waiting for
+    /// the Save. `dest` cannot be a project already, nor be inside this one, nor a folder
+    /// with files: nothing is overwritten. The temporary folder of a draft is deleted after
+    /// the copy.
+    pub fn save_as(&mut self, dest: &Path) -> Result<()> {
+        let dest = with_extension(dest);
+        if is_project(&dest) {
+            return Err(Error::Exists(dest));
+        }
+        if dest.starts_with(&self.root) {
+            return Err(Error::Invalid(format!(
+                "{} fica dentro do projeto aberto",
+                dest.display()
+            )));
+        }
+        if fs::read_dir(&dest).is_ok_and(|mut d| d.next().is_some()) {
+            return Err(Error::Invalid(format!(
+                "{} já tem arquivos: escolha uma pasta nova ou vazia",
+                dest.display()
+            )));
+        }
+        // The presence files are of this session only; they are written again there.
+        copy_dir(&self.root, &dest)?;
+        let _ = fs::remove_dir_all(dest.join(PRESENCE));
+        for (p, bytes) in &self.deferred {
+            let fim = dest.join(p.strip_prefix(&self.root).unwrap_or(p));
+            fsio::write_new(&fim, bytes)?;
+        }
+        let me = self.me.clone();
+        let mut nova = Self::open(&dest, &me, self.cache_dir.as_deref())?;
+        nova.defer = self.defer;
+        // The old one is dropped here: a draft takes its temporary folder with it.
+        *self = nova;
+        Ok(())
+    }
+
+    /// Automatic saving off (`true`): the new operations wait in memory for
+    /// [`ProjectFolder::write_deferred`]. Turning it back on writes what was waiting.
+    pub fn set_defer(&mut self, defer: bool) -> Result<usize> {
+        self.defer = defer;
+        if defer { Ok(0) } else { self.write_deferred() }
+    }
+
+    pub fn is_deferred(&self) -> bool {
+        self.defer
+    }
+
+    /// Files made but not written to the folder yet.
+    pub fn deferred_count(&self) -> usize {
+        self.deferred.len()
+    }
+
+    /// Writes the files that were waiting (the Save with automatic saving off), in order.
+    /// Returns how many. On a failure, the ones not written keep waiting.
+    pub fn write_deferred(&mut self) -> Result<usize> {
+        let mut n = 0;
+        while let Some((p, bytes)) = self.deferred.first() {
+            fsio::write_new(p, bytes)?;
+            self.deferred.remove(0);
+            n += 1;
+        }
+        Ok(n)
     }
 
     /// Creates a program folder (`docs/plano_lean_seis_sigma.md`, 8.9): the same journal,
@@ -533,7 +654,11 @@ impl ProjectFolder {
         for op in &ops {
             let path = self.op_path(op);
             let text = format::write(op);
-            fsio::write_new(&path, text.as_bytes())?;
+            if self.defer {
+                self.deferred.push((path.clone(), text.as_bytes().to_vec()));
+            } else {
+                fsio::write_new(&path, text.as_bytes())?;
+            }
             self.seen.insert(path);
             // Our own operations always come after everything known.
             let _ = self.journal.insert(op.clone());
@@ -546,7 +671,7 @@ impl ProjectFolder {
             };
             let files: Vec<(Id, &[u8])> =
                 written.iter().map(|(id, t)| (*id, t.as_bytes())).collect();
-            let elo = crate::assinatura::write_link(
+            let (elo, path, bytes) = crate::assinatura::make_link(
                 &self.root,
                 self.me.person,
                 &signer,
@@ -554,6 +679,11 @@ impl ProjectFolder {
                 &files,
                 clock.now_ms(),
             )?;
+            if self.defer {
+                self.deferred.push((path, bytes));
+            } else {
+                fsio::write_new(&path, &bytes)?;
+            }
             self.last_link = Some(Some(elo));
         }
         Ok(ops)
@@ -595,7 +725,8 @@ impl ProjectFolder {
             report.full_replay = true;
         }
         report.pending = self.pending.len();
-        if !self.full && self.journal.tail_len() >= SNAPSHOT_EVERY {
+        // A snapshot holds everything known: not while operations wait for the Save.
+        if !self.full && self.deferred.is_empty() && self.journal.tail_len() >= SNAPSHOT_EVERY {
             report.snapshot = Some(self.write_snapshot(clock)?);
             // Following refreshes keep the in-memory journal; the snapshot serves the next
             // opening (here or elsewhere).
@@ -624,6 +755,10 @@ impl ProjectFolder {
         let Some(path) = self.cache_file() else {
             return Ok(());
         };
+        // Operations not saved must not come back from the cache.
+        if !self.deferred.is_empty() {
+            return Ok(());
+        }
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         }

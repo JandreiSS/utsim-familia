@@ -217,6 +217,21 @@ pub fn write_link(
     ops: &[(Id, &[u8])],
     at_ms: i64,
 ) -> Result<Elo> {
+    let (elo, path, bytes) = make_link(root, person, signer, last, ops, at_ms)?;
+    fsio::write_new(&path, &bytes)?;
+    Ok(elo)
+}
+
+/// The link [`write_link`] writes, with its file and bytes, without writing it (the
+/// project with automatic saving off keeps it for the Save).
+pub fn make_link(
+    root: &Path,
+    person: Id,
+    signer: &Signer,
+    last: Option<&Elo>,
+    ops: &[(Id, &[u8])],
+    at_ms: i64,
+) -> Result<(Elo, PathBuf, Vec<u8>)> {
     let short = signer.short();
     let link = Link {
         author: chain_author(person, &short),
@@ -238,8 +253,7 @@ pub fn write_link(
         &elo.hash[..SHORT.min(elo.hash.len())]
     ));
     let text = serde_json::to_string_pretty(&elo).expect("link serializes");
-    fsio::write_new(&path, text.as_bytes())?;
-    Ok(elo)
+    Ok((elo, path, text.into_bytes()))
 }
 
 /// A key a person registered in the project.

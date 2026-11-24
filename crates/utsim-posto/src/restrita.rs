@@ -68,6 +68,12 @@ impl Unidade {
         }
     }
 
+    /// The restricted folder was created already (it is a unit folder). When it was and
+    /// [`Unidade::abrir_restrita`] gives `None`, the person has no access to it.
+    pub fn restrita_criada(&self) -> bool {
+        Unidade::eh_unidade(&self.caminho_restrita())
+    }
+
     /// Opens the restricted folder; `None` when this person cannot reach it (the folder
     /// is not shared with them, or was never created).
     pub fn abrir_restrita(&self) -> Option<Restrita> {
