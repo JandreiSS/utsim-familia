@@ -318,6 +318,401 @@ impl LiveIndex {
     }
 }
 
+/// Records from which [`Timeline::build`] splits its work over threads.
+const PARALLEL_RECORDS: usize = 200_000;
+
+fn new_item() -> ItemTrack {
+    ItemTrack {
+        steps: Vec::new(),
+        transit: 0.0,
+        created: f64::INFINITY,
+        destroyed: f64::INFINITY,
+        item_type: None,
+    }
+}
+
+/// Dense index of the item with trace id `key`, numbered by first appearance; `fresh`
+/// runs once for a new item.
+fn dense(index: &mut FxMap<u64, usize>, key: u64, mut fresh: impl FnMut()) -> usize {
+    let n = index.len();
+    *index.entry(key).or_insert_with(|| {
+        fresh();
+        n
+    })
+}
+
+/// The items' steps, creation and end, and types.
+struct ItemPass {
+    items: Vec<ItemTrack>,
+    index: FxMap<u64, usize>,
+}
+
+impl ItemPass {
+    fn run(replay: &Replay, n_blocks: usize) -> Self {
+        let mut items: Vec<ItemTrack> = Vec::new();
+        let mut index: FxMap<u64, usize> = FxMap::default();
+        // Items moved into each block so far (the arrival number of the next one).
+        let mut arrivals = vec![0u32; n_blocks];
+        let mut n_flights = 0usize;
+        // Steps of the last item that left: room for a new item's steps (the items of a
+        // line take the same path), so the vectors do not grow step by step.
+        let mut hint = 0usize;
+        let mut of = |key: u64, items: &mut Vec<ItemTrack>, hint: usize| {
+            dense(&mut index, key, || {
+                let mut it = new_item();
+                it.steps.reserve_exact(hint);
+                items.push(it);
+            })
+        };
+        for rec in &replay.records {
+            let t = rec.t;
+            match &rec.event {
+                TraceEvent::Created { item, block } => {
+                    let i = of(*item, &mut items, hint);
+                    items[i].created = items[i].created.min(t);
+                    items[i].steps.push((t, ItemStep::Created(small(*block))));
+                }
+                TraceEvent::Moved { item, from, to } => {
+                    let i = of(*item, &mut items, hint);
+                    if items[i].created.is_infinite() {
+                        items[i].created = t;
+                    }
+                    let seq = arrivals.get(*to).copied().unwrap_or(0);
+                    if let Some(a) = arrivals.get_mut(*to) {
+                        *a += 1;
+                    }
+                    items[i].steps.push((
+                        t,
+                        ItemStep::Moved {
+                            from: small(*from),
+                            to: small(*to),
+                            seq,
+                        },
+                    ));
+                }
+                TraceEvent::Transit { item, from, to, .. } => {
+                    let i = of(*item, &mut items, hint);
+                    let k = n_flights;
+                    n_flights += 1;
+                    items[i].steps.push((
+                        t,
+                        ItemStep::Flight {
+                            from: small(*from),
+                            to: small(*to),
+                            flight: small(k),
+                        },
+                    ));
+                }
+                TraceEvent::Packed { item, container } => {
+                    let i = of(*item, &mut items, hint);
+                    let c = of(*container, &mut items, hint);
+                    items[i].steps.push((t, ItemStep::Packed(small(c))));
+                }
+                TraceEvent::Unpacked { item, block } => {
+                    let i = of(*item, &mut items, hint);
+                    items[i].steps.push((t, ItemStep::Unpacked(small(*block))));
+                }
+                TraceEvent::Destroyed { item } => {
+                    let i = of(*item, &mut items, hint);
+                    items[i].steps.push((t, ItemStep::Destroyed));
+                    items[i].destroyed = items[i].destroyed.min(t);
+                    hint = items[i].steps.len();
+                }
+                TraceEvent::Slot { item, .. } => {
+                    of(*item, &mut items, hint);
+                }
+                TraceEvent::ItemType { item, item_type } => {
+                    let i = of(*item, &mut items, hint);
+                    items[i].item_type = Some(*item_type);
+                }
+                _ => {}
+            }
+        }
+        drop(of);
+        for it in &mut items {
+            if it.steps.capacity() > it.steps.len() + it.steps.len() / 8 {
+                it.steps.shrink_to_fit();
+            }
+        }
+        ItemPass { items, index }
+    }
+}
+
+/// The blocks' states, content and arrivals, the belt events, the rack slots and the
+/// hand-offs of the carriers.
+struct BlockPass {
+    blocks: Vec<BlockTrack>,
+    belt_events: HashMap<usize, Vec<BeltEv>>,
+    slots: FxMap<(usize, usize), Vec<(f64, usize)>>,
+    max_slot: HashMap<usize, usize>,
+    handoffs: HashMap<usize, Vec<Handoff>>,
+}
+
+impl BlockPass {
+    fn run(replay: &Replay, mobile: &[bool], belt: &[bool]) -> Self {
+        let n_blocks = replay.blocks.len();
+        let is_mobile = |b: usize| mobile.get(b).copied().unwrap_or(false);
+        let is_belt = |b: usize| belt.get(b).copied().unwrap_or(false);
+        let mut blocks = vec![BlockTrack::default(); n_blocks];
+        // The sizes first, by block index only (no item lookup): growing a thousand
+        // vectors of a hundred thousand entries by doubling costs more than this count.
+        // Content changes are counted at most (several at one instant keep one entry).
+        {
+            let mut content = vec![0usize; n_blocks];
+            let mut arrivals = vec![0usize; n_blocks];
+            let mut states = vec![0usize; n_blocks];
+            let add = |v: &mut Vec<usize>, b: usize| {
+                if let Some(n) = v.get_mut(b) {
+                    *n += 1;
+                }
+            };
+            for rec in &replay.records {
+                match &rec.event {
+                    TraceEvent::Created { block, .. } | TraceEvent::Unpacked { block, .. } => {
+                        add(&mut content, *block)
+                    }
+                    TraceEvent::Moved { from, to, .. } => {
+                        add(&mut content, *from);
+                        add(&mut content, *to);
+                        add(&mut arrivals, *to);
+                    }
+                    TraceEvent::Transit { from, .. } => add(&mut content, *from),
+                    TraceEvent::State { block, .. } => add(&mut states, *block),
+                    _ => {}
+                }
+            }
+            for (b, track) in blocks.iter_mut().enumerate() {
+                track.content_t.reserve_exact(content[b]);
+                track.content_n.reserve_exact(content[b]);
+                track.arrivals.reserve_exact(arrivals[b]);
+                track.states.reserve_exact(states[b]);
+            }
+        }
+        let mut counts = vec![0usize; n_blocks];
+        let mut index: FxMap<u64, usize> = FxMap::default();
+        // Current block of each item (None while packed or gone), for the counters, and
+        // whether its last step was the departure of a timed connection.
+        let mut at: Vec<Option<usize>> = Vec::new();
+        let mut flying: Vec<bool> = Vec::new();
+        let mut belt_events: HashMap<usize, Vec<BeltEv>> = HashMap::new();
+        let mut belt_halted: HashMap<usize, bool> = HashMap::new();
+        let mut slots: FxMap<(usize, usize), Vec<(f64, usize)>> = FxMap::default();
+        let mut max_slot: HashMap<usize, usize> = HashMap::new();
+        let mut handoffs: HashMap<usize, Vec<Handoff>> = HashMap::new();
+        let mut of = |key: u64, at: &mut Vec<Option<usize>>, flying: &mut Vec<bool>| {
+            dense(&mut index, key, || {
+                at.push(None);
+                flying.push(false);
+            })
+        };
+        let mut belt_ev = |b: usize, ev: BeltEv| {
+            if is_belt(b) {
+                belt_events.entry(b).or_default().push(ev);
+            }
+        };
+        for rec in &replay.records {
+            let t = rec.t;
+            match &rec.event {
+                TraceEvent::Created { item, block } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    flying[i] = false;
+                    at[i] = Some(*block);
+                    bump(&mut blocks, &mut counts, *block, t, true);
+                    belt_ev(*block, BeltEv::In { t, item: i });
+                }
+                TraceEvent::Moved { item, from, to } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    // The arrival of a timed transfer: the departure was already counted.
+                    let arriving = flying[i];
+                    flying[i] = false;
+                    if !arriving {
+                        bump(&mut blocks, &mut counts, *from, t, false);
+                    }
+                    bump(&mut blocks, &mut counts, *to, t, true);
+                    if let Some(track) = blocks.get_mut(*to) {
+                        track.arrivals.push(t);
+                    }
+                    for (carrier, other, pickup) in [(*to, *from, true), (*from, *to, false)] {
+                        if is_mobile(carrier) && !(arriving && !pickup) {
+                            handoffs.entry(carrier).or_default().push(Handoff {
+                                t,
+                                item: i,
+                                other,
+                                pickup,
+                            });
+                        }
+                    }
+                    if !arriving {
+                        belt_ev(*from, BeltEv::Out { t, item: i });
+                    }
+                    belt_ev(*to, BeltEv::In { t, item: i });
+                    at[i] = Some(*to);
+                }
+                TraceEvent::Transit { item, from, .. } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    flying[i] = true;
+                    bump(&mut blocks, &mut counts, *from, t, false);
+                    belt_ev(*from, BeltEv::Out { t, item: i });
+                    at[i] = None;
+                }
+                TraceEvent::Packed { item, container } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    of(*container, &mut at, &mut flying);
+                    flying[i] = false;
+                    if let Some(b) = at[i].take() {
+                        bump(&mut blocks, &mut counts, b, t, false);
+                        belt_ev(b, BeltEv::Out { t, item: i });
+                    }
+                }
+                TraceEvent::Unpacked { item, block } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    flying[i] = false;
+                    at[i] = Some(*block);
+                    bump(&mut blocks, &mut counts, *block, t, true);
+                    belt_ev(*block, BeltEv::In { t, item: i });
+                }
+                TraceEvent::Destroyed { item } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    flying[i] = false;
+                    if let Some(b) = at[i].take() {
+                        bump(&mut blocks, &mut counts, b, t, false);
+                        belt_ev(b, BeltEv::Out { t, item: i });
+                    }
+                }
+                TraceEvent::State { block, state } => {
+                    if let Some(track) = blocks.get_mut(*block) {
+                        track.states.push((t, *state));
+                    }
+                    if is_belt(*block) {
+                        // A breakdown or a shift stops the belt (the kernel shows these states).
+                        let on = matches!(state, State::Down | State::OffShift);
+                        let was = belt_halted.insert(*block, on).unwrap_or(false);
+                        if on != was {
+                            belt_ev(*block, BeltEv::Halt { t, on });
+                        }
+                    }
+                }
+                TraceEvent::Slot { item, block, slot } => {
+                    let i = of(*item, &mut at, &mut flying);
+                    slots.entry((*block, i)).or_default().push((t, *slot));
+                    let m = max_slot.entry(*block).or_insert(0);
+                    *m = (*m).max(*slot);
+                }
+                TraceEvent::ItemType { item, .. } => {
+                    of(*item, &mut at, &mut flying);
+                }
+                _ => {}
+            }
+        }
+        drop(belt_ev);
+        for track in &mut blocks {
+            track.content_t.shrink_to_fit();
+            track.content_n.shrink_to_fit();
+        }
+        BlockPass {
+            blocks,
+            belt_events,
+            slots,
+            max_slot,
+            handoffs,
+        }
+    }
+}
+
+/// Content count of block `b` after one item came in (`up`) or went out, at `t`.
+fn bump(blocks: &mut [BlockTrack], counts: &mut [usize], b: usize, t: f64, up: bool) {
+    if b >= counts.len() {
+        return;
+    }
+    if up {
+        counts[b] += 1;
+    } else {
+        counts[b] = counts[b].saturating_sub(1);
+    }
+    // Several changes at one instant keep only the last count: the query reads the last
+    // change at or before `t`, so the result is the same.
+    let track = &mut blocks[b];
+    let n = small(counts[b]);
+    match (track.content_t.last(), track.content_n.last_mut()) {
+        (Some(&last), Some(c)) if last == t => *c = n,
+        _ => {
+            track.content_t.push(t);
+            track.content_n.push(n);
+        }
+    }
+}
+
+/// The event times, the travels of the carriers, the paths of the timed connections, the
+/// tokens and the fluids.
+struct MiscPass {
+    event_times: Vec<f64>,
+    legs: HashMap<usize, Vec<TravelLeg>>,
+    n_travels: usize,
+    tokens: crate::tokens::TokenTrack,
+    fluid: FluidSeries,
+    flights: Vec<TravelLeg>,
+}
+
+impl MiscPass {
+    fn run(replay: &Replay) -> Self {
+        let mut event_times: Vec<f64> = Vec::new();
+        let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
+        let mut n_travels = 0usize;
+        let mut tokens = crate::tokens::TokenTrack::default();
+        let mut fluid = FluidSeries::new();
+        let mut flights: Vec<TravelLeg> = Vec::new();
+        for rec in &replay.records {
+            let t = rec.t;
+            if event_times.last() != Some(&t) {
+                event_times.push(t);
+            }
+            match &rec.event {
+                TraceEvent::Transit {
+                    delay,
+                    duration,
+                    path,
+                    ..
+                } => flights.push(TravelLeg::new(t + delay, *duration, path).unwrap_or_else(
+                    || TravelLeg::new(t + delay, 0.0, &[[0.0; 3]]).expect("point"),
+                )),
+                TraceEvent::Travel {
+                    carrier,
+                    path,
+                    duration,
+                } => {
+                    n_travels += 1;
+                    if let Some(leg) = TravelLeg::new(t, *duration, path) {
+                        legs.entry(*carrier).or_default().push(leg);
+                    }
+                }
+                TraceEvent::Tokens {
+                    flow,
+                    activity,
+                    count,
+                } => tokens.push(t, *flow, *activity, *count),
+                TraceEvent::Fluid {
+                    net,
+                    node,
+                    level,
+                    rate,
+                } => fluid
+                    .entry((*net, *node))
+                    .or_default()
+                    .push((t, *level, *rate)),
+                _ => {}
+            }
+        }
+        MiscPass {
+            event_times,
+            legs,
+            n_travels,
+            tokens,
+            fluid,
+            flights,
+        }
+    }
+}
+
 /// The replay index. See the module docs.
 #[derive(Clone, Debug)]
 pub struct Timeline {
@@ -426,14 +821,12 @@ const GAP_SAMPLE: usize = 1_000_000;
 
 impl Timeline {
     pub fn build(replay: &Replay, setting: TransitSetting) -> Self {
+        Self::build_with(replay, setting, replay.records.len() >= PARALLEL_RECORDS)
+    }
+
+    /// [`Self::build`], with the passes on threads or not.
+    fn build_with(replay: &Replay, setting: TransitSetting, parallel: bool) -> Self {
         let n_blocks = replay.blocks.len();
-        let mut blocks = vec![BlockTrack::default(); n_blocks];
-        let mut items: Vec<ItemTrack> = Vec::new();
-        let mut index: FxMap<u64, usize> = FxMap::default();
-        // Current block of each item (None while packed or gone), for the counters.
-        let mut at: Vec<Option<usize>> = Vec::new();
-        let mut counts = vec![0usize; n_blocks];
-        let mut event_times: Vec<f64> = Vec::new();
         let mobile: Vec<bool> = replay
             .blocks
             .iter()
@@ -448,250 +841,47 @@ impl Timeline {
         let is_positioned = |b: usize| positioned.get(b).copied().unwrap_or(false);
         // Per block, once: the test runs several times for each of millions of records.
         let belt: Vec<bool> = replay.blocks.iter().map(|b| b.kind == "Conveyor").collect();
-        let is_belt = |b: usize| belt.get(b).copied().unwrap_or(false);
-        let mut belt_events: HashMap<usize, Vec<BeltEv>> = HashMap::new();
-        let mut belt_halted: HashMap<usize, bool> = HashMap::new();
-        let mut slots: FxMap<(usize, usize), Vec<(f64, usize)>> = FxMap::default();
-        let mut max_slot: HashMap<usize, usize> = HashMap::new();
-        let mut tokens = crate::tokens::TokenTrack::default();
-        let mut fluid = FluidSeries::new();
-        let mut legs: HashMap<usize, Vec<TravelLeg>> = HashMap::new();
-        let mut n_travels = 0usize;
-        let mut flights: Vec<TravelLeg> = Vec::new();
-        let mut handoffs: HashMap<usize, Vec<Handoff>> = HashMap::new();
 
-        let item_index = |key: u64,
-                          index: &mut FxMap<u64, usize>,
-                          items: &mut Vec<ItemTrack>,
-                          at: &mut Vec<Option<usize>>| {
-            *index.entry(key).or_insert_with(|| {
-                items.push(ItemTrack {
-                    steps: Vec::new(),
-                    transit: 0.0,
-                    created: f64::INFINITY,
-                    destroyed: f64::INFINITY,
-                    item_type: None,
-                });
-                at.push(None);
-                items.len() - 1
+        // Three passes over the trace, each on a thread of its own for a long trace: the
+        // items, the blocks and the rest. Each pass numbers the items the same way (first
+        // appearance), so the result is the one of a single pass.
+        let (ItemPass { mut items, index }, block_pass, misc) = if !parallel {
+            (
+                ItemPass::run(replay, n_blocks),
+                BlockPass::run(replay, &mobile, &belt),
+                MiscPass::run(replay),
+            )
+        } else {
+            std::thread::scope(|s| {
+                let items = s.spawn(|| ItemPass::run(replay, n_blocks));
+                let blocks = s.spawn(|| BlockPass::run(replay, &mobile, &belt));
+                let misc = MiscPass::run(replay);
+                (
+                    items
+                        .join()
+                        .unwrap_or_else(|e| std::panic::resume_unwind(e)),
+                    blocks
+                        .join()
+                        .unwrap_or_else(|e| std::panic::resume_unwind(e)),
+                    misc,
+                )
             })
         };
-        let bump =
-            |blocks: &mut Vec<BlockTrack>, counts: &mut Vec<usize>, b: usize, t: f64, up: bool| {
-                if b >= counts.len() {
-                    return;
-                }
-                if up {
-                    counts[b] += 1;
-                } else {
-                    counts[b] = counts[b].saturating_sub(1);
-                }
-                // Several changes at one instant keep only the last count: the query reads
-                // the last change at or before `t`, so the result is the same.
-                let track = &mut blocks[b];
-                let n = small(counts[b]);
-                match (track.content_t.last(), track.content_n.last_mut()) {
-                    (Some(&last), Some(c)) if last == t => *c = n,
-                    _ => {
-                        track.content_t.push(t);
-                        track.content_n.push(n);
-                    }
-                }
-            };
-
-        for rec in &replay.records {
-            let t = rec.t;
-            if event_times.last() != Some(&t) {
-                event_times.push(t);
-            }
-            match &rec.event {
-                TraceEvent::Created { item, block } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    items[i].created = items[i].created.min(t);
-                    items[i].steps.push((t, ItemStep::Created(small(*block))));
-                    at[i] = Some(*block);
-                    bump(&mut blocks, &mut counts, *block, t, true);
-                    if is_belt(*block) {
-                        belt_events
-                            .entry(*block)
-                            .or_default()
-                            .push(BeltEv::In { t, item: i });
-                    }
-                }
-                TraceEvent::Moved { item, from, to } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    if items[i].created.is_infinite() {
-                        items[i].created = t;
-                    }
-                    // The arrival of a timed transfer: the departure was already counted.
-                    let arriving =
-                        matches!(items[i].steps.last(), Some((_, ItemStep::Flight { .. })));
-                    let seq = blocks.get(*to).map_or(0, |track| track.arrivals.len()) as u32;
-                    items[i].steps.push((
-                        t,
-                        ItemStep::Moved {
-                            from: small(*from),
-                            to: small(*to),
-                            seq,
-                        },
-                    ));
-                    if !arriving {
-                        bump(&mut blocks, &mut counts, *from, t, false);
-                    }
-                    bump(&mut blocks, &mut counts, *to, t, true);
-                    if let Some(track) = blocks.get_mut(*to) {
-                        track.arrivals.push(t);
-                    }
-                    for (carrier, other, pickup) in [(*to, *from, true), (*from, *to, false)] {
-                        if is_mobile(carrier) && !(arriving && !pickup) {
-                            handoffs.entry(carrier).or_default().push(Handoff {
-                                t,
-                                item: i,
-                                other,
-                                pickup,
-                            });
-                        }
-                    }
-                    if is_belt(*from) && !arriving {
-                        belt_events
-                            .entry(*from)
-                            .or_default()
-                            .push(BeltEv::Out { t, item: i });
-                    }
-                    if is_belt(*to) {
-                        belt_events
-                            .entry(*to)
-                            .or_default()
-                            .push(BeltEv::In { t, item: i });
-                    }
-                    at[i] = Some(*to);
-                }
-                TraceEvent::Transit {
-                    item,
-                    from,
-                    to,
-                    delay,
-                    duration,
-                    path,
-                } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    let k = flights.len();
-                    flights.push(
-                        TravelLeg::new(t + delay, *duration, path).unwrap_or_else(|| {
-                            TravelLeg::new(t + delay, 0.0, &[[0.0; 3]]).expect("point")
-                        }),
-                    );
-                    items[i].steps.push((
-                        t,
-                        ItemStep::Flight {
-                            from: small(*from),
-                            to: small(*to),
-                            flight: small(k),
-                        },
-                    ));
-                    bump(&mut blocks, &mut counts, *from, t, false);
-                    if is_belt(*from) {
-                        belt_events
-                            .entry(*from)
-                            .or_default()
-                            .push(BeltEv::Out { t, item: i });
-                    }
-                    at[i] = None;
-                }
-                TraceEvent::Packed { item, container } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    let c = item_index(*container, &mut index, &mut items, &mut at);
-                    items[i].steps.push((t, ItemStep::Packed(small(c))));
-                    if let Some(b) = at[i].take() {
-                        bump(&mut blocks, &mut counts, b, t, false);
-                        if is_belt(b) {
-                            belt_events
-                                .entry(b)
-                                .or_default()
-                                .push(BeltEv::Out { t, item: i });
-                        }
-                    }
-                }
-                TraceEvent::Unpacked { item, block } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    items[i].steps.push((t, ItemStep::Unpacked(small(*block))));
-                    at[i] = Some(*block);
-                    bump(&mut blocks, &mut counts, *block, t, true);
-                    if is_belt(*block) {
-                        belt_events
-                            .entry(*block)
-                            .or_default()
-                            .push(BeltEv::In { t, item: i });
-                    }
-                }
-                TraceEvent::Destroyed { item } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    items[i].steps.push((t, ItemStep::Destroyed));
-                    items[i].destroyed = items[i].destroyed.min(t);
-                    if let Some(b) = at[i].take() {
-                        bump(&mut blocks, &mut counts, b, t, false);
-                        if is_belt(b) {
-                            belt_events
-                                .entry(b)
-                                .or_default()
-                                .push(BeltEv::Out { t, item: i });
-                        }
-                    }
-                }
-                TraceEvent::State { block, state } => {
-                    if let Some(track) = blocks.get_mut(*block) {
-                        track.states.push((t, *state));
-                    }
-                    if is_belt(*block) {
-                        // A breakdown or a shift stops the belt (the kernel shows these states).
-                        let on = matches!(state, State::Down | State::OffShift);
-                        let was = belt_halted.insert(*block, on).unwrap_or(false);
-                        if on != was {
-                            belt_events
-                                .entry(*block)
-                                .or_default()
-                                .push(BeltEv::Halt { t, on });
-                        }
-                    }
-                }
-                TraceEvent::Travel {
-                    carrier,
-                    path,
-                    duration,
-                } => {
-                    n_travels += 1;
-                    if let Some(leg) = TravelLeg::new(t, *duration, path) {
-                        legs.entry(*carrier).or_default().push(leg);
-                    }
-                }
-                // The hook height of overhead cranes: not in the timeline yet.
-                TraceEvent::Hoist { .. } => {}
-                TraceEvent::Tokens {
-                    flow,
-                    activity,
-                    count,
-                } => tokens.push(t, *flow, *activity, *count),
-                TraceEvent::Fluid {
-                    net,
-                    node,
-                    level,
-                    rate,
-                } => fluid
-                    .entry((*net, *node))
-                    .or_default()
-                    .push((t, *level, *rate)),
-                TraceEvent::Slot { item, block, slot } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    slots.entry((*block, i)).or_default().push((t, *slot));
-                    let m = max_slot.entry(*block).or_insert(0);
-                    *m = (*m).max(*slot);
-                }
-                TraceEvent::ItemType { item, item_type } => {
-                    let i = item_index(*item, &mut index, &mut items, &mut at);
-                    items[i].item_type = Some(*item_type);
-                }
-            }
-        }
+        let BlockPass {
+            blocks,
+            belt_events,
+            slots,
+            max_slot,
+            handoffs,
+        } = block_pass;
+        let MiscPass {
+            event_times,
+            legs,
+            n_travels,
+            tokens,
+            fluid,
+            flights,
+        } = misc;
         // Items only seen as containers (no own event) never exist visually.
         for it in &mut items {
             if it.created.is_infinite() {
@@ -724,22 +914,36 @@ impl Timeline {
             // Not used with a fixed transit time.
             TransitSetting::Fixed(_) => hi,
         };
-        let mut gaps: Vec<f64> = Vec::new();
-
-        for it in &mut items {
-            it.transit = match setting {
-                TransitSetting::Fixed(v) => v.max(0.0),
-                TransitSetting::Auto => {
-                    gaps.clear();
-                    gaps.extend(
-                        it.steps
-                            .windows(2)
-                            .map(|w| w[1].0 - w[0].0)
-                            .filter(|g| *g > 0.0),
-                    );
-                    median(&mut gaps).map_or(global_default, |m| (0.4 * m).clamp(lo, hi))
+        let item_transit = |part: &mut [ItemTrack]| {
+            let mut gaps: Vec<f64> = Vec::new();
+            for it in part {
+                it.transit = match setting {
+                    TransitSetting::Fixed(v) => v.max(0.0),
+                    TransitSetting::Auto => {
+                        gaps.clear();
+                        gaps.extend(
+                            it.steps
+                                .windows(2)
+                                .map(|w| w[1].0 - w[0].0)
+                                .filter(|g| *g > 0.0),
+                        );
+                        median(&mut gaps).map_or(global_default, |m| (0.4 * m).clamp(lo, hi))
+                    }
+                };
+            }
+        };
+        if !parallel {
+            item_transit(&mut items);
+        } else {
+            // Each item on its own: the medians split over the threads.
+            let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+            let chunk = items.len().div_ceil(workers.clamp(1, 8)).max(1);
+            let f = &item_transit;
+            std::thread::scope(|s| {
+                for part in items.chunks_mut(chunk) {
+                    s.spawn(move || f(part));
                 }
-            };
+            });
         }
         // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
         let tween: Vec<bool> = (0..n_blocks)
@@ -1226,6 +1430,30 @@ mod tests {
         assert_eq!(end, rep.report.blocks[sink].input as usize);
         assert_eq!(tl.block_content(sink, 20.0), 0, "a sink holds nothing");
         assert_eq!(tl.block_received(99, 20.0), 0);
+    }
+
+    /// The passes on threads give the index of a single pass.
+    #[test]
+    fn the_parallel_build_is_the_sequential_one() {
+        for text in [MODEL, include_str!("../../../examples/agvs.ron")] {
+            let rep = replay_of(text);
+            let one = Timeline::build_with(&rep, TransitSetting::Auto, false);
+            let par = Timeline::build_with(&rep, TransitSetting::Auto, true);
+            let sorted = |m: &HashMap<usize, Vec<Handoff>>| {
+                let mut v: Vec<_> = m.iter().map(|(k, v)| (*k, format!("{v:?}"))).collect();
+                v.sort();
+                v
+            };
+            assert_eq!(format!("{:?}", one.items), format!("{:?}", par.items));
+            assert_eq!(format!("{:?}", one.blocks), format!("{:?}", par.blocks));
+            assert_eq!(one.event_times, par.event_times);
+            assert_eq!(one.ids, par.ids);
+            assert_eq!(format!("{:?}", one.flights), format!("{:?}", par.flights));
+            assert_eq!(sorted(&one.handoffs), sorted(&par.handoffs));
+            assert_eq!(one.transit_default, par.transit_default);
+            assert_eq!(one.n_travels, par.n_travels);
+            assert!(one.item_count() > 0);
+        }
     }
 
     #[test]
