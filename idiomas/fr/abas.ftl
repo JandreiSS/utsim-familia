@@ -111,3 +111,59 @@ abas-ligue_o_bloco_antes = activez d'abord le bloc '{ $nome }'
 abas-bloco_invalido = bloc invalide
 abas-cadastre_uma_caracteristica_medida_antes = enregistrez une caractéristique mesurée avant le plan de surveillance
 abas-item_nao_existe-2 = '{ $lista }' : l'élément { $indice } n'existe pas
+
+## Paleta de objetos, categorias e nós de fluido (o editor do simulador e o UTSim 3D)
+
+paleta-source = Arrivée
+paleta-queue = File
+paleta-processor = Processus
+paleta-sink = Sortie
+paleta-combiner = Assemblage
+paleta-separator = Désassemblage
+paleta-conveyor = Convoyeur
+paleta-rack = Rayonnage à palettes
+paleta-transporter = Transporteur
+paleta-operator = Opérateur
+paleta-forklift = Chariot élévateur
+paleta-agv = AGV
+paleta-dispatcher = Répartiteur
+paleta-esteira-desenhada = Convoyeur dessiné
+paleta-esteira-canaletas = Convoyeur à goulottes
+paleta-caminho-piso = Chemin au sol
+categoria-fluxo-de-itens = Flux d’éléments
+categoria-montagem = Assemblage
+categoria-manuseio-de-materiais = Manutention
+categoria-recursos-moveis = Ressources mobiles
+fluido-source = Source
+fluido-tank = Cuve
+fluido-pipe = Tuyauterie
+fluido-sink = Évacuation
+fluido-fromitems = Éléments vers fluide
+fluido-toitems = Fluide vers éléments
+
+## Estados dos blocos (o editor do simulador e o UTSim 3D; o rótulo 3D dos roteiros continua em português)
+
+estado-sem-estado = sans état
+estado-ocioso = inactif
+estado-vazio = vide
+estado-gerando = génère
+estado-liberando = libère
+estado-coletando = collecte
+estado-preparacao = réglage
+estado-processando = en traitement
+estado-bloqueado = bloqué
+estado-aguardando-operador = attend un opérateur
+estado-aguardando-transporte = attend un transport
+estado-em-falha = en panne
+estado-fora-do-turno = hors équipe
+estado-viajando-vazio = roule à vide
+estado-viajando-carregado = roule chargé
+estado-carregando = chargement
+estado-descarregando = déchargement
+estado-trabalhando-no-posto = travaille au poste
+estado-parado = arrêté (commande externe)
+estado-aguardando-tecnico = attend un technicien
+estado-em-manutencao = en maintenance préventive
+estado-em-pausa = en pause (fatigue)
+estado-operador-entrando = opérateur qui entre
+estado-operador-saindo = opérateur qui sort
