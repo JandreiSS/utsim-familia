@@ -69,34 +69,43 @@ pub enum TransitSetting {
     Fixed(f64),
 }
 
+/// One step of an item, 16 bytes (24 with its time): a long trace has tens of millions of
+/// them. Block and item indices are `u32`; the visual transit of a move is computed when
+/// asked ([`Timeline::transit_of`]) and the wait of a timed connection is the start of its
+/// path (`Timeline::flights`), so neither is stored per step.
 #[derive(Clone, Copy, Debug)]
 enum ItemStep {
-    Created(usize),
+    Created(u32),
     Moved {
-        from: usize,
-        to: usize,
-        transit: f64,
+        from: u32,
+        to: u32,
         /// How many items had arrived at `to` before this one (its arrival number there):
         /// it gives the item a place on the block that it keeps while it rests there.
         seq: u32,
     },
     /// Left `from` on a timed direct connection; the `Moved` that follows is the arrival.
-    /// `flight` indexes `Timeline::flights`; `delay` is the wait before moving.
+    /// `flight` indexes `Timeline::flights`, whose `t0` is the end of the wait.
     Flight {
-        from: usize,
-        to: usize,
-        delay: f64,
-        flight: usize,
+        from: u32,
+        to: u32,
+        flight: u32,
     },
-    Packed(usize),
-    Unpacked(usize),
+    Packed(u32),
+    Unpacked(u32),
     Destroyed,
+}
+
+/// Index or count as stored in the compact tracks.
+fn small(v: usize) -> u32 {
+    u32::try_from(v).unwrap_or(u32::MAX)
 }
 
 #[derive(Clone, Debug, Default)]
 struct ItemTrack {
     /// Sorted by time (ties keep trace order).
     steps: Vec<(f64, ItemStep)>,
+    /// Longest visual transit of a move of this item (cut at its next event).
+    transit: f64,
     created: f64,
     destroyed: f64,
     /// Item type (1-based index in the model's `item_types`), when the model has types.
@@ -238,8 +247,10 @@ pub fn is_mobile_kind(kind: &str) -> bool {
 #[derive(Clone, Debug, Default)]
 struct BlockTrack {
     states: Vec<(f64, State)>,
-    /// Content count right after each change (sorted by time).
-    content: Vec<(f64, usize)>,
+    /// Times of the content changes (sorted, one entry per instant) and the count right
+    /// after each, in two vectors (12 bytes a change, not 16).
+    content_t: Vec<f64>,
+    content_n: Vec<u32>,
     /// Times at which an item moved into the block (sorted).
     arrivals: Vec<f64>,
 }
@@ -319,6 +330,9 @@ pub struct Timeline {
     transit_default: f64,
     /// Per block: whether it is a mobile resource.
     mobile: Vec<bool>,
+    /// Per block: whether the moves into and out of it are drawn as a transit (neither a
+    /// carrier nor a block with modelled positions).
+    tween: Vec<bool>,
     /// Travel legs per mobile block, in time order.
     legs: HashMap<usize, Vec<TravelLeg>>,
     n_travels: usize,
@@ -453,6 +467,7 @@ impl Timeline {
             *index.entry(key).or_insert_with(|| {
                 items.push(ItemTrack {
                     steps: Vec::new(),
+                    transit: 0.0,
                     created: f64::INFINITY,
                     destroyed: f64::INFINITY,
                     item_type: None,
@@ -471,7 +486,17 @@ impl Timeline {
                 } else {
                     counts[b] = counts[b].saturating_sub(1);
                 }
-                blocks[b].content.push((t, counts[b]));
+                // Several changes at one instant keep only the last count: the query reads
+                // the last change at or before `t`, so the result is the same.
+                let track = &mut blocks[b];
+                let n = small(counts[b]);
+                match (track.content_t.last(), track.content_n.last_mut()) {
+                    (Some(&last), Some(c)) if last == t => *c = n,
+                    _ => {
+                        track.content_t.push(t);
+                        track.content_n.push(n);
+                    }
+                }
             };
 
         for rec in &replay.records {
@@ -483,7 +508,7 @@ impl Timeline {
                 TraceEvent::Created { item, block } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     items[i].created = items[i].created.min(t);
-                    items[i].steps.push((t, ItemStep::Created(*block)));
+                    items[i].steps.push((t, ItemStep::Created(small(*block))));
                     at[i] = Some(*block);
                     bump(&mut blocks, &mut counts, *block, t, true);
                     if is_belt(*block) {
@@ -505,9 +530,8 @@ impl Timeline {
                     items[i].steps.push((
                         t,
                         ItemStep::Moved {
-                            from: *from,
-                            to: *to,
-                            transit: 0.0,
+                            from: small(*from),
+                            to: small(*to),
                             seq,
                         },
                     ));
@@ -553,16 +577,16 @@ impl Timeline {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     let k = flights.len();
                     flights.push(
-                        TravelLeg::new(t + delay, *duration, path)
-                            .unwrap_or_else(|| TravelLeg::new(t, 0.0, &[[0.0; 3]]).expect("point")),
+                        TravelLeg::new(t + delay, *duration, path).unwrap_or_else(|| {
+                            TravelLeg::new(t + delay, 0.0, &[[0.0; 3]]).expect("point")
+                        }),
                     );
                     items[i].steps.push((
                         t,
                         ItemStep::Flight {
-                            from: *from,
-                            to: *to,
-                            delay: *delay,
-                            flight: k,
+                            from: small(*from),
+                            to: small(*to),
+                            flight: small(k),
                         },
                     ));
                     bump(&mut blocks, &mut counts, *from, t, false);
@@ -577,7 +601,7 @@ impl Timeline {
                 TraceEvent::Packed { item, container } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
                     let c = item_index(*container, &mut index, &mut items, &mut at);
-                    items[i].steps.push((t, ItemStep::Packed(c)));
+                    items[i].steps.push((t, ItemStep::Packed(small(c))));
                     if let Some(b) = at[i].take() {
                         bump(&mut blocks, &mut counts, b, t, false);
                         if is_belt(b) {
@@ -590,7 +614,7 @@ impl Timeline {
                 }
                 TraceEvent::Unpacked { item, block } => {
                     let i = item_index(*item, &mut index, &mut items, &mut at);
-                    items[i].steps.push((t, ItemStep::Unpacked(*block)));
+                    items[i].steps.push((t, ItemStep::Unpacked(small(*block))));
                     at[i] = Some(*block);
                     bump(&mut blocks, &mut counts, *block, t, true);
                     if is_belt(*block) {
@@ -703,7 +727,7 @@ impl Timeline {
         let mut gaps: Vec<f64> = Vec::new();
 
         for it in &mut items {
-            let base = match setting {
+            it.transit = match setting {
                 TransitSetting::Fixed(v) => v.max(0.0),
                 TransitSetting::Auto => {
                     gaps.clear();
@@ -716,32 +740,11 @@ impl Timeline {
                     median(&mut gaps).map_or(global_default, |m| (0.4 * m).clamp(lo, hi))
                 }
             };
-            for k in 0..it.steps.len() {
-                let next = it.steps.get(k + 1).map(|s| s.0);
-                let here = it.steps[k].0;
-                let after_flight = k > 0 && matches!(it.steps[k - 1].1, ItemStep::Flight { .. });
-                if let ItemStep::Moved {
-                    from, to, transit, ..
-                } = &mut it.steps[k].1
-                {
-                    if after_flight {
-                        *transit = 0.0;
-                        continue;
-                    }
-                    // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
-                    if is_mobile(*from)
-                        || is_mobile(*to)
-                        || is_positioned(*from)
-                        || is_positioned(*to)
-                    {
-                        *transit = 0.0;
-                        continue;
-                    }
-                    let gap = next.map_or(f64::INFINITY, |next| next - here);
-                    *transit = base.min(gap);
-                }
-            }
         }
+        // Pick-ups and drop-offs by a carrier are not tweened (see module docs).
+        let tween: Vec<bool> = (0..n_blocks)
+            .map(|b| !is_mobile(b) && !is_positioned(b))
+            .collect();
 
         let live = LiveIndex::build(&items);
         let mut ids = vec![0u64; items.len()];
@@ -770,6 +773,7 @@ impl Timeline {
             n_records: replay.records.len(),
             transit_default,
             mobile,
+            tween,
             legs,
             n_travels,
             belt_events,
@@ -895,6 +899,49 @@ impl Timeline {
         self.n_records
     }
 
+    /// Bytes held by the per-record vectors of the index (the steps of the items, the
+    /// states, content changes and arrivals of the blocks, the event times and the live
+    /// index), by their capacity: the measure of `frame_cost_of_a_large_scene`.
+    pub fn heap_bytes(&self) -> usize {
+        fn bytes<T>(v: &Vec<T>) -> usize {
+            v.capacity() * std::mem::size_of::<T>()
+        }
+        let blocks: usize = self
+            .blocks
+            .iter()
+            .map(|b| {
+                bytes(&b.states) + bytes(&b.content_t) + bytes(&b.content_n) + bytes(&b.arrivals)
+            })
+            .sum();
+        let items: usize = self.items.iter().map(|i| bytes(&i.steps)).sum();
+        blocks
+            + items
+            + bytes(&self.blocks)
+            + bytes(&self.items)
+            + bytes(&self.event_times)
+            + bytes(&self.live.order)
+            + bytes(&self.live.created)
+            + bytes(&self.live.tree)
+            + bytes(&self.ids)
+    }
+
+    /// Visual transit of step `k` of `track` (a move): the item's transit, cut at its next
+    /// event; none after a timed connection or into or out of a carrier.
+    fn transit_of(&self, track: &ItemTrack, k: usize) -> f64 {
+        let (here, ItemStep::Moved { from, to, .. }) = track.steps[k] else {
+            return 0.0;
+        };
+        if k > 0 && matches!(track.steps[k - 1].1, ItemStep::Flight { .. }) {
+            return 0.0;
+        }
+        let tween = |b: u32| self.tween.get(b as usize).copied().unwrap_or(true);
+        if !tween(from) || !tween(to) {
+            return 0.0;
+        }
+        let gap = track.steps.get(k + 1).map_or(f64::INFINITY, |s| s.0 - here);
+        track.transit.min(gap)
+    }
+
     /// Global default transit length (informational, for the UI).
     pub fn transit_default(&self) -> f64 {
         self.transit_default
@@ -929,8 +976,8 @@ impl Timeline {
         let Some(track) = self.blocks.get(b) else {
             return 0;
         };
-        let k = track.content.partition_point(|s| s.0 <= t);
-        k.checked_sub(1).map_or(0, |k| track.content[k].1)
+        let k = track.content_t.partition_point(|&s| s <= t);
+        k.checked_sub(1).map_or(0, |k| track.content_n[k] as usize)
     }
 
     /// Tokens in activity `activity` of flow block `flow` at time `t`.
@@ -991,8 +1038,8 @@ impl Timeline {
     /// Creation block of an item (for coloring), if known.
     pub fn item_origin(&self, item: usize) -> Option<usize> {
         match self.items.get(item)?.steps.first()?.1 {
-            ItemStep::Created(b) => Some(b),
-            ItemStep::Moved { from, .. } => Some(from),
+            ItemStep::Created(b) => Some(b as usize),
+            ItemStep::Moved { from, .. } => Some(from as usize),
             _ => None,
         }
     }
@@ -1024,40 +1071,35 @@ impl Timeline {
         };
         let (te, step) = track.steps[k];
         let pos = match step {
-            ItemStep::Created(b) | ItemStep::Unpacked(b) => ItemPos::At(b),
-            ItemStep::Moved {
-                from, to, transit, ..
-            } => {
+            ItemStep::Created(b) | ItemStep::Unpacked(b) => ItemPos::At(b as usize),
+            ItemStep::Moved { from, to, .. } => {
+                let transit = self.transit_of(track, k);
                 if transit > 0.0 && t < te + transit {
                     ItemPos::Transit {
-                        from,
-                        to,
+                        from: from as usize,
+                        to: to as usize,
                         progress: ((t - te) / transit).clamp(0.0, 1.0),
                     }
                 } else {
-                    ItemPos::At(to)
+                    ItemPos::At(to as usize)
                 }
             }
-            ItemStep::Flight {
-                from,
-                to,
-                delay,
-                flight,
-            } => {
-                let leg = &self.flights[flight];
+            ItemStep::Flight { from, to, flight } => {
+                let leg = &self.flights[flight as usize];
+                // The leg starts after the wait (`t0` = the departure plus the delay).
                 let progress = if leg.duration > 0.0 {
-                    ((t - te - delay) / leg.duration).clamp(0.0, 1.0)
+                    ((t - leg.t0) / leg.duration).clamp(0.0, 1.0)
                 } else {
                     0.0
                 };
                 ItemPos::Flight {
-                    from,
-                    to,
+                    from: from as usize,
+                    to: to as usize,
                     progress,
-                    flight,
+                    flight: flight as usize,
                 }
             }
-            ItemStep::Packed(c) => ItemPos::Inside(c),
+            ItemStep::Packed(c) => ItemPos::Inside(c as usize),
             ItemStep::Destroyed => ItemPos::Gone,
         };
         (pos, te)
@@ -1195,12 +1237,11 @@ mod tests {
         for i in 0..tl.item_count() {
             let track = &tl.items[i];
             for (k, (te, step)) in track.steps.iter().enumerate() {
-                let ItemStep::Moved {
-                    from, to, transit, ..
-                } = step
-                else {
+                let ItemStep::Moved { from, to, .. } = *step else {
                     continue;
                 };
+                let (from, to) = (&(from as usize), &(to as usize));
+                let transit = &tl.transit_of(track, k);
                 if let Some(next) = track.steps.get(k + 1) {
                     assert!(
                         te + transit <= next.0 + 1e-12,
