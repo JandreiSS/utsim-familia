@@ -800,13 +800,21 @@ impl Scene {
     }
 
     /// Centre of the place of `item` on fixed block `b` at `t` (layout space), as the
-    /// simple shapes lay their resting items; `None` for belts, racks and mobiles.
+    /// simple shapes lay their resting items. On a belt (straight or drawn by nodes) it is
+    /// where the item rides at `t`, or the entry when it is just being dropped there;
+    /// `None` for racks and mobiles.
     pub fn slot_center(&self, b: usize, item: usize, t: f64) -> Option<[f32; 3]> {
         let geom = self.geoms.get(b)?;
-        if matches!(geom.shape, style::Shape::Belt | style::Shape::Rack)
-            || self.blocks.get(b)?.role.is_some()
-        {
+        if self.blocks.get(b)?.role.is_some() || geom.shape == style::Shape::Rack {
             return None;
+        }
+        if geom.shape == style::Shape::Belt {
+            let distance = self
+                .timeline
+                .belt_position(b, item, t)
+                .unwrap_or(geom.belt_params()?.item_length);
+            let (offset, _) = geom.belt_item(distance)?;
+            return Some(add(self.base_at(b, t), offset));
         }
         let n = style::visible_slots_in(geom.shape, geom.half);
         let k = self.slot_of(b, item, t, n)?;

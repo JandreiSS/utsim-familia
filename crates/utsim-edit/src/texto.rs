@@ -87,6 +87,10 @@ pub fn rotulo_paleta(e: &crate::PaletteEntry) -> &'static str {
         "Forklift" => tx("paleta-forklift"),
         "Agv" => tx("paleta-agv"),
         "Dispatcher" => tx("paleta-dispatcher"),
+        // The drawing tools of the Godot editor (`utsim-godot` `path_edit`).
+        "EsteiraDesenhada" => tx("paleta-esteira-desenhada"),
+        "EsteiraCanaletas" => tx("paleta-esteira-canaletas"),
+        "CaminhoPiso" => tx("paleta-caminho-piso"),
         _ => e.label,
     }
 }

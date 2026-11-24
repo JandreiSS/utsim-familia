@@ -597,3 +597,52 @@ fn corners_are_rounded_and_the_odometer_counts_the_path() {
     assert!((scene.distance_at(t, 20.0) - 20.0).abs() < 1e-9);
     assert_eq!(scene.distance_at(t, 1.0), 0.0);
 }
+
+/// The forklift or the person that takes an item off a belt drawn by nodes goes to the
+/// item where it rides (at the exit, up the route), not to a fixed point of the belt.
+#[test]
+fn a_carrier_picks_an_item_off_a_drawn_belt_where_it_rides() {
+    let model = Model::parse(
+        r#"Model(
+        name: "belt pick",
+        run: (stop_time: 60.0, seed: 1, replications: 1),
+        objects: [
+            (name: "src", kind: Source(interarrival: Const(100.0), first_at_zero: true),
+             position: (0.0, 0.0, 0.0)),
+            (name: "belt", kind: Conveyor(length: 4.0, speed: 1.0, item_length: 0.5,
+                route: Some((nodes: [(at: (-2.0, 0.0, 0.8)), (at: (2.0, 0.0, 0.8)),
+                    (at: (2.0, 3.0, 1.1))]))),
+             position: (2.0, 0.0, 0.0), transport: Some("t")),
+            (name: "sink", kind: Sink, position: (10.0, 3.0, 0.0)),
+            (name: "t", kind: Transporter(speed: 2.0, load_time: Const(2.0),
+             unload_time: Const(2.0)), position: (8.0, 0.0, 0.0)),
+        ],
+        connections: [("src", "belt"), ("belt", "sink")],
+    )"#,
+    )
+    .unwrap();
+    let scene = scene_of(&model);
+    let t_idx = index(block_id(&scene, "t"));
+    let belt = index(block_id(&scene, "belt"));
+    let w = windows(&scene, t_idx, true, 60.0);
+    assert!(!w.is_empty(), "the transporter never loads");
+    let at = w[0][0];
+    let (h, pickup, _) = scene.carrier_window(t_idx, at).unwrap();
+    assert!(pickup);
+    assert_eq!(h.other, belt);
+    let target = scene.slot_center(belt, h.item, at).unwrap();
+    let placed = scene
+        .items_at(at)
+        .into_iter()
+        .find(|p| p.item == h.item)
+        .unwrap();
+    for k in 0..3 {
+        assert!(
+            (target[k] - placed.center[k]).abs() < 1e-3,
+            "{target:?} {:?}",
+            placed.center
+        );
+    }
+    // At the exit end, up the route: about 1.1 m plus half the item above the floor.
+    assert!(target[1] > 1.1, "{target:?}");
+}
