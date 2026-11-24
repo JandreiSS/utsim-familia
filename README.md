@@ -1,7 +1,5 @@
 # UTSim
 
-[![CI](https://github.com/JandreiSS/utsim/actions/workflows/ci.yml/badge.svg)](https://github.com/JandreiSS/utsim/actions/workflows/ci.yml)
-
 Simulador de processos produtivos por **eventos discretos**, escrito em Rust, livre e
 com visualização 3D. A implementação é própria e o comportamento é especificado por
 nós, em [docs/arquitetura.md](docs/arquitetura.md).

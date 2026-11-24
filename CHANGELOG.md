@@ -7,6 +7,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Alterado
+- Distribuição pelo GitHub: cada app tem um repositório público só de downloads, e cada versão é uma release `v<versão>` com o pacote cifrado como asset. `utsim-publicar github` sobe o pacote, grava o endereço no manifesto, deixa as 3 versões mais novas do app (apagando as releases das outras) e envia o manifesto assinado para a release fixa `manifesto` do repositório do launcher. `utsim-publicar manifesto-github` envia só o manifesto. O manifesto novo sobe com outro nome e só depois troca o antigo, para o endereço não ficar vazio.
+- Launcher 0.3.6: lê o manifesto no GitHub (`confianca/manifesto_url.txt`) e mostra "VIA GITHUB" na linha de verificação. Quem tem o 0.3.4 ou o 0.3.5 chega ao 0.3.6 pelo último manifesto publicado no Drive, que já aponta para os pacotes no GitHub.
 - Tradução, rodada 14: o UTSim 3D fecha as cinco línguas. As mensagens da barra de estado que vêm do GDScript, o painel dos trajetos (esteiras e caminhos), os erros de campo que começavam por um nome e os avisos da janela de valores agora seguem a língua escolhida, com plural de verdade.
 
 ### Alterado

@@ -23,9 +23,8 @@ O UTSim tem quatro camadas de teste. Cada uma pega um tipo diferente de erro.
    Pegam **qualquer** mudança de comportamento, mesmo a que não viola a teoria: uma
    troca na ordem de sorteio do RNG, um arredondamento novo ou um evento a mais.
 
-4. **Verificação completa e CI.** Os scripts `scripts/verificar.sh` e
-   `scripts/verificar.ps1` rodam tudo em sequência, e o workflow
-   `.github/workflows/ci.yml` faz o mesmo a cada push e pull request.
+4. **Verificação completa.** Os scripts `scripts/verificar.sh` e
+   `scripts/verificar.ps1` rodam tudo em sequência, na máquina (não há CI no GitHub).
 
 ### Quando os snapshots golden quebram
 
@@ -95,19 +94,12 @@ Os dois scripts rodam, nesta ordem, e param no primeiro passo que falhar:
    com `--headless` (o `g2_tutorial_01.json` monta o tutorial 1 pela interface e compara o
    `.ron` salvo com `examples/tutorial_01_caixa.ron`)
 
-## CI
+## Verificação local, sem CI
 
-O workflow `.github/workflows/ci.yml` roda em push e pull request:
-
-- **windows-latest:** executa `scripts/verificar.ps1` inteiro, incluindo os golden.
-- **ubuntu-latest:** roda clippy e `cargo test --workspace --exclude utsim-viewer -- --skip golden`, para
-  checar portabilidade sem comparar snapshots.
-- **viewer (ubuntu-latest):** instala as bibliotecas do Bevy e roda clippy e `cargo test -p utsim-viewer`
-  (índice da linha do tempo contra `RunReport.series`, layout, carregamento). Localmente: `UTSIM_VIEWER=1 bash scripts/verificar.sh`.
-- **godot (ubuntu-latest):** clippy e `cargo test -p utsim-godot` (conversão de coordenadas, escolha
-  dos modelos, empacotamento dos quadros, esquema das propriedades, edição e o tutorial 1 montado
-  pelas chamadas da interface), sem o Godot. O teste no Godot roda localmente:
-  `UTSIM_GODOT=1 bash scripts/verificar.sh` ou `bash scripts/godot_teste.sh`.
+O projeto não usa GitHub Actions. Tudo roda na máquina, com `scripts/verificar.sh`.
+Opcionais: `UTSIM_VIEWER=1 bash scripts/verificar.sh` inclui o `utsim-viewer` (Bevy), e
+`UTSIM_GODOT=1 bash scripts/verificar.sh` inclui a ponte do Godot (o teste no próprio Godot é
+`bash scripts/godot_teste.sh`).
 
 ## Testes roteirizados da interface
 

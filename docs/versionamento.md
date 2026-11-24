@@ -6,7 +6,7 @@ O UTSim tem três números de versão independentes.
 
 O número em `Cargo.toml` (`version` do workspace) segue o [versionamento semântico](https://semver.org/lang/pt-BR/): `MAJOR.MINOR.PATCH`.
 Enquanto estiver em `0.x`, mudanças incompatíveis podem acontecer em versões `MINOR`, sempre registradas no `CHANGELOG.md`.
-Uma versão sai com a tag `v<versão>` (por exemplo `v0.1.0`), que dispara o fluxo de publicação em `.github/workflows/release.yml`.
+Uma versão sai como a release `v<versão>` (por exemplo `v0.1.0`) do repositório do app no GitHub, criada da máquina por `utsim-publicar github` (não há GitHub Actions).
 
 ## Formato do modelo (`format`)
 

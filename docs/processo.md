@@ -48,7 +48,7 @@ powershell -File scripts/verificar.ps1
 ```
 
 Ele executa, em ordem: formatação, clippy sem avisos, todos os testes, build release e
-`utsim check` em todos os exemplos. O CI (`.github/workflows/ci.yml`) roda o mesmo.
+`utsim check` em todos os exemplos. Não há CI no GitHub: a verificação roda só na máquina.
 As camadas de teste estão descritas em [testes.md](testes.md):
 
 | Camada | Arquivo | Pega o quê |
