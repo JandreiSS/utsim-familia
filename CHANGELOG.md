@@ -7,6 +7,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 ## [Não lançado]
 
 ### Alterado
+- Tradução, rodada 14: o UTSim 3D fecha as cinco línguas. As mensagens da barra de estado que vêm do GDScript, o painel dos trajetos (esteiras e caminhos), os erros de campo que começavam por um nome e os avisos da janela de valores agora seguem a língua escolhida, com plural de verdade.
+
+### Alterado
 - Tradução, rodada 13: as janelas do UTSim 3D falam as cinco línguas. A barra, a Biblioteca (com os nomes da paleta e as categorias), as chegadas, o ajuste de dados, o PERT/CPM, os painéis de rede, corredores e zonas, os indicadores, os trabalhos em segundo plano, os atalhos (F1), as mensagens de edição, os erros de campo e a pergunta de descartar mudanças ao fechar. Contagens usam plural de verdade. Os nomes de nó e os roteiros continuam como estavam.
 
 ### Corrigido
