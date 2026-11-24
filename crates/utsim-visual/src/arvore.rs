@@ -184,6 +184,8 @@ enum Alvo {
 #[derive(Clone, Debug, Default)]
 struct Estado {
     edicao: Option<Edicao<Alvo>>,
+    /// O nó cuja remoção espera a confirmação.
+    remover: Option<usize>,
 }
 
 /// O botão "+" do nó.
@@ -339,11 +341,56 @@ pub fn mostrar(ui: &mut Ui, id: impl Hash + std::fmt::Debug, a: &Arvore) -> Vec<
             if n.removivel {
                 ui.separator();
                 if ui.button(tx("visual-remover")).clicked() {
-                    acoes.push(Acao::Remover { no: i });
+                    est.remover = Some(i);
                     ui.close();
                 }
             }
         });
+    }
+
+    // A confirmação da remoção pedida pelo menu, junto do nó (o que está abaixo dele vai
+    // junto).
+    if let Some(i) = est.remover {
+        match (rects.get(i), a.nos.get(i)) {
+            (Some(r), Some(n)) => {
+                let abaixo = {
+                    let mut c = 0;
+                    let mut fila = vec![i];
+                    // Um ciclo (dados de duas pessoas ao mesmo tempo) não trava a conta.
+                    while let Some(x) = fila.pop() {
+                        if c > a.nos.len() {
+                            break;
+                        }
+                        for &y in &f[x] {
+                            c += 1;
+                            fila.push(y);
+                        }
+                    }
+                    c
+                };
+                let pergunta = crate::texto::fx(
+                    "visual-confirmar_remocao_no",
+                    &[
+                        ("nome", n.texto.clone().into()),
+                        ("n", (abaixo as i64).into()),
+                    ],
+                );
+                match crate::util::confirmar_remocao(
+                    ui.ctx(),
+                    id.with("confirmar"),
+                    r.left_bottom() + vec2(0.0, 4.0),
+                    &pergunta,
+                ) {
+                    Some(true) => {
+                        est.remover = None;
+                        acoes.push(Acao::Remover { no: i });
+                    }
+                    Some(false) => est.remover = None,
+                    None => {}
+                }
+            }
+            _ => est.remover = None,
+        }
     }
 
     if let Some(mut ed) = est.edicao.take()

@@ -318,6 +318,8 @@ enum Alvo {
 struct Estado {
     edicao: Option<Edicao<Alvo>>,
     arrasto: Option<(usize, usize)>,
+    /// A remoção pedida pelo menu, esperando a confirmação.
+    remover: Option<Alvo>,
 }
 
 /// Desenha a espinha e devolve o que a pessoa fez neste quadro.
@@ -461,7 +463,7 @@ pub fn mostrar(ui: &mut Ui, id: impl Hash + std::fmt::Debug, e: &Espinha) -> Vec
                         ui.close();
                     }
                     if ui.button(tx("visual-remover_categoria")).clicked() {
-                        acoes.push(Acao::RemoverOsso { osso: k });
+                        est.remover = Some(Alvo::Osso(k));
                         ui.close();
                     }
                 });
@@ -573,7 +575,7 @@ pub fn mostrar(ui: &mut Ui, id: impl Hash + std::fmt::Debug, e: &Espinha) -> Vec
                 });
                 ui.separator();
                 if ui.button(tx("visual-remover")).clicked() {
-                    acoes.push(Acao::Remover { osso: k, cartao: j });
+                    est.remover = Some(Alvo::Cartao(k, j));
                     ui.close();
                 }
             });
@@ -611,6 +613,57 @@ pub fn mostrar(ui: &mut Ui, id: impl Hash + std::fmt::Debug, e: &Espinha) -> Vec
     }
     if est.arrasto.is_some() && !ui.input(|i| i.pointer.any_down()) {
         est.arrasto = None;
+    }
+
+    // A confirmação da remoção pedida pelo menu, junto do cartão ou do nome do osso.
+    if let Some(alvo) = est.remover {
+        let lugar = match alvo {
+            Alvo::Cartao(k, j) => d
+                .ossos
+                .get(k)
+                .and_then(|o| o.cartoes.get(j))
+                .zip(e.ossos.get(k).and_then(|o| o.cartoes.get(j)))
+                .map(|(r, c)| {
+                    (
+                        r.left_bottom(),
+                        crate::texto::fx(
+                            "visual-confirmar_remocao",
+                            &[("nome", c.texto.clone().into())],
+                        ),
+                    )
+                }),
+            Alvo::Osso(k) => d.ossos.get(k).zip(e.ossos.get(k)).map(|(o, osso)| {
+                (
+                    o.rotulo.left_bottom(),
+                    crate::texto::fx(
+                        "visual-confirmar_remocao_categoria",
+                        &[
+                            ("nome", osso.nome.clone().into()),
+                            ("n", (osso.cartoes.len() as i64).into()),
+                        ],
+                    ),
+                )
+            }),
+            Alvo::Novo(_) => None,
+        };
+        match lugar {
+            None => est.remover = None,
+            Some((pos, pergunta)) => {
+                match crate::util::confirmar_remocao(ui.ctx(), id.with("confirmar"), pos, &pergunta)
+                {
+                    Some(true) => {
+                        est.remover = None;
+                        match alvo {
+                            Alvo::Cartao(k, j) => acoes.push(Acao::Remover { osso: k, cartao: j }),
+                            Alvo::Osso(k) => acoes.push(Acao::RemoverOsso { osso: k }),
+                            Alvo::Novo(_) => {}
+                        }
+                    }
+                    Some(false) => est.remover = None,
+                    None => {}
+                }
+            }
+        }
     }
 
     // O campo de edição em cima do desenho.
