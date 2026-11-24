@@ -117,9 +117,39 @@ pub fn style() -> Style {
     style
 }
 
-/// O destaque do app: a aba ou o item selecionado (e o texto selecionado) na cor do app,
-/// a mesma do lançador, em vez do azul do tema. Chame depois de [`install`].
+thread_local! {
+    /// A cor do app nesta thread (a da tela); `None` enquanto o app não disse a sua.
+    static COR_DO_APP: std::cell::Cell<Option<Color32>> = const { std::cell::Cell::new(None) };
+}
+
+/// `cor` escurecida até o texto branco ler bem sobre ela (contraste de 4,5 ou mais).
+fn fundo_legivel(cor: Color32) -> Color32 {
+    let canal = |v: u8| {
+        let v = f32::from(v) / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let lum = |c: Color32| 0.2126 * canal(c.r()) + 0.7152 * canal(c.g()) + 0.0722 * canal(c.b());
+    let mut c = cor;
+    // Contraste com o branco: 1,05 / (lum + 0,05) >= 4,5.
+    while lum(c) > 0.183 {
+        c = Color32::from_rgb(
+            (f32::from(c.r()) * 0.94) as u8,
+            (f32::from(c.g()) * 0.94) as u8,
+            (f32::from(c.b()) * 0.94) as u8,
+        );
+    }
+    c
+}
+
+/// O destaque do app: a aba ou o item selecionado (e o texto selecionado) e o botão
+/// principal ([`widgets::primary`]) na cor do app, a mesma do lançador, em vez do azul do
+/// tema. O resto do tema é igual em toda a família. Chame depois de [`install`].
 pub fn usar_cor_do_app(ctx: &Context, cor: Color32) {
+    COR_DO_APP.with(|c| c.set(Some(cor)));
     // Um pouco mais escura, para o texto branco ler bem.
     let fundo = Color32::from_rgb(
         (f32::from(cor.r()) * 0.78) as u8,
@@ -130,6 +160,16 @@ pub fn usar_cor_do_app(ctx: &Context, cor: Color32) {
         s.visuals.selection.bg_fill = fundo;
         s.visuals.selection.stroke.color = Color32::WHITE;
     });
+}
+
+/// A cor do app nesta thread, se [`usar_cor_do_app`] já foi chamada.
+pub fn cor_do_app() -> Option<Color32> {
+    COR_DO_APP.with(|c| c.get())
+}
+
+/// A borda do botão principal: a cor do app, ou o azul do tema.
+pub fn primary_stroke() -> Color32 {
+    cor_do_app().unwrap_or(colors::ACCENT)
 }
 
 /// Maximiza a janela de verdade nos primeiros quadros. No Windows, o pedido do construtor
@@ -336,11 +376,12 @@ pub mod widgets {
         painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
     }
 
-    /// A primary button ("Aplicar"): the selected fill and strong text.
+    /// A primary button ("Aplicar"): the app's colour (the theme's blue when the app has
+    /// none) and strong text.
     pub fn primary(text: &str) -> Button<'static> {
         Button::new(RichText::new(text.to_owned()).color(colors::TEXT_STRONG))
-            .fill(colors::SELECTED)
-            .stroke(Stroke::new(1.0, colors::ACCENT))
+            .fill(super::primary_fill())
+            .stroke(Stroke::new(1.0, super::primary_stroke()))
     }
 
     /// A row of toggles that read as one control (only one is on): `items` are the labels,
@@ -367,11 +408,15 @@ pub mod widgets {
                         colors::TEXT
                     });
                     Button::new(text)
-                        .fill(if on { colors::SELECTED } else { colors::BUTTON })
+                        .fill(if on {
+                            super::primary_fill()
+                        } else {
+                            colors::BUTTON
+                        })
                         .stroke(Stroke::new(
                             1.0,
                             if on {
-                                colors::ACCENT
+                                super::primary_stroke()
                             } else {
                                 colors::BUTTON_BORDER
                             },
@@ -385,9 +430,10 @@ pub mod widgets {
     }
 }
 
-/// The fill of a primary button ("Aplicar"): the selected colour.
+/// The fill of a primary button ("Aplicar"): the app's colour, darkened until white text
+/// reads on it, or the theme's selected colour when the app has none.
 pub fn primary_fill() -> Color32 {
-    colors::SELECTED
+    cor_do_app().map_or(colors::SELECTED, fundo_legivel)
 }
 
 #[cfg(test)]
@@ -475,5 +521,26 @@ mod tests {
         let ctx = Context::default();
         install_style(&ctx);
         assert_eq!(ctx.global_style().visuals.panel_fill, colors::PANEL);
+    }
+
+    #[test]
+    fn o_botao_principal_usa_a_cor_do_app_com_texto_legivel() {
+        assert_eq!(primary_fill(), colors::SELECTED);
+        let ctx = Context::default();
+        install_style(&ctx);
+        for cor in [
+            Color32::from_rgb(0x4F, 0xD0, 0x6A),
+            Color32::from_rgb(0xD9, 0x46, 0x7A),
+            Color32::from_rgb(0x3A, 0x6E, 0xE0),
+            Color32::from_rgb(0xF2, 0x8C, 0x1E),
+            Color32::from_rgb(0x1F, 0xB5, 0xA3),
+            Color32::from_rgb(0x8A, 0x5C, 0xE6),
+        ] {
+            usar_cor_do_app(&ctx, cor);
+            let fundo = primary_fill();
+            let contraste = (luminance(colors::TEXT_STRONG) + 0.05) / (luminance(fundo) + 0.05);
+            assert!(contraste >= 4.4, "{cor:?} -> {fundo:?}: {contraste}");
+            assert_eq!(primary_stroke(), cor);
+        }
     }
 }
