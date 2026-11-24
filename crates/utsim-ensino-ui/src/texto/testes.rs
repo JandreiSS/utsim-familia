@@ -252,8 +252,18 @@ fn nenhum_texto_fora_do_catalogo() {
         .filter(|p| p.extension().is_some_and(|x| x == "rs"))
         .filter(|p| p.file_name().is_some_and(|n| n != "texto.rs"))
         .collect();
-    arquivos.push(raiz.join("../utsim-ensino-app/src/main.rs"));
-    arquivos.push(raiz.join("../utsim-godot/src/ensino_class.rs"));
+    // The window of the app and the Godot bridge also show these texts. They live in other
+    // repositories (utsim-ensino, utsim-simulador): checked only when they are next to this
+    // crate, as in a workspace with all of them.
+    for outro in [
+        "../utsim-ensino-app/src/main.rs",
+        "../utsim-godot/src/ensino_class.rs",
+    ] {
+        let p = raiz.join(outro);
+        if p.is_file() {
+            arquivos.push(p);
+        }
+    }
     arquivos.sort();
     let mut achados = Vec::new();
     for a in &arquivos {
