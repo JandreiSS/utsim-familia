@@ -44,7 +44,9 @@ pub fn confirmar_remocao(
                 ui.horizontal(|ui| {
                     let vermelho = ui.visuals().error_fg_color;
                     if ui
-                        .button(egui::RichText::new(crate::texto::tx("visual-remover")).color(vermelho))
+                        .button(
+                            egui::RichText::new(crate::texto::tx("visual-remover")).color(vermelho),
+                        )
                         .clicked()
                     {
                         resposta = Some(true);

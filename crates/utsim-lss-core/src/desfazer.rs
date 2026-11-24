@@ -55,7 +55,10 @@ mod tests {
     use crate::tools::testing::Fixture;
 
     fn texto(f: &Fixture, id: Id, campo: &str) -> String {
-        f.state.entity(id).map(|e| e.text(campo)).unwrap_or_default()
+        f.state
+            .entity(id)
+            .map(|e| e.text(campo))
+            .unwrap_or_default()
     }
 
     #[test]
@@ -66,12 +69,18 @@ mod tests {
         let passo = vec![Edit::new(p, fields::project::PROBLEM, "Refugo alto")];
         let desfaz = compensar(&f.state, &passo);
         f.commit(passo);
-        assert_eq!(texto(&f, f.project, fields::project::PROBLEM), "Refugo alto");
+        assert_eq!(
+            texto(&f, f.project, fields::project::PROBLEM),
+            "Refugo alto"
+        );
         let refaz = compensar(&f.state, &desfaz);
         f.commit(desfaz);
         assert_eq!(texto(&f, f.project, fields::project::PROBLEM), antes);
         f.commit(refaz);
-        assert_eq!(texto(&f, f.project, fields::project::PROBLEM), "Refugo alto");
+        assert_eq!(
+            texto(&f, f.project, fields::project::PROBLEM),
+            "Refugo alto"
+        );
     }
 
     #[test]
