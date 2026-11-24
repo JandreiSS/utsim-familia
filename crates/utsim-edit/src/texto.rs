@@ -73,7 +73,12 @@ pub fn estado(state: Option<utsim_core::State>) -> &'static str {
 /// O rótulo de uma entrada da paleta de objetos na língua de agora (o `label` da entrada
 /// fica em português: é o que os roteiros e os modelos antigos conhecem).
 pub fn rotulo_paleta(e: &crate::PaletteEntry) -> &'static str {
-    match e.id {
+    rotulo_de(e.id, e.label)
+}
+
+/// O mesmo, a partir do id da entrada e do rótulo em português que ela traz.
+pub fn rotulo_de<'a>(id: &str, rotulo: &'a str) -> &'a str {
+    match id {
         "Source" => tx("paleta-source"),
         "Queue" => tx("paleta-queue"),
         "Processor" => tx("paleta-processor"),
@@ -91,7 +96,7 @@ pub fn rotulo_paleta(e: &crate::PaletteEntry) -> &'static str {
         "EsteiraDesenhada" => tx("paleta-esteira-desenhada"),
         "EsteiraCanaletas" => tx("paleta-esteira-canaletas"),
         "CaminhoPiso" => tx("paleta-caminho-piso"),
-        _ => e.label,
+        _ => rotulo,
     }
 }
 

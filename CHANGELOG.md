@@ -6,6 +6,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Alterado
+- Tradução, rodada 13: as janelas do UTSim 3D falam as cinco línguas. A barra, a Biblioteca (com os nomes da paleta e as categorias), as chegadas, o ajuste de dados, o PERT/CPM, os painéis de rede, corredores e zonas, os indicadores, os trabalhos em segundo plano, os atalhos (F1), as mensagens de edição, os erros de campo e a pergunta de descartar mudanças ao fechar. Contagens usam plural de verdade. Os nomes de nó e os roteiros continuam como estavam.
+
 ### Corrigido
 - Gêmeo digital: com o relógio vindo de uma tag, uma leitura que chega antes do primeiro valor do relógio espera por ele e fica com esse tempo. Antes, ela ia para o tempo 0, e um gêmeo que entrava numa linha já em andamento via a fila vazia desde o início (alertas falsos). O teste de OPC UA de ponta a ponta só põe o relógio da fábrica para andar depois que o gêmeo assina, e falha com a causa se a primeira janela vier vazia.
 - UTSim Segurança: as cinco etapas do inventário vêm do catálogo de tradução também no relatório, e os indicadores sem horas-homem dão 0 sem o sinal de menos. Na aba Pessoas, uma pasta restrita ainda não criada aparece em aviso neutro com o botão para criar, e só uma pasta que existe mas não abre mostra o erro de acesso. A Nova inspeção do checklist exige a máquina, com o aviso ao lado do campo, e o mês das horas-homem já vem com o mês atual.
