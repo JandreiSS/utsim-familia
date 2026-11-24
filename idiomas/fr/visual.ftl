@@ -45,3 +45,10 @@ visual-clique_leva_a_linha = Cliquez pour aller à la ligne ; à nouveau, pour l
 
 visual-necessidade_importancia = importance
 visual-peso = poids
+
+## confirmações
+
+visual-cancelar = Annuler
+visual-confirmar_remocao = Supprimer la cause « { $nome } » ?
+visual-confirmar_remocao_categoria = Supprimer la catégorie « { $nome } » et ses { $n } causes ?
+visual-confirmar_remocao_no = Supprimer « { $nome } » et les { $n } pourquoi en dessous ?

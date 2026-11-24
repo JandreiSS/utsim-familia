@@ -43,3 +43,10 @@ visual-clique_leva_a_linha = Clique para ir à linha; de novo, para a próxima d
 
 visual-necessidade_importancia = importância
 visual-peso = peso
+
+## confirmações
+
+visual-cancelar = Cancelar
+visual-confirmar_remocao = Remover a causa “{ $nome }”?
+visual-confirmar_remocao_categoria = Remover a categoria “{ $nome }” e as { $n } causas dela?
+visual-confirmar_remocao_no = Remover “{ $nome }” e os { $n } porquês abaixo dele?

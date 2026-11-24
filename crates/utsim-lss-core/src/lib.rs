@@ -76,6 +76,8 @@ pub mod analises;
 pub mod roteiro;
 // A trilha do painel: estações, portões e o "agora faça" de cada fase.
 pub mod trilha;
+// Desfazer e refazer por edições compensatórias, registradas no diário.
+pub mod desfazer;
 
 // Design of experiments (P3, `docs/plano_lean_seis_sigma.md`, 2.4 and 3.4).
 pub mod experimentos;
