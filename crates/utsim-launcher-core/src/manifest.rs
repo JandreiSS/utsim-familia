@@ -30,6 +30,9 @@ pub const FORMAT: u32 = 1;
 pub const STABLE: &str = "estavel";
 /// The test channel.
 pub const TESTING: &str = "testes";
+/// Not a channel: every release, whatever its channel. Since 25/11/2026 the launcher shows
+/// all the versions of each app, and the channel of a release only matters to old launchers.
+pub const ALL: &str = "*";
 /// Id of the launcher itself in the manifest: its NSIS installer, published so an installed
 /// launcher updates itself. Never shown as an app card.
 pub const LAUNCHER: &str = "launcher";
@@ -290,7 +293,7 @@ impl Product {
         let mut v: Vec<&Release> = self
             .releases
             .iter()
-            .filter(|r| r.channel == channel || r.channel == STABLE)
+            .filter(|r| channel == ALL || r.channel == channel || r.channel == STABLE)
             .collect();
         v.sort_by(|a, b| compare_versions(&b.version, &a.version));
         v

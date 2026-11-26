@@ -138,10 +138,11 @@ impl LauncherState {
         Ok(())
     }
 
-    pub fn channel(&self, product: &str) -> &str {
-        self.channels
-            .get(product)
-            .map_or(crate::manifest::STABLE, String::as_str)
+    /// The releases this launcher shows for `product`: all of them ([`crate::manifest::ALL`]).
+    /// The channels chosen by older launchers stay in `channels` (read and written back
+    /// untouched) but no longer filter anything.
+    pub fn channel(&self, _product: &str) -> &str {
+        crate::manifest::ALL
     }
 }
 
@@ -234,8 +235,10 @@ mod tests {
         s.save(&path).unwrap();
         let back = LauncherState::load(&path);
         assert_eq!(back.last_sequence, 5);
-        assert_eq!(back.channel("utsim"), "testes");
-        assert_eq!(back.channel("outro"), "estavel");
+        // The channel an older launcher saved is kept, but no longer filters anything.
+        assert_eq!(back.channels["utsim"], "testes");
+        assert_eq!(back.channel("utsim"), crate::manifest::ALL);
+        assert_eq!(back.channel("outro"), crate::manifest::ALL);
     }
 
     #[test]
