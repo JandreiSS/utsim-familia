@@ -25,3 +25,6 @@ dist/
 
 # Cache do Python (scripts do Blender)
 __pycache__/
+
+# Família local (scripts/familia-local.sh)
+.cargo/config.toml

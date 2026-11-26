@@ -2,17 +2,14 @@
 resolver = "3"
 members = ["crates/*"]
 # The Python bindings need a Python toolchain: built on their own (crates/utsim-py).
-exclude = ["crates/utsim-py", "tools/icone"]
+exclude = ["tools/icone"]
 # The 3D viewer pulls in Bevy (slow to build): it is opt-in (`-p utsim-viewer`). The Godot
 # bridge (`-p utsim-godot`, a GDExtension library) is opt-in too: `scripts/godot.sh`. The
 # windowed apps (`utsim-launcher`, `utsim-lss-app`, `utsim-ensino-app`, `utsim-qualidade-app`, `utsim-estatistica-app`,
 # `utsim-seguranca-app`, `utsim-produto-app`, `utsim-posto-ui`) build with `-p` or `--workspace`.
 default-members = [
-    "crates/utsim-assets",
     "crates/utsim-cad",
-    "crates/utsim-cli",
     "crates/utsim-core",
-    "crates/utsim-dash",
     "crates/utsim-doe",
     "crates/utsim-diagram",
     "crates/utsim-diario",
@@ -21,24 +18,20 @@ default-members = [
     "crates/utsim-ensino-store",
     "crates/utsim-exposicao",
     "crates/utsim-ferramentas",
-    "crates/utsim-env",
     "crates/utsim-estudo",
     "crates/utsim-fit",
     "crates/utsim-flow",
     "crates/utsim-fluid",
     "crates/utsim-idiomas",
     "crates/utsim-linhas",
-    "crates/utsim-look",
     "crates/utsim-lss-core",
     "crates/utsim-lss-store",
     "crates/utsim-model",
     "crates/utsim-nav",
     "crates/utsim-objects",
-    "crates/utsim-opt",
     "crates/utsim-pasta",
     "crates/utsim-pert",
     "crates/utsim-posto",
-    "crates/utsim-produto-core",
     "crates/utsim-quality",
     "crates/utsim-qualidade-core",
     "crates/utsim-scene",
@@ -46,16 +39,14 @@ default-members = [
     "crates/utsim-seguranca-core",
     "crates/utsim-stats",
     "crates/utsim-troca",
-    "crates/utsim-twin",
     "crates/utsim-ui-tema",
-    "crates/utsim-web",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-repository = "https://github.com/jandreiss/utsim"
+repository = "https://github.com/JandreiSS/utsim-familia"
 
 [workspace.dependencies]
 utsim-core = { path = "crates/utsim-core" }
@@ -70,32 +61,23 @@ utsim-script = { path = "crates/utsim-script" }
 utsim-seguranca-core = { path = "crates/utsim-seguranca-core" }
 utsim-flow = { path = "crates/utsim-flow" }
 utsim-fluid = { path = "crates/utsim-fluid" }
-utsim-opt = { path = "crates/utsim-opt" }
 utsim-pert = { path = "crates/utsim-pert" }
 utsim-posto = { path = "crates/utsim-posto" }
 utsim-estudo = { path = "crates/utsim-estudo" }
 utsim-pasta = { path = "crates/utsim-pasta" }
 utsim-troca = { path = "crates/utsim-troca" }
 utsim-posto-ui = { path = "crates/utsim-posto-ui" }
-utsim-env = { path = "crates/utsim-env" }
-utsim-emu = { path = "crates/utsim-emu" }
-utsim-web = { path = "crates/utsim-web" }
 utsim-scene = { path = "crates/utsim-scene" }
-utsim-assets = { path = "crates/utsim-assets" }
-utsim-look = { path = "crates/utsim-look" }
 utsim-cad = { path = "crates/utsim-cad" }
 utsim-doe = { path = "crates/utsim-doe" }
 utsim-diagram = { path = "crates/utsim-diagram" }
-utsim-dash = { path = "crates/utsim-dash" }
 utsim-nav = { path = "crates/utsim-nav" }
 utsim-exposicao = { path = "crates/utsim-exposicao" }
 utsim-ferramentas = { path = "crates/utsim-ferramentas" }
-utsim-twin = { path = "crates/utsim-twin" }
 utsim-ui-tema = { path = "crates/utsim-ui-tema" }
 utsim-linhas = { path = "crates/utsim-linhas" }
 utsim-diario = { path = "crates/utsim-diario" }
 utsim-idiomas = { path = "crates/utsim-idiomas" }
-utsim-produto-core = { path = "crates/utsim-produto-core" }
 
 rand = { version = "0.9", default-features = false, features = ["std"] }
 rand_distr = { version = "0.5", default-features = false, features = ["std"] }
