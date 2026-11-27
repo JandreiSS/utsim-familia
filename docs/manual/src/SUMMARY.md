@@ -9,6 +9,7 @@
 - [UTSim Ensino (o jogo e a sala de aula)](ensino.md)
 - [UTSim Qualidade](qualidade-app.md)
 - [UTSim Segurança do Trabalho](seguranca-app.md)
+- [UTSim Ambiental](ambiental.md)
 - [UTSim Estatística](estatistica-app.md)
 - [UTSim Produto](produto-app.md)
 

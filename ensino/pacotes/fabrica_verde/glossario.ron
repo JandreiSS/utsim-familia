@@ -1,0 +1,21 @@
+// Glossário do pacote Fábrica verde. Textos próprios do UTSim.
+Glossario(termos: [
+    (id: "energia_por_estado", nome: "Energia por estado",
+     texto: "A energia de uma máquina é a potência de cada estado vezes o tempo nele. A mesma máquina gasta muito produzindo, menos esperando e quase nada desligada. A simulação mede o tempo, e o bloco ambiental do nó guarda a potência.",
+     manual: "ambiental.md"),
+    (id: "energia_sem_valor", nome: "Energia sem valor agregado",
+     texto: "Energia gasta com a máquina ligada sem produzir: esperando peça, parada em quebra ou ligada fora do turno. É o desperdício de espera visto na conta de luz.",
+     manual: "ambiental.md"),
+    (id: "co2_equivalente", nome: "CO₂ equivalente",
+     texto: "Forma de somar gases e fluxos diferentes numa só conta de efeito no clima. Cada fluxo é multiplicado por um fator em kg de CO₂ equivalente por unidade. Neste pacote os fatores são didáticos, não oficiais.",
+     manual: "ambiental.md"),
+    (id: "custo_e_impacto", nome: "Custo e impacto",
+     texto: "A opção que emite menos nem sempre é a mais barata. Comparar as duas coisas lado a lado mostra o que cada real investido evita de emissão.",
+     manual: "ambiental.md"),
+    (id: "destino_de_residuos", nome: "Destino de resíduos",
+     texto: "O mesmo resíduo emite mais ou menos conforme o destino: aterro, coprocessamento ou recuperação. O fator do destino vale por quilo, então a massa de cada resíduo pesa tanto quanto o destino.",
+     manual: "ambiental.md"),
+    (id: "impacto_embutido", nome: "Impacto embutido",
+     texto: "Tudo o que a peça já consumiu até um ponto da linha: energia, água, gás e tinta. Quando a peça vira refugo no fim, esse impacto se perde e é dividido entre as peças entregues.",
+     manual: "ambiental.md"),
+])

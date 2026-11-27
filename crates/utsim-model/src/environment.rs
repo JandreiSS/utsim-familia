@@ -661,6 +661,99 @@ pub fn energia_por_grupo(
     g
 }
 
+/// O fator (kg CO₂e por unidade) de um fluxo do catálogo; o de um resíduo é o do destino
+/// dele. `None`: falta o fator.
+fn fator(cat: &EnvironmentCatalog, fluxo: &str) -> Option<f64> {
+    match cat.fluxo(fluxo) {
+        Some(f) if f.kind == FlowKind::Waste => {
+            let d = f.destination.as_deref()?;
+            cat.waste_destinations
+                .iter()
+                .find(|x| x.name == d)
+                .and_then(|x| x.kg_co2e)
+        }
+        _ => cat.fator(fluxo).and_then(|f| f.kg_co2e),
+    }
+}
+
+/// Publica as métricas ambientais de cada nó com bloco no relatório da replicação, como
+/// métricas do próprio bloco (`<nó>.energia_kwh`...): o UTSim Ensino e os experimentos as
+/// leem como qualquer outra. É a conta simples, pelas frações de tempo do relatório e pelas
+/// peças que entraram e saíram; a conta completa (setups, partidas, desligamento em espera,
+/// massa, água) é do UTSim Ambiental. A simulação não muda.
+///
+/// Métricas: `energia_kwh`, `energia_kwh.<grupo>`, `energia_sem_valor_kwh`,
+/// `kwh_por_peca` (com peças saindo), `fluxo.<fluxo>` (direcionador por peça, peça boa ou
+/// tempo em estados) e `co2e_kg` (só quando todo fluxo usado tem fator).
+pub fn add_to_report(model: &crate::Model, report: &mut utsim_core::RunReport) {
+    let vazio = EnvironmentCatalog::inicial();
+    let cat = model.environment.as_deref().unwrap_or(&vazio);
+    let hu = cat.clock.time_unit.em_horas();
+    let janela = report.end_time - report.stats_from;
+    let eletrico = cat.fluxo_eletrico().map(|f| f.name.clone());
+    for o in &model.objects {
+        let Some(def) = o.environment.as_deref() else {
+            continue;
+        };
+        let Some(b) = report.blocks.iter_mut().find(|b| b.name == o.name) else {
+            continue;
+        };
+        let g = energia_por_grupo(def, b, janela, hu);
+        let kwh: f64 = g.iter().sum();
+        let mut m: Vec<(String, f64)> = vec![("energia_kwh".into(), kwh)];
+        for gr in Grupo::TODOS {
+            m.push((format!("energia_kwh.{}", gr.chave()), g[gr.indice()]));
+        }
+        let sem: f64 = Grupo::TODOS
+            .iter()
+            .filter(|x| x.sem_valor())
+            .map(|x| g[x.indice()])
+            .sum();
+        m.push(("energia_sem_valor_kwh".into(), sem));
+        if b.output > 0 {
+            m.push(("kwh_por_peca".into(), kwh / b.output as f64));
+        }
+        let horas = |estado: &str| b.states.get(estado).copied().unwrap_or(0.0) * janela * hu;
+        // Todo fluxo do catálogo sai, com 0 quando o nó não o usa: uma alavanca que troca o
+        // bloco (estufa a gás por elétrica) não faz a métrica sumir.
+        let mut fluxos: BTreeMap<String, f64> = cat
+            .flows
+            .iter()
+            .filter(|f| Some(&f.name) != eletrico.as_ref())
+            .map(|f| (f.name.clone(), 0.0))
+            .collect();
+        for f in &def.flows {
+            let dir = match &f.driver {
+                Driver::Item => b.input as f64,
+                Driver::GoodItem => b.output as f64,
+                Driver::Time(es) => es.iter().map(|e| horas(e.nome())).sum(),
+                _ => continue,
+            };
+            *fluxos.entry(f.flow.clone()).or_default() += f.amount * dir;
+        }
+        let mut co2 = Some(0.0);
+        if kwh > 0.0 {
+            co2 = match (co2, eletrico.as_deref().and_then(|e| fator(cat, e))) {
+                (Some(c), Some(k)) => Some(c + kwh * k),
+                _ => None,
+            };
+        }
+        for (f, q) in &fluxos {
+            m.push((format!("fluxo.{f}"), *q));
+            if *q != 0.0 {
+                co2 = match (co2, fator(cat, f)) {
+                    (Some(c), Some(k)) => Some(c + q * k),
+                    _ => None,
+                };
+            }
+        }
+        if let Some(c) = co2 {
+            m.push(("co2e_kg".into(), c));
+        }
+        b.custom.extend(m);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -683,5 +776,49 @@ mod tests {
         assert_eq!(d.power.no_estado("idle"), 9.0);
         let de_novo: EnvironmentDef = ron::from_str(&ron::to_string(&d).unwrap()).unwrap();
         assert_eq!(d, de_novo);
+    }
+
+    /// As métricas por nó saem no relatório: caso resolvido à mão.
+    #[test]
+    fn metricas_no_relatorio() {
+        let m = crate::Model::parse(
+            r#"Model(name: "m", run: (stop_time: 7200.0, warmup: 0.0, seed: 1, replications: 1),
+               objects: [(name: "a", kind: Source(interarrival: Const(60.0))),
+                         (name: "forno", kind: Processor(process: Const(30.0)),
+                          environment: Some((power: (producing: 10.0, waiting: 4.0),
+                            flows: [(flow: "gas", amount: 2.0, driver: Item)]))),
+                         (name: "b", kind: Sink)],
+               connections: [("a", "forno"), ("forno", "b")],
+               environment: Some((
+                 flows: [(name: "eletricidade", kind: Energy, unit: "kWh", direction: In),
+                         (name: "gas", kind: Fuel, unit: "m3", direction: In)],
+                 factors: [(flow: "eletricidade", scope: 2, kg_co2e: Some(0.5), source: "teste", didactic: true),
+                           (flow: "gas", scope: 1, kg_co2e: Some(2.0), source: "teste")])))"#,
+        )
+        .unwrap();
+        let r = &m.run_replications().unwrap()[0];
+        let x = r.metrics();
+        // 2 h: metade produzindo a 10 kW (10 kWh), metade esperando a 4 kW (4 kWh).
+        let e = x["forno.energia_kwh"];
+        assert!((e - 14.0).abs() < 0.1, "{e}");
+        let gas = x["forno.fluxo.gas"];
+        let pecas = x["forno.input"];
+        assert!((gas - 2.0 * pecas).abs() < 1e-9);
+        assert!((x["forno.co2e_kg"] - (e * 0.5 + gas * 2.0)).abs() < 1e-9);
+        assert!((x["forno.energia_sem_valor_kwh"] - x["forno.energia_kwh.esperando"]).abs() < 1e-9);
+        // Fluxo do catálogo que o nó não usa sai com 0.
+        assert_eq!(x["forno.fluxo.gas"], gas);
+        assert!(!x.contains_key("forno.fluxo.eletricidade"));
+        // Sem bloco, nada novo.
+        assert!(!x.contains_key("a.energia_kwh"));
+        // A alavanca de uma missão muda a potência pelo patch.
+        let mut set = std::collections::BTreeMap::new();
+        set.insert(
+            "forno.environment.power.waiting".to_string(),
+            "1.0".to_string(),
+        );
+        let m2 = crate::experiment::apply_patches(&m, &set).unwrap();
+        let e2 = m2.run_replications().unwrap()[0].metrics()["forno.energia_kwh"];
+        assert!((e - e2 - 3.0).abs() < 0.1, "{e} {e2}");
     }
 }

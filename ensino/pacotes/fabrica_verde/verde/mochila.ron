@@ -1,0 +1,56 @@
+Missao(
+    id: "verde/mochila",
+    titulo: "A mochila da peça",
+    conceitos: ["impacto_embutido", "co2_equivalente"],
+    modelo: "../modelos/mochila.ron",
+    texto: "mochila.md",
+    previsao: [
+        Valor(
+            id: "escape",
+            pergunta: "Hoje, que fração das peças entregues ao cliente tem trinca (de 0 a 1)?",
+            valor: [(chave: "cliente.pct_defeituosas")],
+            tolerancia: Absoluta(0.02),
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "cedo", rotulo: "Inspeção logo depois da usinagem", opcoes: [
+            (rotulo: "Desligada", ajustes: {"insp_cedo.inspection.every": "1000000"}),
+            (rotulo: "Uma peça a cada 5", ajustes: {"insp_cedo.inspection.every": "5"}, custo: 300),
+            (rotulo: "Todas as peças", ajustes: {"insp_cedo.inspection.every": "1"}, custo: 700),
+        ]),
+        Escolha(id: "final", rotulo: "Inspeção antes da expedição", opcoes: [
+            (rotulo: "Desligada", ajustes: {"insp_final.inspection.every": "1000000"}),
+            (rotulo: "Uma peça a cada 5", ajustes: {"insp_final.inspection.every": "5"}, custo: 400),
+            (rotulo: "Todas as peças", ajustes: {"insp_final.inspection.every": "1"}, custo: 900),
+        ]),
+    ],
+    orcamento: 1600,
+    metricas: [
+        (nome: "escape", rotulo: "Peças com trinca que chegam ao cliente", unidade: "",
+         valor: [(chave: "cliente.pct_defeituosas")], objetivo: Menor, meta: 0.005,
+         tolerancia: Absoluta(0.002), casas: 3),
+        (nome: "mochila", rotulo: "CO₂ equivalente por peça entregue", unidade: "kg",
+         valor: [(chave: "usinagem.co2e_kg"), (chave: "lavadora.co2e_kg"), (chave: "estufa.co2e_kg"),
+                 (chave: "cabine.co2e_kg")],
+         divisor: [(chave: "cliente.input")],
+         objetivo: Menor, meta: 1.45, tolerancia: Absoluta(0.01), casas: 3),
+        (nome: "custo", rotulo: "Custo dos postos de inspeção", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 1600.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que a inspeção no fim, sozinha, deixa a mochila da peça entregue mais pesada?",
+         opcoes: [
+            "Porque a peça com trinca já passou pela lavadora, pela estufa e pela cabine antes de virar refugo, e esse gasto vai para as peças boas",
+            "Porque a inspeção no fim gasta muita energia",
+            "Porque o cliente devolve as peças",
+         ],
+         certa: 0),
+    ],
+    dicas: [
+        "Onde a trinca nasce e onde ela é vista pela primeira vez?",
+        "Uma peça refugada no fim levou água, gás e tinta à toa. Esse gasto é dividido pelas peças entregues.",
+        "Barre a trinca cedo e deixe no fim o que ainda for preciso para o escape.",
+    ],
+    referencia: {"cedo": 2, "final": 2},
+    animacao: (duracao: 240, unidade: "min"),
+)

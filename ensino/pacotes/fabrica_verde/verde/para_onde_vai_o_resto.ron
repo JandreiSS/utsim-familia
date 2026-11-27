@@ -1,0 +1,54 @@
+Missao(
+    id: "verde/para_onde_vai_o_resto",
+    titulo: "Para onde vai o resto?",
+    conceitos: ["destino_de_residuos", "co2_equivalente"],
+    modelo: "../modelos/para_onde_vai_o_resto.ron",
+    texto: "para_onde_vai_o_resto.md",
+    previsao: [
+        Escolha(
+            id: "residuo",
+            pergunta: "Qual resíduo pesa mais no CO₂ equivalente de hoje?",
+            opcoes: [
+                (rotulo: "O lodo da lavadora", valor: [(chave: "lavadora.fluxo.lodo_aterro")]),
+                (rotulo: "A borra de tinta da cabine", valor: [(chave: "cabine.fluxo.borra_aterro")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "lodo", rotulo: "Destino do lodo da lavadora", opcoes: [
+            (rotulo: "Aterro, como hoje", ajustes: {"lavadora.environment": "Some((stage: Some(\"pré-tratamento\"), power: (producing: 15.0, waiting: 9.0), flows: [(flow: \"lodo_aterro\", amount: 0.3, driver: Item)]))"}),
+            (rotulo: "Coprocessamento em forno de cimento", ajustes: {"lavadora.environment": "Some((stage: Some(\"pré-tratamento\"), power: (producing: 15.0, waiting: 9.0), flows: [(flow: \"lodo_coprocessamento\", amount: 0.3, driver: Item)]))"}, custo: 800),
+            (rotulo: "Secar o lodo antes do aterro (metade da massa, mais energia)", ajustes: {"lavadora.environment": "Some((stage: Some(\"pré-tratamento\"), power: (producing: 20.0, waiting: 9.0), flows: [(flow: \"lodo_seco_aterro\", amount: 0.15, driver: Item)]))"}, custo: 1200),
+        ]),
+        Escolha(id: "borra", rotulo: "Destino da borra de tinta", opcoes: [
+            (rotulo: "Aterro, como hoje", ajustes: {"cabine.environment": "Some((stage: Some(\"pintura\"), power: (producing: 8.0, waiting: 5.0), flows: [(flow: \"borra_aterro\", amount: 0.15, driver: Item)]))"}),
+            (rotulo: "Coprocessamento em forno de cimento", ajustes: {"cabine.environment": "Some((stage: Some(\"pintura\"), power: (producing: 8.0, waiting: 5.0), flows: [(flow: \"borra_coprocessamento\", amount: 0.15, driver: Item)]))"}, custo: 800),
+            (rotulo: "Recuperação do solvente", ajustes: {"cabine.environment": "Some((stage: Some(\"pintura\"), power: (producing: 8.0, waiting: 5.0), flows: [(flow: \"borra_recuperacao\", amount: 0.15, driver: Item)]))"}, custo: 1500),
+        ]),
+    ],
+    orcamento: 2400,
+    metricas: [
+        (nome: "co2", rotulo: "CO₂ equivalente da linha", unidade: "kg",
+         valor: [(chave: "lavadora.co2e_kg"), (chave: "cabine.co2e_kg")],
+         objetivo: Menor, meta: 36.0, tolerancia: Absoluta(0.5), casas: 1),
+        (nome: "custo", rotulo: "Custo dos contratos de destinação", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 2400.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que o melhor destino vai primeiro para o lodo?",
+         opcoes: [
+            "Porque sai o dobro de lodo por peça, e a emissão do destino é por quilo",
+            "Porque o lodo é mais perigoso que a borra",
+            "Porque o coprocessamento não aceita borra de tinta",
+         ],
+         certa: 0),
+    ],
+    dicas: [
+        "O CO₂ equivalente de um resíduo é a massa dele vezes o fator do destino.",
+        "Compare quantos quilos de lodo e de borra saem por peça.",
+        "Secar o lodo tira massa, mas a secadora gasta energia. Faça a conta dos dois lados.",
+    ],
+    referencia: {"lodo": 1, "borra": 2},
+    animacao: (duracao: 240, unidade: "min"),
+)

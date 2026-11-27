@@ -326,6 +326,29 @@ pub fn patch(model: &mut Model, key: &str, text: &str) -> Result<(), ModelError>
         "transfer.speed" | "transfer.delay" => {
             return patch_transfer(&mut obj.transfer, key, field, text);
         }
+        // The environmental block (UTSim Ambiental): the whole block, or the power of a
+        // state group a teaching mission or an experiment varies.
+        "environment" => {
+            set!(obj.environment);
+            return Ok(());
+        }
+        f if f.starts_with("environment.power.") => {
+            let grupo = &f["environment.power.".len()..];
+            let kw: f64 = parse_value(key, text)?;
+            let env = obj.environment.get_or_insert_with(Default::default);
+            let p = &mut env.power;
+            match grupo {
+                "producing" => p.producing = kw,
+                "preparing" => p.preparing = kw,
+                "waiting" => p.waiting = kw,
+                "stopped" => p.stopped = kw,
+                "off_shift" => p.off_shift = kw,
+                estado => {
+                    p.by_state.insert(estado.to_string(), kw);
+                }
+            }
+            return Ok(());
+        }
         // Quality and safety blocks (`docs/formato_qualidade_seguranca.md`): the whole
         // block, or the numbers a teaching mission or an experiment varies.
         "quality" => {

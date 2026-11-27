@@ -1,0 +1,39 @@
+// Lavadora que gera lodo e cabine de pintura que gera borra de tinta. Hoje os dois resíduos vão
+// para o aterro. A missão troca o bloco ambiental inteiro de cada nó, com o resíduo indo para
+// outro destino do catálogo. Tempos em minutos; fatores didáticos.
+Model(
+    name: "Para onde vai o resto?",
+    description: "Lodo da lavadora e borra da cabine com três destinos possíveis",
+    run: (stop_time: 960.0, warmup: 60.0, seed: 47, replications: 5),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 6.0)), position: (0.0, 0.0, 0.0)),
+        (name: "lavadora", kind: Processor(process: Const(2.0)), position: (4.0, 0.0, 0.0),
+         environment: Some((stage: Some("pré-tratamento"), power: (producing: 15.0, waiting: 9.0),
+            flows: [(flow: "lodo_aterro", amount: 0.3, driver: Item)]))),
+        (name: "fila", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "cabine", kind: Processor(process: Const(3.0)), position: (10.0, 0.0, 0.0),
+         environment: Some((stage: Some("pintura"), power: (producing: 8.0, waiting: 5.0),
+            flows: [(flow: "borra_aterro", amount: 0.15, driver: Item)]))),
+        (name: "expedicao", kind: Sink, position: (14.0, 0.0, 0.0)),
+    ],
+    connections: [("chegada", "lavadora"), ("lavadora", "fila"), ("fila", "cabine"), ("cabine", "expedicao")],
+    environment: Some((
+        clock: (start: "06:00", time_unit: Minute),
+        flows: [
+            (name: "eletricidade", kind: Energy, unit: "kWh", direction: In),
+            (name: "lodo_aterro", kind: Waste, unit: "kg", direction: Out, destination: Some("aterro")),
+            (name: "lodo_coprocessamento", kind: Waste, unit: "kg", direction: Out, destination: Some("coprocessamento")),
+            (name: "lodo_seco_aterro", kind: Waste, unit: "kg", direction: Out, destination: Some("aterro")),
+            (name: "borra_aterro", kind: Waste, unit: "kg", direction: Out, destination: Some("aterro")),
+            (name: "borra_coprocessamento", kind: Waste, unit: "kg", direction: Out, destination: Some("coprocessamento")),
+            (name: "borra_recuperacao", kind: Waste, unit: "kg", direction: Out, destination: Some("recuperacao")),
+        ],
+        factors: [(flow: "eletricidade", scope: 2, kg_co2e: Some(0.09),
+                   source: "Fator didático do pacote Fábrica verde (não é oficial)", didactic: true)],
+        waste_destinations: [
+            (name: "aterro", diverted: false, kg_co2e: Some(0.6), source: "Fator didático do pacote Fábrica verde (não é oficial)"),
+            (name: "coprocessamento", diverted: true, kg_co2e: Some(0.15), source: "Fator didático do pacote Fábrica verde (não é oficial)"),
+            (name: "recuperacao", diverted: true, kg_co2e: Some(0.05), source: "Fator didático do pacote Fábrica verde (não é oficial)"),
+        ],
+    )),
+)

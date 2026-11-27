@@ -1,0 +1,31 @@
+// Linha de pintura com três máquinas que ficam ligadas esperando peça: a lavadora (tanque
+// aquecido), a estufa de secagem e a cabine (exaustão). Tempos em minutos. A potência de cada
+// grupo de estados está no bloco ambiental de cada nó; os fatores são didáticos.
+Model(
+    name: "Quem deixou a luz acesa?",
+    description: "Lavadora, estufa e cabine com potência em espera alta",
+    run: (stop_time: 960.0, warmup: 60.0, seed: 41, replications: 5),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 6.0)), position: (0.0, 0.0, 0.0)),
+        (name: "lavadora", kind: Processor(process: Const(2.0)), position: (4.0, 0.0, 0.0),
+         environment: Some((stage: Some("pré-tratamento"), power: (producing: 15.0, waiting: 9.0)))),
+        (name: "fila1", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "estufa", kind: Processor(process: Triangular(min: 3.5, mode: 4.5, max: 5.5)),
+         position: (10.0, 0.0, 0.0),
+         environment: Some((stage: Some("secagem"), power: (producing: 20.0, waiting: 12.0)))),
+        (name: "fila2", kind: Queue(), position: (13.0, 0.0, 0.0)),
+        (name: "cabine", kind: Processor(process: Const(3.0)), position: (16.0, 0.0, 0.0),
+         environment: Some((stage: Some("pintura"), power: (producing: 8.0, waiting: 5.0)))),
+        (name: "expedicao", kind: Sink, position: (20.0, 0.0, 0.0)),
+    ],
+    connections: [
+        ("chegada", "lavadora"), ("lavadora", "fila1"), ("fila1", "estufa"),
+        ("estufa", "fila2"), ("fila2", "cabine"), ("cabine", "expedicao"),
+    ],
+    environment: Some((
+        clock: (start: "06:00", time_unit: Minute),
+        flows: [(name: "eletricidade", kind: Energy, unit: "kWh", direction: In)],
+        factors: [(flow: "eletricidade", scope: 2, kg_co2e: Some(0.09),
+                   source: "Fator didático do pacote Fábrica verde (não é oficial)", didactic: true)],
+    )),
+)

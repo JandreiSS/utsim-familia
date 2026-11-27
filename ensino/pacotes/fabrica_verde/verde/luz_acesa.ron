@@ -1,0 +1,61 @@
+Missao(
+    id: "verde/luz_acesa",
+    titulo: "Quem deixou a luz acesa?",
+    conceitos: ["energia_por_estado", "energia_sem_valor"],
+    modelo: "../modelos/luz_acesa.ron",
+    texto: "luz_acesa.md",
+    previsao: [
+        Escolha(
+            id: "maquina",
+            pergunta: "Qual máquina gasta mais energia ligada sem produzir?",
+            opcoes: [
+                (rotulo: "Lavadora", valor: [(chave: "lavadora.energia_sem_valor_kwh")]),
+                (rotulo: "Estufa", valor: [(chave: "estufa.energia_sem_valor_kwh")]),
+                (rotulo: "Cabine de pintura", valor: [(chave: "cabine.energia_sem_valor_kwh")]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "lavadora", rotulo: "Lavadora em espera", opcoes: [
+            (rotulo: "Ligada como hoje (9 kW)", ajustes: {"lavadora.environment.power.waiting": "9.0"}),
+            (rotulo: "Modo econômico (3,6 kW)", ajustes: {"lavadora.environment.power.waiting": "3.6"}, custo: 500),
+            (rotulo: "Desliga sozinha (0,9 kW)", ajustes: {"lavadora.environment.power.waiting": "0.9"}, custo: 1500),
+        ]),
+        Escolha(id: "estufa", rotulo: "Estufa em espera", opcoes: [
+            (rotulo: "Ligada como hoje (12 kW)", ajustes: {"estufa.environment.power.waiting": "12.0"}),
+            (rotulo: "Modo econômico (4,8 kW)", ajustes: {"estufa.environment.power.waiting": "4.8"}, custo: 500),
+            (rotulo: "Desliga sozinha (1,2 kW)", ajustes: {"estufa.environment.power.waiting": "1.2"}, custo: 1500),
+        ]),
+        Escolha(id: "cabine", rotulo: "Cabine em espera", opcoes: [
+            (rotulo: "Ligada como hoje (5 kW)", ajustes: {"cabine.environment.power.waiting": "5.0"}),
+            (rotulo: "Modo econômico (2 kW)", ajustes: {"cabine.environment.power.waiting": "2.0"}, custo: 500),
+            (rotulo: "Desliga sozinha (0,5 kW)", ajustes: {"cabine.environment.power.waiting": "0.5"}, custo: 1500),
+        ]),
+    ],
+    orcamento: 2000,
+    metricas: [
+        (nome: "espera", rotulo: "Energia gasta sem produzir", unidade: "kWh",
+         valor: [(chave: "lavadora.energia_sem_valor_kwh"), (chave: "estufa.energia_sem_valor_kwh"),
+                 (chave: "cabine.energia_sem_valor_kwh")],
+         objetivo: Menor, meta: 70.0, tolerancia: Absoluta(1.0), casas: 1),
+        (nome: "custo", rotulo: "Custo das mudanças", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 2000.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "Por que vale mais pôr o desligamento automático na lavadora que na estufa?",
+         opcoes: [
+            "Porque a lavadora passa mais tempo esperando peça, e o tempo em espera vezes a potência dá a energia perdida",
+            "Porque a lavadora tem a maior potência produzindo",
+            "Porque a estufa nunca fica esperando",
+         ],
+         certa: 0),
+    ],
+    dicas: [
+        "A energia sem produzir é a potência em espera vezes o tempo em que a máquina fica esperando.",
+        "Olhe a fração do tempo de cada máquina em espera no relatório. Quem trabalha pouco espera muito.",
+        "O orçamento paga um desligamento automático e um modo econômico. Ponha cada um onde ele economiza mais.",
+    ],
+    referencia: {"lavadora": 2, "estufa": 1, "cabine": 0},
+    animacao: (duracao: 240, unidade: "min"),
+)

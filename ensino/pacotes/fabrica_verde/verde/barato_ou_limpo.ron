@@ -1,0 +1,58 @@
+Missao(
+    id: "verde/barato_ou_limpo",
+    titulo: "Barato ou limpo?",
+    conceitos: ["co2_equivalente", "custo_e_impacto"],
+    modelo: "../modelos/barato_ou_limpo.ron",
+    texto: "barato_ou_limpo.md",
+    previsao: [
+        Escolha(
+            id: "estufa",
+            pergunta: "Hoje, de onde vem a maior parte do CO₂ equivalente da linha?",
+            opcoes: [
+                (rotulo: "Do gás da estufa", valor: [(chave: "estufa.fluxo.gas", fator: 2.0)]),
+                (rotulo: "Da eletricidade da estufa e da cabine", valor: [(chave: "estufa.energia_kwh", fator: 0.09), (chave: "cabine.energia_kwh", fator: 0.09)]),
+            ],
+            resposta: Maior,
+        ),
+    ],
+    alavancas: [
+        Escolha(id: "estufa", rotulo: "Estufa de cura", opcoes: [
+            (rotulo: "A gás, como hoje", ajustes: {"estufa.environment": "Some((stage: Some(\"cura\"), power: (producing: 2.0, waiting: 1.0), flows: [(flow: \"gas\", amount: 0.25, driver: Item), (flow: \"gas\", amount: 1.5, driver: Time([Idle]))]))"}),
+            (rotulo: "A gás, com isolamento", ajustes: {"estufa.environment": "Some((stage: Some(\"cura\"), power: (producing: 2.0, waiting: 1.0), flows: [(flow: \"gas\", amount: 0.2, driver: Item), (flow: \"gas\", amount: 0.5, driver: Time([Idle]))]))"}, custo: 1500),
+            (rotulo: "Elétrica", ajustes: {"estufa.environment": "Some((stage: Some(\"cura\"), power: (producing: 30.0, waiting: 10.0)))"}, custo: 4000),
+            (rotulo: "Elétrica, com isolamento", ajustes: {"estufa.environment": "Some((stage: Some(\"cura\"), power: (producing: 26.0, waiting: 4.0)))"}, custo: 5500),
+        ]),
+        Escolha(id: "exaustor", rotulo: "Exaustor da cabine", opcoes: [
+            (rotulo: "O de hoje", ajustes: {"cabine.environment.power.producing": "8.0", "cabine.environment.power.waiting": "5.0"}),
+            (rotulo: "Eficiente, com inversor", ajustes: {"cabine.environment.power.producing": "6.0", "cabine.environment.power.waiting": "2.0"}, custo: 1000),
+        ]),
+    ],
+    orcamento: 5000,
+    metricas: [
+        (nome: "co2", rotulo: "CO₂ equivalente da linha", unidade: "kg",
+         valor: [(chave: "estufa.co2e_kg"), (chave: "cabine.co2e_kg")],
+         objetivo: Menor, meta: 45.0, tolerancia: Absoluta(0.5), casas: 1),
+        (nome: "operacao", rotulo: "Custo de energia e gás", unidade: "R$",
+         valor: [(chave: "estufa.energia_kwh", fator: 0.8), (chave: "cabine.energia_kwh", fator: 0.8),
+                 (chave: "estufa.fluxo.gas", fator: 4.5)],
+         objetivo: Menor, peso: 0.5, casas: 0),
+        (nome: "custo", rotulo: "Investimento", unidade: "R$",
+         valor: [(chave: "custo")], objetivo: Menor, meta: 5000.0, peso: 0.0, casas: 0),
+    ],
+    justificativa: [
+        (pergunta: "A estufa elétrica custa mais para operar. Por que ela entra na resposta?",
+         opcoes: [
+            "Porque a meta é de carbono, e nesta rede elétrica cada kWh emite bem menos que o gás que ele substitui",
+            "Porque a eletricidade é sempre mais barata que o gás",
+            "Porque a estufa elétrica é mais rápida e produz mais",
+         ],
+         certa: 0),
+    ],
+    dicas: [
+        "O CO₂ equivalente de cada fluxo é a quantidade vezes o fator do catálogo.",
+        "Isolar a estufa a gás reduz o gás, mas veja se o resultado chega à meta.",
+        "Depois de cumprir a meta, o que sobra do orçamento ainda pode baixar o custo de operação.",
+    ],
+    referencia: {"estufa": 2, "exaustor": 1},
+    animacao: (duracao: 240, unidade: "min"),
+)

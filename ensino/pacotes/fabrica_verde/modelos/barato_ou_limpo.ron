@@ -1,0 +1,31 @@
+// Estufa de cura a gás antes da cabine de pintura. O gás queima por peça e também enquanto a
+// estufa espera aquecida. A missão troca o bloco ambiental inteiro da estufa (gás, gás com
+// isolamento, elétrica, elétrica com isolamento) e a potência do exaustor da cabine.
+// Tempos em minutos; fatores e preços didáticos.
+Model(
+    name: "Barato ou limpo?",
+    description: "Estufa a gás ou elétrica, com custo de operação e emissão",
+    run: (stop_time: 960.0, warmup: 60.0, seed: 43, replications: 5),
+    objects: [
+        (name: "chegada", kind: Source(interarrival: Exp(mean: 5.0)), position: (0.0, 0.0, 0.0)),
+        (name: "estufa", kind: Processor(process: Const(4.0)), position: (4.0, 0.0, 0.0),
+         environment: Some((stage: Some("cura"), power: (producing: 2.0, waiting: 1.0),
+            flows: [(flow: "gas", amount: 0.25, driver: Item),
+                    (flow: "gas", amount: 1.5, driver: Time([Idle]))]))),
+        (name: "fila", kind: Queue(), position: (7.0, 0.0, 0.0)),
+        (name: "cabine", kind: Processor(process: Const(3.0)), position: (10.0, 0.0, 0.0),
+         environment: Some((stage: Some("pintura"), power: (producing: 8.0, waiting: 5.0)))),
+        (name: "expedicao", kind: Sink, position: (14.0, 0.0, 0.0)),
+    ],
+    connections: [("chegada", "estufa"), ("estufa", "fila"), ("fila", "cabine"), ("cabine", "expedicao")],
+    environment: Some((
+        clock: (start: "06:00", time_unit: Minute),
+        flows: [(name: "eletricidade", kind: Energy, unit: "kWh", direction: In),
+                (name: "gas", kind: Fuel, unit: "m3", direction: In)],
+        factors: [(flow: "eletricidade", scope: 2, kg_co2e: Some(0.09),
+                   source: "Fator didático do pacote Fábrica verde (não é oficial)", didactic: true),
+                  (flow: "gas", scope: 1, kg_co2e: Some(2.0),
+                   source: "Fator didático do pacote Fábrica verde (não é oficial)", didactic: true)],
+        prices: {"eletricidade": 0.8, "gas": 4.5},
+    )),
+)

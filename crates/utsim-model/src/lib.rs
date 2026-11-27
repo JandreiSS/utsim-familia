@@ -2295,6 +2295,11 @@ impl Model {
                 exposure::add_to_report(self, &mut report, records);
             }
         }
+        // A model with environmental blocks: the energy and emission metrics of each node
+        // (`environment::add_to_report`); the simulation reads none of the blocks.
+        if self.objects.iter().any(|o| o.environment.is_some()) {
+            environment::add_to_report(self, &mut report);
+        }
         // A model with cranes and people: the time of each person under the loads.
         if self.has_people_under_cranes() {
             if let Some(records) = sim.trace() {

@@ -1,0 +1,30 @@
+// Pacote de missões ambientais do UTSim Ensino (fase AM12 do UTSim Ambiental). Os blocos
+// ambientais estão dentro dos modelos, e o Ensino lê as métricas de cada nó (energia_kwh,
+// energia_sem_valor_kwh, fluxo.<fluxo>, co2e_kg) como qualquer outra. Fatores didáticos.
+Pacote(
+    id: "fabrica_verde",
+    formato: 1,
+    titulo: "Fábrica verde",
+    versao: "0.1.0",
+    autor: "UTSim",
+    descricao: "Quatro casos de uma linha de pintura: a energia gasta sem produzir, o refugo que carrega impacto, o destino dos resíduos e o compromisso entre custo e carbono. Os fatores são didáticos.",
+    requer: ["nucleo >= 0.2.1"],
+    glossario: "glossario.ron",
+    // Conceitos das missões → ferramentas do mapa de competências do UTSim LSS.
+    competencias: {
+        "energia_por_estado": ["vsm"],
+        "energia_sem_valor": ["vsm"],
+        "impacto_embutido": ["plano_controle"],
+        "destino_de_residuos": ["pareto"],
+        "co2_equivalente": ["pareto"],
+        "custo_e_impacto": ["pareto"],
+    },
+    atos: [
+        (numero: 1, titulo: "Fábrica verde", missoes: [
+            "verde/luz_acesa.ron",
+            "verde/mochila.ron",
+            "verde/para_onde_vai_o_resto.ron",
+            "verde/barato_ou_limpo.ron",
+        ]),
+    ],
+)
