@@ -122,6 +122,21 @@ impl<T: Copy + PartialEq> Barra<'_, T> {
             });
         mudou
     }
+
+    /// [`Barra::mostrar`] com um pé: o que o app põe embaixo da barra (a língua, um botão).
+    /// O pé é desenhado primeiro, num painel próprio, e a lista de telas rola no espaço que
+    /// sobra. Sem isso a lista ocupa a altura toda e o que vier depois sai cortado na borda.
+    pub fn mostrar_com_pe(&self, ui: &mut Ui, atual: &mut T, pe: impl FnOnce(&mut Ui)) -> bool {
+        egui::Panel::bottom("pe_da_barra")
+            .frame(egui::Frame::NONE)
+            .show_separator_line(false)
+            .show(ui, |ui| {
+                ui.add_space(4.0);
+                pe(ui);
+                ui.add_space(6.0);
+            });
+        self.mostrar(ui, atual)
+    }
 }
 
 /// Uma linha da barra. Devolve `true` no clique.
@@ -173,4 +188,53 @@ fn item<T>(ui: &mut Ui, it: &Item<'_, T>, selecionado: bool, cor: Color32) -> bo
         );
     }
     ativo && resp.clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A bar taller than the window: the foot stays whole inside the window, under the list.
+    #[test]
+    fn the_foot_stays_inside_a_short_window() {
+        let ctx = egui::Context::default();
+        crate::install(&ctx);
+        let itens: Vec<Item<'_, usize>> = (0..30).map(|i| Item::novo(i, "Tela")).collect();
+        let grupos = [Grupo {
+            titulo: Some("Grupo"),
+            itens,
+        }];
+        let barra = Barra {
+            nome: "UTSim Teste",
+            cor: Color32::from_rgb(200, 60, 110),
+            icone: None,
+            linhas: &[],
+            grupos: &grupos,
+        };
+        let tela = Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 320.0));
+        let mut atual = 0usize;
+        let mut pe = Rect::NOTHING;
+        for _ in 0..3 {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(tela),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::Panel::left("navegacao")
+                        .default_size(LARGURA)
+                        .resizable(false)
+                        .show(ui, |ui| {
+                            barra.mostrar_com_pe(ui, &mut atual, |ui| {
+                                pe = ui.button("Língua").rect;
+                            });
+                        });
+                },
+            )
+            .drop_without_applying_deltas();
+        }
+        assert!(pe.is_positive(), "{pe:?}");
+        assert!(pe.bottom() <= tela.bottom() - 4.0, "{pe:?}");
+        assert!(pe.top() > 100.0, "{pe:?}");
+    }
 }

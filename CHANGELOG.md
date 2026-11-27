@@ -13,6 +13,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 - Quebra de API (por isso 0.2.0): `Aba` ganhou a variante `Ambiental` (um `match` completo sobre `Aba`, como os do utsim-simulador, precisa do braço novo) e `ObjectDef`, `Model` e `ItemTypeDef` ganharam campos (quem monta um deles campo a campo precisa de `environment: None` ou `mass_kg: None`). Nenhum dos outros apps faz isso; o utsim-simulador já vem ajustado.
 
 ### Corrigido
+- Família 0.2.2 (`utsim-ui-tema`): a barra lateral ganhou um pé (`Barra::mostrar_com_pe`). A lista de telas ocupa a altura toda, e o que o app desenhava depois dela (a língua, um botão) saía cortado na borda de baixo e por cima das últimas telas numa janela baixa. O pé agora tem painel próprio e a lista rola no que sobra.
 - Família 0.1.1 (`utsim-ui-tema`): `familia::etiqueta`, `pintar_etiqueta` e os textos em negrito da família desenham em apps que só chamam `utsim_ui_tema::install`. Antes, o app fechava com erro, porque as fontes "familia-negrito" e "familia-mono-negrito" só eram registradas por `familia::install`. Agora o `install` comum registra as duas, com o negrito do sistema quando ele existe.
 
 ### Alterado
