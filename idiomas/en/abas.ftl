@@ -165,3 +165,17 @@ estado-em-manutencao = in preventive maintenance
 estado-em-pausa = on a break (fatigue)
 estado-operador-entrando = operator entering
 estado-operador-saindo = operator leaving
+
+## aba Ambiental
+
+abas-ambiental = Environment
+abas-ambiental_nao_se_aplica = Sources and sinks have no environmental block: they only count items.
+abas-tem_bloco_ambiental = Has an environmental block
+abas-tem_bloco_ambiental_ajuda = The machine power in each state group. The simulation does not read it: UTSim Ambiental computes energy and emissions after the run.
+abas-etapa_do_processo = Process stage
+abas-potencia_produzindo = Power while producing
+abas-potencia_preparando = Power while preparing (setup)
+abas-potencia_esperando = Power while waiting
+abas-potencia_parada = Power while stopped (breakdown, maintenance)
+abas-potencia_fora_de_turno = Power off shift
+abas-fluxos_no_ambiental = Flows (water, materials, waste): edit in UTSim Ambiental

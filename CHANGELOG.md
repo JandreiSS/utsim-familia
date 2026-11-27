@@ -6,6 +6,10 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Novo
+- Família 0.2.0 (`utsim-model`, `utsim-edit`): bloco ambiental do UTSim Ambiental (fase AM10). `ObjectDef.environment` e `Model.environment` (módulo `utsim_model::environment`, com os mesmos tipos do arquivo lateral do Ambiental) e `ItemTypeDef.mass_kg`, todos opcionais e fora do arquivo quando vazios: um modelo antigo abre, roda e salva igual (teste de ida e volta). A simulação não lê nenhum deles. Comandos `SetEnvironment`, `SetEnvironmentCatalog` e `SetItemMass`, e a aba Ambiental do nó (`Aba::Ambiental`: etapa e potência em cada grupo de estado), com textos nas cinco línguas.
+- Quebra de API (por isso 0.2.0): `Aba` ganhou a variante `Ambiental` (um `match` completo sobre `Aba`, como os do utsim-simulador, precisa do braço novo) e `ObjectDef`, `Model` e `ItemTypeDef` ganharam campos (quem monta um deles campo a campo precisa de `environment: None` ou `mass_kg: None`). Nenhum dos outros apps faz isso; o utsim-simulador já vem ajustado.
+
 ### Corrigido
 - Família 0.1.1 (`utsim-ui-tema`): `familia::etiqueta`, `pintar_etiqueta` e os textos em negrito da família desenham em apps que só chamam `utsim_ui_tema::install`. Antes, o app fechava com erro, porque as fontes "familia-negrito" e "familia-mono-negrito" só eram registradas por `familia::install`. Agora o `install` comum registra as duas, com o negrito do sistema quando ele existe.
 

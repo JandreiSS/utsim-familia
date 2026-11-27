@@ -1,4 +1,4 @@
-//! The Qualidade, Segurança and Manutenção tabs of a node (owner's direction of 2026-11-08,
+//! The Qualidade, Segurança, Manutenção and Ambiental tabs of a node (owner's direction of 2026-11-08,
 //! `docs/plano_integracao_familia.md`, section 3), shared by UTSim, UTSim Qualidade and UTSim
 //! Segurança do Trabalho: the same fields ([`campos`]) and the same editing ([`editar`],
 //! [`adicionar`], [`remover`]), so an edit made in one app means the same in the others.
@@ -22,16 +22,24 @@ pub enum Aba {
     Qualidade,
     Seguranca,
     Manutencao,
+    /// The environmental block (UTSim Ambiental): stage and power per state group.
+    Ambiental,
 }
 
 impl Aba {
-    pub const TODAS: [Aba; 3] = [Aba::Qualidade, Aba::Seguranca, Aba::Manutencao];
+    pub const TODAS: [Aba; 4] = [
+        Aba::Qualidade,
+        Aba::Seguranca,
+        Aba::Manutencao,
+        Aba::Ambiental,
+    ];
 
     pub fn nome(self) -> &'static str {
         match self {
             Aba::Qualidade => tx("abas-qualidade"),
             Aba::Seguranca => tx("abas-seguranca"),
             Aba::Manutencao => tx("abas-manutencao"),
+            Aba::Ambiental => tx("abas-ambiental"),
         }
     }
 }
@@ -152,6 +160,7 @@ fn bloco(obj: &ObjectDef, nome: &str) -> Value {
         "sink_role" => serde_json::to_value(obj.sink_role),
         "ppe" => serde_json::to_value(&obj.ppe),
         "operation" => serde_json::to_value(&obj.operation),
+        "environment" => serde_json::to_value(&obj.environment),
         _ => Ok(Value::Null),
     };
     v.unwrap_or(Value::Null)
@@ -186,6 +195,7 @@ pub fn campos(model: &Model, objeto: &str, aba: Aba) -> Result<Vec<Campo>, Strin
         Aba::Qualidade => qualidade(obj, &mut out),
         Aba::Seguranca => seguranca(model, obj, &mut out),
         Aba::Manutencao => manutencao(obj, &mut out),
+        Aba::Ambiental => ambiental(obj, &mut out),
     }
     Ok(out)
 }
@@ -852,6 +862,69 @@ fn operacao(model: &Model, obj: &ObjectDef, out: &mut Vec<Campo>) {
     }
 }
 
+/// The Ambiental tab: the switch, the stage and the power in each state group. Flows, water,
+/// effluent and the catalogue are edited in UTSim Ambiental.
+fn ambiental(obj: &ObjectDef, out: &mut Vec<Campo>) {
+    if matches!(obj.kind, ObjectKind::Source { .. } | ObjectKind::Sink) {
+        out.push(campo(
+            "",
+            tx("abas-ambiental_nao_se_aplica"),
+            Tipo::Info,
+            String::new(),
+            0,
+        ));
+        return;
+    }
+    let e = bloco(obj, "environment");
+    out.push(
+        campo(
+            "environment",
+            tx("abas-tem_bloco_ambiental"),
+            Tipo::Bloco,
+            sim(!e.is_null()),
+            0,
+        )
+        .ajuda(tx("abas-tem_bloco_ambiental_ajuda")),
+    );
+    if e.is_null() {
+        return;
+    }
+    out.push(campo(
+        "environment.stage",
+        tx("abas-etapa_do_processo"),
+        Tipo::Texto,
+        num(get(&e, "stage")),
+        1,
+    ));
+    let p = get(&e, "power");
+    for (k, rotulo) in [
+        ("producing", tx("abas-potencia_produzindo")),
+        ("preparing", tx("abas-potencia_preparando")),
+        ("waiting", tx("abas-potencia_esperando")),
+        ("stopped", tx("abas-potencia_parada")),
+        ("off_shift", tx("abas-potencia_fora_de_turno")),
+    ] {
+        out.push(
+            campo(
+                format!("environment.power.{k}"),
+                rotulo,
+                Tipo::Real,
+                num(get(p, k)),
+                1,
+            )
+            .faixa(0.0, 1.0e6)
+            .unidade("kW"),
+        );
+    }
+    out.push(campo(
+        "environment.flows",
+        tx("abas-fluxos_no_ambiental"),
+        Tipo::Info,
+        lista(&e, "flows").len().to_string(),
+        1,
+    ));
+}
+
 fn manutencao(obj: &ObjectDef, out: &mut Vec<Campo>) {
     let d = bloco(obj, "downtime");
     out.push(campo(
@@ -983,6 +1056,7 @@ fn novo_bloco(nome: &str) -> Result<Value, String> {
         "rework" => serde_json::to_value(utsim_model::quality::ReworkDef::default()),
         "safety" => serde_json::to_value(utsim_model::safety::SafetyDef::default()),
         "operation" => serde_json::to_value(utsim_model::OperationDef::default()),
+        "environment" => serde_json::to_value(utsim_model::environment::EnvironmentDef::default()),
         "downtime" => {
             let d: utsim_model::DowntimeDef =
                 ron::from_str("(mtbf: Exp(mean: 3600.0), mttr: Exp(mean: 300.0))")
@@ -1035,6 +1109,10 @@ fn comando(objeto: &str, nome: &str, v: Value) -> Result<Command, String> {
         "operation" => Command::SetOperation {
             name,
             operation: serde_json::from_value(v).map_err(e)?,
+        },
+        "environment" => Command::SetEnvironment {
+            name,
+            environment: serde_json::from_value(v).map_err(e)?,
         },
         _ => return Err(fx("abas-nao_e_um_bloco_do", &[("nome", vx(&nome))])),
     })
@@ -1465,5 +1543,50 @@ Model(
         assert!(d.model().objects[1].operation.is_none());
         d.undo();
         d.model().validate().unwrap();
+    }
+
+    /// Um modelo antigo (sem bloco ambiental) volta igual ao salvar: nenhum campo novo
+    /// aparece no arquivo.
+    #[test]
+    fn modelo_antigo_volta_igual() {
+        let d = doc();
+        let t = d.to_text();
+        assert!(!t.contains("environment") && !t.contains("mass_kg"));
+        let de_novo = Document::from_model(Model::parse(&t).unwrap(), None, String::new());
+        assert_eq!(de_novo.to_text(), t);
+        assert_eq!(de_novo.model(), d.model());
+    }
+
+    /// A aba Ambiental liga o bloco, muda a potência e a etapa, e o arquivo volta igual.
+    #[test]
+    fn aba_ambiental_edita_e_salva() {
+        let mut d = doc();
+        let m = d.model().clone();
+        let c = campos(&m, "torno", Aba::Ambiental).unwrap();
+        assert_eq!(c[0].caminho, "environment");
+        assert_eq!(c.len(), 1);
+        assert_eq!(
+            campos(&m, "chegada", Aba::Ambiental).unwrap()[0].tipo,
+            Tipo::Info
+        );
+        aplica(&mut d, |m| editar(m, "torno", "environment", "sim"));
+        aplica(&mut d, |m| {
+            editar(m, "torno", "environment.power.waiting", "4,5")
+        });
+        aplica(&mut d, |m| {
+            editar(m, "torno", "environment.stage", "usinagem")
+        });
+        let e = d.model().objects[1].environment.as_deref().unwrap();
+        assert_eq!(e.power.waiting, 4.5);
+        assert_eq!(e.stage.as_deref(), Some("usinagem"));
+        assert!(editar(d.model(), "torno", "environment.power.waiting", "-1").is_err());
+        let t = d.to_text();
+        let de_novo = Model::parse(&t).unwrap();
+        assert_eq!(&de_novo, d.model());
+        // Desfazer volta ao modelo sem o bloco.
+        d.undo();
+        d.undo();
+        d.undo();
+        assert!(d.model().objects[1].environment.is_none());
     }
 }

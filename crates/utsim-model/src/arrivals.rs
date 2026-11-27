@@ -31,6 +31,10 @@ pub struct ItemTypeDef {
         alias = "rotulos_texto"
     )]
     pub text_labels: BTreeMap<String, String>,
+    /// Mass of one item of the type, in kg (UTSim Ambiental: mass balance, scrap in kg).
+    /// Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "massa_kg")]
+    pub mass_kg: Option<f64>,
 }
 
 /// A named floor area (D8 of the plan): a waiting area, break room or office zone. It is

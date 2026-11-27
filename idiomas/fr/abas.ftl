@@ -167,3 +167,17 @@ estado-em-manutencao = en maintenance préventive
 estado-em-pausa = en pause (fatigue)
 estado-operador-entrando = opérateur qui entre
 estado-operador-saindo = opérateur qui sort
+
+## aba Ambiental
+
+abas-ambiental = Environnement
+abas-ambiental_nao_se_aplica = Les sources et les sorties n'ont pas de bloc environnemental : elles ne comptent que des pièces.
+abas-tem_bloco_ambiental = A un bloc environnemental
+abas-tem_bloco_ambiental_ajuda = La puissance de la machine dans chaque groupe d'états. La simulation ne la lit pas : UTSim Ambiental calcule l'énergie et les émissions après l'exécution.
+abas-etapa_do_processo = Étape du procédé
+abas-potencia_produzindo = Puissance en production
+abas-potencia_preparando = Puissance en préparation (réglage)
+abas-potencia_esperando = Puissance en attente
+abas-potencia_parada = Puissance à l'arrêt (panne, maintenance)
+abas-potencia_fora_de_turno = Puissance hors poste
+abas-fluxos_no_ambiental = Flux (eau, matières, déchets) : modifier dans UTSim Ambiental

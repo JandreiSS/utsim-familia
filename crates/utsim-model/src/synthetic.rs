@@ -69,6 +69,7 @@ fn object(name: String, kind: ObjectKind, x: f64, y: f64) -> ObjectDef {
         ppe: Vec::new(),
         safety: None,
         operation: None,
+        environment: None,
     }
 }
 
@@ -268,6 +269,7 @@ pub fn generate(shape: Shape, objects: usize, items: u64) -> Result<Model, Strin
         packs: Vec::new(),
         zones: Vec::new(),
         product: None,
+        environment: None,
     })
 }
 

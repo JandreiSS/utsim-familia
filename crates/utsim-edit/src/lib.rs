@@ -249,6 +249,21 @@ pub enum Command {
         name: String,
         safety: Option<Box<utsim_model::safety::SafetyDef>>,
     },
+    /// Replaces the environmental block of object `name` (UTSim Ambiental and the node's
+    /// Ambiental tab; `None` removes it).
+    SetEnvironment {
+        name: String,
+        environment: Option<Box<utsim_model::environment::EnvironmentDef>>,
+    },
+    /// Replaces the environmental catalogue of the model (`None` removes it).
+    SetEnvironmentCatalog {
+        environment: Option<Box<utsim_model::environment::EnvironmentCatalog>>,
+    },
+    /// Sets the mass (kg) of item type `item_type` (`None` removes it).
+    SetItemMass {
+        item_type: String,
+        mass_kg: Option<f64>,
+    },
     /// Replaces the operation rule of work station `name`: who may operate it and the
     /// time to get in and out (`None` removes it).
     SetOperation {
@@ -785,6 +800,38 @@ fn execute(model: &mut Model, command: &Command) -> Result<(), String> {
         Command::SetDowntime { name, downtime } => {
             object_mut(model, name)?.downtime = downtime.clone();
         }
+        Command::SetEnvironment { name, environment } => {
+            if let Some(e) = environment.as_deref() {
+                let negativo = [
+                    e.power.producing,
+                    e.power.preparing,
+                    e.power.waiting,
+                    e.power.stopped,
+                    e.power.off_shift,
+                ]
+                .iter()
+                .chain(e.power.by_state.values())
+                .any(|x| *x < 0.0);
+                if negativo {
+                    return Err(format!("{name}: a potência não pode ser negativa"));
+                }
+            }
+            object_mut(model, name)?.environment = environment.clone();
+        }
+        Command::SetEnvironmentCatalog { environment } => {
+            model.environment = environment.clone();
+        }
+        Command::SetItemMass { item_type, mass_kg } => {
+            if mass_kg.is_some_and(|m| m.is_nan() || m < 0.0) {
+                return Err(format!("{item_type}: a massa precisa ser zero ou mais"));
+            }
+            let t = model
+                .item_types
+                .iter_mut()
+                .find(|t| &t.name == item_type)
+                .ok_or_else(|| format!("o tipo de item {item_type} não existe"))?;
+            t.mass_kg = *mass_kg;
+        }
         Command::SetOperation { name, operation } => {
             let obj = object_mut(model, name)?;
             if operation.is_some() && !matches!(obj.kind, utsim_model::ObjectKind::Processor { .. })
@@ -1169,6 +1216,7 @@ pub fn template(kind: &str, name: &str, position: [f64; 3]) -> Option<ObjectDef>
         ppe: Vec::new(),
         safety: None,
         operation: None,
+        environment: None,
     })
 }
 

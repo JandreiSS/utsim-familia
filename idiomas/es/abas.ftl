@@ -165,3 +165,17 @@ estado-em-manutencao = en mantenimiento preventivo
 estado-em-pausa = en pausa (fatiga)
 estado-operador-entrando = operador entrando
 estado-operador-saindo = operador saliendo
+
+## aba Ambiental
+
+abas-ambiental = Ambiental
+abas-ambiental_nao_se_aplica = Fuentes y salidas no tienen bloque ambiental: solo cuentan piezas.
+abas-tem_bloco_ambiental = Tiene bloque ambiental
+abas-tem_bloco_ambiental_ajuda = La potencia de la máquina en cada grupo de estado. La simulación no la lee: UTSim Ambiental calcula la energía y las emisiones después de la corrida.
+abas-etapa_do_processo = Etapa del proceso
+abas-potencia_produzindo = Potencia produciendo
+abas-potencia_preparando = Potencia preparando (setup)
+abas-potencia_esperando = Potencia esperando
+abas-potencia_parada = Potencia parada (avería, mantenimiento)
+abas-potencia_fora_de_turno = Potencia fuera de turno
+abas-fluxos_no_ambiental = Flujos (agua, materiales, residuos): editar en UTSim Ambiental

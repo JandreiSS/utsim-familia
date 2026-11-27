@@ -7,6 +7,7 @@ mod crane;
 pub use crane::{CraneControl, LoadZone};
 pub mod csv;
 pub mod dados;
+pub mod environment;
 pub mod espera;
 pub mod experiment;
 pub mod exposure;
@@ -204,6 +205,11 @@ pub struct Model {
     /// Product project the model came from ([`ProductLink`]). Never read by the simulation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub product: Option<ProductLink>,
+    /// The environmental catalogue of the model: flows, emission factors, destinations,
+    /// tariff and targets ([`environment::EnvironmentCatalog`], UTSim Ambiental). Never read
+    /// by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "ambiental")]
+    pub environment: Option<Box<environment::EnvironmentCatalog>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -350,6 +356,11 @@ pub struct ObjectDef {
     /// ([`OperationDef`], `Processor` only).
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "operacao")]
     pub operation: Option<Box<OperationDef>>,
+    /// The environmental block of the node: power per state group, flows, water and
+    /// effluent ([`environment::EnvironmentDef`], UTSim Ambiental and the node's Ambiental
+    /// tab). Never read by the simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "ambiental")]
+    pub environment: Option<Box<environment::EnvironmentDef>>,
 }
 
 /// Operation rule of a work station: who may operate it and the time the operators take
