@@ -274,13 +274,44 @@ pub const SYSTEM_FONTS: &[&str] = &[
     "/System/Library/Fonts/Helvetica.ttc",
 ];
 
+/// Font family of the family's bold sans (names, the wordmark): `familia::NEGRITO`.
+pub const FAMILIA_NEGRITO: &str = "familia-negrito";
+/// Font family of the family's bold monospace (buttons, badges): `familia::MONO_NEGRITO`.
+pub const FAMILIA_MONO_NEGRITO: &str = "familia-mono-negrito";
+
+/// System bold fonts for the two named families (not shipped either).
+const SYSTEM_BOLD: &[&str] = &[
+    "C:/Windows/Fonts/segoeuib.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+];
+const SYSTEM_MONO_BOLD: &[&str] = &[
+    "C:/Windows/Fonts/consolab.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSansMono-Bold.ttf",
+];
+
 /// The fonts: the first system UI font of [`SYSTEM_FONTS`] that exists, then egui's
-/// defaults as fallbacks (for the symbols the system font lacks).
+/// defaults as fallbacks (for the symbols the system font lacks). The two named families
+/// of the family's widgets get the system's bold fonts in front, when they exist.
 pub fn fonts() -> FontDefinitions {
-    let found = SYSTEM_FONTS
-        .iter()
-        .find_map(|p| std::fs::read(p).ok().map(|bytes| (*p, bytes)));
-    fonts_with(found.map(|(_, bytes)| bytes))
+    let read = |paths: &[&str]| paths.iter().find_map(|p| std::fs::read(p).ok());
+    let mut defs = fonts_with(read(SYSTEM_FONTS));
+    for (family, font, bytes) in [
+        (FAMILIA_NEGRITO, "utsim-ui-b", read(SYSTEM_BOLD)),
+        (FAMILIA_MONO_NEGRITO, "utsim-mono-b", read(SYSTEM_MONO_BOLD)),
+    ] {
+        if let Some(bytes) = bytes {
+            defs.font_data
+                .insert(font.to_owned(), FontData::from_owned(bytes).into());
+            defs.families
+                .entry(FontFamily::Name(family.into()))
+                .or_default()
+                .insert(0, font.to_owned());
+        }
+    }
+    defs
 }
 
 /// The fonts with `primary` (a `.ttf`) in front of egui's defaults, or the defaults alone.
@@ -301,6 +332,16 @@ pub fn fonts_with(primary: Option<Vec<u8>>) -> FontDefinitions {
             .entry(FontFamily::Proportional)
             .or_default()
             .insert(0, "utsim-ui".to_owned());
+    }
+    // The named families of the family's widgets (`familia::etiqueta`, `familia::negrito`):
+    // always there, so an app that only calls [`install`] can draw them. egui panics on a
+    // font family nobody registered.
+    for (name, like) in [
+        (FAMILIA_NEGRITO, FontFamily::Proportional),
+        (FAMILIA_MONO_NEGRITO, FontFamily::Monospace),
+    ] {
+        let chain = defs.families[&like].clone();
+        defs.families.insert(FontFamily::Name(name.into()), chain);
     }
     defs
 }
@@ -541,6 +582,43 @@ mod tests {
             let contraste = (luminance(colors::TEXT_STRONG) + 0.05) / (luminance(fundo) + 0.05);
             assert!(contraste >= 4.4, "{cor:?} -> {fundo:?}: {contraste}");
             assert_eq!(primary_stroke(), cor);
+        }
+    }
+
+    /// The named families of the family's widgets exist in the common fonts too.
+    #[test]
+    fn the_common_fonts_have_the_named_families() {
+        for defs in [fonts_with(None), fonts_with(Some(vec![1])), fonts()] {
+            for name in [FAMILIA_NEGRITO, FAMILIA_MONO_NEGRITO] {
+                let chain = &defs.families[&FontFamily::Name(name.into())];
+                assert!(!chain.is_empty(), "{name}");
+                for font in chain {
+                    assert!(defs.font_data.contains_key(font), "{name}: {font}");
+                }
+            }
+        }
+    }
+
+    /// A badge draws in an app that only called `install` (it used to panic: the bold
+    /// monospace family was registered only by `familia::install`).
+    #[cfg(feature = "familia")]
+    #[test]
+    fn a_badge_draws_after_the_common_install() {
+        let ctx = Context::default();
+        install(&ctx);
+        {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                familia::etiqueta(ui, "novo", Color32::WHITE);
+                familia::pintar_etiqueta(
+                    ui.painter(),
+                    egui::pos2(10.0, 40.0),
+                    "ok",
+                    Color32::WHITE,
+                    10.0,
+                );
+                ui.label(egui::RichText::new("Nome").font(familia::negrito(16.0)));
+            })
+            .drop_without_applying_deltas();
         }
     }
 }

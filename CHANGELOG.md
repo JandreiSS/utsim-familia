@@ -6,6 +6,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Corrigido
+- Família 0.1.1 (`utsim-ui-tema`): `familia::etiqueta`, `pintar_etiqueta` e os textos em negrito da família desenham em apps que só chamam `utsim_ui_tema::install`. Antes, o app fechava com erro, porque as fontes "familia-negrito" e "familia-mono-negrito" só eram registradas por `familia::install`. Agora o `install` comum registra as duas, com o negrito do sistema quando ele existe.
+
 ### Alterado
 - Distribuição pelo GitHub: cada app tem um repositório público só de downloads, e cada versão é uma release `v<versão>` com o pacote cifrado como asset. `utsim-publicar github` sobe o pacote, grava o endereço no manifesto, deixa as 3 versões mais novas do app (apagando as releases das outras) e envia o manifesto assinado para a release fixa `manifesto` do repositório do launcher. `utsim-publicar manifesto-github` envia só o manifesto. O manifesto novo sobe com outro nome e só depois troca o antigo, para o endereço não ficar vazio.
 - Todos os apps abertos para todos: não há mais código de testador nem canais. `utsim-publicar publicar` publica aberto por padrão (a chave do pacote vai no manifesto; `--restrito` volta ao modo com código) e no canal estavel. O pacote continua cifrado, no formato que os launchers antigos leem, e a assinatura do manifesto continua garantindo que ele veio do autor.

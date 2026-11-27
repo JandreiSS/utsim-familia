@@ -2657,7 +2657,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "utsim-cad"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ron",
  "serde",
@@ -2666,7 +2666,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rand 0.9.5",
  "rand_distr",
@@ -2678,7 +2678,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-diagram"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-core",
@@ -2688,7 +2688,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-diario"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-doe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-stats",
@@ -2709,7 +2709,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-edit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rand 0.9.5",
  "ron",
@@ -2724,7 +2724,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-ensino-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ron",
  "serde",
@@ -2742,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-ensino-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rayon",
  "ron",
@@ -2763,7 +2763,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-ensino-ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "egui",
  "ron",
@@ -2779,7 +2779,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-estudo"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rust_xlsxwriter",
  "serde",
@@ -2792,7 +2792,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-exposicao"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-core",
@@ -2803,7 +2803,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-ferramentas"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proptest",
  "serde",
@@ -2814,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-fit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proptest",
  "rand 0.9.5",
@@ -2828,7 +2828,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-flow"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-core",
@@ -2837,7 +2837,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-fluid"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-core",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-idiomas"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "egui",
  "fluent-bundle",
@@ -2856,7 +2856,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-launcher-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2876,7 +2876,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-linhas"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ron",
  "serde",
@@ -2928,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proptest",
  "rayon",
@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-nav"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-cad",
@@ -2959,7 +2959,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-objects"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "utsim-core",
@@ -2967,7 +2967,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-pasta"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "getrandom 0.2.17",
  "serde",
@@ -2978,7 +2978,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-pert"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rayon",
  "serde",
@@ -2991,7 +2991,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-posto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "getrandom 0.2.17",
  "serde",
@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-posto-ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "egui",
  "egui_plot",
@@ -3027,7 +3027,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-qualidade-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3046,7 +3046,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-quality"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rand 0.9.5",
  "rand_distr",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-scene"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-script"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rhai",
  "utsim-core",
@@ -3080,7 +3080,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-seguranca-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3096,7 +3096,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-stats"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rand 0.9.5",
  "rand_pcg",
@@ -3106,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-troca"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3119,7 +3119,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-ui-tema"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "egui",
  "png",
@@ -3129,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "utsim-visual"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "egui",
  "utsim-idiomas",

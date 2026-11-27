@@ -152,9 +152,9 @@ pub fn usar_claro(ctx: &Context, claro: bool) {
 }
 
 /// Font family of the bold sans (names, the wordmark).
-pub const NEGRITO: &str = "familia-negrito";
+pub const NEGRITO: &str = super::FAMILIA_NEGRITO;
 /// Font family of the bold monospace (buttons).
-pub const MONO_NEGRITO: &str = "familia-mono-negrito";
+pub const MONO_NEGRITO: &str = super::FAMILIA_MONO_NEGRITO;
 
 pub fn sans(size: f32) -> FontId {
     FontId::proportional(size)
